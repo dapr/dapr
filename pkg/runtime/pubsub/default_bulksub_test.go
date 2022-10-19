@@ -26,8 +26,8 @@ import (
 func TestFlushMessages(t *testing.T) {
 	emptyMessages := []contribPubsub.BulkMessageEntry{}
 	sampleMessages := []contribPubsub.BulkMessageEntry{
-		{EntryID: "1"},
-		{EntryID: "2"},
+		{EntryId: "1"},
+		{EntryId: "2"},
 	}
 
 	sampleMsgCbMap := map[string]func(error){
@@ -79,22 +79,22 @@ func TestFlushMessages(t *testing.T) {
 
 	t.Run("flushMessages should invoke callbacks based on handler response", func(t *testing.T) {
 		messages := []contribPubsub.BulkMessageEntry{
-			{EntryID: "1"},
-			{EntryID: "2"},
-			{EntryID: "3"},
+			{EntryId: "1"},
+			{EntryId: "2"},
+			{EntryId: "3"},
 		}
 
 		tests := []struct {
 			name             string
 			handlerResponses []contribPubsub.BulkSubscribeResponseEntry
 			handlerErr       error
-			entryIDErrMap    map[string]struct{}
+			entryIdErrMap    map[string]struct{} //nolint:stylecheck
 		}{
 			{
 				"all callbacks should be invoked with nil error when handler returns nil error",
 				[]contribPubsub.BulkSubscribeResponseEntry{
-					{EntryID: "1"},
-					{EntryID: "2"},
+					{EntryId: "1"},
+					{EntryId: "2"},
 				},
 				nil,
 				map[string]struct{}{},
@@ -112,9 +112,9 @@ func TestFlushMessages(t *testing.T) {
 			{
 				"failed messages' callback should be invoked with error when handler returns error and responses is not nil",
 				[]contribPubsub.BulkSubscribeResponseEntry{
-					{EntryID: "1", Error: errors.New("failed message")},
-					{EntryID: "2"},
-					{EntryID: "3", Error: errors.New("failed message")},
+					{EntryId: "1", Error: errors.New("failed message")},
+					{EntryId: "2"},
+					{EntryId: "3", Error: errors.New("failed message")},
 				},
 				errors.New("handler error"),
 				map[string]struct{}{
@@ -143,7 +143,7 @@ func TestFlushMessages(t *testing.T) {
 				flushMessages(context.Background(), "topic", messages, msgCbMap, handler)
 
 				for id, err := range invokedCallbacks {
-					if _, ok := tc.entryIDErrMap[id]; ok {
+					if _, ok := tc.entryIdErrMap[id]; ok {
 						assert.NotNil(t, err)
 					} else {
 						assert.Nil(t, err)

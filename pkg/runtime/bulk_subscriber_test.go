@@ -43,16 +43,16 @@ const (
 func getBulkMessageEntries(len int) []pubsub.BulkMessageEntry {
 	bulkEntries := make([]pubsub.BulkMessageEntry, 10)
 
-	bulkEntries[0] = pubsub.BulkMessageEntry{EntryID: "1111111a", Event: []byte(order1)}
-	bulkEntries[1] = pubsub.BulkMessageEntry{EntryID: "2222222b", Event: []byte(order2)}
-	bulkEntries[2] = pubsub.BulkMessageEntry{EntryID: "333333c", Event: []byte(order3)}
-	bulkEntries[3] = pubsub.BulkMessageEntry{EntryID: "4444444d", Event: []byte(order4)}
-	bulkEntries[4] = pubsub.BulkMessageEntry{EntryID: "5555555e", Event: []byte(order5)}
-	bulkEntries[5] = pubsub.BulkMessageEntry{EntryID: "66666666f", Event: []byte(order6)}
-	bulkEntries[6] = pubsub.BulkMessageEntry{EntryID: "7777777g", Event: []byte(order7)}
-	bulkEntries[7] = pubsub.BulkMessageEntry{EntryID: "8888888h", Event: []byte(order8)}
-	bulkEntries[8] = pubsub.BulkMessageEntry{EntryID: "9999999i", Event: []byte(order9)}
-	bulkEntries[9] = pubsub.BulkMessageEntry{EntryID: "10101010j", Event: []byte(order10)}
+	bulkEntries[0] = pubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(order1)}
+	bulkEntries[1] = pubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(order2)}
+	bulkEntries[2] = pubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(order3)}
+	bulkEntries[3] = pubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(order4)}
+	bulkEntries[4] = pubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(order5)}
+	bulkEntries[5] = pubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(order6)}
+	bulkEntries[6] = pubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(order7)}
+	bulkEntries[7] = pubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(order8)}
+	bulkEntries[8] = pubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(order9)}
+	bulkEntries[9] = pubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
 
 	return bulkEntries[:len]
 }
@@ -317,12 +317,12 @@ func TestBulkSubscribe(t *testing.T) {
 		msgArr := getBulkMessageEntries(10)
 		responseItemsOrders1 := pubsub.AppBulkResponse{
 			AppResponses: []pubsub.AppBulkResponseEntry{
-				{EntryID: "1111111a", Status: "SUCCESS"},
-				{EntryID: "333333c", Status: "RETRY"},
-				{EntryID: "5555555e", Status: "DROP"},
-				{EntryID: "7777777g", Status: "RETRY"},
-				{EntryID: "8888888h", Status: "SUCCESS"},
-				{EntryID: "9999999i", Status: "SUCCESS"},
+				{EntryId: "1111111a", Status: "SUCCESS"},
+				{EntryId: "333333c", Status: "RETRY"},
+				{EntryId: "5555555e", Status: "DROP"},
+				{EntryId: "7777777g", Status: "RETRY"},
+				{EntryId: "8888888h", Status: "SUCCESS"},
+				{EntryId: "9999999i", Status: "SUCCESS"},
 			},
 		}
 
@@ -332,10 +332,10 @@ func TestBulkSubscribe(t *testing.T) {
 
 		responseItemsOrders2 := pubsub.AppBulkResponse{
 			AppResponses: []pubsub.AppBulkResponseEntry{
-				{EntryID: "2222222b", Status: "SUCCESS"},
-				{EntryID: "4444444d", Status: "DROP"},
-				{EntryID: "66666666f", Status: "DROP"},
-				{EntryID: "10101010j", Status: "SUCCESS"},
+				{EntryId: "2222222b", Status: "SUCCESS"},
+				{EntryId: "4444444d", Status: "DROP"},
+				{EntryId: "66666666f", Status: "DROP"},
+				{EntryId: "10101010j", Status: "SUCCESS"},
 			},
 		}
 
@@ -371,23 +371,23 @@ func TestBulkSubscribe(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "1111111a", IsError: false},
-				{EntryID: "2222222b", IsError: false},
-				{EntryID: "333333c", IsError: true},
-				{EntryID: "4444444d", IsError: false},
-				{EntryID: "5555555e", IsError: false},
-				{EntryID: "66666666f", IsError: false},
-				{EntryID: "7777777g", IsError: true},
-				{EntryID: "8888888h", IsError: false},
-				{EntryID: "9999999i", IsError: false},
-				{EntryID: "10101010j", IsError: false},
+				{EntryId: "1111111a", IsError: false},
+				{EntryId: "2222222b", IsError: false},
+				{EntryId: "333333c", IsError: true},
+				{EntryId: "4444444d", IsError: false},
+				{EntryId: "5555555e", IsError: false},
+				{EntryId: "66666666f", IsError: false},
+				{EntryId: "7777777g", IsError: true},
+				{EntryId: "8888888h", IsError: false},
+				{EntryId: "9999999i", IsError: false},
+				{EntryId: "10101010j", IsError: false},
 			},
 		}
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
 
-	t.Run("verify Responses when entryID supplied blank while sending messages", func(t *testing.T) {
+	t.Run("verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
@@ -421,13 +421,13 @@ func TestBulkSubscribe(t *testing.T) {
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(4)
-		msgArr[0].EntryID = ""
-		msgArr[2].EntryID = ""
+		msgArr[0].EntryId = ""
+		msgArr[2].EntryId = ""
 
 		responseItemsOrders1 := pubsub.AppBulkResponse{
 			AppResponses: []pubsub.AppBulkResponseEntry{
-				{EntryID: "2222222b", Status: "SUCCESS"},
-				{EntryID: "4444444d", Status: "SUCCESS"},
+				{EntryId: "2222222b", Status: "SUCCESS"},
+				{EntryId: "4444444d", Status: "SUCCESS"},
 			},
 		}
 
@@ -457,17 +457,17 @@ func TestBulkSubscribe(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "", IsError: true},
-				{EntryID: "2222222b", IsError: false},
-				{EntryID: "", IsError: true},
-				{EntryID: "4444444d", IsError: false},
+				{EntryId: "", IsError: true},
+				{EntryId: "2222222b", IsError: false},
+				{EntryId: "", IsError: true},
+				{EntryId: "4444444d", IsError: false},
 			},
 		}
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
 
-	t.Run("verify bulk Subscribe Responses when App sends back out of order entryIDs", func(t *testing.T) {
+	t.Run("verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
@@ -504,11 +504,11 @@ func TestBulkSubscribe(t *testing.T) {
 
 		responseItemsOrders1 := pubsub.AppBulkResponse{
 			AppResponses: []pubsub.AppBulkResponseEntry{
-				{EntryID: "2222222b", Status: "RETRY"},
-				{EntryID: "333333c", Status: "SUCCESS"},
-				{EntryID: "5555555e", Status: "RETRY"},
-				{EntryID: "1111111a", Status: "SUCCESS"},
-				{EntryID: "4444444d", Status: "SUCCESS"},
+				{EntryId: "2222222b", Status: "RETRY"},
+				{EntryId: "333333c", Status: "SUCCESS"},
+				{EntryId: "5555555e", Status: "RETRY"},
+				{EntryId: "1111111a", Status: "SUCCESS"},
+				{EntryId: "4444444d", Status: "SUCCESS"},
 			},
 		}
 
@@ -536,18 +536,18 @@ func TestBulkSubscribe(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "1111111a", IsError: false},
-				{EntryID: "2222222b", IsError: true},
-				{EntryID: "333333c", IsError: false},
-				{EntryID: "4444444d", IsError: false},
-				{EntryID: "5555555e", IsError: true},
+				{EntryId: "1111111a", IsError: false},
+				{EntryId: "2222222b", IsError: true},
+				{EntryId: "333333c", IsError: false},
+				{EntryId: "4444444d", IsError: false},
+				{EntryId: "5555555e", IsError: true},
 			},
 		}
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
 
-	t.Run("verify bulk Subscribe Responses when App sends back wrong entryIDs", func(t *testing.T) {
+	t.Run("verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
@@ -584,11 +584,11 @@ func TestBulkSubscribe(t *testing.T) {
 
 		responseItemsOrders1 := pubsub.AppBulkResponse{
 			AppResponses: []pubsub.AppBulkResponseEntry{
-				{EntryID: "wrongEntryID1", Status: "SUCCESS"},
-				{EntryID: "2222222b", Status: "RETRY"},
-				{EntryID: "333333c", Status: "SUCCESS"},
-				{EntryID: "wrongEntryID2", Status: "SUCCESS"},
-				{EntryID: "5555555e", Status: "RETRY"},
+				{EntryId: "wrongEntryId1", Status: "SUCCESS"},
+				{EntryId: "2222222b", Status: "RETRY"},
+				{EntryId: "333333c", Status: "SUCCESS"},
+				{EntryId: "wrongEntryId2", Status: "SUCCESS"},
+				{EntryId: "5555555e", Status: "RETRY"},
 			},
 		}
 
@@ -616,11 +616,11 @@ func TestBulkSubscribe(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "1111111a", IsError: true},
-				{EntryID: "2222222b", IsError: true},
-				{EntryID: "333333c", IsError: false},
-				{EntryID: "4444444d", IsError: true},
-				{EntryID: "5555555e", IsError: true},
+				{EntryId: "1111111a", IsError: true},
+				{EntryId: "2222222b", IsError: true},
+				{EntryId: "333333c", IsError: false},
+				{EntryId: "4444444d", IsError: true},
+				{EntryId: "5555555e", IsError: true},
 			},
 		}
 
@@ -666,13 +666,13 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		nbei1 := pubsub.BulkMessageEntry{EntryID: "1111111a", Event: []byte(`{"orderId":"1"}`)}
-		nbei2 := pubsub.BulkMessageEntry{EntryID: "2222222b", Event: []byte(`{"orderId":"2"}`)}
+		nbei1 := pubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(`{"orderId":"1"}`)}
+		nbei2 := pubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(`{"orderId":"2"}`)}
 		msgArr := []pubsub.BulkMessageEntry{nbei1, nbei2}
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 2)
 		for k, msg := range msgArr {
 			responseEntries[k] = &runtimev1pb.TopicEventBulkResponseEntry{
-				EntryID: msg.EntryID,
+				EntryId: msg.EntryId,
 			}
 		}
 		responseEntries = setBulkResponseStatus(responseEntries,
@@ -714,8 +714,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "1111111a", IsError: false},
-				{EntryID: "2222222b", IsError: false},
+				{EntryId: "1111111a", IsError: false},
+				{EntryId: "2222222b", IsError: false},
 			},
 		}
 		assert.Contains(t, string((mockServer.RequestsReceived["orders"].GetEntries()[0].GetEvent())), `{"orderId":"1"}`)
@@ -764,12 +764,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		for k, msg := range msgArr {
 			if strings.Contains(string(msgArr[k].Event), "type1") {
 				responseEntries1[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-					EntryID: msg.EntryID,
+					EntryId: msg.EntryId,
 				}
 				i++
 			} else if strings.Contains(string(msgArr[k].Event), "type2") {
 				responseEntries2[j] = &runtimev1pb.TopicEventBulkResponseEntry{
-					EntryID: msg.EntryID,
+					EntryId: msg.EntryId,
 				}
 				j++
 			}
@@ -825,23 +825,23 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "1111111a", IsError: false},
-				{EntryID: "2222222b", IsError: true},
-				{EntryID: "333333c", IsError: true},
-				{EntryID: "4444444d", IsError: false},
-				{EntryID: "5555555e", IsError: false},
-				{EntryID: "66666666f", IsError: true},
-				{EntryID: "7777777g", IsError: true},
-				{EntryID: "8888888h", IsError: false},
-				{EntryID: "9999999i", IsError: false},
-				{EntryID: "10101010j", IsError: false},
+				{EntryId: "1111111a", IsError: false},
+				{EntryId: "2222222b", IsError: true},
+				{EntryId: "333333c", IsError: true},
+				{EntryId: "4444444d", IsError: false},
+				{EntryId: "5555555e", IsError: false},
+				{EntryId: "66666666f", IsError: true},
+				{EntryId: "7777777g", IsError: true},
+				{EntryId: "8888888h", IsError: false},
+				{EntryId: "9999999i", IsError: false},
+				{EntryId: "10101010j", IsError: false},
 			},
 		}
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
 
-	t.Run("GRPC - verify Responses when entryID supplied blank while sending messages", func(t *testing.T) {
+	t.Run("GRPC - verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
 		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
@@ -866,12 +866,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 		msgArr := getBulkMessageEntries(4)
-		msgArr[0].EntryID = ""
-		msgArr[2].EntryID = ""
+		msgArr[0].EntryId = ""
+		msgArr[2].EntryId = ""
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 4)
 		for k, msg := range msgArr {
 			responseEntries[k] = &runtimev1pb.TopicEventBulkResponseEntry{
-				EntryID: msg.EntryID,
+				EntryId: msg.EntryId,
 			}
 		}
 		responseEntries[1].Status = runtimev1pb.TopicEventResponse_SUCCESS
@@ -909,17 +909,17 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "", IsError: true},
-				{EntryID: "2222222b", IsError: false},
-				{EntryID: "", IsError: true},
-				{EntryID: "4444444d", IsError: false},
+				{EntryId: "", IsError: true},
+				{EntryId: "2222222b", IsError: false},
+				{EntryId: "", IsError: true},
+				{EntryId: "4444444d", IsError: false},
 			},
 		}
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
 
-	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIDs", func(t *testing.T) {
+	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
 		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
@@ -946,23 +946,23 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		msgArr := getBulkMessageEntries(5)
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
 		responseEntries[0] = &runtimev1pb.TopicEventBulkResponseEntry{
-			EntryID: msgArr[1].EntryID,
+			EntryId: msgArr[1].EntryId,
 			Status:  runtimev1pb.TopicEventResponse_RETRY,
 		}
 		responseEntries[1] = &runtimev1pb.TopicEventBulkResponseEntry{
-			EntryID: msgArr[2].EntryID,
+			EntryId: msgArr[2].EntryId,
 			Status:  runtimev1pb.TopicEventResponse_SUCCESS,
 		}
 		responseEntries[2] = &runtimev1pb.TopicEventBulkResponseEntry{
-			EntryID: msgArr[4].EntryID,
+			EntryId: msgArr[4].EntryId,
 			Status:  runtimev1pb.TopicEventResponse_RETRY,
 		}
 		responseEntries[3] = &runtimev1pb.TopicEventBulkResponseEntry{
-			EntryID: msgArr[0].EntryID,
+			EntryId: msgArr[0].EntryId,
 			Status:  runtimev1pb.TopicEventResponse_SUCCESS,
 		}
 		responseEntries[4] = &runtimev1pb.TopicEventBulkResponseEntry{
-			EntryID: msgArr[3].EntryID,
+			EntryId: msgArr[3].EntryId,
 			Status:  runtimev1pb.TopicEventResponse_SUCCESS,
 		}
 		responses := runtimev1pb.TopicEventBulkResponse{
@@ -998,18 +998,18 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "1111111a", IsError: false},
-				{EntryID: "2222222b", IsError: true},
-				{EntryID: "333333c", IsError: false},
-				{EntryID: "4444444d", IsError: false},
-				{EntryID: "5555555e", IsError: true},
+				{EntryId: "1111111a", IsError: false},
+				{EntryId: "2222222b", IsError: true},
+				{EntryId: "333333c", IsError: false},
+				{EntryId: "4444444d", IsError: false},
+				{EntryId: "5555555e", IsError: true},
 			},
 		}
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
 
-	t.Run("GRPC - verify bulk Subscribe Responses when App sends back wrong entryIDs", func(t *testing.T) {
+	t.Run("GRPC - verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
 		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
@@ -1037,11 +1037,11 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
 		for k, msg := range msgArr {
 			responseEntries[k] = &runtimev1pb.TopicEventBulkResponseEntry{
-				EntryID: msg.EntryID,
+				EntryId: msg.EntryId,
 			}
 		}
-		responseEntries[0].EntryID = "wrongId1"
-		responseEntries[3].EntryID = "wrongId2"
+		responseEntries[0].EntryId = "wrongId1"
+		responseEntries[3].EntryId = "wrongId2"
 		responseEntries = setBulkResponseStatus(responseEntries,
 			runtimev1pb.TopicEventResponse_SUCCESS,
 			runtimev1pb.TopicEventResponse_RETRY,
@@ -1082,11 +1082,11 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
-				{EntryID: "1111111a", IsError: true},
-				{EntryID: "2222222b", IsError: true},
-				{EntryID: "333333c", IsError: false},
-				{EntryID: "4444444d", IsError: true},
-				{EntryID: "5555555e", IsError: true},
+				{EntryId: "1111111a", IsError: true},
+				{EntryId: "2222222b", IsError: true},
+				{EntryId: "333333c", IsError: false},
+				{EntryId: "4444444d", IsError: true},
+				{EntryId: "5555555e", IsError: true},
 			},
 		}
 
@@ -1121,7 +1121,7 @@ func setBulkResponseStatus(responses []*runtimev1pb.TopicEventBulkResponseEntry,
 }
 
 type BulkResponseEntryExpectation struct {
-	EntryID string
+	EntryId string //nolint:stylecheck
 	IsError bool
 }
 
@@ -1131,7 +1131,7 @@ type BulkResponseExpectation struct {
 
 func verifyBulkSubscribeResponses(expected BulkResponseExpectation, actual pubsub.BulkSubscribeResponse) bool {
 	for i, expectedEntryResponse := range expected.Responses {
-		if expectedEntryResponse.EntryID != actual.Statuses[i].EntryID {
+		if expectedEntryResponse.EntryId != actual.Statuses[i].EntryId {
 			return false
 		}
 		if (actual.Statuses[i].Error != nil) != expectedEntryResponse.IsError {

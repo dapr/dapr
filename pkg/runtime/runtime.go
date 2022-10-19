@@ -670,11 +670,11 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
 	var err error
 	routeMetadata := route.metadata
-	if routeMetadata[BulkSubscribe] == "true" {
+	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
 		err = a.bulkSubscribeTopic(ctx, policy, name, topic, route)
 		if err != nil {
 			cancel()
-			return fmt.Errorf("failed to subscribe to topic %s: %w", topic, err)
+			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
 		}
 		a.topicCtxCancels[subKey] = cancel
 		return nil

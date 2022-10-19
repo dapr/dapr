@@ -578,12 +578,12 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	entries := make([]pubsub.BulkMessageEntry, len(in.Entries))
 
 	for i, entry := range in.Entries {
-		if len(entry.EntryID) == 0 {
-			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "missing entryID")
+		if entry.EntryId == "" {
+			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "missing entryId")
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.BulkPublishResponse{}, err
 		}
-		entries[i].EntryID = entry.EntryID
+		entries[i].EntryId = entry.EntryId
 		entries[i].ContentType = entry.ContentType
 		entries[i].Event = entry.Event
 		// Populate entry metadata with request level metadata. Entry level metadata keys
@@ -658,7 +658,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	if len(res.Statuses) != 0 {
 		for _, r := range res.Statuses {
 			resEntry := runtimev1pb.BulkPublishResponseEntry{}
-			resEntry.EntryID = r.EntryID
+			resEntry.EntryId = r.EntryId
 			if r.Error != nil {
 				resEntry.Error = r.Error.Error()
 			}

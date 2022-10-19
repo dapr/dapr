@@ -66,13 +66,13 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 
 	// Subscribe to the topic and listen for messages.
 	return p.p.Subscribe(ctx, req, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
-		entryID, err := uuid.NewRandom()
+		entryId, err := uuid.NewRandom() //nolint:stylecheck
 		if err != nil {
 			return err
 		}
 
 		bulkMsgEntry := contribPubsub.BulkMessageEntry{
-			EntryID:  entryID.String(),
+			EntryId:  entryId.String(),
 			Event:    msg.Data,
 			Metadata: msg.Metadata,
 		}
@@ -114,7 +114,7 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 		case msgCb := <-msgCbChan:
 			messages[n] = msgCb.msg
 			n++
-			msgCbMap[msgCb.msg.EntryID] = msgCb.cb
+			msgCbMap[msgCb.msg.EntryId] = msgCb.cb
 			if n >= cfg.MaxBulkSubCount {
 				flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 				n = 0
@@ -144,7 +144,7 @@ func flushMessages(ctx context.Context, topic string, messages []contribPubsub.B
 		if responses != nil {
 			// invoke callbacks for each message
 			for _, r := range responses {
-				if cb, ok := msgCbMap[r.EntryID]; ok {
+				if cb, ok := msgCbMap[r.EntryId]; ok {
 					cb(r.Error)
 				}
 			}

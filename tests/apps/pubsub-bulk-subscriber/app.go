@@ -79,7 +79,7 @@ type BulkRawMessage struct {
 }
 
 type BulkMessageRawEntry struct {
-	EntryID     string            `json:"entryID"`
+	EntryId     string            `json:"entryId"` //nolint:stylecheck
 	Event       string            `json:"event"`
 	ContentType string            `json:"contentType,omitempty"`
 	Metadata    map[string]string `json:"metadata"`
@@ -92,21 +92,21 @@ type BulkMessage struct {
 }
 
 type BulkMessageEntry struct {
-	EntryID     string                 `json:"entryID"`
+	EntryId     string                 `json:"entryId"` //nolint:stylecheck
 	Event       map[string]interface{} `json:"event"`
 	ContentType string                 `json:"contentType,omitempty"`
 	Metadata    map[string]string      `json:"metadata"`
 }
 
 type AppBulkMessageEntry struct {
-	EntryID     string            `json:"entryID"`
+	EntryId     string            `json:"entryId"` //nolint:stylecheck
 	EventStr    string            `json:"event"`
 	ContentType string            `json:"contentType,omitempty"`
 	Metadata    map[string]string `json:"metadata"`
 }
 
 type BulkSubscribeResponseEntry struct {
-	EntryID string `json:"entryID"`
+	EntryId string `json:"entryId"` //nolint:stylecheck
 	Status  string `json:"status"`
 }
 
@@ -343,7 +343,7 @@ func bulkSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		for i, msg := range msgs {
 			entryResponse := BulkSubscribeResponseEntry{}
-			entryResponse.EntryID = msg.EntryID
+			entryResponse.EntryId = msg.EntryId
 			entryResponse.Status = "DROP"
 			bulkResponseEntries[i] = entryResponse
 		}
@@ -356,8 +356,8 @@ func bulkSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	for i, msg := range msgs {
 		entryResponse := BulkSubscribeResponseEntry{}
 		log.Printf("(%s) bulkSubscribeHandler called %s.Index: %d, Message: %s", reqID, r.URL, i, msg)
-		log.Printf("(%s) Responding with SUCCESS for entryID %s", reqID, msg.EntryID)
-		entryResponse.EntryID = msg.EntryID
+		log.Printf("(%s) Responding with SUCCESS for entryId %s", reqID, msg.EntryId)
+		entryResponse.EntryId = msg.EntryId
 		entryResponse.Status = "SUCCESS"
 		bulkResponseEntries[i] = entryResponse
 
@@ -437,11 +437,11 @@ func extractBulkMessage(reqID string, body []byte, isRawPayload bool) ([]AppBulk
 		for i, entry := range bulkMsg.Entries {
 			entryCEData := entry.Event["data"].(string)
 			appMsg := AppBulkMessageEntry{
-				EntryID:  entry.EntryID,
+				EntryId:  entry.EntryId,
 				EventStr: entryCEData,
 			}
 			finalMsgs[i] = appMsg
-			log.Printf("(%s) output at index: %d, entry id:'%s' is: '%s':", reqID, i, entry.EntryID, entryCEData)
+			log.Printf("(%s) output at index: %d, entry id:'%s' is: '%s':", reqID, i, entry.EntryId, entryCEData)
 		}
 		return finalMsgs, nil
 	}
@@ -461,24 +461,24 @@ func extractBulkMessage(reqID string, body []byte, isRawPayload bool) ([]AppBulk
 		}
 
 		entryDataStr := string(entryData)
-		log.Printf("(%s) output from base64 in bulk entry %s is:'%s'", reqID, entry.EntryID, entryDataStr)
+		log.Printf("(%s) output from base64 in bulk entry %s is:'%s'", reqID, entry.EntryId, entryDataStr)
 
 		var actualMsg string
 		err = json.Unmarshal([]byte(entryDataStr), &actualMsg)
 		if err != nil {
 			// Log only
-			log.Printf("(%s) Error extracing JSON from raw event in bulk entry %s is: %v", reqID, entry.EntryID, err)
+			log.Printf("(%s) Error extracing JSON from raw event in bulk entry %s is: %v", reqID, entry.EntryId, err)
 		} else {
-			log.Printf("(%s) Output of JSON from raw event in bulk entry %s is: %v", reqID, entry.EntryID, actualMsg)
+			log.Printf("(%s) Output of JSON from raw event in bulk entry %s is: %v", reqID, entry.EntryId, actualMsg)
 			entryDataStr = actualMsg
 		}
 
 		appMsg := AppBulkMessageEntry{
-			EntryID:  entry.EntryID,
+			EntryId:  entry.EntryId,
 			EventStr: entryDataStr,
 		}
 		finalMsgs[i] = appMsg
-		log.Printf("(%s) output at index: %d, entry id:'%s' is: '%s':", reqID, i, entry.EntryID, entryData)
+		log.Printf("(%s) output at index: %d, entry id:'%s' is: '%s':", reqID, i, entry.EntryId, entryData)
 	}
 	return finalMsgs, nil
 }
