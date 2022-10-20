@@ -15,7 +15,7 @@ package components
 
 import (
 	"github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/components-contrib/middleware/http/oauth2"
+	"github.com/dapr/components-contrib/middleware/http/routeralias"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/kit/logger"
@@ -24,7 +24,7 @@ import (
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return oauth2.NewOAuth2Middleware(log).GetHandler(metadata)
+			return routeralias.NewMiddleware(log).GetHandler(metadata)
 		}
-	}, "oauth2")
+	}, "routeralias")
 }
