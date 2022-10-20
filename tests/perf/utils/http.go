@@ -26,15 +26,20 @@ import (
 	"time"
 )
 
+const (
+	// DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
+	// HTTPGetRawNTimes() to avoid cases where early requests hang and
+	// block all subsequent requests.
+	DefaultProbeTimeout = 30 * time.Second
+)
+
 var httpClient *http.Client
 
 func init() {
 	httpClient = &http.Client{
 		Transport: &http.Transport{
-			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
 			Dial: (&net.Dialer{
-				// This number cannot be large. Callers should retry failed calls (see HTTPGetNTimes())
-				Timeout: 3 * time.Minute,
+				Timeout: DefaultProbeTimeout,
 			}).Dial,
 		},
 	}

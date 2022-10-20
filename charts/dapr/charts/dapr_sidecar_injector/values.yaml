@@ -1,5 +1,6 @@
 replicaCount: 1
 logLevel: info
+component: sidecar-injector
 
 # Specify full docker image name including registry url to use the custom side car image
 # Otherwise, helm chart will use {{ .Values.global.registry }}/daprd:{{ .Values.global.tag }}
@@ -16,6 +17,8 @@ fullnameOverride: ""
 webhookFailurePolicy: Ignore
 sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
+sidecarRunAsNonRoot: true
+sidecarReadOnlyRootFilesystem: true
 resources: {}
 kubeClusterDomain: cluster.local
 ignoreEntrypointTolerations: "[{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"alibabacloud.com/eci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"azure.com/aci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"aws\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"huawei.com/cci\\\"}]"

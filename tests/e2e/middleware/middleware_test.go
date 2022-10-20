@@ -28,10 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	appName         = "middlewareapp" // App name in Dapr.
-	numHealthChecks = 60              // Number of get calls before starting tests.
-)
+const numHealthChecks = 60 // Number of get calls before starting tests.
 
 type testResponse struct {
 	Input  string `json:"input"`
@@ -59,7 +56,7 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        appName,
+			AppName:        "middlewareapp",
 			DaprEnabled:    true,
 			ImageName:      "e2e-middleware",
 			Replicas:       1,
@@ -86,12 +83,12 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner(appName, testApps, nil, nil)
+	tr = runner.NewTestRunner("middleware", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
 func TestSimpleMiddleware(t *testing.T) {
-	middlewareURL := getExternalURL(t, appName)
+	middlewareURL := getExternalURL(t, "middlewareapp")
 	appMiddlewareURL := getExternalURL(t, "app-channel-middleware")
 	noMiddlewareURL := getExternalURL(t, "no-middleware")
 
@@ -104,7 +101,7 @@ func TestSimpleMiddleware(t *testing.T) {
 	t.Logf("noMiddlewareURL is '%s'\n", noMiddlewareURL)
 
 	t.Run("test_basicMiddleware", func(t *testing.T) {
-		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", middlewareURL, appName), []byte{})
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", middlewareURL, "middlewareapp"), []byte{})
 
 		require.Nil(t, err)
 		require.Equal(t, 200, status)

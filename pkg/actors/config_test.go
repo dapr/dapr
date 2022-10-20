@@ -32,7 +32,14 @@ const (
 
 func TestDefaultConfigValuesSet(t *testing.T) {
 	appConfig := appConfig.ApplicationConfig{Entities: []string{"actor1"}}
-	config := NewConfig(HostAddress, AppID, []string{PlacementAddress}, Port, Namespace, appConfig)
+	config := NewConfig(ConfigOpts{
+		HostAddress:        HostAddress,
+		AppID:              AppID,
+		PlacementAddresses: []string{PlacementAddress},
+		Port:               Port,
+		Namespace:          Namespace,
+		AppConfig:          appConfig,
+	})
 
 	assert.Equal(t, HostAddress, config.HostAddress)
 	assert.Equal(t, AppID, config.AppID)
@@ -72,7 +79,14 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 			},
 		},
 	}
-	config := NewConfig(HostAddress, AppID, []string{PlacementAddress}, Port, Namespace, appConfig)
+	config := NewConfig(ConfigOpts{
+		HostAddress:        HostAddress,
+		AppID:              AppID,
+		PlacementAddresses: []string{PlacementAddress},
+		Port:               Port,
+		Namespace:          Namespace,
+		AppConfig:          appConfig,
+	})
 
 	// Check the base level items.
 	assert.Equal(t, HostAddress, config.HostAddress)
@@ -138,7 +152,14 @@ func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
 		},
 	}
 
-	config := NewConfig(HostAddress, AppID, []string{PlacementAddress}, Port, Namespace, appConfig)
+	config := NewConfig(ConfigOpts{
+		HostAddress:        HostAddress,
+		AppID:              AppID,
+		PlacementAddresses: []string{PlacementAddress},
+		Port:               Port,
+		Namespace:          Namespace,
+		AppConfig:          appConfig,
+	})
 
 	assert.Contains(t, config.EntityConfigs, "actor1")
 	assert.Contains(t, config.EntityConfigs, "actor2")
