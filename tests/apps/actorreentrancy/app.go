@@ -125,7 +125,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr %s request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing dapr %s request for %s\n", r.Method, r.URL.RequestURI())
 	if r.Method == "DELETE" {
 		resetLogs()
 	}
@@ -136,7 +136,7 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), daprConfigResponse)
+	log.Printf("Processing dapr request for %s, responding with %v\n", r.URL.RequestURI(), daprConfigResponse)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -149,7 +149,7 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
-	log.Print("Handling actor test call")
+	log.Println("Handling actor test call")
 
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
@@ -163,7 +163,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(body, &reentrantReq)
 
 	if len(reentrantReq.Calls) == 0 {
-		log.Print("No calls in test chain")
+		log.Println("No calls in test chain")
 		return
 	}
 
@@ -190,7 +190,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
-	log.Print("Handling actor method call.")
+	log.Println("Handling actor method call.")
 	method := mux.Vars(r)["method"]
 
 	switch method {
@@ -204,7 +204,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
-	log.Print("Handling reentrant call")
+	log.Println("Handling reentrant call")
 	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Enter %s", mux.Vars(r)["method"]))
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
@@ -218,13 +218,13 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(body, &reentrantReq)
 
 	if len(reentrantReq.Calls) == 0 {
-		log.Print("End of call chain")
+		log.Println("End of call chain")
 		return
 	}
 
 	nextCall, nextBody := advanceCallStackForNextRequest(reentrantReq)
 
-	log.Printf("Next call: %s on %s.%s", nextCall.Method, nextCall.ActorType, nextCall.ActorID)
+	log.Printf("Next call: %s on %s.%s\n", nextCall.Method, nextCall.ActorType, nextCall.ActorID)
 
 	url := fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method)
 	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(nextBody))
@@ -245,7 +245,7 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func standardHandler(w http.ResponseWriter, r *http.Request) {
-	log.Print("Handling standard call")
+	log.Println("Handling standard call")
 	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Enter %s", mux.Vars(r)["method"]))
 	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Exit %s", mux.Vars(r)["method"]))
 }
@@ -282,6 +282,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Actor App - listening on http://localhost:%d", appPort)
+	log.Printf("Actor App - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

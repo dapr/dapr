@@ -80,11 +80,11 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 //nolint:gosec
 func testHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Entered testHandler")
+	log.Println("Entered testHandler")
 	var requestBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&requestBody)
 	if err != nil {
-		log.Printf("error parsing request body: %s", err)
+		log.Printf("error parsing request body: %s\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -94,7 +94,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	for _, message := range requestBody.Messages {
 		body, err := json.Marshal(&message)
 		if err != nil {
-			log.Printf("error encoding message: %s", err)
+			log.Printf("error encoding message: %s\n", err)
 
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("error: " + err.Error()))
@@ -106,7 +106,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Body.Close()
 
 		if err != nil {
-			log.Printf("error sending request to output binding: %s", err)
+			log.Printf("error sending request to output binding: %s\n", err)
 
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("error: " + err.Error()))
@@ -118,11 +118,11 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendGRPC(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Entered sendGRPC")
+	log.Println("Entered sendGRPC")
 	var requestBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&requestBody)
 	if err != nil {
-		log.Printf("error parsing request body: %s", err)
+		log.Printf("error parsing request body: %s\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -131,7 +131,7 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 		//nolint:gosec
 		body, _ := json.Marshal(&message)
 
-		log.Printf("Sending message: %s", body)
+		log.Printf("Sending message: %s\n", body)
 		req := runtimev1pb.InvokeBindingRequest{
 			Name:      topicNameGrpc,
 			Data:      body,
@@ -140,7 +140,7 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 
 		_, err = daprClient.InvokeBinding(context.Background(), &req)
 		if err != nil {
-			log.Printf("Error sending request to GRPC output binding: %s", err)
+			log.Printf("Error sending request to GRPC output binding: %s\n", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("error: " + err.Error()))
 			return
@@ -149,7 +149,7 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 }
 
 func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Entered getReceivedTopicsGRPC")
+	log.Println("Entered getReceivedTopicsGRPC")
 
 	req := runtimev1pb.InvokeServiceRequest{
 		Id: inputbindingSvc,
@@ -164,7 +164,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := daprClient.InvokeService(context.Background(), &req)
 	if err != nil {
-		log.Printf("Could not get received messages: %s", err.Error())
+		log.Printf("Could not get received messages: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -191,6 +191,6 @@ func appRouter() *mux.Router {
 func main() {
 	daprClient = utils.GetGRPCClient(50001)
 
-	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
+	log.Printf("Hello Dapr - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

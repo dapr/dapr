@@ -387,7 +387,7 @@ func retrieveRequestObject(w http.ResponseWriter, r *http.Request) {
 	headers := map[string][]string{}
 	for k, vals := range r.Header {
 		headers[k] = vals
-		log.Printf("headers: %s %q", k, vals)
+		log.Printf("headers: %s %q\n", k, vals)
 	}
 
 	serializedHeaders, _ := json.Marshal(headers)
@@ -1235,7 +1235,7 @@ func main() {
 
 	httpMethods = []string{"POST", "GET", "PUT", "DELETE"}
 
-	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
+	log.Printf("Hello Dapr - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }
 

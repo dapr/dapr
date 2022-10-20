@@ -81,7 +81,7 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 // This method is required for actor registration (provides supported types).
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
+	log.Printf("Processing dapr request for %s\n", r.URL.RequestURI())
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -105,7 +105,7 @@ func callActorMethod(w http.ResponseWriter, r *http.Request) {
 	if resp != nil {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		log.Printf("Resp: %s", string(respBody))
+		log.Printf("Resp: %s\n", string(respBody))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
 	}
@@ -117,7 +117,7 @@ func callActorMethod(w http.ResponseWriter, r *http.Request) {
 }
 
 func logCall(w http.ResponseWriter, r *http.Request) {
-	log.Printf("logCall is called")
+	log.Println("logCall is called")
 
 	actorType := mux.Vars(r)["actorType"]
 	actorID := mux.Vars(r)["actorId"]
@@ -144,7 +144,7 @@ func callDifferentActor(w http.ResponseWriter, r *http.Request) {
 	if resp != nil {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		log.Printf("Resp: %s", string(respBody))
+		log.Printf("Resp: %s\n", string(respBody))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
 	}
@@ -183,6 +183,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Actor Invocation App - listening on http://localhost:%d", appPort)
+	log.Printf("Actor Invocation App - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

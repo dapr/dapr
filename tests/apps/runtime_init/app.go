@@ -46,7 +46,7 @@ func publishMessagesToPubsub(wg *sync.WaitGroup) {
 		if err != nil {
 			log.Fatalf("Error marshalling %s to JSON", m)
 		}
-		log.Printf("Publishing to %s", daprPubsubURL)
+		log.Printf("Publishing to %s\n", daprPubsubURL)
 		r, err := httpClient.Post(daprPubsubURL, "application/json", bytes.NewBuffer(jsonValue))
 		if r != nil {
 			defer r.Body.Close()
@@ -63,7 +63,7 @@ func publishMessagesToBinding(wg *sync.WaitGroup) {
 	daprBindingURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/%s", daprPort, bindingTopic)
 	for i := 0; i < numBindingMessage; i++ {
 		b := []byte(fmt.Sprintf(`{"data": {"id": "message%d"}}`, i))
-		log.Printf("Publishing to %s", daprBindingURL)
+		log.Printf("Publishing to %s\n", daprBindingURL)
 		r, err := httpClient.Post(daprBindingURL, "application/json", bytes.NewBuffer(b))
 		if r != nil {
 			defer r.Body.Close()

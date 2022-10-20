@@ -78,7 +78,7 @@ var (
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("indexHandler is called\n")
+	log.Println("indexHandler is called")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
@@ -93,7 +93,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	r.Body.Close()
 	if err != nil {
-		log.Printf("(%s) performPublish() called. Failed to parse command body: %v", reqID, err)
+		log.Printf("(%s) performPublish() called. Failed to parse command body: %v\n", reqID, err)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
@@ -107,7 +107,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 	{
 		enc, _ := json.Marshal(commandBody)
-		log.Printf("(%s) performPublish() called with commandBody=%s", reqID, string(enc))
+		log.Printf("(%s) performPublish() called with commandBody=%s\n", reqID, string(enc))
 	}
 
 	// based on commandBody.Topic, send to the appropriate topic
@@ -115,7 +115,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 	jsonValue, err := json.Marshal(commandBody.Data)
 	if err != nil {
-		log.Printf("(%s) Error Marshaling: %v", reqID, err)
+		log.Printf("(%s) Error Marshaling: %v\n", reqID, err)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
@@ -137,7 +137,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("(%s) Publish failed with error=%v, StatusCode=%d", reqID, err, status)
+		log.Printf("(%s) Publish failed with error=%v, StatusCode=%d\n", reqID, err, status)
 
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(appResponse{
@@ -152,10 +152,10 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	endTime := time.Now()
 	duration := endTime.Sub(startTime)
 	if status == http.StatusOK || status == http.StatusNoContent {
-		log.Printf("(%s) Publish succeeded in %v", reqID, formatDuration(duration))
+		log.Printf("(%s) Publish succeeded in %v\n", reqID, formatDuration(duration))
 		resp = appResponse{Message: "Success"}
 	} else {
-		log.Printf("(%s) Publish failed in %v", reqID, formatDuration(duration))
+		log.Printf("(%s) Publish failed in %v\n", reqID, formatDuration(duration))
 		resp = appResponse{Message: "Failed"}
 	}
 	resp.StartTime = epoch(&startTime)
@@ -174,7 +174,7 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 		url = url + "?" + params.Encode()
 	}
 
-	log.Printf("(%s) Publishing using url %s and body '%s'", reqID, url, jsonValue)
+	log.Printf("(%s) Publishing using url %s and body '%s'\n", reqID, url, jsonValue)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -197,7 +197,7 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 
 func performPublishGRPC(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
-	log.Printf("Connecting to dapr using url %s", url)
+	log.Printf("Connecting to dapr using url %s\n", url)
 
 	req := &runtimev1pb.PublishEventRequest{
 		PubsubName:      pubsubName,
@@ -210,7 +210,7 @@ func performPublishGRPC(reqID string, topic string, jsonValue []byte, contentTyp
 	_, err := grpcClient.PublishEvent(ctx, req)
 	cancel()
 	if err != nil {
-		log.Printf("(%s) Publish failed: %v", reqID, err)
+		log.Printf("(%s) Publish failed: %v\n", reqID, err)
 
 		if strings.Contains(err.Error(), "topic is empty") {
 			return http.StatusNotFound, err
@@ -228,7 +228,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	r.Body.Close()
 
 	if err != nil {
-		log.Printf("(%s) Could not read request body: %v", reqID, err)
+		log.Printf("(%s) Could not read request body: %v\n", reqID, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -236,7 +236,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	var req callSubscriberMethodRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		log.Printf("(%s) Could not parse JSON request body: %v", reqID, err)
+		log.Printf("(%s) Could not parse JSON request body: %v\n", reqID, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -244,7 +244,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 		reqID = req.ReqID
 	}
 
-	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
+	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s\n", reqID, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
 	if req.Protocol == "grpc" {
@@ -254,7 +254,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("(%s) Could not get logs from %s: %s", reqID, req.RemoteApp, err.Error())
+		log.Printf("(%s) Could not get logs from %s: %s\n", reqID, req.RemoteApp, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -262,7 +262,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 
 	duration := time.Now().Sub(startTime)
-	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
+	log.Printf("(%s) responded in %v via %s\n", reqID, formatDuration(duration), req.Protocol)
 }
 
 func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
@@ -325,7 +325,7 @@ func formatDuration(d time.Duration) string {
 
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
-	log.Printf("Enter appRouter()")
+	log.Println("Enter appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Log requests and their processing time
@@ -343,6 +343,6 @@ func appRouter() *mux.Router {
 func main() {
 	grpcClient = utils.GetGRPCClient(daprPortGRPC)
 
-	log.Printf("PubSub Publisher - listening on http://localhost:%d", appPort)
+	log.Printf("PubSub Publisher - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

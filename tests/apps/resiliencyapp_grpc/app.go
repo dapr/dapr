@@ -69,7 +69,7 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 		callCount = records[len(records)-1].Count + 1
 	}
 
-	log.Printf("Proxy has seen %s %d times.", message.ID, callCount)
+	log.Printf("Proxy has seen %s %d times.\n", message.ID, callCount)
 
 	s.callTracking[message.ID] = append(s.callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
 
@@ -118,7 +118,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 			callCount = records[len(records)-1].Count + 1
 		}
 
-		log.Printf("Seen %s %d times.", message.ID, callCount)
+		log.Printf("Seen %s %d times.\n", message.ID, callCount)
 
 		s.callTracking[message.ID] = append(s.callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
 
@@ -170,7 +170,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 		callCount = records[len(records)-1].Count + 1
 	}
 
-	log.Printf("Seen %s %d times.", message.ID, callCount)
+	log.Printf("Seen %s %d times.\n", message.ID, callCount)
 
 	s.callTracking[message.ID] = append(s.callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
 
@@ -214,7 +214,7 @@ func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEven
 		callCount = records[len(records)-1].Count + 1
 	}
 
-	log.Printf("Seen %s %d times.", message.ID, callCount)
+	log.Printf("Seen %s %d times.\n", message.ID, callCount)
 
 	s.callTracking[message.ID] = append(s.callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
 
@@ -234,7 +234,7 @@ func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEven
 
 // Init.
 func main() {
-	log.Printf("Initializing grpc")
+	log.Println("Initializing grpc")
 
 	/* #nosec */
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", appPort))

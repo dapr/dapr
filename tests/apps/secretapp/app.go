@@ -60,13 +60,13 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func get(key, store string) (*map[string]string, int, error) {
-	log.Printf("Processing get request for %s.", key)
+	log.Printf("Processing get request for %s.\n", key)
 	url, err := createSecretURL(key, store)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
 
-	log.Printf("Fetching state from %s", url)
+	log.Printf("Fetching state from %s\n", url)
 	// url is created from user input, it is OK since this is a test app only and will not run in prod.
 	/* #nosec */
 	res, err := httpClient.Get(url)
@@ -85,7 +85,7 @@ func get(key, store string) (*map[string]string, int, error) {
 		return nil, res.StatusCode, fmt.Errorf("got err response for key %s from Dapr: %s", key, body)
 	}
 
-	log.Printf("Found secret for key %s: %s", key, body)
+	log.Printf("Found secret for key %s: %s\n", key, body)
 
 	state := map[string]string{}
 	if len(body) == 0 {
@@ -103,7 +103,7 @@ func get(key, store string) (*map[string]string, int, error) {
 
 func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
 	statusCode := http.StatusOK
-	log.Printf("Processing get request for %d states.", len(secrets))
+	log.Printf("Processing get request for %d states.\n", len(secrets))
 
 	output := make([]daprSecret, 0, len(secrets))
 	for _, secret := range secrets {
@@ -112,7 +112,7 @@ func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
 			return nil, sc, err
 		}
 
-		log.Printf("Result for get request for key %s: %v", secret.Key, value)
+		log.Printf("Result for get request for key %s: %v\n", secret.Key, value)
 		output = append(output, daprSecret{
 			Key:   secret.Key,
 			Value: value,
@@ -121,20 +121,20 @@ func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
 		statusCode = sc
 	}
 
-	log.Printf("Result for get request for %d secrets: %v", len(secrets), output)
+	log.Printf("Result for get request for %d secrets: %v\n", len(secrets), output)
 
 	return output, statusCode, nil
 }
 
 // handles all APIs
 func handler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing request for %s", r.URL.RequestURI())
+	log.Printf("Processing request for %s\n", r.URL.RequestURI())
 
 	// Retrieve request body contents
 	var req requestResponse
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		log.Printf("Could not parse request body: %s", err.Error())
+		log.Printf("Could not parse request body: %s\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(requestResponse{
 			Message: err.Error(),
@@ -166,7 +166,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	res.EndTime = epoch()
 
 	if statusCode != http.StatusOK {
-		log.Printf("Error status code %v: %v", statusCode, res.Message)
+		log.Printf("Error status code %v: %v\n", statusCode, res.Message)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -204,7 +204,7 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Secret App - listening on http://localhost:%d", appPort)
-	log.Printf("Secret endpoint - to be saved at %s", secretURL)
+	log.Printf("Secret App - listening on http://localhost:%d\n", appPort)
+	log.Printf("Secret endpoint - to be saved at %s\n", secretURL)
 	utils.StartServer(appPort, appRouter, true, false)
 }

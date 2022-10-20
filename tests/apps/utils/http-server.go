@@ -59,7 +59,7 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 			Handler: h2c.NewHandler(appRouter(), h2s),
 			ConnState: func(c net.Conn, cs http.ConnState) {
 				if logConnState {
-					log.Printf("ConnState changed: %s -> %s state: %s (HTTP2)", c.RemoteAddr(), c.LocalAddr(), cs)
+					log.Printf("ConnState changed: %s -> %s state: %s (HTTP2)\n", c.RemoteAddr(), c.LocalAddr(), cs)
 				}
 			},
 		}
@@ -70,7 +70,7 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 			Handler: appRouter(),
 			ConnState: func(c net.Conn, cs http.ConnState) {
 				if logConnState {
-					log.Printf("ConnState changed: %s -> %s state: %s", c.RemoteAddr(), c.LocalAddr(), cs)
+					log.Printf("ConnState changed: %s -> %s state: %s\n", c.RemoteAddr(), c.LocalAddr(), cs)
 				}
 			},
 		}

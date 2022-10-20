@@ -57,7 +57,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func volumeMountTest() (int, appResponse) {
-	log.Printf("volumeMountTest is called")
+	log.Println("volumeMountTest is called")
 
 	// the secret store will be only able to get the value
 	// if the volume is mounted correctly.
@@ -95,7 +95,7 @@ func volumeMountTest() (int, appResponse) {
 }
 
 func bindingTest() (int, appResponse) {
-	log.Printf("bindingTest is called")
+	log.Println("bindingTest is called")
 
 	url, err := url.Parse(fmt.Sprintf(bindingURL, bindingName))
 	if err != nil {
@@ -175,7 +175,7 @@ func securedAppRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Injector App - listening on http://localhost:%d", appPort)
+	log.Printf("Injector App - listening on http://localhost:%d\n", appPort)
 
 	// start a secured app (with TLS) on an alternate port
 	go func() {

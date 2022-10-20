@@ -34,7 +34,7 @@ func GetGRPCClient(daprPort int) runtimev1pb.DaprClient {
 		}
 	}
 	url := fmt.Sprintf("localhost:%d", daprPort)
-	log.Printf("Connecting to dapr using url %s", url)
+	log.Printf("Connecting to dapr using url %s\n", url)
 
 	var grpcConn *grpc.ClientConn
 	start := time.Now()
@@ -49,15 +49,15 @@ func GetGRPCClient(daprPort int) runtimev1pb.DaprClient {
 		}
 
 		if retries == 0 {
-			log.Printf("Could not connect to dapr: %v", err)
+			log.Printf("Could not connect to dapr: %v\n", err)
 			log.Panic(err)
 		}
 
-		log.Printf("Could not connect to dapr: %v, retrying...", err)
+		log.Printf("Could not connect to dapr: %v, retrying...\n", err)
 		time.Sleep(5 * time.Second)
 	}
 
 	elapsed := time.Since(start)
-	log.Printf("gRPC connect elapsed: %v", elapsed)
+	log.Printf("gRPC connect elapsed: %v\n", elapsed)
 	return runtimev1pb.NewDaprClient(grpcConn)
 }

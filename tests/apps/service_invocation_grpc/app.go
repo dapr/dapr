@@ -52,7 +52,7 @@ type appResponse struct {
 }
 
 func main() {
-	log.Printf("Initializing grpc")
+	log.Println("Initializing grpc")
 
 	/* #nosec */
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", appPort))

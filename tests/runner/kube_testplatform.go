@@ -144,16 +144,16 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 			app.AppMemoryRequest = c.appMemoryRequest()
 		}
 
-		log.Printf("Adding app %v", app)
+		log.Printf("Adding app %v\n", app)
 		c.AppResources.Add(kube.NewAppManager(c.KubeClient, getNamespaceOrDefault(app.Namespace), app))
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
-	log.Printf("Installing apps ...")
+	log.Println("Installing apps ...")
 	if err := c.AppResources.setup(); err != nil {
 		return err
 	}
-	log.Printf("Apps are installed.")
+	log.Println("Apps are installed.")
 
 	return nil
 }

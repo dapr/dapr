@@ -126,7 +126,7 @@ func sendToPublisher(t *testing.T, offset int, publisherExternalURL string, topi
 
 		// debuggability - trace info about the first message.  don't trace others so it doesn't flood log.
 		if i == offset {
-			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
+			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic\n", url, jsonValue)
 		}
 
 		rateLimit.Take()
@@ -148,7 +148,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	start := time.Now()
 	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
 	if err != nil {
-		log.Printf("Publish failed with error=%s (body=%s) (duration=%s)", err.Error(), data, utils.FormatDuration(time.Now().Sub(start)))
+		log.Printf("Publish failed with error=%s (body=%s) (duration=%s)\n", err.Error(), data, utils.FormatDuration(time.Now().Sub(start)))
 		return http.StatusInternalServerError, err
 	}
 	if statusCode != http.StatusOK {
@@ -184,7 +184,7 @@ func testPublishSubscribeRouting(t *testing.T, publisherExternalURL, subscriberE
 func testPublishRouting(t *testing.T, publisherExternalURL string, protocol string) routedMessagesResponse {
 	//nolint: gosec
 	offset := rand.Intn(randomOffsetMax) + 1
-	log.Printf("initial offset: %d", offset)
+	log.Printf("initial offset: %d\n", offset)
 	// set to respond with success
 	sentRouteAMessages, err := sendToPublisher(t, offset, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.A")
 	require.NoError(t, err)
@@ -222,7 +222,7 @@ func testPublishRouting(t *testing.T, publisherExternalURL string, protocol stri
 func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages routedMessagesResponse) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
-	log.Printf("Getting messages received by subscriber using url %s", url)
+	log.Printf("Getting messages received by subscriber using url %s\n", url)
 
 	request := callSubscriberMethodRequest{
 		RemoteApp: subscriberApp,
@@ -238,9 +238,9 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 		var resp []byte
 		start := time.Now()
 		resp, err = utils.HTTPPost(url, rawReq)
-		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
+		log.Printf("(reqID=%s) Attempt %d complete; took %s\n", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
-			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
+			log.Printf("(reqID=%s) Error in response: %v\n", request.ReqID, err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -248,13 +248,13 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 		err = json.Unmarshal(resp, &appResp)
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
-			log.Printf("Error in response: %v", err)
+			log.Printf("Error in response: %v\n", err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 
 		log.Printf(
-			"subscriber received messages: route-a %d/%d, route-b %d/%d, route-c %d/%d, route-d %d/%d, route-e %d/%d, route-f %d/%d",
+			"subscriber received messages: route-a %d/%d, route-b %d/%d, route-c %d/%d, route-d %d/%d, route-e %d/%d, route-f %d/%d\n",
 			len(appResp.RouteA), len(sentMessages.RouteA),
 			len(appResp.RouteB), len(sentMessages.RouteB),
 			len(appResp.RouteC), len(sentMessages.RouteC),
@@ -269,7 +269,7 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 			len(appResp.RouteD) != len(sentMessages.RouteD) ||
 			len(appResp.RouteE) != len(sentMessages.RouteE) ||
 			len(appResp.RouteF) != len(sentMessages.RouteF) {
-			log.Printf("Differing lengths in received vs. sent messages, retrying.")
+			log.Println("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(5 * time.Second)
 		} else {
 			break
