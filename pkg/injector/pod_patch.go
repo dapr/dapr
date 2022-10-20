@@ -107,6 +107,8 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		Tolerations:                 pod.Spec.Tolerations,
 		TrustAnchors:                trustAnchors,
 		VolumeMounts:                volumeMounts,
+		RunAsNonRoot:                i.config.GetRunAsNonRoot(),
+		ReadOnlyRootFilesystem:      i.config.GetReadOnlyRootFilesystem(),
 	})
 	if err != nil {
 		return nil, err
