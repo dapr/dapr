@@ -413,16 +413,18 @@ func (a *api) constructShutdownEndpoints() []Endpoint {
 func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz",
-			Version: apiVersionV1,
-			Handler: a.onGetHealthz,
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "healthz",
+			Version:       apiVersionV1,
+			Handler:       a.onGetHealthz,
+			AlwaysAllowed: true,
 		},
 		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz/outbound",
-			Version: apiVersionV1,
-			Handler: a.onGetOutboundHealthz,
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "healthz/outbound",
+			Version:       apiVersionV1,
+			Handler:       a.onGetOutboundHealthz,
+			AlwaysAllowed: true,
 		},
 	}
 }
@@ -938,36 +940,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		keys = append(keys, string(queryKeyByte))
 	}
 
-	// empty list means subscribing to all configuration keys
-	if len(keys) == 0 {
-		getConfigurationReq := &configuration.GetRequest{
-			Keys:     []string{},
-			Metadata: metadata,
-		}
-
-		start := time.Now()
-		policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
-		var getResponse *configuration.GetResponse
-		err = policy(func(ctx context.Context) (rErr error) {
-			getResponse, rErr = store.Get(ctx, getConfigurationReq)
-			return rErr
-		})
-		elapsed := diag.ElapsedSince(start)
-		diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
-
-		if err != nil {
-			msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
-			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-			log.Debug(msg)
-			return
-		}
-		items := getResponse.Items
-		for key := range items {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", storeName, key)]; !ok {
-				subscribeKeys = append(subscribeKeys, key)
-			}
-		}
-	} else {
+	if len(keys) > 0 {
 		subscribeKeys = append(subscribeKeys, keys...)
 	}
 

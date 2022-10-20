@@ -32,6 +32,8 @@ type Config struct {
 	KubeClusterDomain           string `envconfig:"KUBE_CLUSTER_DOMAIN"`
 	AllowedServiceAccounts      string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
+	RunAsNonRoot                string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
+	ReadOnlyRootFilesystem      string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }
@@ -85,6 +87,22 @@ func (c Config) GetPullPolicy() corev1.PullPolicy {
 
 func (c *Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
 	return c.parsedEntrypointTolerations
+}
+
+func (c *Config) GetRunAsNonRoot() bool {
+	// Default is true if empty
+	if c.RunAsNonRoot == "" {
+		return true
+	}
+	return utils.IsTruthy(c.RunAsNonRoot)
+}
+
+func (c *Config) GetReadOnlyRootFilesystem() bool {
+	// Default is true if empty
+	if c.ReadOnlyRootFilesystem == "" {
+		return true
+	}
+	return utils.IsTruthy(c.ReadOnlyRootFilesystem)
 }
 
 func (c *Config) parseTolerationsJSON() {
