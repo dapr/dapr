@@ -111,8 +111,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform baseline test
-	endpoint := fmt.Sprintf("http://testapp:3000/test")
-	p.TargetEndpoint = endpoint
+	p.TargetEndpoint = "http://testapp:3000/test"
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
@@ -126,8 +125,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
 	// Perform dapr test
-	endpoint = fmt.Sprintf("http://127.0.0.1:3500/v1.0/invoke/testapp/method/test")
-	p.TargetEndpoint = endpoint
+	p.TargetEndpoint = "http://127.0.0.1:3500/v1.0/invoke/testapp/method/test"
 	body, err = json.Marshal(&p)
 	require.NoError(t, err)
 
