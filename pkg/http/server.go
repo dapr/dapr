@@ -46,8 +46,6 @@ var (
 	infoLog = logger.NewLogger("dapr.runtime.http-info")
 )
 
-const protocol = "http"
-
 // Server is an interface for the Dapr HTTP server.
 type Server interface {
 	io.Closer
@@ -362,7 +360,7 @@ func (s *server) endpointAllowed(endpoint Endpoint) bool {
 	var httpRules []config.APIAccessRule
 
 	for _, rule := range s.apiSpec.Allowed {
-		if rule.Protocol == protocol {
+		if rule.Protocol == "http" {
 			httpRules = append(httpRules, rule)
 		}
 	}
@@ -371,7 +369,7 @@ func (s *server) endpointAllowed(endpoint Endpoint) bool {
 	}
 
 	for _, rule := range httpRules {
-		if (strings.Index(endpoint.Route, rule.Name) == 0 && endpoint.Version == rule.Version) || endpoint.Route == "healthz" {
+		if (strings.HasPrefix(endpoint.Route, rule.Name) && endpoint.Version == rule.Version) || endpoint.AlwaysAllowed {
 			return true
 		}
 	}
