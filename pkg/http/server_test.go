@@ -37,7 +37,10 @@ type mockHost struct {
 	hasCORS bool
 }
 
-const healthzEndpoint = "healthz"
+const (
+	healthzEndpoint         = "healthz"
+	healthzOutboundEndpoint = "healthz/outbound"
+)
 
 func (m *mockHost) mockHandler() fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
@@ -91,9 +94,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -137,9 +141,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -178,9 +183,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -219,9 +225,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -260,9 +267,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -301,9 +309,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -342,9 +351,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}

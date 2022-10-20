@@ -418,16 +418,18 @@ func (a *api) constructShutdownEndpoints() []Endpoint {
 func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz",
-			Version: apiVersionV1,
-			Handler: a.onGetHealthz,
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "healthz",
+			Version:       apiVersionV1,
+			Handler:       a.onGetHealthz,
+			AlwaysAllowed: true,
 		},
 		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz/outbound",
-			Version: apiVersionV1,
-			Handler: a.onGetOutboundHealthz,
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "healthz/outbound",
+			Version:       apiVersionV1,
+			Handler:       a.onGetOutboundHealthz,
+			AlwaysAllowed: true,
 		},
 	}
 }
