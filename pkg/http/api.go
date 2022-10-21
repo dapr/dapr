@@ -584,7 +584,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	var responses []state.BulkGetResponse
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
 	rErr := policy(func(ctx context.Context) (rErr error) {
-		bulkGet, responses, rErr = store.BulkGet(reqs)
+		bulkGet, responses, rErr = store.BulkGet(ctx, reqs)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -633,7 +633,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 				var resp *state.GetResponse
 				err = policy(func(ctx context.Context) (rErr error) {
-					resp, rErr = store.Get(gr)
+					resp, rErr = store.Get(ctx, gr)
 					return rErr
 				})
 				if err != nil {
@@ -736,7 +736,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
 	var resp *state.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = store.Get(&req)
+		resp, rErr = store.Get(ctx, &req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1112,7 +1112,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
-		return store.Delete(&req)
+		return store.Delete(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1305,7 +1305,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
-		return store.BulkSet(reqs)
+		return store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -2182,7 +2182,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
 	err := policy(func(ctx context.Context) error {
-		return transactionalStore.Multi(&state.TransactionalStateRequest{
+		return transactionalStore.Multi(ctx, &state.TransactionalStateRequest{
 			Operations: operations,
 			Metadata:   req.Metadata,
 		})
@@ -2235,7 +2235,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
 	var resp *state.QueryResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = querier.Query(&req)
+		resp, rErr = querier.Query(ctx, &req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)

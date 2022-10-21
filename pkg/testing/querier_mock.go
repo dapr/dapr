@@ -3,6 +3,8 @@
 package testing
 
 import (
+	"context"
+
 	state "github.com/dapr/components-contrib/state"
 
 	mock "github.com/stretchr/testify/mock"
@@ -14,12 +16,12 @@ type MockQuerier struct {
 }
 
 // Query provides a mock function with given fields: req
-func (_m *MockQuerier) Query(req *state.QueryRequest) (*state.QueryResponse, error) {
-	ret := _m.Called(req)
+func (_m *MockQuerier) Query(ctx context.Context, req *state.QueryRequest) (*state.QueryResponse, error) {
+	ret := _m.Called(ctx, req)
 
 	var r0 *state.QueryResponse
-	if rf, ok := ret.Get(0).(func(*state.QueryRequest) *state.QueryResponse); ok {
-		r0 = rf(req)
+	if rf, ok := ret.Get(0).(func(context.Context, *state.QueryRequest) *state.QueryResponse); ok {
+		r0 = rf(ctx, req)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*state.QueryResponse)
@@ -36,7 +38,7 @@ func (_m *MockQuerier) Query(req *state.QueryRequest) (*state.QueryResponse, err
 	return r0, r1
 }
 
-func (f *FailingStatestore) Query(req *state.QueryRequest) (*state.QueryResponse, error) {
+func (f *FailingStatestore) Query(ctx context.Context, req *state.QueryRequest) (*state.QueryResponse, error) {
 	key := req.Metadata["key"]
 	err := f.Failure.PerformFailure(key)
 

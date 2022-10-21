@@ -954,13 +954,13 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
+	fakeStore.On("BulkSet", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
 		return reqs[0].Key == goodStoreKey
 	})).Return(nil)
-	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
+	fakeStore.On("BulkSet", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
@@ -1044,14 +1044,14 @@ func TestSaveState(t *testing.T) {
 func TestGetState(t *testing.T) {
 	// Setup mock store
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == goodStoreKey
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: ptr.String("test-etag"),
 		}, nil)
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
 	})).Return(
 		nil,
@@ -1651,16 +1651,20 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 
 func TestGetBulkState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == goodStoreKey
-	})).Return(
+	fakeStore.On("Get",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.GetRequest) bool {
+			return req.Key == goodStoreKey
+		})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: ptr.String("test-etag"),
 		}, nil)
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == errorStoreKey
-	})).Return(
+	fakeStore.On("Get",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.GetRequest) bool {
+			return req.Key == errorStoreKey
+		})).Return(
 		nil,
 		errors.New("failed to get state with error-key"))
 
@@ -1769,12 +1773,16 @@ func TestGetBulkState(t *testing.T) {
 
 func TestDeleteState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == goodStoreKey
-	})).Return(nil)
-	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == errorStoreKey
-	})).Return(errors.New("failed to delete state with key2"))
+	fakeStore.On("Delete",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.DeleteRequest) bool {
+			return req.Key == goodStoreKey
+		})).Return(nil)
+	fakeStore.On("Delete",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.DeleteRequest) bool {
+			return req.Key == errorStoreKey
+		})).Return(errors.New("failed to delete state with key2"))
 
 	fakeAPI := &api{
 		id:          "fakeAPI",
@@ -2005,7 +2013,7 @@ func TestTransactionStateStoreNotImplemented(t *testing.T) {
 
 func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore := &daprt.TransactionalStoreMock{}
-	matchKeyFn := func(req *state.TransactionalStateRequest, key string) bool {
+	matchKeyFn := func(ctx context.Context, req *state.TransactionalStateRequest, key string) bool {
 		if len(req.Operations) == 1 {
 			if rr, ok := req.Operations[0].Request.(state.SetRequest); ok {
 				if rr.Key == "fakeAPI||"+key {
@@ -2017,12 +2025,16 @@ func TestExecuteStateTransaction(t *testing.T) {
 		}
 		return false
 	}
-	fakeStore.On("Multi", mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
-		return matchKeyFn(req, goodKey)
-	})).Return(nil)
-	fakeStore.On("Multi", mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
-		return matchKeyFn(req, "error-key")
-	})).Return(errors.New("error to execute with key2"))
+	fakeStore.On("Multi",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
+			return matchKeyFn(context.TODO(), req, goodKey)
+		})).Return(nil)
+	fakeStore.On("Multi",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
+			return matchKeyFn(context.TODO(), req, "error-key")
+		})).Return(errors.New("error to execute with key2"))
 
 	var fakeTransactionalStore state.TransactionalStore = fakeStore
 	fakeAPI := &api{
@@ -2325,9 +2337,11 @@ func TestQueryState(t *testing.T) {
 
 	fakeStore := &mockStateStoreQuerier{}
 	// simulate full result
-	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
-		return len(req.Query.Sort) != 0 && req.Query.Page.Limit != 0
-	})).Return(
+	fakeStore.MockQuerier.On("Query",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.QueryRequest) bool {
+			return len(req.Query.Sort) != 0 && req.Query.Page.Limit != 0
+		})).Return(
 		&state.QueryResponse{
 			Results: []state.QueryItem{
 				{
@@ -2337,16 +2351,20 @@ func TestQueryState(t *testing.T) {
 			},
 		}, nil)
 	// simulate empty data
-	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
-		return len(req.Query.Sort) == 0 && req.Query.Page.Limit != 0
-	})).Return(
+	fakeStore.MockQuerier.On("Query",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.QueryRequest) bool {
+			return len(req.Query.Sort) == 0 && req.Query.Page.Limit != 0
+		})).Return(
 		&state.QueryResponse{
 			Results: []state.QueryItem{},
 		}, nil)
 	// simulate error
-	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
-		return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
-	})).Return(nil, errors.New("Query error"))
+	fakeStore.MockQuerier.On("Query",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.QueryRequest) bool {
+			return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
+		})).Return(nil, errors.New("Query error"))
 
 	server := startTestServerAPI(port, &api{
 		id:          "fakeAPI",

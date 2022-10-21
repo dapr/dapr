@@ -1067,7 +1067,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 			if a.stateStores != nil {
 				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName, resiliency.Statestore)
 				err := policy(func(ctx context.Context) (err error) {
-					return a.stateStores[response.StoreName].BulkSet(reqs)
+					return a.stateStores[response.StoreName].BulkSet(ctx, reqs)
 				})
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)

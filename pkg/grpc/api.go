@@ -611,7 +611,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	var responses []state.BulkGetResponse
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) (rErr error) {
-		bulkGet, responses, rErr = store.BulkGet(reqs)
+		bulkGet, responses, rErr = store.BulkGet(ctx, reqs)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -646,7 +646,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			var r *state.GetResponse
 			ok := atomic.Bool{}
 			policyErr := policy(func(ctx context.Context) error {
-				res, rErr := store.Get(req)
+				res, rErr := store.Get(ctx, req)
 				if rErr != nil {
 					return rErr
 				}
@@ -726,7 +726,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	var getResponse *state.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = store.Get(&req)
+		getResponse, rErr = store.Get(ctx, &req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -810,7 +810,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
-		return store.BulkSet(reqs)
+		return store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -858,7 +858,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	var resp *state.QueryResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = querier.Query(&req)
+		resp, rErr = querier.Query(ctx, &req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -932,7 +932,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
-		return store.Delete(&req)
+		return store.Delete(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -978,7 +978,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
-		return store.BulkDelete(reqs)
+		return store.BulkDelete(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1212,7 +1212,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err := policy(func(ctx context.Context) error {
-		return transactionalStore.Multi(&state.TransactionalStateRequest{
+		return transactionalStore.Multi(ctx, &state.TransactionalStateRequest{
 			Operations: operations,
 			Metadata:   in.Metadata,
 		})
