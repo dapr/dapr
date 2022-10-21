@@ -103,7 +103,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 
 			// Set up metadata and invoke the bulk publish method.
 			req.Metadata[bulkPublishSeriallyKey] = tc.bulkPublishSeriallyKey
-			res, err := bulkPublisher.BulkPublish(context.TODO(), req)
+			res, err := bulkPublisher.BulkPublish(context.Background(), req)
 
 			// Check if the bulk publish method returns an error.
 			if tc.expectError {
