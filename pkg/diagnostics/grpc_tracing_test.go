@@ -57,6 +57,7 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 		{"/dapr.proto.runtime.v1.Dapr/GetSecret", "GetSecretRequest", "Dapr", "mysecretstore"},
 		{"/dapr.proto.runtime.v1.Dapr/InvokeBinding", "InvokeBindingRequest", "Dapr", "mybindings"},
 		{"/dapr.proto.runtime.v1.Dapr/PublishEvent", "PublishEventRequest", "Dapr", "mytopic"},
+		{"/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1", "BulkPublishEventRequest", "Dapr", "mytopic"},
 	}
 	var req interface{}
 	for _, tt := range tests {
@@ -76,6 +77,8 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 				req = &runtimev1pb.InvokeBindingRequest{Name: "mybindings"}
 			case "PublishEventRequest":
 				req = &runtimev1pb.PublishEventRequest{Topic: "mytopic"}
+			case "BulkPublishEventRequest":
+				req = &runtimev1pb.BulkPublishRequest{Topic: "mytopic"}
 			case "TopicEventRequest":
 				req = &runtimev1pb.TopicEventRequest{Topic: "mytopic"}
 			case "BindingEventRequest":

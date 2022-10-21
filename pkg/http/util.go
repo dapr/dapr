@@ -16,8 +16,8 @@ package http
 import (
 	"encoding/base64"
 	"encoding/json"
-
-	"github.com/pkg/errors"
+	"errors"
+	"fmt"
 
 	contribContentType "github.com/dapr/components-contrib/contenttype"
 )
@@ -32,7 +32,7 @@ func ConvertEventToBytes(event interface{}, contentType string) ([]byte, error) 
 		if dataAsString, ok := event.(string); ok {
 			decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
 			if decodeErr != nil {
-				return []byte{}, errors.Wrapf(decodeErr, "error: unable to decode base64 application/octect-stream data")
+				return []byte{}, fmt.Errorf("error: unable to decode base64 application/octect-stream data: %w", decodeErr)
 			}
 
 			return decoded, nil
@@ -49,7 +49,7 @@ func ConvertEventToBytes(event interface{}, contentType string) ([]byte, error) 
 	} else if contribContentType.IsJSONContentType(contentType) || contribContentType.IsCloudEventContentType(contentType) {
 		dBytes, err := json.Marshal(event)
 		if err != nil {
-			return []byte{}, errors.Wrapf(err, errContentTypeMismatch.Error())
+			return []byte{}, fmt.Errorf("%s: %w", errContentTypeMismatch.Error(), err)
 		}
 		return dBytes, nil
 	}

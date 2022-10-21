@@ -15,6 +15,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,6 +28,7 @@ func TestConvertEventToBytes(t *testing.T) {
 			"test": "event",
 		}, "application/octet-stream")
 		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errContentTypeMismatch))
 		assert.Equal(t, []byte{}, res)
 	})
 
@@ -39,6 +41,7 @@ func TestConvertEventToBytes(t *testing.T) {
 	t.Run("serialize string data with octet-stream content type", func(t *testing.T) {
 		res, err := ConvertEventToBytes("test event", "application/octet-stream")
 		assert.Error(t, err)
+		t.Log(err)
 		assert.Equal(t, []byte{}, res)
 	})
 
@@ -47,6 +50,7 @@ func TestConvertEventToBytes(t *testing.T) {
 			"test": "event",
 		}, "text/plain")
 		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errContentTypeMismatch))
 		assert.Equal(t, []byte{}, res)
 	})
 
@@ -72,6 +76,7 @@ func TestConvertEventToBytes(t *testing.T) {
 	t.Run("serialize string data with wrong content type", func(t *testing.T) {
 		res, err := ConvertEventToBytes("</tag>", "image/png")
 		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errContentTypeMismatch))
 		assert.Equal(t, []byte{}, res)
 	})
 
