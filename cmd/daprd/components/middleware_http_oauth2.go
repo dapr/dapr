@@ -24,7 +24,7 @@ import (
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return oauth2.NewOAuth2Middleware().GetHandler(metadata)
+			return oauth2.NewOAuth2Middleware(log).GetHandler(metadata)
 		}
 	}, "oauth2")
 }
