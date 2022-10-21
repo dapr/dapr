@@ -79,7 +79,9 @@ func (_m *MockAppChannel) HealthProbe(ctx context.Context) (bool, error) {
 }
 
 func (_m *MockAppChannel) Init() {
+	_m.mutex.Lock()
 	_m.requestsReceived = make(map[string]*v1.InvokeMethodRequest)
+	_m.mutex.Unlock()
 }
 
 // InvokeMethod provides a mock function with given fields: ctx, req
@@ -111,6 +113,8 @@ func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *v1.InvokeMethod
 }
 
 func (_m *MockAppChannel) GetInvokedRequest() map[string]*v1.InvokeMethodRequest {
+	_m.mutex.Lock()
+	defer _m.mutex.Unlock()
 	return _m.requestsReceived
 }
 
