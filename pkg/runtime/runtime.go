@@ -683,10 +683,9 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
-	var err error
 	routeMetadata := route.metadata
 	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
-		err = a.bulkSubscribeTopic(ctx, policy, name, topic, route)
+		err := a.bulkSubscribeTopic(ctx, policy, name, topic, route)
 		if err != nil {
 			cancel()
 			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
@@ -694,7 +693,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		a.topicCtxCancels[subKey] = cancel
 		return nil
 	}
-	err = a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
+	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    topic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
@@ -704,9 +703,9 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		msg.Metadata[pubsubName] = name
 
-		rawPayload, innerErr := contribMetadata.IsRawPayload(route.metadata)
-		if innerErr != nil {
-			log.Errorf("error deserializing pubsub metadata: %s", innerErr)
+		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
+		if err != nil {
+			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if route.deadLetterTopic != "" {
 				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
@@ -715,16 +714,16 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 				}
 			}
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
-			return innerErr
+			return err
 		}
 
 		var cloudEvent map[string]interface{}
 		data := msg.Data
 		if rawPayload {
 			cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
-			data, innerErr = json.Marshal(cloudEvent)
-			if innerErr != nil {
-				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, innerErr)
+			data, err = json.Marshal(cloudEvent)
+			if err != nil {
+				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 				if route.deadLetterTopic != "" {
 					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
@@ -733,12 +732,12 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 					}
 				}
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
-				return innerErr
+				return err
 			}
 		} else {
-			innerErr = json.Unmarshal(msg.Data, &cloudEvent)
-			if innerErr != nil {
-				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, innerErr)
+			err = json.Unmarshal(msg.Data, &cloudEvent)
+			if err != nil {
+				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 				if route.deadLetterTopic != "" {
 					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
@@ -747,7 +746,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 					}
 				}
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
-				return innerErr
+				return err
 			}
 		}
 
@@ -761,9 +760,9 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			return nil
 		}
 
-		routePath, shouldProcess, innerErr := findMatchingRoute(route.rules, cloudEvent)
-		if innerErr != nil {
-			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, innerErr)
+		routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
+		if err != nil {
+			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
 			if route.deadLetterTopic != "" {
 				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
@@ -772,7 +771,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 				}
 			}
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
-			return innerErr
+			return err
 		}
 		if !shouldProcess {
 			// The event does not match any route specified so ignore it.
@@ -784,7 +783,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			return nil
 		}
 
-		innerErr = policy(func(ctx context.Context) error {
+		err = policy(func(ctx context.Context) error {
 			psm := &pubsubSubscribedMessage{
 				cloudEvent: cloudEvent,
 				data:       data,
@@ -802,18 +801,17 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 				return backoff.Permanent(errors.New("invalid application protocol"))
 			}
 		})
-		if innerErr != nil && innerErr != context.Canceled {
+		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			if route.deadLetterTopic == "" {
-				return innerErr
+				return err
 			}
 			_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
 			return nil
 		}
-		return innerErr
+		return err
 	})
-
 	if err != nil {
 		cancel()
 		return fmt.Errorf("failed to subscribe to topic %s: %w", topic, err)

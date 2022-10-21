@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -211,13 +212,11 @@ func (c *componentMetrics) BulkPubsubIngressEvent(ctx context.Context, component
 
 // BulkPubsubIngressEventEntries records the metrics for entries inside a bulk pub/sub ingress event.
 func (c *componentMetrics) BulkPubsubIngressEventEntries(ctx context.Context, component, topic string, processStatus string, eventCount int64) {
-	if c.enabled {
-		if eventCount > 0 {
-			stats.RecordWithTags(
-				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
-				c.bulkPubsubEventIngressCount.M(eventCount))
-		}
+	if c.enabled && eventCount > 0 {
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
+			c.bulkPubsubEventIngressCount.M(eventCount))
 	}
 }
 
@@ -227,7 +226,7 @@ func (c *componentMetrics) BulkPubsubEgressEvent(ctx context.Context, component,
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
 			c.bulkPubsubEgressCount.M(1))
 		if eventCount > 0 {
 			// There is at leaset one success in the bulk publish call even if overall success of the call might be a failure
@@ -239,7 +238,7 @@ func (c *componentMetrics) BulkPubsubEgressEvent(ctx context.Context, component,
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
 				c.bulkPubsubEgressLatency.M(elapsed))
 		}
 	}
