@@ -9,6 +9,8 @@ jobs:
     name: bot-processor
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v2 # required to make the script available for next step
       - name: Comment analyzer
         uses: actions/github-script@v4
         with:
