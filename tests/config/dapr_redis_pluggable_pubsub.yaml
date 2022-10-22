@@ -16,7 +16,7 @@ kind: Component
 metadata:
   name: pluggable-messagebus
 spec:
-  type: pubsub.redis-pubsub-pluggable
+  type: pubsub.redis-pluggable
   initTimeout: 1m
   version: v1
   metadata:

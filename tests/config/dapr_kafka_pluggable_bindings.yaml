@@ -16,7 +16,7 @@ kind: Component
 metadata:
   name: pluggable-test-topic
 spec:
-  type: bindings.kafka-pluggable-test-topic
+  type: bindings.kafka-pluggable
   initTimeout: 1m
   version: v1
   metadata:
@@ -44,7 +44,7 @@ kind: Component
 metadata:
   name: pluggable-test-topic-grpc
 spec:
-  type: bindings.kafka-pluggable-test-topic-grpc
+  type: bindings.kafka-pluggable
   initTimeout: 1m
   version: v1
   metadata:
@@ -73,7 +73,7 @@ kind: Component
 metadata:
   name: test-topic-custom-route-pluggable
 spec:
-  type: bindings.kafka-pluggable-test-topic-custom-route-pluggable
+  type: bindings.kafka-pluggable
   initTimeout: 1m
   version: v1
   metadata:
