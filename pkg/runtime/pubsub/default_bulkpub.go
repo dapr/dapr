@@ -78,11 +78,12 @@ func (p *defaultBulkPublisher) bulkPublishSerial(req *contribPubsub.BulkPublishR
 // that messages are sent to the broker in the same order as specified in the request.
 func (p *defaultBulkPublisher) bulkPublishParallel(req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	statuses := make([]contribPubsub.BulkPublishResponseEntry, 0, len(req.Entries))
+	maxConcurrency := utils.GetIntOrDefault(req.Metadata, bulkPublishMaxConcurrencyKey, defaultBulkPublishMaxConcurrency)
 
 	var eg errgroup.Group
-	eg.SetLimit(utils.GetIntOrDefault(req.Metadata, bulkPublishMaxConcurrencyKey, defaultBulkPublishMaxConcurrency))
+	eg.SetLimit(maxConcurrency)
 
-	statusChan := make(chan contribPubsub.BulkPublishResponseEntry)
+	statusChan := make(chan contribPubsub.BulkPublishResponseEntry, maxConcurrency)
 
 	for i := range req.Entries {
 		entry := req.Entries[i]
