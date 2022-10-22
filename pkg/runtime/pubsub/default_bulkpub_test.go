@@ -48,34 +48,42 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 	}
 
 	tcs := []struct {
-		name                   string
-		bulkPublishSeriallyKey string
-		publishErrors          []error
-		expectError            bool
+		name                      string
+		bulkPublishSerially       string
+		bulkPublishMaxConcurrency int
+		publishErrors             []error
+		expectError               bool
 	}{
 		{
-			name:                   "bulkPublishSeriallyKey is set to true, without publish errors",
-			bulkPublishSeriallyKey: "true",
-			publishErrors:          []error{nil, nil},
-			expectError:            false,
+			name:                "bulkPublishSeriallyKey is set to true, without publish errors",
+			bulkPublishSerially: "true",
+			publishErrors:       []error{nil, nil},
+			expectError:         false,
 		},
 		{
-			name:                   "bulkPublishSeriallyKey is set to true, with a publish error",
-			bulkPublishSeriallyKey: "true",
-			publishErrors:          []error{errors.New("publish error"), nil},
-			expectError:            true,
+			name:                "bulkPublishSeriallyKey is set to true, with a publish error",
+			bulkPublishSerially: "true",
+			publishErrors:       []error{errors.New("publish error"), nil},
+			expectError:         true,
 		},
 		{
-			name:                   "bulkPublishSeriallyKey is not true, without publish errors",
-			bulkPublishSeriallyKey: "false",
-			publishErrors:          []error{nil, nil},
-			expectError:            false,
+			name:                "bulkPublishSeriallyKey is not true, without publish errors",
+			bulkPublishSerially: "false",
+			publishErrors:       []error{nil, nil},
+			expectError:         false,
 		},
 		{
-			name:                   "bulkPublishSeriallyKey is not true, with a publish errors",
-			bulkPublishSeriallyKey: "false",
-			publishErrors:          []error{nil, errors.New("publish error")},
-			expectError:            true,
+			name:                "bulkPublishSeriallyKey is not true, with a publish errors",
+			bulkPublishSerially: "false",
+			publishErrors:       []error{nil, errors.New("publish error")},
+			expectError:         true,
+		},
+		{
+			name:                      "bulkPublishMaxConcurrency is less than number of entries, without publish errors",
+			bulkPublishSerially:       "false",
+			bulkPublishMaxConcurrency: 1,
+			publishErrors:             []error{nil, nil},
+			expectError:               false,
 		},
 	}
 
@@ -102,7 +110,11 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			bulkPublisher := NewDefaultBulkPublisher(mockPubSub)
 
 			// Set up metadata and invoke the bulk publish method.
-			req.Metadata[bulkPublishSeriallyKey] = tc.bulkPublishSeriallyKey
+			req.Metadata[bulkPublishSeriallyKey] = tc.bulkPublishSerially
+			if tc.bulkPublishMaxConcurrency > 0 {
+				req.Metadata[bulkPublishMaxConcurrencyKey] = fmt.Sprintf("%d", tc.bulkPublishMaxConcurrency)
+			}
+
 			res, err := bulkPublisher.BulkPublish(context.Background(), req)
 
 			// Check if the bulk publish method returns an error.

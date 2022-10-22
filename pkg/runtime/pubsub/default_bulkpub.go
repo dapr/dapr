@@ -82,7 +82,7 @@ func (p *defaultBulkPublisher) bulkPublishParallel(req *contribPubsub.BulkPublis
 	var eg errgroup.Group
 	eg.SetLimit(utils.GetIntOrDefault(req.Metadata, bulkPublishMaxConcurrencyKey, defaultBulkPublishMaxConcurrency))
 
-	statusChan := make(chan contribPubsub.BulkPublishResponseEntry, len(req.Entries))
+	statusChan := make(chan contribPubsub.BulkPublishResponseEntry)
 
 	for i := range req.Entries {
 		entry := req.Entries[i]
@@ -93,12 +93,13 @@ func (p *defaultBulkPublisher) bulkPublishParallel(req *contribPubsub.BulkPublis
 		})
 	}
 
-	err := eg.Wait()
-	close(statusChan)
-
-	for status := range statusChan {
+	for range req.Entries {
+		status := <-statusChan
 		statuses = append(statuses, status)
 	}
+
+	err := eg.Wait()
+	close(statusChan)
 
 	return contribPubsub.BulkPublishResponse{Statuses: statuses}, err
 }
