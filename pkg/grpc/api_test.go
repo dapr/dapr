@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/components-contrib/lock"
 
 	"github.com/agrea/ptr"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -37,6 +37,7 @@ import (
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -48,13 +49,14 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/actors"
+	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	state_loader "github.com/dapr/dapr/pkg/components/state"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -62,7 +64,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
@@ -199,7 +201,7 @@ func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Re
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
-	span := diag_utils.SpanFromContext(ctx)
+	span := diagUtils.SpanFromContext(ctx)
 	return []byte(SerializeSpanContext(span.SpanContext()))
 }
 
@@ -221,7 +223,7 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc.NewServer(
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
+		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
 	)
 
 	go func() {
@@ -296,7 +298,7 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithInsecure())
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		panic(err)
 	}
@@ -1134,9 +1136,8 @@ func TestGetConfiguration(t *testing.T) {
 			return req.Keys[0] == goodKey
 		})).Return(
 		&configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:   goodKey,
+			Items: map[string]*configuration.Item{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1147,17 +1148,14 @@ func TestGetConfiguration(t *testing.T) {
 			return req.Keys[0] == "good-key1" && req.Keys[1] == goodKey2 && req.Keys[2] == "good-key3"
 		})).Return(
 		&configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:   "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data",
 				},
-				{
-					Key:   "good-key3",
+				"good-key3": {
 					Value: "test-data",
 				},
 			},
@@ -1197,9 +1195,8 @@ func TestGetConfiguration(t *testing.T) {
 			keys:          []string{goodKey},
 			errorExcepted: false,
 			expectedResponse: &runtimev1pb.GetConfigurationResponse{
-				Items: []*commonv1pb.ConfigurationItem{
-					{
-						Key:   goodKey,
+				Items: map[string]*commonv1pb.ConfigurationItem{
+					goodKey: {
 						Value: "test-data",
 					},
 				},
@@ -1212,17 +1209,14 @@ func TestGetConfiguration(t *testing.T) {
 			keys:          []string{"good-key1", goodKey2, "good-key3"},
 			errorExcepted: false,
 			expectedResponse: &runtimev1pb.GetConfigurationResponse{
-				Items: []*commonv1pb.ConfigurationItem{
-					{
-						Key:   "good-key1",
+				Items: map[string]*commonv1pb.ConfigurationItem{
+					"good-key1": {
 						Value: "test-data",
 					},
-					{
-						Key:   goodKey2,
+					goodKey2: {
 						Value: "test-data",
 					},
-					{
-						Key:   "good-key3",
+					"good-key3": {
 						Value: "test-data",
 					},
 				},
@@ -1278,9 +1272,8 @@ func TestSubscribeConfiguration(t *testing.T) {
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
 			if len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey {
 				_ = f(context.Background(), &configuration.UpdateEvent{
-					Items: []*configuration.Item{
-						{
-							Key:   goodKey,
+					Items: map[string]*configuration.Item{
+						goodKey: {
 							Value: "test-data",
 						},
 					},
@@ -1297,13 +1290,11 @@ func TestSubscribeConfiguration(t *testing.T) {
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
 			if len(tempReq.Keys) == 2 && tempReq.Keys[0] == goodKey && tempReq.Keys[1] == goodKey2 {
 				_ = f(context.Background(), &configuration.UpdateEvent{
-					Items: []*configuration.Item{
-						{
-							Key:   goodKey,
+					Items: map[string]*configuration.Item{
+						goodKey: {
 							Value: "test-data",
 						},
-						{
-							Key:   goodKey2,
+						goodKey2: {
 							Value: "test-data2",
 						},
 					},
@@ -1338,7 +1329,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 		storeName        string
 		keys             []string
 		errorExcepted    bool
-		expectedResponse []*commonv1pb.ConfigurationItem
+		expectedResponse map[string]*commonv1pb.ConfigurationItem
 		expectedError    codes.Code
 	}{
 		{
@@ -1346,9 +1337,8 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:     "store1",
 			keys:          []string{goodKey},
 			errorExcepted: false,
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1359,7 +1349,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:        "no-store",
 			keys:             []string{goodKey},
 			errorExcepted:    true,
-			expectedResponse: []*commonv1pb.ConfigurationItem{},
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -1367,7 +1357,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:        "store1",
 			keys:             []string{"error-key"},
 			errorExcepted:    true,
-			expectedResponse: []*commonv1pb.ConfigurationItem{},
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -1375,13 +1365,11 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:     "store1",
 			keys:          []string{goodKey, goodKey2},
 			errorExcepted: false,
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data2",
 				},
 			},
@@ -1451,9 +1439,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 					default:
 					}
 					if err := f(context.Background(), &configuration.UpdateEvent{
-						Items: []*configuration.Item{
-							{
-								Key:   goodKey,
+						Items: map[string]*configuration.Item{
+							goodKey: {
 								Value: "test-data",
 							},
 						},
@@ -1484,13 +1471,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 					default:
 					}
 					if err := f(context.Background(), &configuration.UpdateEvent{
-						Items: []*configuration.Item{
-							{
-								Key:   goodKey,
+						Items: map[string]*configuration.Item{
+							goodKey: {
 								Value: "test-data",
 							},
-							{
-								Key:   goodKey2,
+							goodKey2: {
 								Value: "test-data2",
 							},
 						},
@@ -1523,16 +1508,15 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 		testName         string
 		storeName        string
 		keys             []string
-		expectedResponse []*commonv1pb.ConfigurationItem
+		expectedResponse map[string]*commonv1pb.ConfigurationItem
 		expectedError    codes.Code
 	}{
 		{
 			testName:  "Test unsubscribe",
 			storeName: "store1",
 			keys:      []string{goodKey},
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1542,13 +1526,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			testName:  "Test unsubscribe with multi keys",
 			storeName: "store1",
 			keys:      []string{goodKey, goodKey2},
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data2",
 				},
 			},
@@ -1577,7 +1559,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				rsp, recvErr := resp.Recv()
 				assert.NotNil(t, rsp)
 				assert.Nil(t, recvErr)
-				assert.Equal(t, tt.expectedResponse, rsp.Items)
+				if rsp.Items != nil {
+					assert.Equal(t, tt.expectedResponse, rsp.Items)
+				} else {
+					assert.Equal(t, mockSubscribeID, rsp.Id)
+				}
 				subscribeID = rsp.Id
 			}
 			assert.Nil(t, err, "Error should be nil")
@@ -1599,6 +1585,66 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				_, err = resp.Recv()
 			}
 			assert.Error(t, err, "Unsubscribed channel should returns EOF")
+		})
+	}
+}
+
+func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
+	fakeConfigurationStore := &daprt.MockConfigurationStore{}
+	fakeConfigurationStore.On("Unsubscribe",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
+			return req.ID == mockSubscribeID
+		})).Return(nil)
+
+	fakeAPI := &api{
+		configurationSubscribe: make(map[string]chan struct{}),
+		id:                     "fakeAPI",
+		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
+		resiliency:             resiliency.New(nil),
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		id               string
+		expectedResponse bool
+		expectedError    bool
+	}{
+		{
+			testName:         "Test unsubscribe",
+			storeName:        "store1",
+			id:               "",
+			expectedResponse: true,
+			expectedError:    false,
+		},
+		{
+			testName:         "Test unsubscribe with incorrect store name",
+			storeName:        "no-store",
+			id:               mockSubscribeID,
+			expectedResponse: false,
+			expectedError:    true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.UnsubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Id:        tt.id,
+			}
+
+			resp, err := client.UnsubscribeConfigurationAlpha1(context.Background(), req)
+			assert.Equal(t, tt.expectedResponse, resp != nil)
+			assert.Equal(t, tt.expectedError, err != nil)
 		})
 	}
 }
@@ -1803,17 +1849,19 @@ func TestPublishTopic(t *testing.T) {
 				}
 
 				if req.Topic == "err-not-found" {
-					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+					return runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				}
 
 				if req.Topic == "err-not-allowed" {
-					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+					return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				}
 
 				return nil
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				return &daprt.MockPubSub{}
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
 			},
 		},
 	}
@@ -1861,11 +1909,13 @@ func TestPublishTopic(t *testing.T) {
 func TestShutdownEndpoints(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
+	shutdownCh := make(chan struct{})
 	m := mock.Mock{}
 	m.On("shutdown", mock.Anything).Return()
 	srv := &api{
 		shutdown: func() {
 			m.MethodCalled("shutdown")
+			close(shutdownCh)
 		},
 	}
 	server := startTestServerAPI(port, srv)
@@ -1879,8 +1929,11 @@ func TestShutdownEndpoints(t *testing.T) {
 	t.Run("Shutdown successfully - 204", func(t *testing.T) {
 		_, err := client.Shutdown(context.Background(), &emptypb.Empty{})
 		assert.NoError(t, err, "Expected no error")
-		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
-			<-time.After(200 * time.Millisecond)
+		select {
+		case <-time.After(time.Second):
+			t.Fatal("Did not shut down within 1 second")
+		case <-shutdownCh:
+			// All good
 		}
 		m.AssertCalled(t, "shutdown")
 	})
@@ -1893,7 +1946,7 @@ func TestInvokeBinding(t *testing.T) {
 			if name == "error-binding" {
 				return nil, errors.New("error when invoke binding")
 			}
-			return &bindings.InvokeResponse{Data: []byte("ok")}, nil
+			return &bindings.InvokeResponse{Data: []byte("ok"), Metadata: req.Metadata}, nil
 		},
 	}
 	server := startTestServerAPI(port, srv)
@@ -1907,6 +1960,15 @@ func TestInvokeBinding(t *testing.T) {
 	assert.Nil(t, err)
 	_, err = client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
+
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
+	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
+	assert.Nil(t, err)
+	assert.NotNil(t, resp)
+	assert.Contains(t, resp.Metadata, "traceparent")
+	assert.Equal(t, resp.Metadata["traceparent"], "Test")
+	assert.Contains(t, resp.Metadata, "userMetadata")
+	assert.Equal(t, resp.Metadata["userMetadata"], "val1")
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {
@@ -2055,11 +2117,21 @@ func TestExecuteStateTransaction(t *testing.T) {
 
 func TestGetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	fakeComponent := components_v1alpha.Component{}
+	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
+
+	mockActors := new(actors.MockActors)
+	mockActors.On("GetActiveActorsCount").Return(actors.ActiveActorsCount{
+		Count: 10,
+		Type:  "abcd",
+	})
+
 	fakeAPI := &api{
-		id:         "fakeAPI",
-		components: []components_v1alpha.Component{fakeComponent},
+		id:    "fakeAPI",
+		actor: mockActors,
+		getComponentsFn: func() []componentsV1alpha.Component {
+			return []componentsV1alpha.Component{fakeComponent}
+		},
 		getComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
@@ -2076,17 +2148,20 @@ func TestGetMetadata(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 	response, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, response.Id, "fakeAPI")
 	assert.Len(t, response.RegisteredComponents, 1, "One component should be returned")
 	assert.Equal(t, response.RegisteredComponents[0].Name, "testComponent")
 	assert.Contains(t, response.ExtendedMetadata, "testKey")
 	assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
 	assert.Len(t, response.RegisteredComponents[0].Capabilities, 1, "One capabilities should be returned")
 	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
+	assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
+	assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
 }
 
 func TestSetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	fakeComponent := components_v1alpha.Component{}
+	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 	fakeAPI := &api{
 		id: "fakeAPI",
@@ -2192,6 +2267,7 @@ func TestExtractEtag(t *testing.T) {
 	})
 }
 
+//nolint:nosnakecase
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
@@ -2394,8 +2470,7 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, r.Items)
 		assert.Len(t, r.Items, 1)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
 }
 
@@ -2446,8 +2521,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NotNil(t, r)
 		assert.Len(t, r.Items, 1)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
 
 	t.Run("get all configuration item for empty list", func(t *testing.T) {
@@ -2494,17 +2568,15 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NotNil(t, r)
 		assert.Len(t, r.Items, 2)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
-		assert.Equal(t, "key2", r.Items[1].Key)
-		assert.Equal(t, "val2", r.Items[1].Value)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+		assert.Equal(t, "val2", r.Items["key2"].Value)
 	})
 }
 
 func TestStateAPIWithResiliency(t *testing.T) {
 	failingStore := &daprt.FailingStatestore{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingGetKey":        1,
 				"failingSetKey":        1,
 				"failingDeleteKey":     1,
@@ -2514,7 +2586,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				"failingMultiKey":      1,
 				"failingQueryKey":      1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutGetKey":        time.Second * 10,
 				"timeoutSetKey":        time.Second * 10,
 				"timeoutDeleteKey":     time.Second * 10,
@@ -2524,11 +2596,11 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				"timeoutMultiKey":      time.Second * 10,
 				"timeoutQueryKey":      time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
-	state_loader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
+	stateLoader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
 
 	fakeAPI := &api{
 		id:                       "fakeAPI",
@@ -2551,7 +2623,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Key:       "failingGetKey",
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingGetKey"))
 	})
 
 	t.Run("get state request times out with resiliency", func(t *testing.T) {
@@ -2563,7 +2635,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2578,7 +2650,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			},
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingSetKey"))
 	})
 
 	t.Run("set state request times out with resiliency", func(t *testing.T) {
@@ -2595,7 +2667,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2605,7 +2677,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Key:       "failingDeleteKey",
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingDeleteKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingDeleteKey"))
 	})
 
 	t.Run("delete state request times out with resiliency", func(t *testing.T) {
@@ -2617,7 +2689,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutDeleteKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutDeleteKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2628,8 +2700,8 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkGetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkGetKey"))
 	})
 
 	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
@@ -2650,8 +2722,8 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				assert.Empty(t, item.Error)
 			}
 		}
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkGetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodTimeoutBulkGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2671,8 +2743,8 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkSetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkSetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkSetKey"))
 	})
 
 	t.Run("bulk state set times out with resiliency", func(t *testing.T) {
@@ -2693,8 +2765,8 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkSetKey"])
-		assert.Equal(t, 0, failingStore.Failure.CallCount["goodTimeoutBulkSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkSetKey"))
+		assert.Equal(t, 0, failingStore.Failure.CallCount("goodTimeoutBulkSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2712,7 +2784,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingMultiKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingMultiKey"))
 	})
 
 	t.Run("state transaction times out with resiliency", func(t *testing.T) {
@@ -2729,7 +2801,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutMultiKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutMultiKey"))
 	})
 
 	t.Run("state query retries with resiliency", func(t *testing.T) {
@@ -2740,7 +2812,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingQueryKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingQueryKey"))
 	})
 
 	t.Run("state query times out with resiliency", func(t *testing.T) {
@@ -2751,25 +2823,25 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutQueryKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutQueryKey"))
 	})
 }
 
 func TestConfigurationAPIWithResiliency(t *testing.T) {
 	failingConfigStore := daprt.FailingConfigurationStore{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingGetKey":         1,
 				"failingSubscribeKey":   1,
 				"failingUnsubscribeKey": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutGetKey":         time.Second * 10,
 				"timeoutSubscribeKey":   time.Second * 10,
 				"timeoutUnsubscribeKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	fakeAPI := &api{
@@ -2795,7 +2867,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount["failingGetKey"])
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingGetKey"))
 	})
 
 	t.Run("test get configuration fails due to timeout with resiliency", func(t *testing.T) {
@@ -2806,7 +2878,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount["timeoutGetKey"])
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutGetKey"))
 	})
 
 	t.Run("test subscribe configuration retries with resiliency", func(t *testing.T) {
@@ -2820,7 +2892,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		_, err = resp.Recv()
 		assert.NoError(t, err)
 		// Subscribe now calls Get first so we have an extra call.
-		assert.Equal(t, 3, failingConfigStore.Failure.CallCount["failingSubscribeKey"])
+		assert.Equal(t, 3, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
 	})
 
 	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
@@ -2833,11 +2905,13 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 		_, err = resp.Recv()
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount["timeoutSubscribeKey"])
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey"))
 	})
 
 	t.Run("test unsubscribe configuration retries with resiliency", func(t *testing.T) {
+		fakeAPI.configurationSubscribeLock.Lock()
 		fakeAPI.configurationSubscribe["failingUnsubscribeKey"] = make(chan struct{})
+		fakeAPI.configurationSubscribeLock.Unlock()
 
 		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
@@ -2845,11 +2919,13 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount["failingUnsubscribeKey"])
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey"))
 	})
 
 	t.Run("test unsubscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
+		fakeAPI.configurationSubscribeLock.Lock()
 		fakeAPI.configurationSubscribe["timeoutUnsubscribeKey"] = make(chan struct{})
+		fakeAPI.configurationSubscribeLock.Unlock()
 
 		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
@@ -2857,17 +2933,17 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount["timeoutUnsubscribeKey"])
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutUnsubscribeKey"))
 	})
 }
 
 func TestSecretAPIWithResiliency(t *testing.T) {
 	failingStore := daprt.FailingSecretStore{
-		Failure: daprt.Failure{
-			Fails:     map[string]int{"key": 1, "bulk": 1},
-			Timeouts:  map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
-			CallCount: map[string]int{},
-		},
+		Failure: daprt.NewFailure(
+			map[string]int{"key": 1, "bulk": 1},
+			map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			map[string]int{},
+		),
 	}
 
 	// Setup Dapr API server
@@ -2895,7 +2971,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["key"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("key"))
 	})
 
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
@@ -2908,7 +2984,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeout"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2919,7 +2995,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["bulk"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("bulk"))
 	})
 
 	t.Run("Get bulk secret - timeout before request ends", func(t *testing.T) {
@@ -2931,24 +3007,24 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["bulkTimeout"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }
 
 func TestServiceInvocationWithResiliency(t *testing.T) {
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingKey":        1,
 				"extraFailingKey":   3,
 				"circuitBreakerKey": 10,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	// Setup Dapr API server
@@ -2980,7 +3056,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["failingKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
@@ -2995,7 +3071,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["timeoutKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("timeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3009,7 +3085,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 		})
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["extraFailingKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("extraFailingKey"))
 	})
 
 	t.Run("Test invoke direct messages opens circuit breaker after consecutive failures", func(t *testing.T) {
@@ -3022,7 +3098,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 			},
 		})
 		assert.Error(t, err)
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 
 		// Additional requests should fail due to the circuit breaker.
 		_, err = client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
@@ -3034,7 +3110,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 		})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "circuit breaker is open")
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 	})
 }
 
@@ -3045,26 +3121,19 @@ func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
 }
 
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
-	items := []*configuration.Item{
-		{
-			Key:   "key1",
-			Value: "val1",
-		}, {
-			Key:   "key2",
-			Value: "val2",
-		},
+	items := map[string]*configuration.Item{
+		"key1": {Value: "val1"},
+		"key2": {Value: "val2"},
 	}
 
-	res := make([]*configuration.Item, 0, 16)
+	res := make(map[string]*configuration.Item)
 
 	if len(req.Keys) == 0 {
 		res = items
 	} else {
-		for _, item := range items {
-			for _, key := range req.Keys {
-				if item.Key == key {
-					res = append(res, item)
-				}
+		for _, key := range req.Keys {
+			if val, ok := items[key]; ok {
+				res[key] = val
 			}
 		}
 	}
@@ -3075,26 +3144,19 @@ func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest
 }
 
 func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
-	items := []*configuration.Item{
-		{
-			Key:   "key1",
-			Value: "val1",
-		}, {
-			Key:   "key2",
-			Value: "val2",
-		},
+	items := map[string]*configuration.Item{
+		"key1": {Value: "val1"},
+		"key2": {Value: "val2"},
 	}
 
-	res := make([]*configuration.Item, 0, 16)
+	res := make(map[string]*configuration.Item)
 
 	if len(req.Keys) == 0 {
 		res = items
 	} else {
-		for _, item := range items {
-			for _, key := range req.Keys {
-				if item.Key == key {
-					res = append(res, item)
-				}
+		for _, key := range req.Keys {
+			if val, ok := items[key]; ok {
+				res[key] = val
 			}
 		}
 	}
@@ -3145,6 +3207,7 @@ func TestUnlockGrpcToComponentRequest(t *testing.T) {
 	assert.NotNil(t, req)
 }
 
+//nolint:nosnakecase
 func TestUnlockResponseToGrpcResponse(t *testing.T) {
 	resp := UnlockResponseToGrpcResponse(&lock.UnlockResponse{Status: lock.Success})
 	assert.True(t, resp.Status == runtimev1pb.UnlockResponse_SUCCESS)
@@ -3154,7 +3217,9 @@ func TestUnlockResponseToGrpcResponse(t *testing.T) {
 
 func TestTryLock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName: "abc",
 		}
@@ -3167,7 +3232,10 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName: "abc",
 		}
@@ -3180,7 +3248,10 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:  "abc",
 			ResourceId: "resource",
@@ -3194,7 +3265,10 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:  "abc",
@@ -3210,7 +3284,10 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "abc",
@@ -3236,7 +3313,10 @@ func TestTryLock(t *testing.T) {
 				Success: true,
 			}, nil
 		})
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "mock",
 			ResourceId:      "resource",
@@ -3251,7 +3331,9 @@ func TestTryLock(t *testing.T) {
 
 func TestUnlock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName: "abc",
@@ -3265,7 +3347,10 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName: "abc",
@@ -3279,7 +3364,10 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
 			ResourceId: "resource",
@@ -3293,7 +3381,10 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
@@ -3317,7 +3408,10 @@ func TestUnlock(t *testing.T) {
 				Status: lock.Success,
 			}, nil
 		})
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(APIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "mock",
 			ResourceId: "resource",
@@ -3325,6 +3419,6 @@ func TestUnlock(t *testing.T) {
 		}
 		resp, err := api.UnlockAlpha1(context.Background(), req)
 		assert.Nil(t, err)
-		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status)
+		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
 	})
 }

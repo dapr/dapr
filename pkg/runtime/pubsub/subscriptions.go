@@ -21,12 +21,11 @@ import (
 
 	"github.com/dapr/kit/retry"
 
-	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -307,7 +306,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 	switch ti.APIVersion {
 	case APIVersionV2alpha1:
 		// "v2alpha1" is the CRD that introduces pubsub routing.
-		var sub subscriptionsapi_v2alpha1.Subscription
+		var sub subscriptionsapiV2alpha1.Subscription
 		if err := yaml.Unmarshal(b, &sub); err != nil {
 			return nil, err
 		}
@@ -329,7 +328,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 	default:
 		// assume "v1alpha1" for backward compatibility as this was
 		// not checked before the introduction of "v2alpha".
-		var sub subscriptionsapi_v1alpha1.Subscription
+		var sub subscriptionsapiV1alpha1.Subscription
 		if err := yaml.Unmarshal(b, &sub); err != nil {
 			return nil, err
 		}
@@ -349,7 +348,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 	}
 }
 
-func parseRoutingRulesYAML(routes subscriptionsapi_v2alpha1.Routes) ([]*Rule, error) {
+func parseRoutingRulesYAML(routes subscriptionsapiV2alpha1.Routes) ([]*Rule, error) {
 	r := make([]*Rule, len(routes.Rules)+1)
 
 	var (
@@ -377,7 +376,7 @@ func parseRoutingRulesYAML(routes subscriptionsapi_v2alpha1.Routes) ([]*Rule, er
 	return r[:n], nil
 }
 
-func parseRoutingRulesGRPC(routes *commonv1pb.TopicRoutes) ([]*Rule, error) {
+func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	if routes == nil {
 		return []*Rule{{
 			Path: "",

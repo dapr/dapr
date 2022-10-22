@@ -19,6 +19,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -26,7 +27,14 @@ import (
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
-const appPort = 3000
+var appPort = 3000
+
+func init() {
+	p := os.Getenv("PORT")
+	if p != "" && p != "0" {
+		appPort, _ = strconv.Atoi(p)
+	}
+}
 
 type testCommandRequest struct {
 	Message string `json:"message,omitempty"`
@@ -127,5 +135,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

@@ -38,7 +38,7 @@ type SubscriptionSpec struct {
 	Pubsubname string `json:"pubsubname"`
 	// The topic name to subscribe to.
 	Topic string `json:"topic"`
-	// The optional metadata to provide the the subscription.
+	// The optional metadata to provide the subscription.
 	// +optional
 	Metadata map[string]string `json:"metadata,omitempty"`
 	// The Routes configuration for this topic.

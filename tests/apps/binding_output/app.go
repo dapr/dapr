@@ -20,10 +20,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
+	"os"
 
 	"github.com/gorilla/mux"
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -32,9 +31,33 @@ import (
 )
 
 const (
-	appPort  = 3000
-	daprPort = 3500
+	appPort                          = 3000
+	daprPort                         = 3500
+	DaprTestTopicEnvVar              = "DAPR_TEST_TOPIC_NAME"
+	DaprTestGRPCTopicEnvVar          = "DAPR_TEST_GRPC_TOPIC_NAME"
+	DaprTestInputBindingServiceEnVar = "DAPR_TEST_INPUT_BINDING_SVC"
 )
+
+var (
+	daprClient      runtimev1pb.DaprClient
+	topicName       = "test-topic"
+	topicNameGrpc   = "test-topic-grpc"
+	inputbindingSvc = "bindinginputgrpc"
+)
+
+func init() {
+	if envTopicName := os.Getenv(DaprTestTopicEnvVar); len(envTopicName) != 0 {
+		topicName = envTopicName
+	}
+
+	if envGrpcTopic := os.Getenv(DaprTestGRPCTopicEnvVar); len(envGrpcTopic) != 0 {
+		topicNameGrpc = envGrpcTopic
+	}
+
+	if envinputBinding := os.Getenv(DaprTestInputBindingServiceEnVar); len(envinputBinding) != 0 {
+		inputbindingSvc = envinputBinding
+	}
+}
 
 type testCommandRequest struct {
 	Messages []struct {
@@ -47,11 +70,6 @@ type indexHandlerResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-var (
-	grpcConn   *grpc.ClientConn
-	daprClient runtimev1pb.DaprClient
-)
-
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler is called")
@@ -60,6 +78,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(indexHandlerResponse{Message: "OK"})
 }
 
+//nolint:gosec
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered testHandler")
 	var requestBody testCommandRequest
@@ -70,7 +89,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/v1.0/bindings/test-topic", daprPort)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/bindings/%s", daprPort, topicName)
 
 	for _, message := range requestBody.Messages {
 		body, err := json.Marshal(&message)
@@ -109,11 +128,12 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, message := range requestBody.Messages {
+		//nolint:gosec
 		body, _ := json.Marshal(&message)
 
 		log.Printf("Sending message: %s", body)
 		req := runtimev1pb.InvokeBindingRequest{
-			Name:      "test-topic-grpc",
+			Name:      topicNameGrpc,
 			Data:      body,
 			Operation: "create",
 		}
@@ -132,12 +152,12 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered getReceivedTopicsGRPC")
 
 	req := runtimev1pb.InvokeServiceRequest{
-		Id: "bindinginputgrpc",
+		Id: inputbindingSvc,
 		Message: &commonv1pb.InvokeRequest{
 			Method: "GetReceivedTopics",
 			Data:   &anypb.Any{},
 			HttpExtension: &commonv1pb.HTTPExtension{
-				Verb: commonv1pb.HTTPExtension_POST,
+				Verb: commonv1pb.HTTPExtension_POST, //nolint:nosnakecase
 			},
 		},
 	}
@@ -168,31 +188,9 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func initGRPCClient() {
-	url := fmt.Sprintf("localhost:%d", 50001)
-	log.Printf("Connecting to dapr using url %s", url)
-	for retries := 10; retries > 0; retries-- {
-		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
-		if err == nil {
-			break
-		}
-
-		if retries == 0 {
-			log.Printf("Could not connect to dapr: %v", err)
-			log.Panic(err)
-		}
-
-		log.Printf("Could not connect to dapr: %v, retrying...", err)
-		time.Sleep(5 * time.Second)
-	}
-
-	daprClient = runtimev1pb.NewDaprClient(grpcConn)
-}
-
 func main() {
-	initGRPCClient()
+	daprClient = utils.GetGRPCClient(50001)
 
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

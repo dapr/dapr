@@ -27,45 +27,46 @@ import (
 	"testing"
 	"time"
 
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/fasthttputil"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-
-	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/components-contrib/lock"
+	"github.com/dapr/dapr/pkg/actors"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
-	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/utils/nethttpadaptor"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
@@ -144,17 +145,19 @@ func TestPubSubEndpoints(t *testing.T) {
 				}
 
 				if req.PubsubName == "errnotfound" {
-					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+					return runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				}
 
 				if req.PubsubName == "errnotallowed" {
-					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+					return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				}
 
 				return nil
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				return &daprt.MockPubSub{}
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
 			},
 		},
 	}
@@ -298,11 +301,13 @@ func TestPubSubEndpoints(t *testing.T) {
 func TestShutdownEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	shutdownCh := make(chan struct{})
 	m := mock.Mock{}
 	m.On("shutdown", mock.Anything).Return()
 	testAPI := &api{
 		shutdown: func() {
 			m.MethodCalled("shutdown")
+			close(shutdownCh)
 		},
 	}
 
@@ -312,8 +317,11 @@ func TestShutdownEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
-		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
-			<-time.After(200 * time.Millisecond)
+		select {
+		case <-time.After(time.Second):
+			t.Fatal("Did not shut down within 1 second")
+		case <-shutdownCh:
+			// All good
 		}
 		m.AssertCalled(t, "shutdown")
 	})
@@ -916,17 +924,17 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingKey":        1,
 				"extraFailingKey":   3,
 				"circuitBreakerKey": 10,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	fakeServer := newFakeHTTPServer()
@@ -948,7 +956,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["failingKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
@@ -965,7 +973,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["timeoutKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("timeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -981,7 +989,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["extraFailingKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("extraFailingKey"))
 	})
 
 	t.Run("Test invoke direct messages can trip circuit breaker", func(t *testing.T) {
@@ -995,13 +1003,13 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		// Circuit Breaker trips on the 5th failure, stopping retries.
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 
 		// Request occurs when the circuit breaker is open, which shouldn't even hit the app.
 		resp = fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Contains(t, string(resp.RawBody), "circuit breaker is open", "Should have received a circuit breaker open error.")
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 	})
 
 	fakeServer.Shutdown()
@@ -1715,15 +1723,15 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	failingActors := &actors.FailingActors{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingId": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutId": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	t.Run("Direct Message - retries with resiliency", func(t *testing.T) {
@@ -1733,7 +1741,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingActors.Failure.CallCount["failingId"])
+		assert.Equal(t, 2, failingActors.Failure.CallCount("failingId"))
 	})
 
 	fakeServer.Shutdown()
@@ -1744,19 +1752,19 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		getComponentsFn: func() []components_v1alpha1.Component {
-			return []components_v1alpha1.Component{
+		getComponentsFn: func() []componentsV1alpha1.Component {
+			return []componentsV1alpha1.Component{
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "MockComponent1Name",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "mock.component1Type",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent1",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -1764,16 +1772,16 @@ func TestV1MetadataEndpoint(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "MockComponent2Name",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "mock.component2Type",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent2",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -2115,7 +2123,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1.0"}
-	pipe := http_middleware.Pipeline{}
+	pipe := httpMiddleware.Pipeline{}
 
 	createExporters(&buffer)
 
@@ -2180,13 +2188,14 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 1, len(resp.JSONBody.([]interface{})))
-		rspMap := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 1, len(resp.JSONBody.(map[string]interface{})))
+		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
-		assert.Equal(t, "good-key1", rspMap.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap.(map[string]interface{})["version"].(string))
-		metadata := rspMap.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap, "good-key1")
+		goodkeyVal := rspMap["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal["version"].(string))
+		metadata := goodkeyVal["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
 	})
 	t.Run("Get Configurations with good keys", func(t *testing.T) {
@@ -2195,21 +2204,23 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.([]interface{})))
-		rspMap1 := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
-		assert.Equal(t, "good-key1", rspMap1.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap1.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap1.(map[string]interface{})["version"].(string))
-		metadata := rspMap1.(map[string]interface{})["metadata"].(map[string]interface{})
-		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+		assert.Contains(t, rspMap1, "good-key1")
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
+		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.([]interface{})[1]
+		rspMap2 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap2)
-		assert.Equal(t, "good-key2", rspMap2.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value2", rspMap2.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version2", rspMap2.(map[string]interface{})["version"].(string))
-		metadata2 := rspMap2.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap2, "good-key2")
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
+		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
+		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2221,21 +2232,23 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.([]interface{})))
-		rspMap1 := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
-		assert.Equal(t, "good-key1", rspMap1.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap1.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap1.(map[string]interface{})["version"].(string))
-		metadata := rspMap1.(map[string]interface{})["metadata"].(map[string]interface{})
-		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+		assert.Contains(t, rspMap1, "good-key1")
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
+		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.([]interface{})[1]
+		rspMap2 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap2)
-		assert.Equal(t, "good-key2", rspMap2.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value2", rspMap2.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version2", rspMap2.(map[string]interface{})["version"].(string))
-		metadata2 := rspMap2.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap2, "good-key2")
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
+		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
+		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2279,16 +2292,41 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
 		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
-		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when app channel is empty")
 
 		rspMap1 := resp1.JSONBody
-		assert.NotNil(t, rspMap1)
+		assert.Nil(t, rspMap1)
 
-		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
+		uuid, err := uuid.NewRandom()
+		assert.Nil(t, err, "unable to generate id")
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, &uuid)
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 200, resp2.StatusCode, "unsubscribe configuration store,should return 200")
+		assert.NotNil(t, resp2.JSONBody, "Unsubscribe configuration should return a non nil response body")
+	})
+
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when appchannel is not initialized")
+		rspMap1 := resp1.JSONBody
+		assert.Nil(t, rspMap1)
+
+		uuid, err := uuid.NewRandom()
+		assert.Nil(t, err, "unable to generate id")
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 
-		assert.Equal(t, 204, resp2.StatusCode, "unsubscribe configuration store,should return 204")
+		assert.Equal(t, 400, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+	})
+
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, "subscribe_id_err")
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 500, resp2.StatusCode, "Expected error during unsubscribe api")
+		assert.NotNil(t, resp2.ErrorBody, "Unsubscribe configuration should return a non nil response body")
 	})
 }
 
@@ -2460,26 +2498,22 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 }
 
-func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
-	registry := http_middleware_loader.NewRegistry()
-	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
-		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-			return func(ctx *fasthttp.RequestCtx) {
-				body := string(ctx.PostBody())
-				ctx.Request.SetBody([]byte(strings.ToUpper(body)))
-				h(ctx)
-			}
-		}, nil
-	}))
-	var handlers []http_middleware.Middleware
+func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
+	registry := httpMiddlewareLoader.NewRegistry()
+	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
+		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+			return utils.UppercaseRequestMiddleware, nil
+		}
+	}, "uppercase")
+	var handlers []httpMiddleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
 		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{})
 		if err != nil {
-			return http_middleware.Pipeline{}
+			return httpMiddleware.Pipeline{}
 		}
 		handlers = append(handlers, handler)
 	}
-	return http_middleware.Pipeline{Handlers: handlers}
+	return httpMiddleware.Pipeline{Handlers: handlers}
 }
 
 func TestSinglePipelineWithTracer(t *testing.T) {
@@ -2690,11 +2724,15 @@ func (f *fakeHTTPServer) StartServerWithAPIToken(endpoints []Endpoint) {
 	}
 }
 
-func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline http_middleware.Pipeline, endpoints []Endpoint) {
+func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline httpMiddleware.Pipeline, endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		handler := pipeline.Apply(router.Handler)
+		handler := fasthttpadaptor.NewFastHTTPHandler(
+			pipeline.Apply(
+				nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler),
+			),
+		)
 		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(handler, "fakeAppID", spec)); err != nil {
 			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
@@ -2804,8 +2842,8 @@ func TestV1StateEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	var fakeStore state.Store = fakeStateStoreQuerier{}
 	failingStore := &daprt.FailingStatestore{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingGetKey":        1,
 				"failingSetKey":        1,
 				"failingDeleteKey":     1,
@@ -2815,7 +2853,7 @@ func TestV1StateEndpoints(t *testing.T) {
 				"failingMultiKey":      1,
 				"failingQueryKey":      1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutGetKey":        time.Second * 10,
 				"timeoutSetKey":        time.Second * 10,
 				"timeoutDeleteKey":     time.Second * 10,
@@ -2825,8 +2863,8 @@ func TestV1StateEndpoints(t *testing.T) {
 				"timeoutMultiKey":      time.Second * 10,
 				"timeoutQueryKey":      time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 	fakeStores := map[string]state.Store{
 		"store1":    fakeStore,
@@ -3058,7 +3096,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3091,7 +3129,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3134,7 +3172,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingGetKey"))
 	})
 
 	t.Run("get state request times out with resiliency", func(t *testing.T) {
@@ -3145,7 +3183,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3159,7 +3197,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingSetKey"))
 	})
 
 	t.Run("set state request times out with resiliency", func(t *testing.T) {
@@ -3175,7 +3213,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3184,7 +3222,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingDeleteKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingDeleteKey"))
 	})
 
 	t.Run("delete state request times out with resiliency", func(t *testing.T) {
@@ -3195,7 +3233,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutDeleteKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutDeleteKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3209,8 +3247,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkGetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkGetKey"))
 	})
 
 	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
@@ -3231,8 +3269,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Len(t, bulkResponse, 2)
 		assert.NotEmpty(t, bulkResponse[0].Error)
 		assert.Empty(t, bulkResponse[1].Error)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkGetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodTimeoutBulkGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3252,8 +3290,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkSetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkSetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkSetKey"))
 	})
 
 	t.Run("bulk state set times out with resiliency", func(t *testing.T) {
@@ -3274,8 +3312,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkSetKey"])
-		assert.Equal(t, 0, failingStore.Failure.CallCount["goodTimeoutBulkSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkSetKey"))
+		assert.Equal(t, 0, failingStore.Failure.CallCount("goodTimeoutBulkSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3297,7 +3335,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingMultiKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingMultiKey"))
 	})
 
 	t.Run("state transaction times out with resiliency", func(t *testing.T) {
@@ -3318,7 +3356,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutMultiKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutMultiKey"))
 	})
 
 	t.Run("state query retries with resiliency", func(t *testing.T) {
@@ -3330,7 +3368,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingQueryKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingQueryKey"))
 	})
 
 	t.Run("state query times out with resiliency", func(t *testing.T) {
@@ -3342,7 +3380,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutQueryKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutQueryKey"))
 	})
 }
 
@@ -3465,7 +3503,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
 			Data: []byte("\"bGlmZSBpcyBnb29k\""),
-			ETag: ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+			ETag: ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
 	if req.Key == "error-key" {
@@ -3480,7 +3518,7 @@ func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetRe
 }
 
 func (c fakeStateStore) Init(metadata state.Metadata) error {
-	c.counter = 0
+	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
@@ -3536,11 +3574,11 @@ func TestV1SecretEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	fakeStore := daprt.FakeSecretStore{}
 	failingStore := daprt.FailingSecretStore{
-		Failure: daprt.Failure{
-			Fails:     map[string]int{"key": 1, "bulk": 1},
-			Timeouts:  map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
-			CallCount: map[string]int{},
-		},
+		Failure: daprt.NewFailure(
+			map[string]int{"key": 1, "bulk": 1},
+			map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			map[string]int{},
+		),
 	}
 	fakeStores := map[string]secretstores.SecretStore{
 		"store1":     fakeStore,
@@ -3684,7 +3722,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["key"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("key"))
 	})
 
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
@@ -3696,7 +3734,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeout"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3706,7 +3744,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"metadata.key": "bulk"})
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["bulk"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("bulk"))
 	})
 
 	t.Run("Get bulk secret - timeout before request ends", func(t *testing.T) {
@@ -3717,7 +3755,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["bulkTimeout"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }
@@ -3733,16 +3771,15 @@ func (c fakeConfigurationStore) Ping() error {
 func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
 	if len(req.Keys) == 0 {
 		return &configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:     "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value:   "good-value1",
 					Version: "version1",
 					Metadata: map[string]string{
 						"metadata-key1": "metadata-value1",
 					},
-				}, {
-					Key:     "good-key2",
+				},
+				"good-key2": {
 					Value:   "good-value2",
 					Version: "version2",
 					Metadata: map[string]string{
@@ -3755,29 +3792,28 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 
 	if len(req.Keys) == 1 && req.Keys[0] == "good-key1" {
 		return &configuration.GetResponse{
-			Items: []*configuration.Item{{
-				Key:     "good-key1",
-				Value:   "good-value1",
-				Version: "version1",
-				Metadata: map[string]string{
-					"metadata-key1": "metadata-value1",
-				},
-			}},
-		}, nil
-	}
-
-	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
-		return &configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:     "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value:   "good-value1",
 					Version: "version1",
 					Metadata: map[string]string{
 						"metadata-key1": "metadata-value1",
 					},
-				}, {
-					Key:     "good-key2",
+				},
+			},
+		}, nil
+	}
+
+	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
+		return &configuration.GetResponse{
+			Items: map[string]*configuration.Item{
+				"good-key1": {
+					Value:   "good-value1",
+					Version: "version1",
+					Metadata: map[string]string{
+						"metadata-key1": "metadata-value1",
+					},
+				}, "good-key2": {
 					Value:   "good-value2",
 					Version: "version2",
 					Metadata: map[string]string{
@@ -3796,7 +3832,7 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 }
 
 func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
-	c.counter = 0
+	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
@@ -3805,6 +3841,9 @@ func (c *fakeConfigurationStore) Subscribe(ctx context.Context, req *configurati
 }
 
 func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	if req.ID == "subscribe_id_err" {
+		return errors.New("Error occurred during unsubscribe op")
+	}
 	return nil
 }
 

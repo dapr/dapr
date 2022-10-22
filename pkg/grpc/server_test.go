@@ -48,7 +48,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 1, len(serverOption))
+		assert.Equal(t, 2, len(serverOption))
 	})
 
 	t.Run("should not disable middleware even when SamplingRate is 0", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 1, len(serverOption))
+		assert.Equal(t, 2, len(serverOption))
 	})
 
 	t.Run("should have api access rules middleware", func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 1, len(serverOption))
+		assert.Equal(t, 2, len(serverOption))
 	})
 }
 
@@ -94,7 +94,17 @@ func TestClose(t *testing.T) {
 	t.Run("test close with api logging enabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, true)
+		serverConfig := ServerConfig{
+			AppID:                "test",
+			HostAddress:          "127.0.0.1",
+			Port:                 port,
+			APIListenAddresses:   []string{"127.0.0.1"},
+			NameSpace:            "test",
+			TrustDomain:          "test",
+			MaxRequestBodySizeMB: 4,
+			ReadBufferSizeKB:     4,
+			EnableAPILogging:     true,
+		}
 		a := &api{}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
 		require.NoError(t, server.StartNonBlocking())
@@ -105,7 +115,17 @@ func TestClose(t *testing.T) {
 	t.Run("test close with api logging disabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, false)
+		serverConfig := ServerConfig{
+			AppID:                "test",
+			HostAddress:          "127.0.0.1",
+			Port:                 port,
+			APIListenAddresses:   []string{"127.0.0.1"},
+			NameSpace:            "test",
+			TrustDomain:          "test",
+			MaxRequestBodySizeMB: 4,
+			ReadBufferSizeKB:     4,
+			EnableAPILogging:     false,
+		}
 		a := &api{}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
 		require.NoError(t, server.StartNonBlocking())

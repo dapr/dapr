@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package main
 
 import (
@@ -19,6 +20,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -27,10 +30,19 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
+
+var appPort = 3000
+
+func init() {
+	p := os.Getenv("PORT")
+	if p != "" && p != "0" {
+		appPort, _ = strconv.Atoi(p)
+	}
+}
 
 // server is our user app
 type server struct{}
@@ -43,14 +55,14 @@ func main() {
 	log.Printf("Initializing grpc")
 
 	/* #nosec */
-	lis, err := net.Listen("tcp", ":3000")
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", appPort))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
 	/* #nosec */
 	s := grpc.NewServer()
-	pb.RegisterAppCallbackServer(s, &server{})
+	runtimev1pb.RegisterAppCallbackServer(s, &server{})
 
 	fmt.Println("Client starting...")
 
@@ -79,10 +91,12 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	requestMD := map[string][]string{}
+	fmt.Print("incoming md: ")
 	for k, vals := range md {
 		requestMD[k] = vals
-		fmt.Printf("incoming md: %s %q", k, vals)
+		fmt.Printf("%s='%q' ", k, vals)
 	}
+	fmt.Print("\n")
 
 	header := metadata.Pairs(
 		"DaprTest-Response-1", "DaprTest-Response-Value-1",
@@ -95,7 +109,7 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 		TraceFlags: trace.TraceFlags(1),
 	}
 	sc := trace.NewSpanContext(scConfig)
-	header.Set("grpc-trace-bin", string(diag_utils.BinaryFromSpanContext(sc)))
+	header.Set("grpc-trace-bin", string(diagUtils.BinaryFromSpanContext(sc)))
 
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(
@@ -135,9 +149,9 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 // ListTopicSubscriptions Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
 // To subscribe to a topic named TopicA
-func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
-	return &pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*commonv1pb.TopicSubscription{
+func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+	return &runtimev1pb.ListTopicSubscriptionsResponse{
+		Subscriptions: []*runtimev1pb.TopicSubscription{
 			{
 				Topic: "TopicA",
 			},
@@ -147,22 +161,22 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 
 // ListInputBindings Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
 // To invoke our app with a binding named storage
-func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
-	return &pb.ListInputBindingsResponse{
+func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
+	return &runtimev1pb.ListInputBindingsResponse{
 		Bindings: []string{"storage"},
 	}, nil
 }
 
 // OnBindingEvent This method gets invoked every time a new event is fired from a registered binding.
 // The message carries the binding name, a payload and optional metadata
-func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
+func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
 	fmt.Println("Invoked from binding")
-	return &pb.BindingEventResponse{}, nil
+	return &runtimev1pb.BindingEventResponse{}, nil
 }
 
 // OnTopicEvent This method is fired whenever a message has been published to a topic that has been subscribed.
 // Dapr sends published messages in a CloudEvents 1.0 envelope.
-func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*pb.TopicEventResponse, error) {
+func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
 	fmt.Println("Topic message arrived")
-	return &pb.TopicEventResponse{}, nil
+	return &runtimev1pb.TopicEventResponse{}, nil
 }

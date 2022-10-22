@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package http
 
 import (
@@ -28,7 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -36,7 +37,10 @@ type mockHost struct {
 	hasCORS bool
 }
 
-const healthzEndpoint = "healthz"
+const (
+	healthzEndpoint         = "healthz"
+	healthzOutboundEndpoint = "healthz/outbound"
+)
 
 func (m *mockHost) mockHandler() fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
@@ -90,9 +94,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -131,9 +136,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -172,9 +178,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -213,9 +220,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -254,9 +262,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -295,9 +304,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -336,9 +346,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -660,9 +671,24 @@ func TestClose(t *testing.T) {
 	t.Run("test close with api logging enabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, true)
+		serverConfig := ServerConfig{
+			AppID:              "test",
+			HostAddress:        "127.0.0.1",
+			Port:               port,
+			APIListenAddresses: []string{"127.0.0.1"},
+			MaxRequestBodySize: 4,
+			ReadBufferSize:     4,
+			EnableAPILogging:   true,
+		}
 		a := &api{}
-		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
+		server := NewServer(NewServerOpts{
+			API:         a,
+			Config:      serverConfig,
+			TracingSpec: config.TracingSpec{},
+			MetricSpec:  config.MetricSpec{},
+			Pipeline:    httpMiddleware.Pipeline{},
+			APISpec:     config.APISpec{},
+		})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
@@ -671,9 +697,24 @@ func TestClose(t *testing.T) {
 	t.Run("test close with api logging disabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, false)
+		serverConfig := ServerConfig{
+			AppID:              "test",
+			HostAddress:        "127.0.0.1",
+			Port:               port,
+			APIListenAddresses: []string{"127.0.0.1"},
+			MaxRequestBodySize: 4,
+			ReadBufferSize:     4,
+			EnableAPILogging:   false,
+		}
 		a := &api{}
-		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
+		server := NewServer(NewServerOpts{
+			API:         a,
+			Config:      serverConfig,
+			TracingSpec: config.TracingSpec{},
+			MetricSpec:  config.MetricSpec{},
+			Pipeline:    httpMiddleware.Pipeline{},
+			APISpec:     config.APISpec{},
+		})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())

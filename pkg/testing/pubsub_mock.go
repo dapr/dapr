@@ -38,7 +38,8 @@ func (m *MockPubSub) Close() error {
 }
 
 func (m *MockPubSub) Features() []pubsub.Feature {
-	return nil
+	args := m.Called()
+	return args.Get(0).([]pubsub.Feature)
 }
 
 // FailingPubsub is a mock pubsub component object that simulates failures.
@@ -102,13 +103,14 @@ func (m *InMemoryPubsub) Init(metadata pubsub.Metadata) error {
 
 // Publish is a mock publish method.
 func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
-	var send chan *pubsub.NewMessage
 	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	var send chan *pubsub.NewMessage
 	t, ok := m.subscribedTopics[req.Topic]
 	if ok && t.send != nil {
 		send = t.send
 	}
-	m.lock.Unlock()
 
 	if send != nil {
 		send <- &pubsub.NewMessage{
@@ -146,12 +148,12 @@ func (m *InMemoryPubsub) Subscribe(parentCtx context.Context, req pubsub.Subscri
 					go m.handler(req.Topic, msg)
 				}
 			case <-ctx.Done():
-				close(ch)
 				m.lock.Lock()
+				close(ch)
 				delete(m.subscribedTopics, req.Topic)
 				m.onSubscribedTopicsChanged()
-				m.lock.Unlock()
 				m.MethodCalled("unsubscribed", req.Topic)
+				m.lock.Unlock()
 				return
 			}
 		}
@@ -163,11 +165,13 @@ func (m *InMemoryPubsub) Subscribe(parentCtx context.Context, req pubsub.Subscri
 
 // Close is a mock close method.
 func (m *InMemoryPubsub) Close() error {
+	m.lock.Lock()
 	if len(m.subscribedTopics) > 0 {
 		for _, f := range m.subscribedTopics {
 			f.cancel()
 		}
 	}
+	m.lock.Unlock()
 	return nil
 }
 

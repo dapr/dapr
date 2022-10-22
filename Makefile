@@ -20,7 +20,7 @@ export GOPROXY ?= https://proxy.golang.org
 export GOSUMDB ?= sum.golang.org
 
 GIT_COMMIT  = $(shell git rev-list -1 HEAD)
-GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
+GIT_VERSION ?= $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
 BINARIES    ?= daprd placement operator injector sentry
@@ -48,6 +48,8 @@ else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
 	TARGET_ARCH_LOCAL=arm
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),arm64)
+	TARGET_ARCH_LOCAL=arm64
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 7),aarch64)
 	TARGET_ARCH_LOCAL=arm64
 else
 	TARGET_ARCH_LOCAL=amd64
@@ -246,7 +248,7 @@ ifneq ($(ADDITIONAL_HELM_SET),)
 endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
-	$(HELM) install \
+	$(HELM) upgrade --install \
 		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s \
 		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
@@ -278,11 +280,49 @@ test: test-deps
 		go test ./tests/...
 
 ################################################################################
+# Target: test-race                                                            #
+################################################################################
+# Note that we are expliciting maintaing an allow-list of packages that should be tested
+# with "-race", as many packags aren't passing those tests yet.
+# Eventually, the goal is to be able to have all packages pass tests with "-race"
+# Note: CGO is required for tests with "-race"
+TEST_WITH_RACE=./pkg/acl/... \
+./pkg/actors \
+./pkg/apis/... \
+./pkg/apphealth/... \
+./pkg/channel/... \
+./pkg/client/... \
+./pkg/components/... \
+./pkg/concurrency/... \
+./pkg/diagnostics/... \
+./pkg/encryption/... \
+./pkg/expr/... \
+./pkg/fswatcher/... \
+./pkg/grpc/... \
+./pkg/health/... \
+./pkg/http/... \
+./pkg/injector/... \
+./pkg/messages/... \
+./pkg/messaging/... \
+./pkg/metrics/... \
+./pkg/middleware/... \
+./pkg/modes/... \
+./pkg/operator/... \
+./pkg/placement/... \
+./pkg/proto/... \
+./pkg/resiliency/... \
+./pkg/runtime/...
+
+.PHONY: test-race
+test-race:
+	echo "$(TEST_WITH_RACE)" | xargs \
+		go test -tags=unit -race
+
+################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
-# Please use golangci-lint version v1.45.2 , otherwise you might encounter errors.
-# You can download version v1.45.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.45.2
+# Please use golangci-lint version v1.48.0 , otherwise you might encounter errors.
+# You can download version v1.48.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.48.0
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
@@ -295,7 +335,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); go mod tidy -compat=1.18; cd -
+	cd $(shell dirname $(1)); go mod tidy -compat=1.19; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -340,7 +380,7 @@ init-proto:
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry
+GRPC_PROTOS:=common internals operator placement runtime sentry components
 PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary

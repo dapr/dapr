@@ -19,91 +19,44 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/bindings"
-
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/kit/logger"
 )
 
-type (
-	// InputBinding is an input binding component definition.
-	InputBinding struct {
-		Names         []string
-		FactoryMethod func() bindings.InputBinding
-	}
-
-	// OutputBinding is an output binding component definition.
-	OutputBinding struct {
-		Names         []string
-		FactoryMethod func() bindings.OutputBinding
-	}
-
-	// Registry is the interface of a components that allows callers to get registered instances of input and output bindings.
-	Registry interface {
-		RegisterInputBindings(components ...InputBinding)
-		RegisterOutputBindings(components ...OutputBinding)
-		HasInputBinding(name, version string) bool
-		HasOutputBinding(name, version string) bool
-		CreateInputBinding(name, version string) (bindings.InputBinding, error)
-		CreateOutputBinding(name, version string) (bindings.OutputBinding, error)
-	}
-
-	bindingsRegistry struct {
-		inputBindings  map[string]func() bindings.InputBinding
-		outputBindings map[string]func() bindings.OutputBinding
-	}
-)
-
-// NewInput creates a InputBinding.
-func NewInput(name string, factoryMethod func() bindings.InputBinding, aliases ...string) InputBinding {
-	names := []string{name}
-	if len(aliases) > 0 {
-		names = append(names, aliases...)
-	}
-	return InputBinding{
-		Names:         names,
-		FactoryMethod: factoryMethod,
-	}
+// Registry is the interface of a components that allows callers to get registered instances of input and output bindings.
+type Registry struct {
+	Logger         logger.Logger
+	inputBindings  map[string]func(logger.Logger) bindings.InputBinding
+	outputBindings map[string]func(logger.Logger) bindings.OutputBinding
 }
 
-// NewOutput creates a OutputBinding.
-func NewOutput(name string, factoryMethod func() bindings.OutputBinding, aliases ...string) OutputBinding {
-	names := []string{name}
-	if len(aliases) > 0 {
-		names = append(names, aliases...)
-	}
-	return OutputBinding{
-		Names:         names,
-		FactoryMethod: factoryMethod,
-	}
-}
+// DefaultRegistry is the singleton with the registry.
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry is used to create new bindings.
-func NewRegistry() Registry {
-	return &bindingsRegistry{
-		inputBindings:  map[string]func() bindings.InputBinding{},
-		outputBindings: map[string]func() bindings.OutputBinding{},
+func NewRegistry() *Registry {
+	return &Registry{
+		inputBindings:  map[string]func(logger.Logger) bindings.InputBinding{},
+		outputBindings: map[string]func(logger.Logger) bindings.OutputBinding{},
 	}
 }
 
-// RegisterInputBindings registers one or more new input bindings.
-func (b *bindingsRegistry) RegisterInputBindings(components ...InputBinding) {
-	for _, component := range components {
-		for _, name := range component.Names {
-			b.inputBindings[createFullName(name)] = component.FactoryMethod
-		}
+// RegisterInputBinding adds a name input binding to the registry.
+func (b *Registry) RegisterInputBinding(componentFactory func(logger.Logger) bindings.InputBinding, names ...string) {
+	for _, name := range names {
+		b.inputBindings[createFullName(name)] = componentFactory
 	}
 }
 
-// RegisterOutputBindings registers one or more new output bindings.
-func (b *bindingsRegistry) RegisterOutputBindings(components ...OutputBinding) {
-	for _, component := range components {
-		for _, name := range component.Names {
-			b.outputBindings[createFullName(name)] = component.FactoryMethod
-		}
+// RegisterOutputBinding adds a name output binding to the registry.
+func (b *Registry) RegisterOutputBinding(componentFactory func(logger.Logger) bindings.OutputBinding, names ...string) {
+	for _, name := range names {
+		b.outputBindings[createFullName(name)] = componentFactory
 	}
 }
 
 // CreateInputBinding Create instantiates an input binding based on `name`.
-func (b *bindingsRegistry) CreateInputBinding(name, version string) (bindings.InputBinding, error) {
+func (b *Registry) CreateInputBinding(name, version string) (bindings.InputBinding, error) {
 	if method, ok := b.getInputBinding(name, version); ok {
 		return method(), nil
 	}
@@ -111,7 +64,7 @@ func (b *bindingsRegistry) CreateInputBinding(name, version string) (bindings.In
 }
 
 // CreateOutputBinding Create instantiates an output binding based on `name`.
-func (b *bindingsRegistry) CreateOutputBinding(name, version string) (bindings.OutputBinding, error) {
+func (b *Registry) CreateOutputBinding(name, version string) (bindings.OutputBinding, error) {
 	if method, ok := b.getOutputBinding(name, version); ok {
 		return method(), nil
 	}
@@ -119,41 +72,61 @@ func (b *bindingsRegistry) CreateOutputBinding(name, version string) (bindings.O
 }
 
 // HasInputBinding checks if an input binding based on `name` exists in the registry.
-func (b *bindingsRegistry) HasInputBinding(name, version string) bool {
+func (b *Registry) HasInputBinding(name, version string) bool {
 	_, ok := b.getInputBinding(name, version)
 	return ok
 }
 
 // HasOutputBinding checks if an output binding based on `name` exists in the registry.
-func (b *bindingsRegistry) HasOutputBinding(name, version string) bool {
+func (b *Registry) HasOutputBinding(name, version string) bool {
 	_, ok := b.getOutputBinding(name, version)
 	return ok
 }
 
-func (b *bindingsRegistry) getInputBinding(name, version string) (func() bindings.InputBinding, bool) {
+func (b *Registry) getInputBinding(name, version string) (func() bindings.InputBinding, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	bindingFn, ok := b.inputBindings[nameLower+"/"+versionLower]
 	if ok {
-		return bindingFn, true
+		return b.wrapInputBindingFn(bindingFn), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		bindingFn, ok = b.inputBindings[nameLower]
+		if ok {
+			return b.wrapInputBindingFn(bindingFn), true
+		}
 	}
-	return bindingFn, ok
+
+	return nil, false
 }
 
-func (b *bindingsRegistry) getOutputBinding(name, version string) (func() bindings.OutputBinding, bool) {
+func (b *Registry) getOutputBinding(name, version string) (func() bindings.OutputBinding, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	bindingFn, ok := b.outputBindings[nameLower+"/"+versionLower]
 	if ok {
-		return bindingFn, true
+		return b.wrapOutputBindingFn(bindingFn), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		bindingFn, ok = b.outputBindings[nameLower]
+		if ok {
+			return b.wrapOutputBindingFn(bindingFn), true
+		}
 	}
-	return bindingFn, ok
+
+	return nil, false
+}
+
+func (b *Registry) wrapInputBindingFn(componentFactory func(logger.Logger) bindings.InputBinding) func() bindings.InputBinding {
+	return func() bindings.InputBinding {
+		return componentFactory(b.Logger)
+	}
+}
+
+func (b *Registry) wrapOutputBindingFn(componentFactory func(logger.Logger) bindings.OutputBinding) func() bindings.OutputBinding {
+	return func() bindings.OutputBinding {
+		return componentFactory(b.Logger)
+	}
 }
 
 func createFullName(name string) string {

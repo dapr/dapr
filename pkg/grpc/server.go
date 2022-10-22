@@ -22,21 +22,23 @@ import (
 	"sync"
 	"time"
 
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/pkg/errors"
-	grpc_go "google.golang.org/grpc"
+	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 const (
@@ -59,7 +61,7 @@ type server struct {
 	tracingSpec        config.TracingSpec
 	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
-	servers            []*grpc_go.Server
+	servers            []*grpcGo.Server
 	renewMutex         *sync.Mutex
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
@@ -157,7 +159,7 @@ func (s *server) StartNonBlocking() error {
 			runtimev1pb.RegisterDaprServer(server, s.api)
 		}
 
-		go func(server *grpc_go.Server, l net.Listener) {
+		go func(server *grpcGo.Server, l net.Listener) {
 			if err := server.Serve(l); err != nil {
 				s.logger.Fatalf("gRPC serve error: %v", err)
 			}
@@ -194,10 +196,10 @@ func (s *server) generateWorkloadCert() error {
 	return nil
 }
 
-func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
-	opts := []grpc_go.ServerOption{}
-	intr := []grpc_go.UnaryServerInterceptor{}
-	intrStream := []grpc_go.StreamServerInterceptor{}
+func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
+	opts := []grpcGo.ServerOption{}
+	intr := []grpcGo.UnaryServerInterceptor{}
+	intrStream := []grpcGo.StreamServerInterceptor{}
 
 	if len(s.apiSpec.Allowed) > 0 {
 		s.logger.Info("enabled API access list on gRPC server")
@@ -206,21 +208,24 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 
 	if s.authToken != "" {
 		s.logger.Info("enabled token authentication on gRPC server")
-		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
+		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, authConsts.APITokenHeader))
 	}
 
-	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
+	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		s.logger.Info("enabled gRPC tracing middleware")
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
-
-		if s.proxy != nil {
-			intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
-		}
+		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
 	if s.metricSpec.Enabled {
 		s.logger.Info("enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
+
+		if s.kind == apiServer {
+			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingServerInterceptor())
+		} else if s.kind == internalServer {
+			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingClientInterceptor())
+		}
 	}
 
 	enableAPILogging := s.config.EnableAPILogging
@@ -228,29 +233,27 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 		intr = append(intr, s.getGRPCAPILoggingInfo())
 	}
 
-	chain := grpc_middleware.ChainUnaryServer(
+	chain := grpcMiddleware.ChainUnaryServer(
 		intr...,
 	)
 	opts = append(
 		opts,
-		grpc_go.UnaryInterceptor(chain),
+		grpcGo.UnaryInterceptor(chain),
 	)
 
-	if s.proxy != nil {
-		chainStream := grpc_middleware.ChainStreamServer(
-			intrStream...,
-		)
+	chainStream := grpcMiddleware.ChainStreamServer(
+		intrStream...,
+	)
 
-		opts = append(opts, grpc_go.StreamInterceptor(chainStream))
-	}
+	opts = append(opts, grpcGo.StreamInterceptor(chainStream))
 
 	return opts
 }
 
-func (s *server) getGRPCServer() (*grpc_go.Server, error) {
+func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 	opts := s.getMiddlewareOptions()
 	if s.maxConnectionAge != nil {
-		opts = append(opts, grpc_go.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
+		opts = append(opts, grpcGo.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
 	}
 
 	if s.authenticator != nil {
@@ -259,7 +262,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 			return nil, err
 		}
 
-		// nolint:gosec
+		//nolint:gosec
 		tlsConfig := tls.Config{
 			ClientCAs:  s.signedCert.TrustChain,
 			ClientAuth: tls.RequireAndVerifyClientCert,
@@ -269,17 +272,21 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 		}
 		ta := credentials.NewTLS(&tlsConfig)
 
-		opts = append(opts, grpc_go.Creds(ta))
+		opts = append(opts, grpcGo.Creds(ta))
 		go s.startWorkloadCertRotation()
 	}
 
-	opts = append(opts, grpc_go.MaxRecvMsgSize(s.config.MaxRequestBodySize*1024*1024), grpc_go.MaxSendMsgSize(s.config.MaxRequestBodySize*1024*1024), grpc_go.MaxHeaderListSize(uint32(s.config.ReadBufferSize*1024)))
+	opts = append(opts,
+		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySizeMB<<20),
+		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySizeMB<<20),
+		grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSizeKB<<10)),
+	)
 
 	if s.proxy != nil {
-		opts = append(opts, grpc_go.UnknownServiceHandler(s.proxy.Handler()))
+		opts = append(opts, grpcGo.UnknownServiceHandler(s.proxy.Handler()))
 	}
 
-	return grpc_go.NewServer(opts...), nil
+	return grpcGo.NewServer(opts...), nil
 }
 
 func (s *server) startWorkloadCertRotation() {
@@ -314,10 +321,18 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 	return percentagePassed >= renewWhenPercentagePassed
 }
 
-func (s *server) getGRPCAPILoggingInfo() grpc_go.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (interface{}, error) {
+func (s *server) getGRPCAPILoggingInfo() grpcGo.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (interface{}, error) {
 		if s.infoLogger != nil && info != nil {
-			s.infoLogger.Info("gRPC API Called: ", info.FullMethod)
+			log := s.infoLogger
+			if meta, ok := metadata.FromIncomingContext(ctx); ok {
+				if val, ok := meta["user-agent"]; ok && len(val) > 0 {
+					log = log.WithFields(map[string]any{
+						"useragent": val[0],
+					})
+				}
+			}
+			log.Info("gRPC API Called: ", info.FullMethod)
 		}
 		return handler(ctx, req)
 	}

@@ -19,75 +19,61 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/pubsub"
-
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/kit/logger"
 )
 
-type (
-	// PubSub is a pub/sub component definition.
-	PubSub struct {
-		Names         []string
-		FactoryMethod func() pubsub.PubSub
-	}
-
-	// Registry is the interface for callers to get registered pub-sub components.
-	Registry interface {
-		Register(components ...PubSub)
-		Create(name, version string) (pubsub.PubSub, error)
-	}
-
-	pubSubRegistry struct {
-		messageBuses map[string]func() pubsub.PubSub
-	}
-)
-
-// New creates a PubSub.
-func New(name string, factoryMethod func() pubsub.PubSub, aliases ...string) PubSub {
-	names := []string{name}
-	if len(aliases) > 0 {
-		names = append(names, aliases...)
-	}
-	return PubSub{
-		Names:         names,
-		FactoryMethod: factoryMethod,
-	}
+type Registry struct {
+	Logger       logger.Logger
+	messageBuses map[string]func(logger.Logger) pubsub.PubSub
 }
+
+// DefaultRegistry is the singleton with the registry.
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry returns a new pub sub registry.
-func NewRegistry() Registry {
-	return &pubSubRegistry{
-		messageBuses: map[string]func() pubsub.PubSub{},
+func NewRegistry() *Registry {
+	return &Registry{
+		messageBuses: map[string]func(logger.Logger) pubsub.PubSub{},
 	}
 }
 
-// Register registers one or more new message buses.
-func (p *pubSubRegistry) Register(components ...PubSub) {
-	for _, component := range components {
-		for _, name := range component.Names {
-			p.messageBuses[createFullName(name)] = component.FactoryMethod
-		}
+// RegisterComponent adds a new message bus to the registry.
+func (p *Registry) RegisterComponent(componentFactory func(logger.Logger) pubsub.PubSub, names ...string) {
+	for _, name := range names {
+		p.messageBuses[createFullName(name)] = componentFactory
 	}
 }
 
 // Create instantiates a pub/sub based on `name`.
-func (p *pubSubRegistry) Create(name, version string) (pubsub.PubSub, error) {
+func (p *Registry) Create(name, version string) (pubsub.PubSub, error) {
 	if method, ok := p.getPubSub(name, version); ok {
 		return method(), nil
 	}
 	return nil, errors.Errorf("couldn't find message bus %s/%s", name, version)
 }
 
-func (p *pubSubRegistry) getPubSub(name, version string) (func() pubsub.PubSub, bool) {
+func (p *Registry) getPubSub(name, version string) (func() pubsub.PubSub, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	pubSubFn, ok := p.messageBuses[nameLower+"/"+versionLower]
 	if ok {
-		return pubSubFn, true
+		return p.wrapFn(pubSubFn), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		pubSubFn, ok = p.messageBuses[nameLower]
+		if ok {
+			return p.wrapFn(pubSubFn), true
+		}
 	}
-	return pubSubFn, ok
+
+	return nil, false
+}
+
+func (p *Registry) wrapFn(componentFactory func(logger.Logger) pubsub.PubSub) func() pubsub.PubSub {
+	return func() pubsub.PubSub {
+		return componentFactory(p.Logger)
+	}
 }
 
 func createFullName(name string) string {

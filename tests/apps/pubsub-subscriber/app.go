@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -40,7 +41,16 @@ const (
 	pubsubRaw        = "pubsub-raw-topic-http"
 	pubsubDead       = "pubsub-dead-topic-http"
 	pubsubDeadLetter = "pubsub-deadletter-topic-http"
+	PubSubEnvVar     = "DAPR_TEST_PUBSUB_NAME"
 )
+
+var pubsubName = "messagebus"
+
+func init() {
+	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
+		pubsubName = psName
+	}
+}
 
 type appResponse struct {
 	// Status field for proper handling of errors form pubsub
@@ -108,8 +118,6 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 // this handles /dapr/subscribe, which is called from dapr into this app.
 // this returns the list of topics the app is subscribed to.
 func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
-	pubsubName := "messagebus"
-
 	t := []subscription{
 		{
 			PubsubName: pubsubName,
@@ -423,5 +431,5 @@ func main() {
 	initializeSets()
 
 	log.Printf("Dapr E2E test app: pubsub - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

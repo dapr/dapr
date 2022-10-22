@@ -31,7 +31,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 func TestSpanContextFromRequest(t *testing.T) {
@@ -135,7 +135,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 		sc := trace.SpanContext{}
 		SpanContextToHTTPHeaders(sc, req.Header.Set)
 
-		assert.Nil(t, req.Header.Peek(traceparentHeader))
+		assert.Nil(t, req.Header.Peek(TraceparentHeader))
 	})
 }
 
@@ -347,7 +347,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
@@ -364,7 +364,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
@@ -381,9 +381,9 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.Equal(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
+		assert.Equal(t, testRequestCtx.Response.Header.Peek(TraceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
 
 	t.Run("traceparent given in response", func(t *testing.T) {
@@ -393,14 +393,14 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 				"dapr-userdefined": "value",
 			},
 			map[string]string{
-				traceparentHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-				tracestateHeader:  "xyz=t61pCWkhMzZ",
+				TraceparentHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+				TracestateHeader:  "xyz=t61pCWkhMzZ",
 			},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.NotEqual(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
+		assert.NotEqual(t, testRequestCtx.Response.Header.Peek(TraceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
 
 	t.Run("path is /v1.0/invoke/*", func(t *testing.T) {
@@ -416,7 +416,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler(testRequestCtx)
 
 		// assert
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		spanString := fmt.Sprintf("%v", span)
 		assert.True(t, strings.Contains(spanString, "CallLocal/callee/method1"))
@@ -472,7 +472,7 @@ func newTraceFastHTTPRequestCtx(expectedBody, expectedRequestURI string, expecte
 	req.Header.SetHost(expectedHost)
 	req.Header.Add(fasthttp.HeaderTransferEncoding, expectedTransferEncoding)
 	req.Header.SetContentLength(len([]byte(expectedBody)))
-	req.BodyWriter().Write([]byte(expectedBody)) // nolint:errcheck
+	req.BodyWriter().Write([]byte(expectedBody)) //nolint:errcheck
 
 	for k, v := range expectedRequestHeader {
 		req.Header.Set(k, v)

@@ -31,6 +31,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/metadata"
@@ -257,24 +258,24 @@ func (s *ProxyHappySuite) SetupSuite() {
 	// Setup of the proxy's Director.
 	s.serverClientConn, err = grpc.Dial(
 		s.serverListener.Addr().String(),
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
-	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, func(), error) {
+	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *ProxyTarget, func(), error) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if ok {
 			if _, exists := md[rejectingMdKey]; exists {
-				return ctx, nil, func() {}, status.Errorf(codes.PermissionDenied, "testing rejection")
+				return ctx, nil, nil, func() {}, status.Errorf(codes.PermissionDenied, "testing rejection")
 			}
 		}
 		// Explicitly copy the metadata, otherwise the tests will fail.
 		outCtx, _ := context.WithCancel(ctx)
 		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
-		return outCtx, s.serverClientConn, func() {}, nil
+		return outCtx, s.serverClientConn, nil, func() {}, nil
 	}
 	s.proxy = grpc.NewServer(
-		grpc.UnknownServiceHandler(TransparentHandler(director, resiliency.New(nil), func(string) (bool, error) { return true, nil })),
+		grpc.UnknownServiceHandler(TransparentHandler(director, resiliency.New(nil), func(string) (bool, error) { return true, nil }, nil)),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.
 	RegisterService(s.proxy, director, resiliency.New(nil),
@@ -296,7 +297,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	clientConn, err := grpc.DialContext(
 		context.Background(),
 		strings.Replace(s.proxyListener.Addr().String(), "127.0.0.1", "localhost", 1),
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)
 	require.NoError(s.T(), err, "must not error on deferred client Dial")

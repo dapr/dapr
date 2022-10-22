@@ -101,6 +101,12 @@ func TestTraceStateFromW3CString(t *testing.T) {
 		got := TraceStateFromW3CString(scText)
 		assert.Equal(t, ts, *got)
 	})
+	t.Run("invalid Tracestate", func(t *testing.T) {
+		ts := trace.TraceState{}
+		// A non-parsable tracestate should equate back to an empty one.
+		got := TraceStateFromW3CString("bad tracestate")
+		assert.Equal(t, ts, *got)
+	})
 }
 
 func TestStartInternalCallbackSpan(t *testing.T) {
@@ -182,5 +188,36 @@ func (e *otelFakeExporter) ExportSpans(ctx context.Context, spans []sdktrace.Rea
 
 // Shutdown implements the open telemetry span exporter interface.
 func (e *otelFakeExporter) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+// Otel Fake Span Processor implements an open telemetry span processor that calls a call back in the OnEnd method.
+type otelFakeSpanProcessor struct {
+	cb func(s sdktrace.ReadOnlySpan)
+}
+
+// newOtelFakeSpanProcessor returns an Open Telemetry Fake Span Processor
+func newOtelFakeSpanProcessor(f func(s sdktrace.ReadOnlySpan)) *otelFakeSpanProcessor {
+	return &otelFakeSpanProcessor{
+		cb: f,
+	}
+}
+
+// OnStart implements the SpanProcessor interface.
+func (o *otelFakeSpanProcessor) OnStart(parent context.Context, s sdktrace.ReadWriteSpan) {
+}
+
+// OnEnd  implements the SpanProcessor interface and calls the callback function provided on init
+func (o *otelFakeSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
+	o.cb(s)
+}
+
+// Shutdown implements the SpanProcessor interface.
+func (o *otelFakeSpanProcessor) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+// ForceFlush implements the SpanProcessor interface.
+func (o *otelFakeSpanProcessor) ForceFlush(ctx context.Context) error {
 	return nil
 }

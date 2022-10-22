@@ -24,14 +24,17 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 
 	"go.opentelemetry.io/otel"
+	otelcodes "go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -127,7 +130,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 
 	testTraceParent := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 	testSpanContext, _ := SpanContextFromW3CString(testTraceParent)
-	testTraceBinary := diag_utils.BinaryFromSpanContext(testSpanContext)
+	testTraceBinary := diagUtils.BinaryFromSpanContext(testSpanContext)
 	ctx := context.Background()
 
 	t.Run("grpc-trace-bin is given", func(t *testing.T) {
@@ -142,7 +145,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 
 		var span trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			span = diag_utils.SpanFromContext(ctx)
+			span = diagUtils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
 		}
 
@@ -166,7 +169,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 
 		var span trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			span = diag_utils.SpanFromContext(ctx)
+			span = diagUtils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
 		}
 
@@ -190,8 +193,52 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 
 		var span trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			span = diag_utils.SpanFromContext(ctx)
+			span = diagUtils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
+		}
+
+		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+
+		sc := span.SpanContext()
+		spanString := fmt.Sprintf("%v", span)
+		assert.True(t, strings.Contains(spanString, "CallLocal/targetID/method1"))
+		traceID := sc.TraceID()
+		spanID := sc.SpanID()
+		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
+		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+	})
+
+	t.Run("InvokeService call with grpc status error", func(t *testing.T) {
+		// set a new tracer provider with a callback on span completion to check that the span errors out
+		checkErrorStatusOnSpan := func(s sdktrace.ReadOnlySpan) {
+			assert.Equal(t, otelcodes.Error, s.Status().Code, "expected span status to be an error")
+		}
+
+		tp := sdktrace.NewTracerProvider(
+			sdktrace.WithBatcher(exp),
+			sdktrace.WithSpanProcessor(newOtelFakeSpanProcessor(checkErrorStatusOnSpan)),
+		)
+		oldTracerProvider := otel.GetTracerProvider()
+		defer func() {
+			_ = tp.Shutdown(context.Background())
+			// reset tracer provider to older one once the test completes
+			otel.SetTracerProvider(oldTracerProvider)
+		}()
+		otel.SetTracerProvider(tp)
+
+		fakeInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/InvokeService",
+		}
+		fakeReq := &runtimev1pb.InvokeServiceRequest{
+			Id:      "targetID",
+			Message: &commonv1pb.InvokeRequest{Method: "method1"},
+		}
+
+		var span trace.Span
+		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			span = diagUtils.SpanFromContext(ctx)
+			// mocking an error that is returned from the gRPC API -- see pkg/grpc/api.go file
+			return nil, status.Error(codes.Internal, errors.New("fake status error").Error())
 		}
 
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
@@ -266,9 +313,9 @@ func TestSpanContextSerialization(t *testing.T) {
 		TraceFlags: trace.TraceFlags(1),
 	}
 	wantSc := trace.NewSpanContext(wantScConfig)
-	passedOverWire := diag_utils.BinaryFromSpanContext(wantSc)
+	passedOverWire := diagUtils.BinaryFromSpanContext(wantSc)
 	storedInDapr := base64.StdEncoding.EncodeToString(passedOverWire)
 	decoded, _ := base64.StdEncoding.DecodeString(storedInDapr)
-	gotSc, _ := diag_utils.SpanContextFromBinary(decoded)
+	gotSc, _ := diagUtils.SpanContextFromBinary(decoded)
 	assert.Equal(t, wantSc, gotSc)
 }

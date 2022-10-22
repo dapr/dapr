@@ -23,6 +23,7 @@ import (
 	nethttp "net/http"
 	"os"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,54 +42,59 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
+	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/configuration"
-	"github.com/dapr/components-contrib/contenttype"
-	"github.com/dapr/components-contrib/lock"
-	contrib_metadata "github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/components-contrib/middleware"
-	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/components-contrib/state"
-	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
-	lock_loader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
-	http_channel "github.com/dapr/dapr/pkg/channel/http"
+	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
-	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
-	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
-	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
-	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
-	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
-	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/resiliency"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
+
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
+	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
+	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	"github.com/dapr/dapr/pkg/components/pluggable"
+	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
+
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/contenttype"
+	"github.com/dapr/components-contrib/lock"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
+	"github.com/dapr/components-contrib/middleware"
+	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
 )
 
 const (
@@ -103,30 +109,20 @@ const (
 	// setting this environment variable restores the
 	// partial hot reloading support for k8s.
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
+
+	componentFormat = "%s (%s/%s)"
+
+	defaultComponentInitTimeout = time.Second * 5
 )
 
-type ComponentCategory string
-
-const (
-	bindingsComponent               ComponentCategory = "bindings"
-	pubsubComponent                 ComponentCategory = "pubsub"
-	secretStoreComponent            ComponentCategory = "secretstores"
-	stateComponent                  ComponentCategory = "state"
-	middlewareComponent             ComponentCategory = "middleware"
-	configurationComponent          ComponentCategory = "configuration"
-	lockComponent                   ComponentCategory = "lock"
-	defaultComponentInitTimeout                       = time.Second * 5
-	defaultGracefulShutdownDuration                   = time.Second * 5
-)
-
-var componentCategoriesNeedProcess = []ComponentCategory{
-	bindingsComponent,
-	pubsubComponent,
-	secretStoreComponent,
-	stateComponent,
-	middlewareComponent,
-	configurationComponent,
-	lockComponent,
+var componentCategoriesNeedProcess = []components.Category{
+	components.CategoryBindings,
+	components.CategoryPubSub,
+	components.CategorySecretStore,
+	components.CategoryStateStore,
+	components.CategoryMiddleware,
+	components.CategoryConfiguration,
+	components.CategoryLock,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -135,18 +131,17 @@ var log = logger.NewLogger("dapr.runtime")
 // was encountered when processing a cloud event's data property.
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
-type Route struct {
-	metadata map[string]string
-	rules    []*runtime_pubsub.Rule
-}
+type TopicRoutes map[string]TopicRouteElem
 
-type TopicRoute struct {
-	routes map[string]Route
+type TopicRouteElem struct {
+	metadata        map[string]string
+	rules           []*runtimePubsub.Rule
+	deadLetterTopic string
 }
 
 // Type of function that determines if a component is authorized.
 // The function receives the component and must return true if the component is authorized.
-type ComponentAuthorizer func(component components_v1alpha1.Component) bool
+type ComponentAuthorizer func(component componentsV1alpha1.Component) bool
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
@@ -156,27 +151,27 @@ type DaprRuntime struct {
 	globalConfig           *config.Configuration
 	accessControlList      *config.AccessControlList
 	componentsLock         *sync.RWMutex
-	components             []components_v1alpha1.Component
+	components             []componentsV1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
 	appConfig              config.ApplicationConfig
 	directMessaging        messaging.DirectMessaging
-	stateStoreRegistry     state_loader.Registry
-	secretStoresRegistry   secretstores_loader.Registry
-	nameResolutionRegistry nr_loader.Registry
+	stateStoreRegistry     *stateLoader.Registry
+	secretStoresRegistry   *secretstoresLoader.Registry
+	nameResolutionRegistry *nrLoader.Registry
 	stateStores            map[string]state.Store
 	actor                  actors.Actors
-	bindingsRegistry       bindings_loader.Registry
+	bindingsRegistry       *bindingsLoader.Registry
 	subscribeBindingList   []string
 	inputBindings          map[string]bindings.InputBinding
 	outputBindings         map[string]bindings.OutputBinding
 	inputBindingsCtx       context.Context
 	inputBindingsCancel    context.CancelFunc
 	secretStores           map[string]secretstores.SecretStore
-	pubSubRegistry         pubsub_loader.Registry
+	pubSubRegistry         *pubsubLoader.Registry
 	pubSubs                map[string]pubsubItem // Key is "componentName"
 	nameResolver           nr.Resolver
-	httpMiddlewareRegistry http_middleware_loader.Registry
+	httpMiddlewareRegistry *httpMiddlewareLoader.Registry
 	hostAddress            string
 	actorStateStoreName    string
 	actorStateStoreLock    *sync.RWMutex
@@ -187,25 +182,25 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	pubsubCtx              context.Context
 	pubsubCancel           context.CancelFunc
-	topicsLock             *sync.Mutex
-	topicRoutes            map[string]TopicRoute         // Key is "componentName"
-	deadLetterTopics       map[string]string             // Key is "componentName||topicName"
+	topicsLock             *sync.RWMutex
+	topicRoutes            map[string]TopicRoutes        // Key is "componentName"
 	topicCtxCancels        map[string]context.CancelFunc // Key is "componentName||topicName"
 	inputBindingRoutes     map[string]string
 	shutdownC              chan error
 	apiClosers             []io.Closer
 	componentAuthorizers   []ComponentAuthorizer
+	appHealth              *apphealth.AppHealth
 
 	secretsConfiguration map[string]config.SecretsScope
 
-	configurationStoreRegistry configuration_loader.Registry
+	configurationStoreRegistry *configurationLoader.Registry
 	configurationStores        map[string]configuration.Store
 
-	lockStoreRegistry lock_loader.Registry
+	lockStoreRegistry *lockLoader.Registry
 	lockStores        map[string]lock.Store
 
-	pendingComponents          chan components_v1alpha1.Component
-	pendingComponentDependents map[string][]components_v1alpha1.Component
+	pendingComponents          chan componentsV1alpha1.Component
+	pendingComponentDependents map[string][]componentsV1alpha1.Component
 
 	proxy messaging.Proxy
 
@@ -250,43 +245,30 @@ type pubsubItem struct {
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
 	rt := &DaprRuntime{
-		ctx:                    ctx,
-		cancel:                 cancel,
-		runtimeConfig:          runtimeConfig,
-		globalConfig:           globalConfig,
-		accessControlList:      accessControlList,
-		componentsLock:         &sync.RWMutex{},
-		components:             make([]components_v1alpha1.Component, 0),
-		actorStateStoreLock:    &sync.RWMutex{},
-		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
-		inputBindings:          map[string]bindings.InputBinding{},
-		outputBindings:         map[string]bindings.OutputBinding{},
-		secretStores:           map[string]secretstores.SecretStore{},
-		stateStores:            map[string]state.Store{},
-		pubSubs:                map[string]pubsubItem{},
-		stateStoreRegistry:     state_loader.NewRegistry(),
-		bindingsRegistry:       bindings_loader.NewRegistry(),
-		pubSubRegistry:         pubsub_loader.NewRegistry(),
-		secretStoresRegistry:   secretstores_loader.NewRegistry(),
-		nameResolutionRegistry: nr_loader.NewRegistry(),
-		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
-
-		topicsLock:                 &sync.Mutex{},
+		ctx:                        ctx,
+		cancel:                     cancel,
+		runtimeConfig:              runtimeConfig,
+		globalConfig:               globalConfig,
+		accessControlList:          accessControlList,
+		componentsLock:             &sync.RWMutex{},
+		components:                 make([]componentsV1alpha1.Component, 0),
+		actorStateStoreLock:        &sync.RWMutex{},
+		grpc:                       grpc.NewGRPCManager(runtimeConfig.Mode),
+		inputBindings:              map[string]bindings.InputBinding{},
+		outputBindings:             map[string]bindings.OutputBinding{},
+		secretStores:               map[string]secretstores.SecretStore{},
+		stateStores:                map[string]state.Store{},
+		pubSubs:                    map[string]pubsubItem{},
+		topicsLock:                 &sync.RWMutex{},
 		inputBindingRoutes:         map[string]string{},
 		secretsConfiguration:       map[string]config.SecretsScope{},
-		configurationStoreRegistry: configuration_loader.NewRegistry(),
 		configurationStores:        map[string]configuration.Store{},
-
-		lockStoreRegistry: lock_loader.NewRegistry(),
-		lockStores:        map[string]lock.Store{},
-
-		pendingComponents:          make(chan components_v1alpha1.Component),
-		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
+		lockStores:                 map[string]lock.Store{},
+		pendingComponents:          make(chan componentsV1alpha1.Component),
+		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
-
-		tracerProvider: nil,
-
-		resiliency: resiliencyProvider,
+		tracerProvider:             nil,
+		resiliency:                 resiliencyProvider,
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -309,8 +291,7 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 		opt(&o)
 	}
 
-	err := a.initRuntime(&o)
-	if err != nil {
+	if err := a.initRuntime(&o); err != nil {
 		return err
 	}
 
@@ -349,7 +330,7 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
 	if a.globalConfig.Spec.TracingSpec.Stdout {
-		tpStore.RegisterExporter(diag_utils.NewStdOutExporter())
+		tpStore.RegisterExporter(diagUtils.NewStdOutExporter())
 	}
 
 	// Register zipkin trace exporter if ZipkinSpec is specified
@@ -384,7 +365,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
 		}
-		otelExporter, err := otlptrace.New(context.Background(), client)
+		otelExporter, err := otlptrace.New(a.ctx, client)
 		if err != nil {
 			return err
 		}
@@ -400,7 +381,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	tpStore.RegisterResource(r)
 
 	// Register a trace sampler based on Sampling settings
-	tpStore.RegisterSampler(diag_utils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
+	tpStore.RegisterSampler(diagUtils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
 
 	tpStore.RegisterTracerProvider()
 
@@ -413,7 +394,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Initialize metrics only if MetricSpec is enabled.
 	if a.globalConfig.Spec.MetricSpec.Enabled {
 		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace); err != nil {
-			log.Errorf("failed to initialize metrics: %v", err)
+			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
 		}
 	}
 
@@ -434,20 +415,21 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return errors.Wrap(err, "failed to setup tracing")
 	}
 	// Register and initialize name resolution for service discovery.
-	a.nameResolutionRegistry.Register(opts.nameResolutions...)
+	a.nameResolutionRegistry = opts.nameResolutionRegistry
 	err = a.initNameResolution()
 	if err != nil {
-		log.Warnf("failed to init name resolution: %s", err)
+		log.Errorf(err.Error())
 	}
 
-	a.pubSubRegistry.Register(opts.pubsubs...)
-	a.secretStoresRegistry.Register(opts.secretStores...)
-	a.stateStoreRegistry.Register(opts.states...)
-	a.configurationStoreRegistry.Register(opts.configurations...)
-	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
-	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
-	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
-	a.lockStoreRegistry.Register(opts.locks...)
+	a.pubSubRegistry = opts.pubsubRegistry
+	a.secretStoresRegistry = opts.secretStoreRegistry
+	a.stateStoreRegistry = opts.stateRegistry
+	a.configurationStoreRegistry = opts.configurationRegistry
+	a.bindingsRegistry = opts.bindingRegistry
+	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
+	a.lockStoreRegistry = opts.lockRegistry
+
+	a.initPluggableComponents()
 
 	go a.processComponents()
 
@@ -532,7 +514,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
 		if err != nil {
-			log.Warnf("failed to init actors: %v", err)
+			log.Warnf(err.Error())
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			grpcAPI.SetActorRuntime(a.actor)
@@ -557,12 +539,52 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		}
 	}
 
-	a.startSubscriptions()
-	err = a.startReadingFromBindings()
-	if err != nil {
-		log.Warnf("failed to read from bindings: %s ", err)
+	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
+		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
+		a.appHealth.OnHealthChange(a.appHealthChanged)
+		a.appHealth.StartProbes(a.ctx)
+
+		// Set the appHealth object in the channel so it's aware of the app's health status
+		a.appChannel.SetAppHealth(a.appHealth)
+
+		// Enqueue a probe right away
+		// This will also start the input components once the app is healthy
+		a.appHealth.Enqueue()
+	} else {
+		// If there's no health check, mark the app as healthy right away so subscriptions can start
+		a.appHealthChanged(apphealth.AppStatusHealthy)
 	}
+
 	return nil
+}
+
+// initPluggableComponents discover pluggable components and initialize with their respective registries.
+func (a *DaprRuntime) initPluggableComponents() {
+	if runtime.GOOS == "windows" {
+		log.Debugf("the current OS does not support pluggable components feature, skipping initialization")
+		return
+	}
+	if err := pluggable.Discover(a.ctx); err != nil {
+		log.Errorf("could not initialize pluggable components %v", err)
+	}
+}
+
+// Sets the status of the app to healthy or un-healthy
+// Callback for apphealth when the detected status changed
+func (a *DaprRuntime) appHealthChanged(status uint8) {
+	switch status {
+	case apphealth.AppStatusHealthy:
+		// Start subscribing to topics and reading from input bindings
+		a.startSubscriptions()
+		err := a.startReadingFromBindings()
+		if err != nil {
+			log.Warnf("failed to read from bindings: %s ", err)
+		}
+	case apphealth.AppStatusUnhealthy:
+		// Stop topic subscriptions and input bindings
+		a.stopSubscriptions()
+		a.stopReadingFromBindings()
+	}
 }
 
 func (a *DaprRuntime) populateSecretsConfiguration() {
@@ -572,53 +594,55 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
-	var handlers []http_middleware.Middleware
+func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (httpMiddleware.Pipeline, error) {
+	var handlers []httpMiddleware.Middleware
 
 	if a.globalConfig != nil {
-		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
+		for i := 0; i < len(spec.Handlers); i++ {
+			middlewareSpec := spec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
-				return http_middleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
+				return httpMiddleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
 					middlewareSpec.Name,
 					middlewareSpec.Type,
 					middlewareSpec.Version)
 			}
 			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version,
-				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
+				middleware.Metadata{Base: a.toBaseMetadata(component)})
 			if err != nil {
-				return http_middleware.Pipeline{}, err
+				return httpMiddleware.Pipeline{}, err
 			}
-			log.Infof("enabled %s/%s http middleware", middlewareSpec.Type, middlewareSpec.Version)
+			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
 			handlers = append(handlers, handler)
 		}
 	}
-	return http_middleware.Pipeline{Handlers: handlers}, nil
+	return httpMiddleware.Pipeline{Handlers: handlers}, nil
 }
 
-func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
+}
+
+func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
+}
+
+func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
 	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initOutputBinding(c); err != nil {
-			log.Errorf("failed to init output bindings: %s", err)
 			return err
 		}
 	}
 
 	if a.bindingsRegistry.HasInputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initInputBinding(c); err != nil {
-			log.Errorf("failed to init input bindings: %s", err)
 			return err
 		}
 	}
 	return nil
 }
 
-func (a *DaprRuntime) sendToDeadLetterIfConfigured(name string, msg *pubsub.NewMessage) (isDeadLetterConfigured bool, err error) {
-	deadLetterTopic, ok := a.deadLetterTopics[pubsubTopicKey(name, msg.Topic)]
-	if !ok {
-		return false, nil
-	}
+func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, deadLetterTopic string) (err error) {
 	req := &pubsub.PublishRequest{
 		Data:        msg.Data,
 		PubsubName:  name,
@@ -630,20 +654,21 @@ func (a *DaprRuntime) sendToDeadLetterIfConfigured(name string, msg *pubsub.NewM
 	err = a.Publish(req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+		return err
 	}
-	return true, err
+	return nil
 }
 
-func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route Route) error {
+func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route TopicRouteElem) error {
 	subKey := pubsubTopicKey(name, topic)
+
+	a.topicsLock.Lock()
+	defer a.topicsLock.Unlock()
 
 	allowed := a.isPubSubOperationAllowed(name, topic, a.pubSubs[name].scopedSubscriptions)
 	if !allowed {
 		return fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", topic, name)
 	}
-
-	a.topicsLock.Lock()
-	defer a.topicsLock.Unlock()
 
 	log.Debugf("subscribing to topic='%s' on pubsub='%s'", topic, name)
 
@@ -652,7 +677,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	policy := a.resiliency.ComponentInboundPolicy(ctx, name)
+	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    topic,
 		Metadata: route.metadata,
@@ -663,13 +688,15 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		msg.Metadata[pubsubName] = name
 
-		rawPayload, err := contrib_metadata.IsRawPayload(route.metadata)
+		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
-				// dlq has been configured and message is successfully sent to dlq.
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-				return nil
+			if route.deadLetterTopic != "" {
+				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					return nil
+				}
 			}
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 			return err
@@ -682,10 +709,12 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
-					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-					return nil
+				if route.deadLetterTopic != "" {
+					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+						// dlq has been configured and message is successfully sent to dlq.
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						return nil
+					}
 				}
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 				return err
@@ -694,10 +723,12 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
-					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-					return nil
+				if route.deadLetterTopic != "" {
+					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+						// dlq has been configured and message is successfully sent to dlq.
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						return nil
+					}
 				}
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 				return err
@@ -708,17 +739,21 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 
-			a.sendToDeadLetterIfConfigured(name, msg)
+			if route.deadLetterTopic != "" {
+				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
+			}
 			return nil
 		}
 
 		routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
 		if err != nil {
 			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
-			if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
-				// dlq has been configured and message is successfully sent to dlq.
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-				return nil
+			if route.deadLetterTopic != "" {
+				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					return nil
+				}
 			}
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 			return err
@@ -727,7 +762,9 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			// The event does not match any route specified so ignore it.
 			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-			a.sendToDeadLetterIfConfigured(name, msg)
+			if route.deadLetterTopic != "" {
+				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
+			}
 			return nil
 		}
 
@@ -752,9 +789,10 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			if configured, _ := a.sendToDeadLetterIfConfigured(name, msg); !configured {
+			if route.deadLetterTopic == "" {
 				return err
 			}
+			_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
 			return nil
 		}
 		return err
@@ -797,7 +835,7 @@ func (a *DaprRuntime) beginPubSub(name string) error {
 		return nil
 	}
 
-	for topic, route := range v.routes {
+	for topic, route := range v {
 		err = a.subscribeTopic(a.pubsubCtx, name, topic, route)
 		if err != nil {
 			// Log the error only
@@ -810,7 +848,7 @@ func (a *DaprRuntime) beginPubSub(name string) error {
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
+func findMatchingRoute(rules []*runtimePubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
 	hasRules := len(rules) > 0
 	if hasRules {
 		data := map[string]interface{}{
@@ -828,7 +866,7 @@ func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}) (pa
 	return "", false, nil
 }
 
-func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}) (*runtime_pubsub.Rule, error) {
+func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) (*runtimePubsub.Rule, error) {
 	for _, rule := range rules {
 		if rule.Match == nil {
 			return rule, nil
@@ -851,22 +889,20 @@ func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{})
 }
 
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
-	a.directMessaging = messaging.NewDirectMessaging(
-		a.runtimeConfig.ID,
-		a.namespace,
-		a.runtimeConfig.InternalGRPCPort,
-		a.runtimeConfig.Mode,
-		a.appChannel,
-		a.grpc.GetGRPCConnection,
-		resolver,
-		a.globalConfig.Spec.TracingSpec,
-		a.runtimeConfig.MaxRequestBodySize,
-		a.proxy,
-		a.runtimeConfig.ReadBufferSize,
-		a.runtimeConfig.StreamRequestBody,
-		a.resiliency,
-		config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
-	)
+	a.directMessaging = messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
+		AppID:               a.runtimeConfig.ID,
+		Namespace:           a.namespace,
+		Port:                a.runtimeConfig.InternalGRPCPort,
+		Mode:                a.runtimeConfig.Mode,
+		AppChannel:          a.appChannel,
+		ClientConnFn:        a.grpc.GetGRPCConnection,
+		Resolver:            resolver,
+		MaxRequestBodySize:  a.runtimeConfig.MaxRequestBodySize,
+		Proxy:               a.proxy,
+		ReadBufferSize:      a.runtimeConfig.ReadBufferSize,
+		Resiliency:          a.resiliency,
+		IsResiliencyEnabled: config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
+	})
 }
 
 func (a *DaprRuntime) initProxy() {
@@ -884,7 +920,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 
 	go func() {
 		parseAndUpdate := func(compRaw []byte) {
-			var component components_v1alpha1.Component
+			var component componentsV1alpha1.Component
 			if err := json.Unmarshal(compRaw, &component); err != nil {
 				log.Warnf("error deserializing component: %s", err)
 				return
@@ -904,7 +940,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 
 		needList := false
 		for {
-			var stream operatorv1pb.Operator_ComponentUpdateClient
+			var stream operatorv1pb.Operator_ComponentUpdateClient //nolint:nosnakecase
 
 			// Retry on stream error.
 			backoff.Retry(func() error {
@@ -959,7 +995,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	return nil
 }
 
-func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) bool {
+func (a *DaprRuntime) onComponentUpdated(component componentsV1alpha1.Component) bool {
 	oldComp, exists := a.getComponent(component.Spec.Type, component.Name)
 	newComp, _ := a.processComponentSecrets(component)
 
@@ -1008,7 +1044,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		for _, o := range ops {
 			if o == req.Operation {
 				var resp *bindings.InvokeResponse
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name)
+				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name, resiliency.Binding)
 				err := policy(func(ctx context.Context) (err error) {
 					resp, err = binding.Invoke(ctx, req)
 					return err
@@ -1029,7 +1065,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName)
+				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName, resiliency.Statestore)
 				err := policy(func(ctx context.Context) (err error) {
 					return a.stateStores[response.StoreName].BulkSet(reqs)
 				})
@@ -1059,7 +1095,26 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	spanContext := trace.SpanContext{}
+
+	// Check the grpc-trace-bin with fallback to traceparent.
+	validTraceparent := false
+	if val, ok := metadata[diag.GRPCTraceContextKey]; ok {
+		if sc, ok := diagUtils.SpanContextFromBinary([]byte(val)); ok {
+			spanContext = sc
+		}
+	} else if val, ok := metadata[diag.TraceparentHeader]; ok {
+		if sc, ok := diag.SpanContextFromW3CString(val); ok {
+			spanContext = sc
+			validTraceparent = true
+			// Only parse the tracestate if we've successfully parsed the traceparent.
+			if val, ok := metadata[diag.TracestateHeader]; ok {
+				ts := diag.TraceStateFromW3CString(val)
+				spanContext.WithTraceState(*ts)
+			}
+		}
+	}
+	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
 	path := a.inputBindingRoutes[bindingName]
@@ -1069,6 +1124,21 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+
+		// Add workaround to fallback on checking traceparent header.
+		// As grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus, tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
+		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path.
+		// TODO: Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827.
+		if validTraceparent {
+			spanContextHeaders := make(map[string]string, 2)
+			diag.SpanContextToHTTPHeaders(span.SpanContext(), func(key string, val string) {
+				spanContextHeaders[key] = val
+			})
+			for key, val := range spanContextHeaders {
+				ctx = md.AppendToOutgoingContext(ctx, key, val)
+			}
+		}
+
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
@@ -1078,7 +1148,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		start := time.Now()
 
 		var resp *runtimev1pb.BindingEventResponse
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
+		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
 		err := policy(func(ctx context.Context) (err error) {
 			resp, err = client.OnBindingEvent(ctx, req)
 			return err
@@ -1107,7 +1177,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
 		}
 		if resp != nil {
-			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
+			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
 				response.Concurrency = bindingsConcurrencyParallel
 			} else {
 				response.Concurrency = bindingsConcurrencySequential
@@ -1137,35 +1207,34 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req.WithMetadata(reqMetadata)
 
 		var resp *invokev1.InvokeMethodResponse
-		respErr := false
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
+		respErr := errors.New("error sending binding event to application")
+		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
 		err := policy(func(ctx context.Context) (err error) {
-			respErr = false
 			resp, err = a.appChannel.InvokeMethod(ctx, req)
 			if err != nil {
 				return err
 			}
 
 			if resp != nil && resp.Status().Code != nethttp.StatusOK {
-				respErr = true
-				return errors.Errorf("Error sending binding event to application, status %d", resp.Status().Code)
+				return fmt.Errorf("%w, status %d", respErr, resp.Status().Code)
 			}
 			return nil
 		})
-		if err != nil && !respErr {
+		if err != nil && !errors.Is(err, respErr) {
 			return nil, errors.Wrap(err, "error invoking app")
 		}
 
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
 				bindingName,
-				fmt.Sprintf("%s /%s", nethttp.MethodPost, bindingName))
+				nethttp.MethodPost+" /"+bindingName,
+			)
 			diag.AddAttributesToSpan(span, m)
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
 		// ::TODO report metrics for http, such as grpc
-		if resp.Status().Code != nethttp.StatusOK {
+		if resp.Status().Code < 200 || resp.Status().Code > 299 {
 			_, body := resp.RawData()
 			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
@@ -1185,7 +1254,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, binding bindings.InputBinding) error {
-	return binding.Read(readCtx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
+	return binding.Read(readCtx, func(_ context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp == nil {
 			return nil, nil
 		}
@@ -1204,42 +1273,50 @@ func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, bind
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) error {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID,
-		a.appChannel,
-		a.directMessaging,
-		a.getComponents,
-		a.resiliency,
-		a.stateStores,
-		a.lockStores,
-		a.secretStores,
-		a.secretsConfiguration,
-		a.configurationStores,
-		a.getPublishAdapter(),
-		a.actor,
-		a.sendToOutputBinding,
-		a.globalConfig.Spec.TracingSpec,
-		a.ShutdownWithWait,
-		a.getComponentsCapabilitesMap,
-	)
-	serverConf := http.NewServerConfig(
-		a.runtimeConfig.ID,
-		a.hostAddress,
-		port,
-		a.runtimeConfig.APIListenAddresses,
-		publicPort,
-		profilePort,
-		allowedOrigins,
-		a.runtimeConfig.EnableProfiling,
-		a.runtimeConfig.MaxRequestBodySize,
-		a.runtimeConfig.UnixDomainSocket,
-		a.runtimeConfig.ReadBufferSize,
-		a.runtimeConfig.StreamRequestBody,
-		a.runtimeConfig.EnableAPILogging,
-	)
+func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
+	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
+		AppID:                       a.runtimeConfig.ID,
+		AppChannel:                  a.appChannel,
+		DirectMessaging:             a.directMessaging,
+		GetComponentsFn:             a.getComponents,
+		Resiliency:                  a.resiliency,
+		StateStores:                 a.stateStores,
+		LockStores:                  a.lockStores,
+		SecretStores:                a.secretStores,
+		SecretsConfiguration:        a.secretsConfiguration,
+		ConfigurationStores:         a.configurationStores,
+		PubsubAdapter:               a.getPublishAdapter(),
+		Actor:                       a.actor,
+		SendToOutputBindingFn:       a.sendToOutputBinding,
+		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		Shutdown:                    a.ShutdownWithWait,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		MaxRequestBodySize:          int64(a.runtimeConfig.MaxRequestBodySize) << 20, // Convert from MB to bytes
+	})
 
-	server := http.NewServer(a.daprHTTPAPI,
-		serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
+	serverConf := http.ServerConfig{
+		AppID:              a.runtimeConfig.ID,
+		HostAddress:        a.hostAddress,
+		Port:               port,
+		APIListenAddresses: a.runtimeConfig.APIListenAddresses,
+		PublicPort:         publicPort,
+		ProfilePort:        profilePort,
+		AllowedOrigins:     allowedOrigins,
+		EnableProfiling:    a.runtimeConfig.EnableProfiling,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
+	}
+
+	server := http.NewServer(http.NewServerOpts{
+		API:         a.daprHTTPAPI,
+		Config:      serverConf,
+		TracingSpec: a.globalConfig.Spec.TracingSpec,
+		MetricSpec:  a.globalConfig.Spec.MetricSpec,
+		Pipeline:    pipeline,
+		APISpec:     a.globalConfig.Spec.APISpec,
+	})
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1278,32 +1355,44 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.EnableAPILogging)
+	return grpc.ServerConfig{
+		AppID:                a.runtimeConfig.ID,
+		HostAddress:          a.hostAddress,
+		Port:                 port,
+		APIListenAddresses:   apiListenAddresses,
+		NameSpace:            a.namespace,
+		TrustDomain:          trustDomain,
+		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:     a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSizeKB:     a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:     a.runtimeConfig.EnableAPILogging,
+	}
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID,
-		a.appChannel,
-		a.resiliency,
-		a.stateStores,
-		a.secretStores,
-		a.secretsConfiguration,
-		a.configurationStores,
-		a.lockStores,
-		a.getPublishAdapter(),
-		a.directMessaging,
-		a.actor,
-		a.sendToOutputBinding,
-		a.globalConfig.Spec.TracingSpec,
-		a.accessControlList,
-		string(a.runtimeConfig.ApplicationProtocol),
-		a.getComponents,
-		a.ShutdownWithWait,
-		a.getComponentsCapabilitesMap,
-	)
+	return grpc.NewAPI(grpc.APIOpts{
+		AppID:                       a.runtimeConfig.ID,
+		AppChannel:                  a.appChannel,
+		Resiliency:                  a.resiliency,
+		StateStores:                 a.stateStores,
+		SecretStores:                a.secretStores,
+		SecretsConfiguration:        a.secretsConfiguration,
+		ConfigurationStores:         a.configurationStores,
+		LockStores:                  a.lockStores,
+		PubsubAdapter:               a.getPublishAdapter(),
+		DirectMessaging:             a.directMessaging,
+		Actor:                       a.actor,
+		SendToOutputBindingFn:       a.sendToOutputBinding,
+		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		AccessControlList:           a.accessControlList,
+		AppProtocol:                 string(a.runtimeConfig.ApplicationProtocol),
+		Shutdown:                    a.ShutdownWithWait,
+		GetComponentsFn:             a.getComponents,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+	})
 }
 
-func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
+func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
 	if len(a.pubSubs) == 0 {
 		return nil
 	}
@@ -1353,21 +1442,18 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 	return false
 }
 
-func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
-	err = binding.Init(bindings.Metadata{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-		Name:       c.ObjectMeta.Name,
-	})
+	err = binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
-		log.Errorf("failed to init input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -1382,23 +1468,20 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
 	if binding != nil {
-		err := binding.Init(bindings.Metadata{
-			Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-			Name:       c.ObjectMeta.Name,
-		})
+		err := binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
 		if err != nil {
-			log.Errorf("failed to init output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-			return err
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 		log.Infof("successful init for output binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		a.outputBindings[c.ObjectMeta.Name] = binding
@@ -1407,22 +1490,19 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
+func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err := store.Init(configuration.Metadata{
-			Properties: props,
-		})
+		err := store.Init(configuration.Metadata{Base: a.toBaseMetadata(s)})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-			log.Warnf("error initializing configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-			return err
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 
 		a.configurationStores[s.ObjectMeta.Name] = store
@@ -1432,34 +1512,34 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
+func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	// create the component
 	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store == nil {
 		return nil
 	}
 	// initialization
-	props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-	err = store.InitLockStore(lock.Metadata{
-		Properties: props,
-	})
+	baseMetadata := a.toBaseMetadata(s)
+	props := baseMetadata.Properties
+	err = store.InitLockStore(lock.Metadata{Base: baseMetadata})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-		log.Warnf("error initializing lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 	// save lock related configuration
 	a.lockStores[s.ObjectMeta.Name] = store
-	err = lock_loader.SaveLockConfiguration(s.ObjectMeta.Name, props)
+	err = lockLoader.SaveLockConfiguration(s.ObjectMeta.Name, props)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-		log.Warnf("error save lock keyprefix: %s", err.Error())
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, wrapError)
 	}
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 
@@ -1467,12 +1547,12 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 }
 
 // Refer for state store api decision  https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
-func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
+func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
 		secretStoreName := a.authSecretStoreOrDefault(s)
@@ -1480,9 +1560,9 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		secretStore := a.getSecretStore(secretStoreName)
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
 		if encErr != nil {
-			log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, encErr)
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-			return encErr
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat+" encyption", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(CreateComponentFailure, fName, err)
 		}
 
 		if encKeys.Primary.Key != "" {
@@ -1492,22 +1572,22 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 			}
 		}
 
-		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err = store.Init(state.Metadata{
-			Properties: props,
-		})
+		baseMetadata := a.toBaseMetadata(s)
+		props := baseMetadata.Properties
+		err = store.Init(state.Metadata{Base: baseMetadata})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-			log.Warnf("error initializing state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-			return err
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 
 		a.stateStores[s.ObjectMeta.Name] = store
-		err = state_loader.SaveStateConfiguration(s.ObjectMeta.Name, props)
+		err = stateLoader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-			log.Warnf("error save state keyprefix: %s", err.Error())
-			return err
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, wrapError)
 		}
 
 		// when placement address list is not empty, set specified actor store.
@@ -1531,14 +1611,14 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscription {
-	var subs []runtime_pubsub.Subscription
+func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription {
+	var subs []runtimePubsub.Subscription
 
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
+		subs = runtimePubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
 	case modes.StandaloneMode:
-		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
+		subs = runtimePubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	}
 
 	// only return valid subscriptions for this app id
@@ -1564,13 +1644,12 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 	return subs[:i]
 }
 
-func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
+func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 	if a.topicRoutes != nil {
 		return a.topicRoutes, nil
 	}
 
-	topicRoutes := make(map[string]TopicRoute)
-	deadLetterTopics := make(map[string]string)
+	topicRoutes := make(map[string]TopicRoutes)
 
 	if a.appChannel == nil {
 		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
@@ -1578,17 +1657,17 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	}
 
 	var (
-		subscriptions []runtime_pubsub.Subscription
+		subscriptions []runtimePubsub.Subscription
 		err           error
 	)
 
 	// handle app subscriptions
 	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
+		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
+		subscriptions, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
 	}
 	if err != nil {
 		return nil, err
@@ -1615,52 +1694,55 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	}
 
 	for _, s := range subscriptions {
-		if _, ok := topicRoutes[s.PubsubName]; !ok {
-			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
+		if topicRoutes[s.PubsubName] == nil {
+			topicRoutes[s.PubsubName] = TopicRoutes{}
 		}
 
-		topicRoutes[s.PubsubName].routes[s.Topic] = Route{metadata: s.Metadata, rules: s.Rules}
-		if len(s.DeadLetterTopic) > 0 {
-			deadLetterTopics[pubsubTopicKey(s.PubsubName, s.Topic)] = s.DeadLetterTopic
+		topicRoutes[s.PubsubName][s.Topic] = TopicRouteElem{
+			metadata:        s.Metadata,
+			rules:           s.Rules,
+			deadLetterTopic: s.DeadLetterTopic,
 		}
 	}
 
 	if len(topicRoutes) > 0 {
 		for pubsubName, v := range topicRoutes {
-			topics := []string{}
-			for topic := range v.routes {
-				topics = append(topics, topic)
+			var topics string
+			for topic := range v {
+				if topics == "" {
+					topics += topic
+				} else {
+					topics += " " + topic
+				}
 			}
-			log.Infof("app is subscribed to the following topics: %v through pubsub=%s", topics, pubsubName)
+			log.Infof("app is subscribed to the following topics: [%s] through pubsub=%s", topics, pubsubName)
 		}
 	}
 	a.topicRoutes = topicRoutes
-	a.deadLetterTopics = deadLetterTopics
 	return topicRoutes, nil
 }
 
-func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating pub sub %s (%s/%s): %s", &c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+	baseMetadata := a.toBaseMetadata(c)
+	properties := baseMetadata.Properties
 	consumerID := strings.TrimSpace(properties["consumerID"])
 	if consumerID == "" {
 		consumerID = a.runtimeConfig.ID
 	}
 	properties["consumerID"] = consumerID
 
-	err = pubSub.Init(pubsub.Metadata{
-		Properties: properties,
-	})
+	err = pubSub.Init(pubsub.Metadata{Base: baseMetadata})
 	if err != nil {
-		log.Warnf("error initializing pub sub %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	pubsubName := c.ObjectMeta.Name
@@ -1680,23 +1762,26 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
+	a.topicsLock.RLock()
 	ps, ok := a.pubSubs[req.PubsubName]
+	a.topicsLock.RUnlock()
+
 	if !ok {
-		return runtime_pubsub.NotFoundError{PubsubName: req.PubsubName}
+		return runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
-		return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
+		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName)
+	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName, resiliency.Pubsub)
 	return policy(func(ctx context.Context) (err error) {
 		return ps.component.Publish(req)
 	})
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
-func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]Route) (err error) {
+func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]TopicRouteElem) (err error) {
 	_, ok := a.pubSubs[name]
 	if !ok {
 		return fmt.Errorf("pubsub component %s does not exist", name)
@@ -1766,7 +1851,8 @@ func (a *DaprRuntime) initNameResolution() error {
 		case modes.StandaloneMode:
 			resolverName = "mdns"
 		default:
-			return errors.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode))
+			fullName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+			return NewInitError(InitComponentFailure, fullName, errors.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode)))
 		}
 	}
 
@@ -1775,6 +1861,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	resolver, err = a.nameResolutionRegistry.Create(resolverName, resolverVersion)
+	resolverMetadata.Name = resolverName
 	resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
 	resolverMetadata.Properties = map[string]string{
 		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.HTTPPort),
@@ -1789,13 +1876,15 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	if err != nil {
-		log.Warnf("error creating name resolution resolver %s: %s", resolverName, err)
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "creation", resolverName)
+		fName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
 	if err = resolver.Init(resolverMetadata); err != nil {
-		log.Errorf("failed to initialize name resolution resolver %s: %s", resolverName, err)
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "init", resolverName)
+		fName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	a.nameResolver = resolver
@@ -1848,7 +1937,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
-			return nil
+			return nil //nolint:nilerr
 		}
 
 		switch appResponse.Status {
@@ -1881,9 +1970,10 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	log.Warnf(errMsg)
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	return errors.Errorf(errMsg)
 }
 
 func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
@@ -1981,15 +2071,15 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	switch res.GetStatus() {
-	case runtimev1pb.TopicEventResponse_SUCCESS:
+	case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 		// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 		// success from protobuf definition
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
 		return nil
-	case runtimev1pb.TopicEventResponse_RETRY:
+	case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-	case runtimev1pb.TopicEventResponse_DROP:
+	case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 
@@ -2018,28 +2108,42 @@ func extractCloudEventProperty(cloudEvent map[string]interface{}, property strin
 func (a *DaprRuntime) initActors() error {
 	err := actors.ValidateHostEnvironment(a.runtimeConfig.mtlsEnabled, a.runtimeConfig.Mode, a.namespace)
 	if err != nil {
-		return err
+		return NewInitError(InitFailure, "actors", err)
 	}
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
 	if a.actorStateStoreName == "" {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID,
-		a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort,
-		a.namespace, a.appConfig)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig,
-		a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features,
-		a.resiliency, a.actorStateStoreName)
+	actorConfig := actors.NewConfig(actors.ConfigOpts{
+		HostAddress:        a.hostAddress,
+		AppID:              a.runtimeConfig.ID,
+		PlacementAddresses: a.runtimeConfig.PlacementAddresses,
+		Port:               a.runtimeConfig.InternalGRPCPort,
+		Namespace:          a.namespace,
+		AppConfig:          a.appConfig,
+	})
+	act := actors.NewActors(actors.ActorsOpts{
+		StateStore:       a.stateStores[a.actorStateStoreName],
+		AppChannel:       a.appChannel,
+		GRPCConnectionFn: a.grpc.GetGRPCConnection,
+		Config:           actorConfig,
+		CertChain:        a.runtimeConfig.CertChain,
+		TracingSpec:      a.globalConfig.Spec.TracingSpec,
+		Features:         a.globalConfig.Spec.Features,
+		Resiliency:       a.resiliency,
+		StateStoreName:   a.actorStateStoreName,
+	})
 	err = act.Init()
 	if err == nil {
 		a.actor = act
+		return nil
 	}
-	return err
+	return NewInitError(InitFailure, "actors", err)
 }
 
-func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {
-	authorized := make([]components_v1alpha1.Component, len(components))
+func (a *DaprRuntime) getAuthorizedComponents(components []componentsV1alpha1.Component) []componentsV1alpha1.Component {
+	authorized := make([]componentsV1alpha1.Component, len(components))
 
 	i := 0
 	for _, c := range components {
@@ -2051,7 +2155,7 @@ func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.C
 	return authorized[0:i]
 }
 
-func (a *DaprRuntime) isComponentAuthorized(component components_v1alpha1.Component) bool {
+func (a *DaprRuntime) isComponentAuthorized(component componentsV1alpha1.Component) bool {
 	for _, auth := range a.componentAuthorizers {
 		if !auth(component) {
 			return false
@@ -2060,7 +2164,7 @@ func (a *DaprRuntime) isComponentAuthorized(component components_v1alpha1.Compon
 	return true
 }
 
-func (a *DaprRuntime) namespaceComponentAuthorizer(component components_v1alpha1.Component) bool {
+func (a *DaprRuntime) namespaceComponentAuthorizer(component componentsV1alpha1.Component) bool {
 	if a.namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
 		if len(component.Scopes) == 0 {
 			return true
@@ -2111,7 +2215,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	return nil
 }
 
-func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Component) {
+func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Component) {
 	a.componentsLock.Lock()
 	defer a.componentsLock.Unlock()
 
@@ -2129,7 +2233,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Co
 	}
 }
 
-func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Component) ComponentCategory {
+func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) components.Category {
 	for _, category := range componentCategoriesNeedProcess {
 		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
 			return category
@@ -2161,11 +2265,11 @@ func (a *DaprRuntime) flushOutstandingComponents() {
 	log.Info("waiting for all outstanding components to be processed")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.pendingComponents <- components_v1alpha1.Component{}
+	a.pendingComponents <- componentsV1alpha1.Component{}
 	log.Info("all outstanding components processed")
 }
 
-func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Component) error {
+func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Component) error {
 	log.Debugf("loading component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
 	res := a.preprocessOneComponent(&comp)
 	if res.unreadyDependency != "" {
@@ -2196,7 +2300,10 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 			return err
 		}
 	case <-time.After(timeout):
-		return fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		err := fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+		fName := fmt.Sprintf(componentFormat, comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	log.Infof("component loaded. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
@@ -2216,30 +2323,30 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	return nil
 }
 
-func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp components_v1alpha1.Component) error {
+func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp componentsV1alpha1.Component) error {
 	switch category {
-	case bindingsComponent:
+	case components.CategoryBindings:
 		return a.initBinding(comp)
-	case pubsubComponent:
+	case components.CategoryPubSub:
 		return a.initPubSub(comp)
-	case secretStoreComponent:
+	case components.CategorySecretStore:
 		return a.initSecretStore(comp)
-	case stateComponent:
+	case components.CategoryStateStore:
 		return a.initState(comp)
-	case configurationComponent:
+	case components.CategoryConfiguration:
 		return a.initConfiguration(comp)
-	case lockComponent:
+	case components.CategoryLock:
 		return a.initLock(comp)
 	}
 	return nil
 }
 
-func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component) componentPreprocessRes {
+func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component) componentPreprocessRes {
 	var unreadySecretsStore string
 	*comp, unreadySecretsStore = a.processComponentSecrets(*comp)
 	if unreadySecretsStore != "" {
 		return componentPreprocessRes{
-			unreadyDependency: componentDependency(secretStoreComponent, unreadySecretsStore),
+			unreadyDependency: componentDependency(components.CategorySecretStore, unreadySecretsStore),
 		}
 	}
 	return componentPreprocessRes{}
@@ -2328,9 +2435,9 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 
-	log.Infof("dapr shutting down.")
+	log.Info("dapr shutting down.")
 
-	log.Infof("Stopping PubSub subscribers and input bindings")
+	log.Info("Stopping PubSub subscribers and input bindings")
 	a.stopSubscriptions()
 	a.stopReadingFromBindings()
 	a.cancel()
@@ -2341,11 +2448,17 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 			log.Warnf("error closing API: %v", err)
 		}
 	}
-	if a.tracerProvider != nil {
-		a.tracerProvider.Shutdown(context.Background())
-	}
+
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	go func() {
+		if a.tracerProvider != nil {
+			a.tracerProvider.Shutdown(shutdownCtx)
+		}
+	}()
+
 	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
+	shutdownCancel()
 	a.shutdownOutputComponents()
 	a.shutdownC <- nil
 }
@@ -2354,7 +2467,7 @@ func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
 
-func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {
+func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Component) (componentsV1alpha1.Component, string) {
 	cache := map[string]secretstores.GetSecretResponse{}
 
 	for i, m := range component.Spec.Metadata {
@@ -2371,7 +2484,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 
 		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
-		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == secretstores_loader.BuiltinKubernetesSecretStore {
+		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == secretstoresLoader.BuiltinKubernetesSecretStore {
 			var jsonVal string
 			err := json.Unmarshal(m.Value.Raw, &jsonVal)
 			if err != nil {
@@ -2385,7 +2498,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 				continue
 			}
 
-			m.Value = components_v1alpha1.DynamicValue{
+			m.Value = componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: dec,
 				},
@@ -2397,7 +2510,8 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 
 		resp, ok := cache[m.SecretKeyRef.Name]
 		if !ok {
-			r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
+			// TODO: cascade context.
+			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
 				Metadata: map[string]string{
 					"namespace": component.ObjectMeta.Namespace,
@@ -2418,7 +2532,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 
 		val, ok := resp.Data[secretKeyName]
 		if ok {
-			component.Spec.Metadata[i].Value = components_v1alpha1.DynamicValue{
+			component.Spec.Metadata[i].Value = componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(val),
 				},
@@ -2430,7 +2544,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 	return component, ""
 }
 
-func (a *DaprRuntime) authSecretStoreOrDefault(comp components_v1alpha1.Component) string {
+func (a *DaprRuntime) authSecretStoreOrDefault(comp componentsV1alpha1.Component) string {
 	if comp.SecretStore == "" {
 		switch a.runtimeConfig.Mode {
 		case modes.KubernetesMode:
@@ -2483,32 +2597,38 @@ func (a *DaprRuntime) loadAppConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) createAppChannel() error {
-	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error)
-
-		switch a.runtimeConfig.ApplicationProtocol {
-		case GRPCProtocol:
-			channelCreatorFn = a.grpc.CreateLocalChannel
-		case HTTPProtocol:
-			channelCreatorFn = http_channel.CreateLocalChannel
-		default:
-			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
-		}
-
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
-		if err != nil {
-			log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
-		}
-
-		// TODO: Remove once feature is finalized
-		if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
-			log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
-		}
-		a.appChannel = ch
-	} else {
-		log.Warn("app channel is not initialized. did you make sure to configure an app-port?")
+func (a *DaprRuntime) createAppChannel() (err error) {
+	if a.runtimeConfig.ApplicationPort == 0 {
+		log.Warn("App channel is not initialized. Did you configure an app-port?")
+		return nil
 	}
+
+	var ch channel.AppChannel
+	switch a.runtimeConfig.ApplicationProtocol {
+	case GRPCProtocol:
+		ch, err = a.grpc.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		if err != nil {
+			return err
+		}
+	case HTTPProtocol:
+		pipeline, err := a.buildAppHTTPPipeline()
+		if err != nil {
+			return err
+		}
+		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, pipeline, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		if err != nil {
+			return err
+		}
+		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
+	default:
+		return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
+	}
+
+	if a.runtimeConfig.MaxConcurrency > 0 {
+		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+	}
+
+	a.appChannel = ch
 
 	return nil
 }
@@ -2521,11 +2641,11 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		// Preload Kubernetes secretstore
-		a.pendingComponents <- components_v1alpha1.Component{
+		a.pendingComponents <- componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: secretstores_loader.BuiltinKubernetesSecretStore,
+				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
 				Version: components.FirstStableVersion,
 			},
@@ -2533,21 +2653,19 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 	}
 }
 
-func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create secret store %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	err = secretStore.Init(secretstores.Metadata{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-	})
+	err = secretStore.Init(secretstores.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
-		log.Warnf("failed to init secret store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	a.secretStores[c.ObjectMeta.Name] = secretStore
@@ -2555,7 +2673,7 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
+func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha1.MetadataItem) map[string]string {
 	properties := map[string]string{}
 	for _, c := range items {
 		val := c.Value.String()
@@ -2568,12 +2686,22 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 			}
 			val = strings.Replace(val, "{podName}", a.podName, 1)
 		}
+		for strings.Contains(val, "{namespace}") {
+			val = strings.Replace(val, "{namespace}", fmt.Sprintf("%s.%s", a.namespace, a.runtimeConfig.ID), 1)
+		}
 		properties[c.Name] = val
 	}
 	return properties
 }
 
-func (a *DaprRuntime) getComponent(componentType string, name string) (components_v1alpha1.Component, bool) {
+func (a *DaprRuntime) toBaseMetadata(c componentsV1alpha1.Component) contribMetadata.Base {
+	return contribMetadata.Base{
+		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+		Name:       c.Name,
+	}
+}
+
+func (a *DaprRuntime) getComponent(componentType string, name string) (componentsV1alpha1.Component, bool) {
 	a.componentsLock.RLock()
 	defer a.componentsLock.RUnlock()
 
@@ -2582,14 +2710,14 @@ func (a *DaprRuntime) getComponent(componentType string, name string) (component
 			return a.components[i], true
 		}
 	}
-	return components_v1alpha1.Component{}, false
+	return componentsV1alpha1.Component{}, false
 }
 
-func (a *DaprRuntime) getComponents() []components_v1alpha1.Component {
+func (a *DaprRuntime) getComponents() []componentsV1alpha1.Component {
 	a.componentsLock.RLock()
 	defer a.componentsLock.RUnlock()
 
-	comps := make([]components_v1alpha1.Component, len(a.components))
+	comps := make([]componentsV1alpha1.Component, len(a.components))
 	copy(comps, a.components)
 	return comps
 }
@@ -2604,6 +2732,10 @@ func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 		}
 		capabilities[key] = stateStoreCapabilities
 	}
+	for key, pubSubItem := range a.pubSubs {
+		features := pubSubItem.component.Features()
+		capabilities[key] = featureTypeToString(features)
+	}
 	for key := range a.inputBindings {
 		capabilities[key] = []string{"INPUT_BINDING"}
 	}
@@ -2613,6 +2745,10 @@ func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 		} else {
 			capabilities[key] = []string{"OUTPUT_BINDING"}
 		}
+	}
+	for key, store := range a.secretStores {
+		features := store.Features()
+		capabilities[key] = featureTypeToString(features)
 	}
 	return capabilities
 }
@@ -2653,7 +2789,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	return nil
 }
 
-func componentDependency(compCategory ComponentCategory, name string) string {
+func componentDependency(compCategory components.Category, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 
@@ -2687,7 +2823,6 @@ func (a *DaprRuntime) stopSubscriptions() {
 
 	// Delete the cached topics and routes
 	a.topicRoutes = nil
-	a.deadLetterTopics = nil
 }
 
 func (a *DaprRuntime) startReadingFromBindings() (err error) {

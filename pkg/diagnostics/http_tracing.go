@@ -26,7 +26,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
@@ -35,8 +35,8 @@ const (
 	supportedVersion  = 0
 	maxVersion        = 254
 	maxTracestateLen  = 512
-	traceparentHeader = "traceparent"
-	tracestateHeader  = "tracestate"
+	TraceparentHeader = "traceparent"
+	TracestateHeader  = "tracestate"
 )
 
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
@@ -49,6 +49,10 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 		}
 
 		ctx, span := startTracingClientSpanFromHTTPContext(ctx, path, spec)
+		headers := make(map[string]string)
+		ctx.Request.Header.VisitAll(func(key []byte, value []byte) {
+			headers[string(key)] = string(value)
+		})
 		next(ctx)
 
 		// Add span attributes only if it is sampled, which reduced the perf impact.
@@ -64,8 +68,8 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 		}
 
 		// Check if response has traceparent header and add if absent
-		if ctx.Response.Header.Peek(traceparentHeader) == nil {
-			span = diag_utils.SpanFromContext(ctx)
+		if ctx.Response.Header.Peek(TraceparentHeader) == nil {
+			span = diagUtils.SpanFromContext(ctx)
 			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
 		}
 
@@ -94,13 +98,13 @@ func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName st
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
 	_, span := tracer.Start(netCtx, spanName, kindOption)
-	diag_utils.SpanToFastHTTPContext(ctx, span)
+	diagUtils.SpanToFastHTTPContext(ctx, span)
 	return ctx, span
 }
 
 // SpanContextFromRequest extracts a span context from incoming requests.
 func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok bool) {
-	h, ok := getRequestHeader(req, traceparentHeader)
+	h, ok := getRequestHeader(req, TraceparentHeader)
 	if !ok {
 		return trace.SpanContext{}, false
 	}
@@ -150,7 +154,7 @@ func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
 }
 
 func tracestateFromRequest(req *fasthttp.Request) *trace.TraceState {
-	h, _ := getRequestHeader(req, tracestateHeader)
+	h, _ := getRequestHeader(req, TracestateHeader)
 	return TraceStateFromW3CString(h)
 }
 
@@ -161,13 +165,13 @@ func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, strin
 		return
 	}
 	h := SpanContextToW3CString(sc)
-	setHeader(traceparentHeader, h)
+	setHeader(TraceparentHeader, h)
 	tracestateToHeader(sc, setHeader)
 }
 
 func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
 	if h := TraceStateToW3CString(sc); h != "" && len(h) <= maxTracestateLen {
-		setHeader(tracestateHeader, h)
+		setHeader(TracestateHeader, h)
 	}
 }
 
