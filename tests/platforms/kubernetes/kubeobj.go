@@ -125,6 +125,13 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.AppHealthThreshold != 0 {
 		annotationObject["dapr.io/app-health-threshold"] = strconv.Itoa(appDesc.AppHealthThreshold)
 	}
+	if len(appDesc.PluggableComponents) != 0 {
+		componentNames := make([]string, len(appDesc.PluggableComponents))
+		for idx, component := range appDesc.PluggableComponents {
+			componentNames[idx] = component.Name
+		}
+		annotationObject["dapr.io/pluggable-components"] = strings.Join(componentNames, ",")
+	}
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
@@ -178,9 +185,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		VolumeMounts: appDesc.AppVolumeMounts,
 	}}
 
-	if len(appDesc.PluggableComponents) != 0 {
-		containers = append(containers, adaptAndBuildPluggableComponents(&appDesc)...)
-	}
+	containers = append(containers, appDesc.PluggableComponents...)
 
 	nodeSelectorRequirements := appDesc.NodeSelectors
 	if nodeSelectorRequirements == nil {
