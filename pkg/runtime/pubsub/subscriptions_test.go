@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -114,10 +115,21 @@ func writeSubscriptionToDisk(subscription interface{}, filePath string) {
 	os.WriteFile(filePath, b, 0o600)
 }
 
+func writeSubscriptionsToDisk(subscriptions []interface{}, filePath string) {
+	byteArray := make([][]byte, len(subscriptions))
+	for i, sub := range subscriptions {
+		byteArray[i], _ = yaml.Marshal(sub)
+	}
+
+	b := bytes.Join(byteArray, []byte("\n---\n"))
+	os.WriteFile(filePath, b, 0o600)
+}
+
 func TestDeclarativeSubscriptionsV1(t *testing.T) {
 	dir := filepath.Join(".", "components")
 	os.Mkdir(dir, 0o777)
 	defer os.RemoveAll(dir)
+	subscriptionCount := 5
 
 	t.Run("load single valid subscription", func(t *testing.T) {
 		s := testDeclarativeSubscriptionV1()
@@ -125,6 +137,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 
 		filePath := filepath.Join(dir, "sub.yaml")
 		writeSubscriptionToDisk(s, filePath)
+		defer os.RemoveAll(filePath)
 
 		subs := DeclarativeSelfHosted(dir, log)
 		if assert.Len(t, subs, 1) {
@@ -138,8 +151,8 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		}
 	})
 
-	t.Run("load multiple subscriptions", func(t *testing.T) {
-		for i := 0; i < 1; i++ {
+	t.Run("load multiple subscriptions in different files", func(t *testing.T) {
+		for i := 0; i < subscriptionCount; i++ {
 			s := testDeclarativeSubscriptionV1()
 			s.Spec.Topic = fmt.Sprintf("%v", i)
 			s.Spec.Route = fmt.Sprintf("%v", i)
@@ -149,12 +162,47 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 			}
 			s.Scopes = []string{fmt.Sprintf("%v", i)}
 
-			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v.yaml", dir, i))
+			filepath := fmt.Sprintf("%s/%v.yaml", dir, i)
+			writeSubscriptionToDisk(s, filepath)
+			defer os.RemoveAll(filepath)
 		}
 
 		subs := DeclarativeSelfHosted(dir, log)
-		if assert.Len(t, subs, 2) {
-			for i := 0; i < 1; i++ {
+		if assert.Len(t, subs, subscriptionCount) {
+			for i := 0; i < subscriptionCount; i++ {
+				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
+				if assert.Equal(t, 1, len(subs[i].Rules)) {
+					assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Rules[0].Path)
+				}
+				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].PubsubName)
+				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Scopes[0])
+				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
+			}
+		}
+	})
+
+	t.Run("load multiple subscriptions in single file", func(t *testing.T) {
+		subscriptions := []interface{}{}
+		for i := 0; i < subscriptionCount; i++ {
+			s := testDeclarativeSubscriptionV1()
+			s.Spec.Topic = fmt.Sprintf("%v", i)
+			s.Spec.Route = fmt.Sprintf("%v", i)
+			s.Spec.Pubsubname = fmt.Sprintf("%v", i)
+			s.Spec.Metadata = map[string]string{
+				"testName": fmt.Sprintf("%v", i),
+			}
+			s.Scopes = []string{fmt.Sprintf("%v", i)}
+
+			subscriptions = append(subscriptions, s)
+		}
+
+		filepath := filepath.Join(dir, "sub.yaml")
+		writeSubscriptionsToDisk(subscriptions, filepath)
+		defer os.RemoveAll(filepath)
+
+		subs := DeclarativeSelfHosted(dir, log)
+		if assert.Len(t, subs, subscriptionCount) {
+			for i := 0; i < subscriptionCount; i++ {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
 				if assert.Equal(t, 1, len(subs[i].Rules)) {
 					assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Rules[0].Path)
@@ -172,9 +220,10 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 
 		filePath := filepath.Join(dir, "sub.txt")
 		writeSubscriptionToDisk(s, filePath)
+		defer os.RemoveAll(filePath)
 
 		subs := DeclarativeSelfHosted(dir, log)
-		assert.Len(t, subs, 2)
+		assert.Len(t, subs, 0)
 	})
 
 	t.Run("no subscriptions loaded", func(t *testing.T) {
@@ -194,6 +243,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 	dir := filepath.Join(".", "componentsV2")
 	os.Mkdir(dir, 0o777)
 	defer os.RemoveAll(dir)
+	subscriptionCount := 5
 
 	t.Run("load single valid subscription", func(t *testing.T) {
 		s := testDeclarativeSubscriptionV2()
@@ -201,6 +251,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 
 		filePath := filepath.Join(dir, "sub.yaml")
 		writeSubscriptionToDisk(s, filePath)
+		defer os.RemoveAll(filePath)
 
 		subs := DeclarativeSelfHosted(dir, log)
 		if assert.Len(t, subs, 1) {
@@ -216,8 +267,8 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		}
 	})
 
-	t.Run("load multiple subscriptions", func(t *testing.T) {
-		for i := 0; i < 1; i++ {
+	t.Run("load multiple subscriptions in different files", func(t *testing.T) {
+		for i := 0; i < subscriptionCount; i++ {
 			iStr := fmt.Sprintf("%v", i)
 			s := testDeclarativeSubscriptionV2()
 			s.Spec.Topic = iStr
@@ -231,12 +282,52 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 			}
 			s.Scopes = []string{iStr}
 
-			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v.yaml", dir, i))
+			filePath := fmt.Sprintf("%s/%v.yaml", dir, i)
+			writeSubscriptionToDisk(s, filePath)
+			defer os.RemoveAll(filePath)
 		}
 
 		subs := DeclarativeSelfHosted(dir, log)
-		if assert.Len(t, subs, 2) {
-			for i := 0; i < 1; i++ {
+		if assert.Len(t, subs, subscriptionCount) {
+			for i := 0; i < subscriptionCount; i++ {
+				iStr := fmt.Sprintf("%v", i)
+				assert.Equal(t, iStr, subs[i].Topic)
+				if assert.Equal(t, 3, len(subs[i].Rules)) {
+					assert.Equal(t, iStr, subs[i].Rules[0].Path)
+				}
+				assert.Equal(t, iStr, subs[i].PubsubName)
+				assert.Equal(t, iStr, subs[i].Scopes[0])
+				assert.Equal(t, iStr, subs[i].Metadata["testName"])
+			}
+		}
+	})
+
+	t.Run("load multiple subscriptions in single file", func(t *testing.T) {
+		subscriptions := []interface{}{}
+		for i := 0; i < subscriptionCount; i++ {
+			iStr := fmt.Sprintf("%v", i)
+			s := testDeclarativeSubscriptionV2()
+			s.Spec.Topic = iStr
+			for j := range s.Spec.Routes.Rules {
+				s.Spec.Routes.Rules[j].Path = iStr
+			}
+			s.Spec.Routes.Default = iStr
+			s.Spec.Pubsubname = iStr
+			s.Spec.Metadata = map[string]string{
+				"testName": iStr,
+			}
+			s.Scopes = []string{iStr}
+
+			subscriptions = append(subscriptions, s)
+		}
+
+		filepath := filepath.Join(dir, "sub.yaml")
+		writeSubscriptionsToDisk(subscriptions, filepath)
+		defer os.RemoveAll(filepath)
+
+		subs := DeclarativeSelfHosted(dir, log)
+		if assert.Len(t, subs, subscriptionCount) {
+			for i := 0; i < subscriptionCount; i++ {
 				iStr := fmt.Sprintf("%v", i)
 				assert.Equal(t, iStr, subs[i].Topic)
 				if assert.Equal(t, 3, len(subs[i].Rules)) {
