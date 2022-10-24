@@ -10,14 +10,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/config"
-	dapr_testing "github.com/dapr/dapr/pkg/testing"
-	"github.com/dapr/kit/logger"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/dapr/dapr/pkg/config"
+	dapr_testing "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/logger"
 )
 
 func TestCertRenewal(t *testing.T) {
