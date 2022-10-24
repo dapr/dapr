@@ -9,7 +9,7 @@ require (
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938
-	github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5
+	github.com/dapr/kit v0.0.3-0.20221024212643-ca65758d4538
 	github.com/fasthttp/router v1.4.12
 	github.com/fsnotify/fsnotify v1.6.0
 	github.com/ghodss/yaml v1.0.0
@@ -394,9 +394,6 @@ replace (
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 )
-
-// TEMP ONLY UNTIL https://github.com/dapr/kit/pull/25 IS MERGED
-replace github.com/dapr/kit => github.com/italypaleale/dapr-kit v0.0.2-0.20221024201453-eccec03b2ad9
 
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
