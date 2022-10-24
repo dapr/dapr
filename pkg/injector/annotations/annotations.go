@@ -63,7 +63,7 @@ const (
 	KeyAppHealthThreshold               = "dapr.io/app-health-threshold"
 	KeyPlacementHostAddresses           = "dapr.io/placement-host-address"
 	KeyPluggableComponents              = "dapr.io/pluggable-components"
-	KeyPluggableComponentsSocketsFolder = "dapr.io/pluggable-components-socket-folder-path"
+	KeyPluggableComponentsSocketsFolder = "dapr.io/pluggable-components-sockets-folder"
 )
 
 // Default values

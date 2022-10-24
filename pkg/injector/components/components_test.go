@@ -73,7 +73,7 @@ func TestComponentsPatch(t *testing.T) {
 					Op:   "add",
 					Path: "/spec/containers/1/env",
 					Value: []corev1.EnvVar{{
-						Name:  componentsUnixDomainSocketMountEnvVar,
+						Name:  componentsUnixDomainSocketMountPathEnvVar,
 						Value: socketSharedVolumeMount.MountPath,
 					}},
 				},
@@ -110,7 +110,7 @@ func TestComponentsPatch(t *testing.T) {
 					Op:   "add",
 					Path: "/spec/containers/1/env",
 					Value: []corev1.EnvVar{{
-						Name:  componentsUnixDomainSocketMountEnvVar,
+						Name:  componentsUnixDomainSocketMountPathEnvVar,
 						Value: socketSharedVolumeMount.MountPath,
 					}},
 				},

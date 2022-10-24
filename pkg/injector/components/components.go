@@ -25,14 +25,14 @@ import (
 )
 
 const (
-	componentsUnixDomainSocketVolume      = "dapr-components-unix-domain-socket" // Name of the Unix domain socket volume for components.
-	componentsUnixDomainSocketMountEnvVar = "DAPR_COMPONENT_SOCKET_FOLDER"
+	componentsUnixDomainSocketVolumeName      = "dapr-components-unix-domain-socket" // Name of the Unix domain socket volume for components.
+	componentsUnixDomainSocketMountPathEnvVar = "DAPR_COMPONENT_SOCKET_FOLDER"
 )
 
 // sharedComponentsSocketVolume creates a shared unix socket volume to be used by sidecar.
 func sharedComponentsSocketVolume() corev1.Volume {
 	return corev1.Volume{
-		Name: componentsUnixDomainSocketVolume,
+		Name: componentsUnixDomainSocketVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
@@ -42,7 +42,7 @@ func sharedComponentsSocketVolume() corev1.Volume {
 // sharedComponentsUnixSocketVolumeMount creates a shared unix socket volume mount to be used by pluggable component.
 func sharedComponentsUnixSocketVolumeMount(mountPath string) corev1.VolumeMount {
 	return corev1.VolumeMount{
-		Name:      componentsUnixDomainSocketVolume,
+		Name:      componentsUnixDomainSocketVolumeName,
 		MountPath: mountPath,
 	}
 }
@@ -100,7 +100,7 @@ func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes, sharedSocketVolume)
 	componentsEnvVars := []corev1.EnvVar{{
-		Name:  componentsUnixDomainSocketMountEnvVar,
+		Name:  componentsUnixDomainSocketMountPathEnvVar,
 		Value: sharedSocketVolumeMount.MountPath,
 	}}
 
