@@ -408,8 +408,6 @@ github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuA
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938 h1:NhktrtFtznZD3/4iYvn/XZ+ZiAVXCWtCxud/eQfUhxs=
 github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938/go.mod h1:kOudI10ue7r0pjsbMR1BPgms3EhuBur4wzNugo4mUjE=
-github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5 h1:Jx8u3y/BMjUar0Gp+dzZybBo1Kvbj+18XPbiJ28Xa7A=
-github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5/go.mod h1:FR+yc0R0szlKnJooVqJvl7FhWf21wzY4/EzmyFQrESw=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -890,6 +888,8 @@ github.com/influxdata/influxdb-client-go v1.4.0/go.mod h1:S+oZsPivqbcP1S9ur+T+Qq
 github.com/influxdata/influxdb1-client v0.0.0-20191209144304-8bf82d3c094d/go.mod h1:qj24IKcXYK6Iy9ceXlo3Tc+vtHo9lIhSX5JddghvEPo=
 github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 h1:W9WBk7wlPfJLvMCdtV4zPulc4uCPrlywQOmbFOhgQNU=
 github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839/go.mod h1:xaLFMmpvUxqXtVkUJfg9QmT88cDaCJ3ZKgdZ78oO8Qo=
+github.com/italypaleale/dapr-kit v0.0.2-0.20221024201453-eccec03b2ad9 h1:EFRHjXbEp66ckHbroLCj5vyhFPml+ZYaDuOsz7oGnLM=
+github.com/italypaleale/dapr-kit v0.0.2-0.20221024201453-eccec03b2ad9/go.mod h1:FR+yc0R0szlKnJooVqJvl7FhWf21wzY4/EzmyFQrESw=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b h1:C8S2+VttkHFdOOCXJe+YGfa4vHYwlt4Zx+IVXQ97jYg=

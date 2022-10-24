@@ -395,6 +395,9 @@ replace (
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 )
 
+// TEMP ONLY UNTIL https://github.com/dapr/kit/pull/25 IS MERGED
+replace github.com/dapr/kit => github.com/italypaleale/dapr-kit v0.0.2-0.20221024201453-eccec03b2ad9
+
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
