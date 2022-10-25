@@ -237,7 +237,7 @@ func TestComponentCalls(t *testing.T) {
 		stStore, cleanup, err := getStateStore(svc)
 		require.NoError(t, err)
 		defer cleanup()
-		err = stStore.Delete(context.TODO(), &state.DeleteRequest{
+		err = stStore.Delete(context.Background(), &state.DeleteRequest{
 			Key: fakeKey,
 		})
 
