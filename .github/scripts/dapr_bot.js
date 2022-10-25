@@ -1,6 +1,7 @@
 // list of owner who can control dapr-bot workflow
 // TODO: Read owners from OWNERS file.
 const owners = [
+    'addjuarez',
     'artursouza',
     'berndverst',
     'daixiang0',
