@@ -39,15 +39,16 @@ type cmdE2EPerf struct {
 
 // Flags for the e2e/perf commands
 type cmdE2EPerfFlags struct {
-	AppDir        string
-	DestRegistry  string
-	DestTag       string
-	CacheRegistry string
-	Dockerfile    string
-	TargetOS      string
-	TargetArch    string
-	IgnoreFile    string
-	Name          string
+	AppDir           string
+	DestRegistry     string
+	DestTag          string
+	CacheRegistry    string
+	Dockerfile       string
+	TargetOS         string
+	TargetArch       string
+	IgnoreFile       string
+	CacheIncludeFile string
+	Name             string
 }
 
 // Returns the command for e2e or perf
@@ -89,6 +90,7 @@ If the "--cache-registry" option is set, it will be pushed to the cache too.
 	buildCmd.Flags().StringVar(&obj.flags.TargetOS, "target-os", runtime.GOOS, "Target OS")
 	buildCmd.Flags().StringVar(&obj.flags.TargetArch, "target-arch", runtime.GOARCH, "Target architecture")
 	buildCmd.Flags().StringVar(&obj.flags.IgnoreFile, "ignore-file", ".gitignore", "Name of the file with files to exclude (in the format of .gitignore)")
+	buildCmd.Flags().StringVar(&obj.flags.CacheIncludeFile, "cache-include-file", ".cache-include", "Name of the file inside the app folder with additional files to include in checksumming (in the format of .gitignore)")
 
 	// "push" sub-command
 	pushCmd := &cobra.Command{
@@ -129,6 +131,7 @@ If the "--cahce-registry" option is set and the image exists in the cache, it wi
 	buildAndPushCmd.Flags().StringVar(&obj.flags.TargetOS, "target-os", runtime.GOOS, "Target OS")
 	buildAndPushCmd.Flags().StringVar(&obj.flags.TargetArch, "target-arch", runtime.GOARCH, "Target architecture")
 	buildAndPushCmd.Flags().StringVar(&obj.flags.IgnoreFile, "ignore-file", ".gitignore", "Name of the file with files to exclude (in the format of .gitignore)")
+	buildAndPushCmd.Flags().StringVar(&obj.flags.CacheIncludeFile, "cache-include-file", ".cache-include", "Name of the file inside the app folder with additional files to include in checksumming (in the format of .gitignore)")
 
 	// Register the commands
 	cmd.AddCommand(buildCmd)
@@ -391,6 +394,64 @@ func (c *cmdE2EPerf) getIgnores() *gitignore.GitIgnore {
 	return gitignore.CompileIgnoreLines(lines...)
 }
 
+// Loads the ".cache-include" (or whatever the value of "includeFile" is) in the appDir/name folder
+func (c *cmdE2EPerf) getIncludes() []string {
+	appDir := c.getAppDir()
+	read, err := os.ReadFile(
+		filepath.Join(appDir, c.flags.Name, c.flags.CacheIncludeFile),
+	)
+	if err != nil || len(read) == 0 {
+		// Just ignore errors
+		return nil
+	}
+
+	return strings.Split(string(read), "\n")
+}
+
+func hashFilesInDir(basePath string, ignores *gitignore.GitIgnore) ([]string, error) {
+	files := []string{}
+
+	err := filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
+		// Check if the file is ignored
+		relPath, err := filepath.Rel(basePath, path)
+		if err != nil {
+			return err
+		}
+
+		// Skip the folders and ignored files
+		if relPath == "." || d.IsDir() || (ignores != nil && ignores.MatchesPath(path)) {
+			return nil
+		}
+
+		// Add the hash of the file
+		checksum, err := hashEntryForFile(path, relPath)
+		if err != nil {
+			return err
+		}
+
+		files = append(files, checksum)
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func hashEntryForFile(path string, relPath string) (string, error) {
+	// Compute the sha256 of the file
+	checksum, err := checksumFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	// Convert all slashes to / so the hash is the same on Windows and Linux
+	relPath = filepath.ToSlash(relPath)
+
+	return relPath + " " + checksum, nil
+}
+
 // Returns the checksum of the files in the directory
 func (c *cmdE2EPerf) getHashDir() (string, error) {
 	basePath := filepath.Join(c.getAppDir(), c.flags.Name)
@@ -403,37 +464,55 @@ func (c *cmdE2EPerf) getHashDir() (string, error) {
 	// Load the files to exclude
 	ignores := c.getIgnores()
 
+	// Load additional paths to include
+	includes := c.getIncludes()
+
 	// Compute the hash of the app's files
-	files := []string{}
-	err = filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
-		// Check if the file is ignored
-		relPath, err := filepath.Rel(basePath, path)
-		if err != nil {
-			return err
-		}
-
-		// Skip the folders and ignored files
-		if relPath == "." || d.IsDir() || (ignores != nil && ignores.MatchesPath(path)) {
-			return nil
-		}
-
-		// Compute the sha256 of the file
-		checksum, err := checksumFile(path)
-		if err != nil {
-			return err
-		}
-
-		// Convert all slashes to / so the hash is the same on Windows and Linux
-		relPath = filepath.ToSlash(relPath)
-
-		files = append(files, relPath+" "+checksum)
-		return nil
-	})
+	files, err := hashFilesInDir(basePath, ignores)
 	if err != nil {
 		return "", err
 	}
 	if len(files) == 0 {
 		return "", fmt.Errorf("no file found in the folder")
+	}
+
+	// Include other files or folders as needed
+	for _, pattern := range includes {
+		if !filepath.IsAbs(pattern) {
+			pattern = filepath.Join(basePath, pattern)
+		}
+		matches, err := filepath.Glob(pattern)
+		if err != nil || len(matches) == 0 {
+			continue
+		}
+		for _, match := range matches {
+			if match == "" {
+				continue
+			}
+			info, err := os.Stat(match)
+			if err != nil {
+				continue
+			}
+			if info.IsDir() {
+				// Note: we are not passing "ignores" here because .gitignore files are usually specific for the folder they live in, while "match" is often outside of the app's folder.
+				// Best is to make sure that include paths are specific, such as ending with `*.go` or `*.proto`, rather than including the entire folder.
+				addFiles, err := hashFilesInDir(match, nil)
+				if err != nil || len(addFiles) == 0 {
+					continue
+				}
+				files = append(files, addFiles...)
+			} else {
+				relPath, err := filepath.Rel(basePath, match)
+				if err != nil {
+					continue
+				}
+				checksum, err := hashEntryForFile(match, relPath)
+				if err != nil {
+					continue
+				}
+				files = append(files, checksum)
+			}
+		}
 	}
 
 	// Sort files to have a consistent order, then compute the checksum of that slice (getting the first 10 chars only)
