@@ -55,8 +55,9 @@ var (
 )
 
 const (
-	invokeURL  = "http://localhost:%s/v1.0/invoke/%s/method/%s"
-	publishURL = "http://localhost:%s/v1.0/publish/inmemorypubsub/mytopic"
+	invokeURL       = "http://localhost:%s/v1.0/invoke/%s/method/%s"
+	publishURL      = "http://localhost:%s/v1.0/publish/inmemorypubsub/mytopic"
+	inputBindingURL = "http://localhost:%s/v1.0/bindings/schedule"
 )
 
 func main() {
@@ -85,6 +86,11 @@ func main() {
 	go func() {
 		<-ready
 		startPublishing(ctx)
+	}()
+
+	go func() {
+		<-ready
+		startInputBinding(ctx)
 	}()
 
 	if appProtocol == "grpc" {
@@ -164,7 +170,7 @@ func (c *countAndLast) MarshalJSON() ([]byte, error) {
 
 func startControlServer() {
 	// Wait until the first health probe
-	log.Print("Waiting for signalto start control server…")
+	log.Print("Waiting for signal to start control server...")
 	<-ready
 
 	port, _ := strconv.Atoi(controlPort)
@@ -243,6 +249,31 @@ func startControlServer() {
 
 		return r
 	}, false, false)
+}
+
+func startInputBinding(ctx context.Context) {
+	t := time.NewTicker(time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Context done; stop invoke input binding")
+		case <-t.C:
+			invokeBinding()
+		}
+	}
+}
+
+func invokeBinding() {
+	u := fmt.Sprintf(inputBindingURL, daprPort)
+	log.Println("Invoking Binding URL", u)
+	res, err := httpClient.Post(u, "application/json", nil)
+	if err != nil {
+		log.Printf("Failed to invoke input binding. Error: %v", err)
+		return
+	}
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, res.Body)
+	res.Body.Close()
 }
 
 func startPublishing(ctx context.Context) {
