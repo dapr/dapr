@@ -406,8 +406,6 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938 h1:NhktrtFtznZD3/4iYvn/XZ+ZiAVXCWtCxud/eQfUhxs=
-github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938/go.mod h1:kOudI10ue7r0pjsbMR1BPgms3EhuBur4wzNugo4mUjE=
 github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650 h1:ow01K9XkIyvVHyvIenyEVYl1sJcn4VBx7HfI1FchQts=
 github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650/go.mod h1:kJUEIl8aisjgepaWZApm/D2W4quCyO2hAeWhpmC2l2c=
 github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5 h1:Jx8u3y/BMjUar0Gp+dzZybBo1Kvbj+18XPbiJ28Xa7A=
@@ -471,6 +469,8 @@ github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 h1:YEetp8
 github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21/go.mod h1:+020luEh2TKB4/GOp8oxxtq0Daoen/Cii55CzbTV6DU=
 github.com/eapache/queue v1.1.0 h1:YOEu7KNc61ntiQlcEeUIoDTJ2o8mQznoNvUhiigpIqc=
 github.com/eapache/queue v1.1.0/go.mod h1:6eCeP0CKFpHLu8blIFXhExK/dRa7WDZfr6jVFPTqq+I=
+github.com/eclipse/paho.mqtt.golang v1.4.2-0.20221018190109-a1800d8df9a4 h1:yJj84YKRTY+zu/s9peWf0kuSq38zKT4KJUaFcJ1uRJM=
+github.com/eclipse/paho.mqtt.golang v1.4.2-0.20221018190109-a1800d8df9a4/go.mod h1:JGt0RsEwEX+Xa/agj90YJ9d9DH2b7upDZMK9HRbFvCA=
 github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
 github.com/elazarl/goproxy v0.0.0-20180725130230-947c36da3153 h1:yUdfgN0XgIJw7foRItutHYUIhlcKzcSf5vDpdhQAKTc=
 github.com/emicklei/go-restful/v3 v3.8.0 h1:eCZ8ulSerjdAiaNpF7GxXIE7ZCMo1moN1qX+S609eVw=
@@ -1318,8 +1318,6 @@ github.com/shirou/gopsutil v3.20.11+incompatible h1:LJr4ZQK4mPpIV5gOa4jCOKOGb4ty
 github.com/shirou/gopsutil v3.20.11+incompatible/go.mod h1:5b4v6he4MtMOwMlS0TUMTu2PcXUg8+E1lC7eC3UO/RA=
 github.com/shirou/gopsutil/v3 v3.21.6 h1:vU7jrp1Ic/2sHB7w6UNs7MIkn7ebVtTb5D9j45o9VYE=
 github.com/shirou/gopsutil/v3 v3.21.6/go.mod h1:JfVbDpIBLVzT8oKbvMg9P3wEIMDDpVn+LwHTKj0ST88=
-github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8 h1:BXKXQzeHuVnSrHAKjvq9ICrgPC27tJ/hXWLMQo36c5s=
-github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8/go.mod h1:JGt0RsEwEX+Xa/agj90YJ9d9DH2b7upDZMK9HRbFvCA=
 github.com/shurcooL/sanitized_anchor_name v1.0.0/go.mod h1:1NzhyTcUVG4SuEtjjoZeVRXNmyL/1OwPU0+IJeTBvfc=
 github.com/sijms/go-ora/v2 v2.5.3 h1:klGKmhqRONVTtIzTdfYTvrW94kdJkdmZl93u2A3vchI=
 github.com/sijms/go-ora/v2 v2.5.3/go.mod h1:EHxlY6x7y9HAsdfumurRfTd+v8NrEOTR3Xl4FWlH6xk=
