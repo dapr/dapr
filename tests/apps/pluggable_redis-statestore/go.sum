@@ -6,8 +6,8 @@ github.com/cespare/xxhash/v2 v2.1.2 h1:YRXhKfTDauu4ajMg1TPgFO5jnlC2HCbmLXMcTG5cb
 github.com/cespare/xxhash/v2 v2.1.2/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221020133829-d48efa38c091 h1:OomLrjnBDXESUmztS/SZaN5pDBGjw8BmpMVS9QhJwg4=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221020133829-d48efa38c091/go.mod h1:7CpOwUfY7KlADHWTCmOtf0nRjvLt/62lHJKrgueVE1I=
-github.com/dapr/components-contrib v1.9.1-0.20221024210723-04242ce38a21 h1:S9oUjCQLBNlr06pmoDH7PQK/nG2IaNZad0nvpP5anxs=
-github.com/dapr/components-contrib v1.9.1-0.20221024210723-04242ce38a21/go.mod h1:kJUEIl8aisjgepaWZApm/D2W4quCyO2hAeWhpmC2l2c=
+github.com/dapr/components-contrib v1.9.1-0.20221024220536-cc856d4e1377 h1:dwQqMJAW6OA3wPiK0lUjRt5RPEtbYcvI5sAWfxbPlwo=
+github.com/dapr/components-contrib v1.9.1-0.20221024220536-cc856d4e1377/go.mod h1:kJUEIl8aisjgepaWZApm/D2W4quCyO2hAeWhpmC2l2c=
 github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5 h1:Jx8u3y/BMjUar0Gp+dzZybBo1Kvbj+18XPbiJ28Xa7A=
 github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5/go.mod h1:FR+yc0R0szlKnJooVqJvl7FhWf21wzY4/EzmyFQrESw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
