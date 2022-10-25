@@ -179,6 +179,7 @@ type DaprRuntime struct {
 	namespace              string
 	podName                string
 	daprHTTPAPI            http.API
+	daprGRPCAPI            grpc.API
 	operatorClient         operatorv1pb.OperatorClient
 	pubsubCtx              context.Context
 	pubsubCancel           context.CancelFunc
@@ -190,6 +191,8 @@ type DaprRuntime struct {
 	apiClosers             []io.Closer
 	componentAuthorizers   []ComponentAuthorizer
 	appHealth              *apphealth.AppHealth
+	appHealthReady         func() // Invoked the first time the app health becomes ready
+	appHealthLock          *sync.Mutex
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -269,6 +272,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
+		appHealthReady:             nil,
+		appHealthLock:              &sync.Mutex{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -461,9 +466,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.initProxy()
 
 	// Create and start internal and external gRPC servers
-	grpcAPI := a.getGRPCAPI()
+	a.daprGRPCAPI = a.getGRPCAPI()
 
-	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
+	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
@@ -485,7 +490,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("The request body size parameter is: %v", a.runtimeConfig.MaxRequestBodySize)
 
-	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
+	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
@@ -502,14 +507,41 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
-	grpcAPI.SetAppChannel(a.appChannel)
-
-	a.loadAppConfiguration()
+	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 
 	a.initDirectMessaging(a.nameResolver)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
-	grpcAPI.SetDirectMessaging(a.directMessaging)
+	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
+
+	a.appHealthReady = func() {
+		a.appHealthReadyInit(opts)
+	}
+	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
+		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
+		a.appHealth.OnHealthChange(a.appHealthChanged)
+		a.appHealth.StartProbes(a.ctx)
+
+		// Set the appHealth object in the channel so it's aware of the app's health status
+		a.appChannel.SetAppHealth(a.appHealth)
+
+		// Enqueue a probe right away
+		// This will also start the input components once the app is healthy
+		a.appHealth.Enqueue()
+	} else {
+		// If there's no health check, mark the app as healthy right away so subscriptions can start
+		a.appHealthChanged(apphealth.AppStatusHealthy)
+	}
+
+	return nil
+}
+
+// appHealthReadyInit completes the initialization phase and is invoked after the app is healthy
+func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
+	var err error
+
+	// Load app configuration (for actors) and init actors
+	a.loadAppConfiguration()
 
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
@@ -517,7 +549,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Warnf(err.Error())
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
-			grpcAPI.SetActorRuntime(a.actor)
+			a.daprGRPCAPI.SetActorRuntime(a.actor)
 		}
 	}
 
@@ -538,24 +570,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Fatalf("failed to register components with callback: %s", err)
 		}
 	}
-
-	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
-		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
-		a.appHealth.OnHealthChange(a.appHealthChanged)
-		a.appHealth.StartProbes(a.ctx)
-
-		// Set the appHealth object in the channel so it's aware of the app's health status
-		a.appChannel.SetAppHealth(a.appHealth)
-
-		// Enqueue a probe right away
-		// This will also start the input components once the app is healthy
-		a.appHealth.Enqueue()
-	} else {
-		// If there's no health check, mark the app as healthy right away so subscriptions can start
-		a.appHealthChanged(apphealth.AppStatusHealthy)
-	}
-
-	return nil
 }
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
@@ -572,8 +586,17 @@ func (a *DaprRuntime) initPluggableComponents() {
 // Sets the status of the app to healthy or un-healthy
 // Callback for apphealth when the detected status changed
 func (a *DaprRuntime) appHealthChanged(status uint8) {
+	a.appHealthLock.Lock()
+	defer a.appHealthLock.Unlock()
+
 	switch status {
 	case apphealth.AppStatusHealthy:
+		// First time the app becomes healthy, complete the init process
+		if a.appHealthReady != nil {
+			a.appHealthReady()
+			a.appHealthReady = nil
+		}
+
 		// Start subscribing to topics and reading from input bindings
 		a.startSubscriptions()
 		err := a.startReadingFromBindings()
