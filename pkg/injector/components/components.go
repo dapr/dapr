@@ -26,7 +26,7 @@ import (
 
 const (
 	componentsUnixDomainSocketVolumeName      = "dapr-components-unix-domain-socket" // Name of the Unix domain socket volume for components.
-	componentsUnixDomainSocketMountPathEnvVar = "DAPR_COMPONENT_SOCKET_FOLDER"
+	componentsUnixDomainSocketMountPathEnvVar = "DAPR_COMPONENT_SOCKETS_FOLDER"
 )
 
 // sharedComponentsSocketVolume creates a shared unix socket volume to be used by sidecar.
