@@ -30,8 +30,8 @@ func TestBuildPluggableComponents(t *testing.T) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			PluggableComponents: map[string]apiv1.Container{
-				"my-socket": {},
+			PluggableComponents: []apiv1.Container{
+				{},
 			},
 		}
 	}
