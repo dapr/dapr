@@ -276,7 +276,11 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 		go s.startWorkloadCertRotation()
 	}
 
-	opts = append(opts, grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySize*1024*1024), grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySize*1024*1024), grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSize*1024)))
+	opts = append(opts,
+		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySizeMB<<20),
+		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySizeMB<<20),
+		grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSizeKB<<10)),
+	)
 
 	if s.proxy != nil {
 		opts = append(opts, grpcGo.UnknownServiceHandler(s.proxy.Handler()))
@@ -319,14 +323,16 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 
 func (s *server) getGRPCAPILoggingInfo() grpcGo.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (interface{}, error) {
-		userAgent := "unknown"
-		if meta, ok := metadata.FromIncomingContext(ctx); ok {
-			if val, ok := meta["user-agent"]; ok {
-				userAgent = val[0]
-			}
-		}
 		if s.infoLogger != nil && info != nil {
-			s.infoLogger.Infof("gRPC API Called: %s UserAgent: %s", info.FullMethod, userAgent)
+			log := s.infoLogger
+			if meta, ok := metadata.FromIncomingContext(ctx); ok {
+				if val, ok := meta["user-agent"]; ok && len(val) > 0 {
+					log = log.WithFields(map[string]any{
+						"useragent": val[0],
+					})
+				}
+			}
+			log.Info("gRPC API Called: ", info.FullMethod)
 		}
 		return handler(ctx, req)
 	}

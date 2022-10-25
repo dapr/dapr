@@ -34,15 +34,15 @@ on:
     types: [e2e-test]
 env:
   # Version of Go
-  GOVER: "1.19"
+  GOVER: "^1.19.2"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.22.6"
+  KUBECTLVER: "v1.25.2"
   # If not empty, uses cloud resources for testing
   TEST_CLOUD_ENV: "azure"
   # Version of Helm
-  HELMVER: "v3.7.2"
+  HELMVER: "v3.10.0"
   # Kubernetes namespace to use
   DAPR_NAMESPACE: "dapr-tests"
   # Timeout for tests
@@ -177,7 +177,7 @@ jobs:
             | --- | --- | --- |
             | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
             | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
-            | Linux_arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
+            | Linux/arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
@@ -193,7 +193,7 @@ jobs:
             | --- | --- | --- |
             | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
             | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
-            | Linux_arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
+            | Linux/arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
 
             Please check the logs for details on the failure.
 

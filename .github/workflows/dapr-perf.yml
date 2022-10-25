@@ -34,13 +34,13 @@ on:
 
 env:
   # Version of Go
-  GOVER: "1.19"
+  GOVER: "^1.19.2"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.22.6"
+  KUBECTLVER: "v1.25.2"
   # Version of Helm
-  HELMVER: "v3.7.2"
+  HELMVER: "v3.10.0"
   # Kubernetes namespace to use
   DAPR_NAMESPACE: "dapr-tests"
   # Timeout for tests
@@ -63,7 +63,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -73,8 +73,25 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
+      - name: Create PR comment
+        if: env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          hide: true
+          hide_classify: OUTDATED
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            # Dapr perf test
+
+            🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+            Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
         uses: actions/checkout@v2
@@ -106,6 +123,7 @@ jobs:
           REGIONS_SIZE=${#REGIONS[@]}
           REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
           REGION=${REGIONS[$REGIONS_IDX]}
+          echo "AZURE_REGION=${REGION}" >> $GITHUB_ENV
           echo "Deploying to Azure region: ${REGION}"
 
            # Tags
@@ -120,7 +138,8 @@ jobs:
 
           # Deploy the test cluster, deploying AKS only
           # Retry the deployment twice in case of transient failures (such as capacity constraints)
-          for i in 1 2; do 
+          success=false
+          for i in 1 2 3; do 
             az deployment group create \
               --resource-group "${{ env.TEST_RESOURCE_GROUP }}" \
               --template-file ./tests/test-infra/azure-aks.bicep \
@@ -130,9 +149,42 @@ jobs:
                 linuxVMSize=Standard_D8s_v4 \
                 diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
                 diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
-            && break || sleep 120
+              && success=true \
+              && break \
+              || sleep 120
           done
+          # Exit with error if failed
+          $success || exit 1
         shell: bash
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Infrastructure deployed
+
+            - Resource group name: `Dapr-Perf-${{ env.TEST_PREFIX }}`
+            - Azure region: ${{ env.AZURE_REGION }}
+
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Infrastructure deployment failed
+
+            - Resource group name: `Dapr-Perf-${{ env.TEST_PREFIX }}`
+            - Azure region: ${{ env.AZURE_REGION }}
+
+            Please check the logs for details on the failure.
 
   build:
     name: Build 
@@ -151,7 +203,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -161,7 +213,9 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
@@ -241,6 +295,31 @@ jobs:
         run: |
           make build-push-perf-app-all
         shell: bash
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Build succeeded
+
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Build failed
+
+            Please check the logs for details on the error.
 
   test-perf:
     name: Perf tests
@@ -273,7 +352,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -283,7 +362,9 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
@@ -435,38 +516,6 @@ jobs:
         with:
           name: perf_test_logs
           path: ${{ env.DAPR_TEST_LOG_PATH }}
-      - name: Add test result comment to PR
-        if: always() && github.event_name == 'repository_dispatch' && env.TEST_PREFIX != ''
-        env:
-          JOB_CONTEXT: ${{ toJson(job) }}
-        uses: actions/github-script@0.3.0
-        with:
-          github-token: ${{secrets.DAPR_BOT_TOKEN}}
-          script: |
-            const testPayload = context.payload.client_payload;
-            const jobContext = JSON.parse(process.env.JOB_CONTEXT);
-            const jobStatus = jobContext.status.toLowerCase();
-
-            console.log(`Current Job Status: ${jobStatus}`);
-
-            var message = "";
-
-            if (jobStatus == "cancelled") {
-              message = "Dapr Perf tests cancelled.";
-            } else if (jobStatus == "success") {
-              message = "All Dapr perf tests completed.";
-            } else if (jobStatus == "failure") {
-              message = "Dapr Perf tests failed.";
-            }
-
-            if (message) {
-              await github.issues.createComment({
-                owner: testPayload.issue.owner,
-                repo: testPayload.issue.repo,
-                issue_number: testPayload.issue.number,
-                body: message
-              });
-            }
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@master
@@ -474,6 +523,43 @@ jobs:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: test_perf.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.*
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Perf tests succeeded
+
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Perf tests failed
+
+            Please check the logs for details on the error.
+      - name: Update PR comment for cancellation
+        if: cancelled() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Perf tests cancelled
+
+            The Action has been canceled
 
   cleanup:
     name: Clean up Azure resources

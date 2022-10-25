@@ -16,7 +16,7 @@ package kubernetes
 import (
 	"fmt"
 
-	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -24,7 +24,7 @@ import (
 
 const (
 	// pluggableComponentSocketEnvVar env var used to point the socket location for the pluggable component.
-	pluggableComponentSocketEnvVar    = "DAPR_COMPONENT_SOCKET_PATH"
+	pluggableComponentSocketEnvVar    = "DAPR_COMPONENT_SOCKET_FOLDER"
 	pluggableComponentSocketMountPath = "/dapr-unix-domain-sockets"
 )
 
@@ -46,11 +46,11 @@ func sharedUnixSocketVolumeMount() apiv1.VolumeMount {
 	}
 }
 
-// daprSocketPathEnvVarFor returns a env var that points to the pluggable component socket path environment variable.
-func daprSocketPathEnvVarFor(socket string) apiv1.EnvVar {
+// daprSocketPathEnvVar returns a env var that points to the pluggable component socket path environment variable.
+func daprSocketPathEnvVar() apiv1.EnvVar {
 	return apiv1.EnvVar{
 		Name:  pluggableComponentSocketEnvVar,
-		Value: fmt.Sprintf("%s/%s", pluggableComponentSocketMountPath, socket),
+		Value: pluggableComponentSocketMountPath,
 	}
 }
 
@@ -62,10 +62,10 @@ func adaptAndBuildPluggableComponents(appDesc *AppDescription) []apiv1.Container
 
 	// specify unix domain socket path
 	if appDesc.UnixDomainSocketPath == "" {
-		appDesc.UnixDomainSocketPath = components.GetPluggableComponentsSocketFolderPath()
+		appDesc.UnixDomainSocketPath = pluggable.GetSocketFolderPath()
 	} else {
 		// if specified so the env var should be set.
-		sidecarSocketFolderEnvVar := fmt.Sprintf("%s=%s", components.DaprPluggableComponentsSocketFolderEnvVar, appDesc.UnixDomainSocketPath)
+		sidecarSocketFolderEnvVar := fmt.Sprintf("%s=%s", pluggable.SocketFolderEnvVar, appDesc.UnixDomainSocketPath)
 		if appDesc.DaprEnv == "" {
 			appDesc.DaprEnv = sidecarSocketFolderEnvVar
 		} else {
@@ -77,9 +77,9 @@ func adaptAndBuildPluggableComponents(appDesc *AppDescription) []apiv1.Container
 	containers := make([]apiv1.Container, len(appDesc.PluggableComponents))
 	containerIdx := 0
 	sharedVolumeMount := sharedUnixSocketVolumeMount()
-	for socket, container := range appDesc.PluggableComponents {
+	for _, container := range appDesc.PluggableComponents {
 		container.VolumeMounts = append(container.VolumeMounts, sharedVolumeMount)
-		container.Env = append(container.Env, daprSocketPathEnvVarFor(socket))
+		container.Env = append(container.Env, daprSocketPathEnvVar())
 		containers[containerIdx] = container
 		containerIdx++
 	}

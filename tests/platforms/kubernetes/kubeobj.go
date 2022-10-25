@@ -182,6 +182,23 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		containers = append(containers, adaptAndBuildPluggableComponents(&appDesc)...)
 	}
 
+	nodeSelectorRequirements := appDesc.NodeSelectors
+	if nodeSelectorRequirements == nil {
+		nodeSelectorRequirements = []apiv1.NodeSelectorRequirement{}
+	}
+	nodeSelectorRequirements = append(nodeSelectorRequirements,
+		apiv1.NodeSelectorRequirement{
+			Key:      "kubernetes.io/os",
+			Operator: "In",
+			Values:   []string{TargetOs},
+		},
+		apiv1.NodeSelectorRequirement{
+			Key:      "kubernetes.io/arch",
+			Operator: "In",
+			Values:   []string{TargetArch},
+		},
+	)
+
 	return apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      labels,
@@ -195,18 +212,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 					RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
 						NodeSelectorTerms: []apiv1.NodeSelectorTerm{
 							{
-								MatchExpressions: []apiv1.NodeSelectorRequirement{
-									{
-										Key:      "kubernetes.io/os",
-										Operator: "In",
-										Values:   []string{TargetOs},
-									},
-									{
-										Key:      "kubernetes.io/arch",
-										Operator: "In",
-										Values:   []string{TargetArch},
-									},
-								},
+								MatchExpressions: nodeSelectorRequirements,
 							},
 						},
 					},
@@ -218,7 +224,8 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 					Name: appDesc.ImageSecret,
 				},
 			},
-			Volumes: appDesc.Volumes,
+			Volumes:     appDesc.Volumes,
+			Tolerations: appDesc.Tolerations,
 		},
 	}
 }

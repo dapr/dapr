@@ -45,7 +45,7 @@ func Policy(ctx context.Context, log logger.Logger, operationName string, t time
 				ctx, cancel := context.WithTimeout(ctx, t)
 				defer cancel()
 
-				done := make(chan error, 1)
+				done := make(chan error)
 				go func() {
 					done <- operCopy(ctx)
 				}()

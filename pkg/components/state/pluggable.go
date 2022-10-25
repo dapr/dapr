@@ -44,7 +44,7 @@ type grpcStateStore struct {
 // Init initializes the grpc state passing out the metadata to the grpc component.
 // It also fetches and set the current components features.
 func (ss *grpcStateStore) Init(metadata state.Metadata) error {
-	if err := ss.Dial(); err != nil {
+	if err := ss.Dial(metadata.Name); err != nil {
 		return err
 	}
 
@@ -452,8 +452,15 @@ func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
-func newGRPCStateStore(socket string) func(l logger.Logger) state.Store {
+func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) state.Store {
 	return func(l logger.Logger) state.Store {
-		return NewGRPCStateStore(l, socket)
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, newStateStoreClient))
 	}
+}
+
+func init() {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.StateStore_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterComponent(newGRPCStateStore(dialer), name)
+	})
 }

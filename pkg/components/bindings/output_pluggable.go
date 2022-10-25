@@ -31,7 +31,7 @@ type grpcOutputBinding struct {
 
 // Init initializes the grpc outputbinding passing out the metadata to the grpc component.
 func (b *grpcOutputBinding) Init(metadata bindings.Metadata) error {
-	if err := b.Dial(); err != nil {
+	if err := b.Dial(metadata.Name); err != nil {
 		return err
 	}
 
@@ -103,8 +103,15 @@ func NewGRPCOutputBinding(l logger.Logger, socket string) *grpcOutputBinding {
 }
 
 // newGRPCOutputBinding creates a new output binding for the given pluggable component.
-func newGRPCOutputBinding(socket string) func(l logger.Logger) bindings.OutputBinding {
+func newGRPCOutputBinding(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) bindings.OutputBinding {
 	return func(l logger.Logger) bindings.OutputBinding {
-		return outputFromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewOutputBindingClient))
+		return outputFromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, proto.NewOutputBindingClient))
 	}
+}
+
+func init() {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.OutputBinding_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterOutputBinding(newGRPCOutputBinding(dialer), name)
+	})
 }

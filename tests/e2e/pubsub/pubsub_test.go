@@ -461,8 +461,8 @@ func TestMain(m *testing.M) {
 	}
 
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
-		redisPubsubPluggableComponent := map[string]apiv1.Container{
-			"dapr-pubsub.redis-pubsub-pluggable-v1.sock": {
+		redisPubsubPluggableComponent := []apiv1.Container{
+			{
 				Name:  "redis-pubsub-pluggable",
 				Image: runner.BuildTestImageName(redisPubSubPluggableApp),
 			},

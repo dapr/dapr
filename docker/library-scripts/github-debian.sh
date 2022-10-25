@@ -16,7 +16,7 @@
 # Users can edit this copy under /usr/local/share in the container to
 # customize this as needed for their custom localhost bindings.
 
-# Source: https://github.com/microsoft/vscode-dev-containers/blob/v0.224.3/script-library/github-debian.sh
+# Source: https://github.com/microsoft/vscode-dev-containers/blob/ecb28cdcf443603ec8f037afff85c63c8cd1dc95/script-library/github-debian.sh
 
 #-------------------------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
@@ -28,9 +28,10 @@
 #
 # Syntax: ./github-debian.sh [version]
 
-CLI_VERSION=${1:-"latest"}
+CLI_VERSION=${VERSION:-"latest"}
+INSTALL_DIRECTLY_FROM_GITHUB_RELEASE=${INSTALLDIRECTLYFROMGITHUBRELEASE:-"true"}
 
-GITHUB_CLI_ARCHIVE_GPG_KEY=C99B11DEB97541F0
+GITHUB_CLI_ARCHIVE_GPG_KEY=23F3D4EA75716059
 GPG_KEY_SERVERS="keyserver hkp://keyserver.ubuntu.com:80
 keyserver hkps://keys.openpgp.org
 keyserver hkp://keyserver.pgp.com"
@@ -159,23 +160,69 @@ receive_gpg_keys() {
     fi
 }
 
-# Function to run apt-get if needed
-apt_get_update_if_needed()
+apt_get_update()
 {
-    if [ ! -d "/var/lib/apt/lists" ] || [ "$(ls /var/lib/apt/lists/ | wc -l)" = "0" ]; then
-        echo "Running apt-get update..."
-        apt-get update
-    else
-        echo "Skipping apt-get update."
-    fi
+    echo "Running apt-get update..."
+    apt-get update -y
 }
 
 # Checks if packages are installed and installs them if not
 check_packages() {
     if ! dpkg -s "$@" > /dev/null 2>&1; then
-        apt_get_update_if_needed
+        apt_get_update
         apt-get -y install --no-install-recommends "$@"
     fi
+}
+
+find_version_from_git_tags() {
+    local variable_name=$1
+    local requested_version=${!variable_name}
+    if [ "${requested_version}" = "none" ]; then return; fi
+    local repository=$2
+    local prefix=${3:-"tags/v"}
+    local separator=${4:-"."}
+    local last_part_optional=${5:-"false"}    
+    if [ "$(echo "${requested_version}" | grep -o "." | wc -l)" != "2" ]; then
+        local escaped_separator=${separator//./\\.}
+        local last_part
+        if [ "${last_part_optional}" = "true" ]; then
+            last_part="(${escaped_separator}[0-9]+)?"
+        else
+            last_part="${escaped_separator}[0-9]+"
+        fi
+        local regex="${prefix}\\K[0-9]+${escaped_separator}[0-9]+${last_part}$"
+        local version_list="$(git ls-remote --tags ${repository} | grep -oP "${regex}" | tr -d ' ' | tr "${separator}" "." | sort -rV)"
+        if [ "${requested_version}" = "latest" ] || [ "${requested_version}" = "current" ] || [ "${requested_version}" = "lts" ]; then
+            declare -g ${variable_name}="$(echo "${version_list}" | head -n 1)"
+        else
+            set +e
+            declare -g ${variable_name}="$(echo "${version_list}" | grep -E -m 1 "^${requested_version//./\\.}([\\.\\s]|$)")"
+            set -e
+        fi
+    fi
+    if [ -z "${!variable_name}" ] || ! echo "${version_list}" | grep "^${!variable_name//./\\.}$" > /dev/null 2>&1; then
+        echo -e "Invalid ${variable_name} value: ${requested_version}\nValid values:\n${version_list}" >&2
+        exit 1
+    fi
+    echo "${variable_name}=${!variable_name}"
+}
+
+
+# Fall back on direct download if no apt package exists
+# Fetches .deb file to be installed with dpkg
+install_deb_using_github() {
+    check_packages wget
+    arch=$(dpkg --print-architecture)
+
+    find_version_from_git_tags CLI_VERSION https://github.com/cli/cli
+    cli_filename="gh_${CLI_VERSION}_linux_${arch}.deb"
+
+    mkdir -p /tmp/ghcli
+    pushd /tmp/ghcli
+    wget https://github.com/cli/cli/releases/download/v${CLI_VERSION}/${cli_filename}
+    dpkg -i /tmp/ghcli/${cli_filename}
+    popd
+    rm -rf /tmp/ghcli
 }
 
 export DEBIAN_FRONTEND=noninteractive
@@ -183,7 +230,7 @@ export DEBIAN_FRONTEND=noninteractive
 # Install curl, apt-transport-https, curl, gpg, or dirmngr, git if missing
 check_packages curl ca-certificates apt-transport-https dirmngr gnupg2
 if ! type git > /dev/null 2>&1; then
-    apt_get_update_if_needed
+    apt_get_update
     apt-get -y install --no-install-recommends git
 fi
 
@@ -197,11 +244,16 @@ fi
 
 # Install the GitHub CLI
 echo "Downloading github CLI..."
-# Import key safely (new method rather than deprecated apt-key approach) and install
-. /etc/os-release
-receive_gpg_keys GITHUB_CLI_ARCHIVE_GPG_KEY /usr/share/keyrings/githubcli-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages ${VERSION_CODENAME} main" > /etc/apt/sources.list.d/github-cli.list
-apt-get update
-apt-get -y install "gh${version_suffix}"
-rm -rf "/tmp/gh/gnupg"
-echo "Done!"
+
+if [ "${INSTALL_DIRECTLY_FROM_GITHUB_RELEASE}" = "true" ]; then
+    install_deb_using_github
+else
+   # Import key safely (new method rather than deprecated apt-key approach) and install
+    . /etc/os-release
+    receive_gpg_keys GITHUB_CLI_ARCHIVE_GPG_KEY /usr/share/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+    apt-get update
+    apt-get -y install "gh${version_suffix}"
+    rm -rf "/tmp/gh/gnupg"
+    echo "Done!"
+fi

@@ -20,7 +20,6 @@ import (
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -66,10 +65,6 @@ func (p *Registry) getPubSub(name, version string) (func() pubsub.PubSub, bool) 
 		if ok {
 			return p.wrapFn(pubSubFn), true
 		}
-	}
-
-	if socket := components.SocketPathForPluggableComponent(name, version); utils.SocketExists(socket) {
-		return p.wrapFn(newGRPCPubSub(socket)), true
 	}
 
 	return nil, false

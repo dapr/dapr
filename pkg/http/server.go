@@ -27,6 +27,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/pprofhandler"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -36,6 +37,7 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/utils/nethttpadaptor"
 	"github.com/dapr/kit/logger"
 )
 
@@ -43,8 +45,6 @@ var (
 	log     = logger.NewLogger("dapr.runtime.http")
 	infoLog = logger.NewLogger("dapr.runtime.http-info")
 )
-
-const protocol = "http"
 
 // Server is an interface for the Dapr HTTP server.
 type Server interface {
@@ -228,12 +228,13 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 
 func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		userAgent := string(ctx.Request.Header.Peek("User-Agent"))
-		if userAgent == "" {
-			userAgent = "unknown"
+		l := infoLog
+		if userAgent := string(ctx.Request.Header.Peek("User-Agent")); userAgent != "" {
+			l = l.WithFields(map[string]any{
+				"useragent": userAgent,
+			})
 		}
-
-		infoLog.Infof("HTTP API Called: %s %s UserAgent: %s", ctx.Method(), ctx.Path(), userAgent)
+		l.Info("HTTP API Called: " + string(ctx.Method()) + " " + string(ctx.Path()))
 		next(ctx)
 	}
 }
@@ -253,7 +254,11 @@ func (s *server) usePublicRouter() fasthttp.RequestHandler {
 }
 
 func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return s.pipeline.Apply(next)
+	return fasthttpadaptor.NewFastHTTPHandler(
+		s.pipeline.Apply(
+			nethttpadaptor.NewNetHTTPHandlerFunc(next),
+		),
+	)
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -355,7 +360,7 @@ func (s *server) endpointAllowed(endpoint Endpoint) bool {
 	var httpRules []config.APIAccessRule
 
 	for _, rule := range s.apiSpec.Allowed {
-		if rule.Protocol == protocol {
+		if rule.Protocol == "http" {
 			httpRules = append(httpRules, rule)
 		}
 	}
@@ -364,7 +369,7 @@ func (s *server) endpointAllowed(endpoint Endpoint) bool {
 	}
 
 	for _, rule := range httpRules {
-		if (strings.Index(endpoint.Route, rule.Name) == 0 && endpoint.Version == rule.Version) || endpoint.Route == "healthz" {
+		if (strings.HasPrefix(endpoint.Route, rule.Name) && endpoint.Version == rule.Version) || endpoint.AlwaysAllowed {
 			return true
 		}
 	}

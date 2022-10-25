@@ -37,7 +37,7 @@ type grpcInputBinding struct {
 
 // Init initializes the grpc inputbinding passing out the metadata to the grpc component.
 func (b *grpcInputBinding) Init(metadata bindings.Metadata) error {
-	if err := b.Dial(); err != nil {
+	if err := b.Dial(metadata.Name); err != nil {
 		return err
 	}
 
@@ -141,8 +141,15 @@ func NewGRPCInputBinding(l logger.Logger, socket string) *grpcInputBinding {
 }
 
 // newGRPCInputBinding creates a new input binding for the given pluggable component.
-func newGRPCInputBinding(socket string) func(l logger.Logger) bindings.InputBinding {
+func newGRPCInputBinding(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) bindings.InputBinding {
 	return func(l logger.Logger) bindings.InputBinding {
-		return inputFromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewInputBindingClient))
+		return inputFromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, proto.NewInputBindingClient))
 	}
+}
+
+func init() {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.InputBinding_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterInputBinding(newGRPCInputBinding(dialer), name)
+	})
 }

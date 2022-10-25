@@ -30,8 +30,8 @@ func TestBuildPluggableComponents(t *testing.T) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			PluggableComponents: map[string]apiv1.Container{
-				"my-socket": {},
+			PluggableComponents: []apiv1.Container{
+				{},
 			},
 		}
 	}
@@ -54,7 +54,7 @@ func TestBuildPluggableComponents(t *testing.T) {
 		app.UnixDomainSocketPath = "fake-path"
 		adaptAndBuildPluggableComponents(&app)
 		assert.NotEmpty(t, app.UnixDomainSocketPath)
-		assert.Equal(t, app.DaprEnv, "DAPR_PLUGGABLE_COMPONENTS_SOCKETS_FOLDER=fake-path")
+		assert.Equal(t, app.DaprEnv, "DAPR_COMPONENTS_SOCKETS_FOLDER=fake-path")
 	})
 
 	t.Run("adaptAndBuild should concat dapr env vars when domain socket path is not empty", func(t *testing.T) {
@@ -64,7 +64,7 @@ func TestBuildPluggableComponents(t *testing.T) {
 		adaptAndBuildPluggableComponents(&app)
 		assert.NotEmpty(t, app.UnixDomainSocketPath)
 		assert.NotEmpty(t, app.DaprEnv)
-		assert.Equal(t, app.DaprEnv, "env=test,DAPR_PLUGGABLE_COMPONENTS_SOCKETS_FOLDER=fake-path")
+		assert.Equal(t, app.DaprEnv, "env=test,DAPR_COMPONENTS_SOCKETS_FOLDER=fake-path")
 	})
 
 	t.Run("adaptAndBuild should return pluggable component containers with the volume mount and envvar", func(t *testing.T) {
