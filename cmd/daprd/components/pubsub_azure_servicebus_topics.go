@@ -14,10 +14,11 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
+	"github.com/dapr/components-contrib/pubsub/azure/servicebus/topics"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(servicebus.NewAzureServiceBus, "azure.servicebus")
+	// "azure.servicebus" is the old name of the component and maintained for backwards-compatibility
+	pubsubLoader.DefaultRegistry.RegisterComponent(topics.NewAzureServiceBusTopics, "azure.servicebus.topics", "azure.servicebus")
 }

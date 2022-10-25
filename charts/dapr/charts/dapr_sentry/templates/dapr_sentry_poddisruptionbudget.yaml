@@ -22,11 +22,9 @@ spec:
   selector:
     matchLabels:
       app: dapr-sentry
-      app.kubernetes.io/name: {{ .Release.Name }}
-      app.kubernetes.io/version: {{ .Values.global.tag }}
-      app.kubernetes.io/component: sentry
-      app.kubernetes.io/part-of: "dapr"
-      app.kubernetes.io/managed-by: "helm"
+      {{- range $key, $value := .Values.global.k8sLabels }}
+      {{ $key }}: {{ tpl $value $ }}
+      {{- end }}
       {{- with .Values.global.labels }}
         {{- toYaml . | nindent 6 }}
       {{- end }}
