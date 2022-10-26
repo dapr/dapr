@@ -5,8 +5,8 @@ github.com/cenkalti/backoff/v4 v4.1.3 h1:cFAlzYUlVYDysBEH2T5hyJZMh3+5+WCBvSnK6Q8
 github.com/cenkalti/backoff/v4 v4.1.3/go.mod h1:scbssz8iZGpm3xbr14ovlUdkxfGXNInqkPWOWmG2CLw=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8 h1:YbYOmbbmti6SpitqozFzfD0HwN3yFH3uOXxLZIZNe5w=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8/go.mod h1:7CpOwUfY7KlADHWTCmOtf0nRjvLt/62lHJKrgueVE1I=
-github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938 h1:NhktrtFtznZD3/4iYvn/XZ+ZiAVXCWtCxud/eQfUhxs=
-github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938/go.mod h1:kOudI10ue7r0pjsbMR1BPgms3EhuBur4wzNugo4mUjE=
+github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650 h1:ow01K9XkIyvVHyvIenyEVYl1sJcn4VBx7HfI1FchQts=
+github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650/go.mod h1:kJUEIl8aisjgepaWZApm/D2W4quCyO2hAeWhpmC2l2c=
 github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5 h1:Jx8u3y/BMjUar0Gp+dzZybBo1Kvbj+18XPbiJ28Xa7A=
 github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5/go.mod h1:FR+yc0R0szlKnJooVqJvl7FhWf21wzY4/EzmyFQrESw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
