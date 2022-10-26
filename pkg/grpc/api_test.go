@@ -2028,12 +2028,12 @@ func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore.On("Multi",
 		mock.AnythingOfType("*context.valueCtx"),
 		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
-			return matchKeyFn(context.TODO(), req, goodKey)
+			return matchKeyFn(context.Background(), req, goodKey)
 		})).Return(nil)
 	fakeStore.On("Multi",
 		mock.AnythingOfType("*context.valueCtx"),
 		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
-			return matchKeyFn(context.TODO(), req, "error-key")
+			return matchKeyFn(context.Background(), req, "error-key")
 		})).Return(errors.New("error to execute with key2"))
 
 	var fakeTransactionalStore state.TransactionalStore = fakeStore
@@ -2478,7 +2478,7 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		r, err := client.GetConfigurationAlpha1(context.TODO(), &runtimev1pb.GetConfigurationRequest{
+		r, err := client.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
 			StoreName: "store1",
 			Keys: []string{
 				"key1",
@@ -2512,7 +2512,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		ctx := context.TODO()
+		ctx := context.Background()
 		client := runtimev1pb.NewDaprClient(clientConn)
 		s, err := client.SubscribeConfigurationAlpha1(ctx, &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "store1",
@@ -2561,7 +2561,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		ctx := context.TODO()
+		ctx := context.Background()
 		client := runtimev1pb.NewDaprClient(clientConn)
 		s, err := client.SubscribeConfigurationAlpha1(ctx, &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "store1",
