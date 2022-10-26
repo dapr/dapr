@@ -584,8 +584,8 @@ github.com/danieljoos/wincred v1.0.2/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3E
 github.com/danieljoos/wincred v1.1.0/go.mod h1:XYlo+eRTsVA9aHGp7NGjFkPla4m+DCL7hqDjlFjiygg=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.8.5-rc.1 h1:NpYx6T6eGnIQrXdymKgy2NkRW/t30QhcbuQm9JtB5bY=
-github.com/dapr/components-contrib v1.8.5-rc.1/go.mod h1:jzbbblrpo1fad70N64TOzsdMXQKcderhM9JuUhe+Ndo=
+github.com/dapr/components-contrib v1.8.6 h1:y8dBfQ+37vDUFl9/xu0aoGwN4CEDbuC8/Z7JDom2Fm4=
+github.com/dapr/components-contrib v1.8.6/go.mod h1:jzbbblrpo1fad70N64TOzsdMXQKcderhM9JuUhe+Ndo=
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233 h1:M0dWIG8kUxEFU57IqTWeqptNqlBsfosFgsA5Ov7rJ8g=
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233/go.mod h1:y8r0VqUNKyd6xBXp7gQjwA59wlCLGfKzL5J8iJsN09w=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
