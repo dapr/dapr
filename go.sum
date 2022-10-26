@@ -73,8 +73,8 @@ contrib.go.opencensus.io/exporter/prometheus v0.4.2/go.mod h1:dvEHbiKmgvbr5pjaF9
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537 h1:NblXw7tbHBFZ0AWEH09fgM9MwQ3XNPUPHDFeBjM7HV4=
 dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537/go.mod h1:O7eTHAilCWlqBjEkG2MW9khZFImiARb/tSOE8PJas+g=
-github.com/1046102779/components-contrib v1.6.0-rc.2.0.20221025205611-e38369028650 h1:V2uXzTUUVFB+Yh8yEbJgTDDUOg52rWPjGN3QHWF2AzM=
-github.com/1046102779/components-contrib v1.6.0-rc.2.0.20221025205611-e38369028650/go.mod h1:kJUEIl8aisjgepaWZApm/D2W4quCyO2hAeWhpmC2l2c=
+github.com/1046102779/components-contrib v1.6.0-rc.2.0.20221026092338-3fc1c26e6a9e h1:Qfpv3BHScwha4nipwyP8dqeMeu7Cp/zWZTYamJtwxdQ=
+github.com/1046102779/components-contrib v1.6.0-rc.2.0.20221026092338-3fc1c26e6a9e/go.mod h1:EO1gEcDvT7xlwNfU2j4maZYpVhh9UqsyXY4Jf0ZMNl8=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:/vQbFIOMbk2FiG/kXiLl8BRyzTWDw7gX/Hz7Dd5eDMs=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:hN7oaIRCjzsZ2dE+yG5k+rsdt3qcwykqK6HVGcKwsw4=
 github.com/99designs/keyring v1.2.1 h1:tYLp1ULvO7i3fI5vE21ReQuj99QFSs7lGm0xWyJo87o=
