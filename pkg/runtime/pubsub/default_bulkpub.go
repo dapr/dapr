@@ -49,7 +49,7 @@ func NewDefaultBulkPublisher(p contribPubsub.PubSub) *defaultBulkPublisher {
 // If 'bulkPublishSerially' metadata is set to true, the messages are sent to the broker serially,
 // in the same order. Otherwise they are sent to the broker as parallel Publish requests.
 func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
-	if req.Metadata[bulkPublishSeriallyKey] == "true" {
+	if utils.IsTruthy(req.Metadata[bulkPublishSeriallyKey]) {
 		return p.bulkPublishSerial(req)
 	} else {
 		return p.bulkPublishParallel(req)
@@ -60,20 +60,15 @@ func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub
 // that messages are sent to the broker in the same order as specified in the request.
 func (p *defaultBulkPublisher) bulkPublishSerial(req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	statuses := make([]contribPubsub.BulkPublishResponseEntry, 0, len(req.Entries))
-	hasError := false
+	var err error
 
 	for _, entry := range req.Entries {
 		status := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
 		if status.Error != nil {
-			hasError = true
+			err = ErrBulkPublishFailure
 		}
 
 		statuses = append(statuses, status)
-	}
-
-	var err error
-	if hasError {
-		err = ErrBulkPublishFailure
 	}
 
 	return contribPubsub.BulkPublishResponse{Statuses: statuses}, err
@@ -83,13 +78,15 @@ func (p *defaultBulkPublisher) bulkPublishSerial(req *contribPubsub.BulkPublishR
 // that messages are sent to the broker in the same order as specified in the request.
 func (p *defaultBulkPublisher) bulkPublishParallel(req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	statuses := make([]contribPubsub.BulkPublishResponseEntry, 0, len(req.Entries))
+	maxConcurrency := utils.GetIntOrDefault(req.Metadata, bulkPublishMaxConcurrencyKey, defaultBulkPublishMaxConcurrency)
+
 	var eg errgroup.Group
-	eg.SetLimit(utils.GetIntOrDefault(req.Metadata, bulkPublishMaxConcurrencyKey, defaultBulkPublishMaxConcurrency))
+	eg.SetLimit(maxConcurrency)
 
 	statusChan := make(chan contribPubsub.BulkPublishResponseEntry, len(req.Entries))
 
-	for _, entry := range req.Entries {
-		entry := entry
+	for i := range req.Entries {
+		entry := req.Entries[i]
 		eg.Go(func() error {
 			status := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
 			statusChan <- status

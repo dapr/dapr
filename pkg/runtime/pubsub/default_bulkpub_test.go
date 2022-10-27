@@ -41,6 +41,12 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 				ContentType: "text/plain",
 				Metadata:    map[string]string{},
 			},
+			{
+				EntryId:     "b3b4b2e1-2b9b-4b9b-9b9b-9b9b9b9b9b9b",
+				Event:       []byte("event3"),
+				ContentType: "text/plain",
+				Metadata:    map[string]string{},
+			},
 		},
 		PubsubName: "pubsub",
 		Topic:      "topic",
@@ -48,34 +54,42 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 	}
 
 	tcs := []struct {
-		name                   string
-		bulkPublishSeriallyKey string
-		publishErrors          []error
-		expectError            bool
+		name                      string
+		bulkPublishSerially       string
+		bulkPublishMaxConcurrency int
+		publishErrors             []error
+		expectError               bool
 	}{
 		{
-			name:                   "bulkPublishSeriallyKey is set to true, without publish errors",
-			bulkPublishSeriallyKey: "true",
-			publishErrors:          []error{nil, nil},
-			expectError:            false,
+			name:                "bulkPublishSeriallyKey is set to true, without publish errors",
+			bulkPublishSerially: "true",
+			publishErrors:       []error{nil, nil, nil},
+			expectError:         false,
 		},
 		{
-			name:                   "bulkPublishSeriallyKey is set to true, with a publish error",
-			bulkPublishSeriallyKey: "true",
-			publishErrors:          []error{errors.New("publish error"), nil},
-			expectError:            true,
+			name:                "bulkPublishSeriallyKey is set to true, with a publish error",
+			bulkPublishSerially: "true",
+			publishErrors:       []error{errors.New("publish error"), nil, nil},
+			expectError:         true,
 		},
 		{
-			name:                   "bulkPublishSeriallyKey is not true, without publish errors",
-			bulkPublishSeriallyKey: "false",
-			publishErrors:          []error{nil, nil},
-			expectError:            false,
+			name:                "bulkPublishSeriallyKey is not true, without publish errors",
+			bulkPublishSerially: "false",
+			publishErrors:       []error{nil, nil, nil},
+			expectError:         false,
 		},
 		{
-			name:                   "bulkPublishSeriallyKey is not true, with a publish errors",
-			bulkPublishSeriallyKey: "false",
-			publishErrors:          []error{nil, errors.New("publish error")},
-			expectError:            true,
+			name:                "bulkPublishSeriallyKey is not true, with a publish errors",
+			bulkPublishSerially: "false",
+			publishErrors:       []error{nil, errors.New("publish error"), nil},
+			expectError:         true,
+		},
+		{
+			name:                      "bulkPublishMaxConcurrency is less than number of entries, without publish errors",
+			bulkPublishSerially:       "false",
+			bulkPublishMaxConcurrency: 1,
+			publishErrors:             []error{nil, nil, nil},
+			expectError:               false,
 		},
 	}
 
@@ -84,10 +98,10 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			// Create publish requests for each message in the bulk request.
 			var pubReqs []*contribPubsub.PublishRequest
 			for _, entry := range req.Entries {
-				contenType := entry.ContentType
+				contentType := entry.ContentType
 				pubReqs = append(pubReqs, &contribPubsub.PublishRequest{
 					Data:        entry.Event,
-					ContentType: &contenType,
+					ContentType: &contentType,
 					Metadata:    entry.Metadata,
 					PubsubName:  req.PubsubName,
 					Topic:       req.Topic,
@@ -102,8 +116,12 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			bulkPublisher := NewDefaultBulkPublisher(mockPubSub)
 
 			// Set up metadata and invoke the bulk publish method.
-			req.Metadata[bulkPublishSeriallyKey] = tc.bulkPublishSeriallyKey
-			res, err := bulkPublisher.BulkPublish(context.TODO(), req)
+			req.Metadata[bulkPublishSeriallyKey] = tc.bulkPublishSerially
+			if tc.bulkPublishMaxConcurrency > 0 {
+				req.Metadata[bulkPublishMaxConcurrencyKey] = fmt.Sprintf("%d", tc.bulkPublishMaxConcurrency)
+			}
+
+			res, err := bulkPublisher.BulkPublish(context.Background(), req)
 
 			// Check if the bulk publish method returns an error.
 			if tc.expectError {
