@@ -16,6 +16,7 @@ package testing
 import (
 	context "context"
 	"encoding/json"
+	"sync"
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -39,6 +40,7 @@ type MockServer struct {
 	RequestsReceived               map[string]*runtimev1pb.TopicEventBulkRequest
 	BulkResponsePerPath            map[string]*runtimev1pb.TopicEventBulkResponse
 	initialized                    bool
+	mutex                          sync.Mutex
 }
 
 func (m *MockServer) Init() {
@@ -89,6 +91,8 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 }
 
 func (m *MockServer) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	if m.initialized != true {
 		m.Init()
 	}

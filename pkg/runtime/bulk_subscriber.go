@@ -222,8 +222,7 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRout
 	rPath, shouldProcess, routeErr := findMatchingRoute(route.rules, matchElem)
 	if routeErr != nil {
 		log.Errorf("error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", psName, topic, message.EntryId, routeErr)
-		(*bulkResponses)[i].EntryId = message.EntryId
-		(*bulkResponses)[i].Error = routeErr
+		setBulkResponseEntry(bulkResponses, i, message.EntryId, routeErr)
 		return "", routeErr
 	}
 	if !shouldProcess {
@@ -238,8 +237,7 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRout
 				ContentType: &message.ContentType,
 			}, route.deadLetterTopic)
 		}
-		(*bulkResponses)[i].EntryId = message.EntryId
-		(*bulkResponses)[i].Error = nil
+		setBulkResponseEntry(bulkResponses, i, message.EntryId, nil)
 		return "", nil
 	}
 	return rPath, nil
@@ -282,8 +280,7 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 				// dlq has been configured and message is successfully sent to dlq.
 				for _, item := range psm.entries {
 					ind := (*entryIdIndexMap)[item.EntryId]
-					(*bulkResponses)[ind].EntryId = item.EntryId
-					(*bulkResponses)[ind].Error = nil
+					setBulkResponseEntry(bulkResponses, ind, item.EntryId, nil)
 				}
 				return nil
 			}
@@ -292,8 +289,7 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 
 		for _, item := range psm.entries {
 			ind := (*entryIdIndexMap)[item.EntryId]
-			(*bulkResponses)[ind].EntryId = item.EntryId
-			(*bulkResponses)[ind].Error = marshalErr
+			setBulkResponseEntry(bulkResponses, ind, item.EntryId, marshalErr)
 		}
 		return marshalErr
 	}
@@ -379,23 +375,21 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 					fallthrough
 				case pubsub.Retry:
 					bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
-					(*bulkResponses)[entryId].EntryId = response.EntryId
-					(*bulkResponses)[entryId].Error = errors.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId)
+					setBulkResponseEntry(bulkResponses, entryId, response.EntryId,
+						errors.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 					hasAnyError = true
 				case pubsub.Success:
 					bulkSubDiag.statusWiseDiag[string(pubsub.Success)]++
-					(*bulkResponses)[entryId].EntryId = response.EntryId
-					(*bulkResponses)[entryId].Error = nil
+					setBulkResponseEntry(bulkResponses, entryId, response.EntryId, nil)
 				case pubsub.Drop:
 					bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
-					(*bulkResponses)[entryId].EntryId = response.EntryId
-					(*bulkResponses)[entryId].Error = nil
+					setBulkResponseEntry(bulkResponses, entryId, response.EntryId, nil)
 				default:
 					// Consider unknown status field as error and retry
 					bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
-					(*bulkResponses)[entryId].EntryId = response.EntryId
-					(*bulkResponses)[entryId].Error = errors.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status)
+					setBulkResponseEntry(bulkResponses, entryId, response.EntryId,
+						errors.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))
 					hasAnyError = true
 				}
 			} else {
@@ -406,8 +400,8 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 		for _, item := range msg.entries {
 			ind := entryIdIndexMap[item.EntryId]
 			if (*bulkResponses)[ind].EntryId == "" {
-				(*bulkResponses)[ind].EntryId = item.EntryId
-				(*bulkResponses)[ind].Error = errors.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId)
+				setBulkResponseEntry(bulkResponses, ind, item.EntryId,
+					errors.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId))
 				hasAnyError = true
 				bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
 			}
@@ -528,23 +522,21 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 				// success from protobuf definition
 				bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += 1
-				(*bulkResponses)[entryId].EntryId = response.EntryId
-				(*bulkResponses)[entryId].Error = nil
+				setBulkResponseEntry(bulkResponses, entryId, response.EntryId, nil)
 			case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
 				bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
-				(*bulkResponses)[entryId].EntryId = response.EntryId
-				(*bulkResponses)[entryId].Error = errors.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", response.EntryId)
+				setBulkResponseEntry(bulkResponses, entryId, response.EntryId,
+					errors.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", response.EntryId))
 				hasAnyError = true
 			case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", response.EntryId)
 				bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += 1
-				(*bulkResponses)[entryId].EntryId = response.EntryId
-				(*bulkResponses)[entryId].Error = nil
+				setBulkResponseEntry(bulkResponses, entryId, response.EntryId, nil)
 			default:
 				// Consider unknown status field as error and retry
 				bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
-				(*bulkResponses)[entryId].EntryId = response.EntryId
-				(*bulkResponses)[entryId].Error = errors.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", response.EntryId, response.GetStatus())
+				setBulkResponseEntry(bulkResponses, entryId, response.EntryId,
+					errors.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", response.EntryId, response.GetStatus()))
 				hasAnyError = true
 			}
 		} else {
@@ -555,8 +547,8 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 	for _, item := range msg.entries {
 		ind := entryIdIndexMap[item.EntryId]
 		if (*bulkResponses)[ind].EntryId == "" {
-			(*bulkResponses)[ind].EntryId = item.EntryId
-			(*bulkResponses)[ind].Error = errors.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId)
+			setBulkResponseEntry(bulkResponses, ind, item.EntryId,
+				errors.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId))
 			hasAnyError = true
 			bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
 		}
@@ -675,8 +667,7 @@ func populateBulkSubscribeResponsesWithError(entries []*pubsub.BulkMessageEntry,
 	for _, item := range entries {
 		ind := (*entryIdIndexMap)[item.EntryId]
 		if (*bulkResponses)[ind].EntryId == "" {
-			(*bulkResponses)[ind].EntryId = item.EntryId
-			(*bulkResponses)[ind].Error = err
+			setBulkResponseEntry(bulkResponses, ind, item.EntryId, err)
 		}
 	}
 }
@@ -686,10 +677,14 @@ func populateAllBulkResponsesWithError(bulkMsg *pubsub.BulkMessage,
 ) {
 	for i, item := range bulkMsg.Entries {
 		if (*bulkResponses)[i].EntryId == "" {
-			(*bulkResponses)[i].EntryId = item.EntryId
-			(*bulkResponses)[i].Error = err
+			setBulkResponseEntry(bulkResponses, i, item.EntryId, err)
 		}
 	}
+}
+
+func setBulkResponseEntry(bulkResponses *[]pubsub.BulkSubscribeResponseEntry, i int, entryId string, err error) { //nolint:stylecheck
+	(*bulkResponses)[i].EntryId = entryId
+	(*bulkResponses)[i].Error = err
 }
 
 func newBulkSubIngressDiagnostics() bulkSubIngressDiagnostics {

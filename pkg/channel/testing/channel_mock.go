@@ -4,6 +4,7 @@ package testing
 
 import (
 	"context"
+	"sync"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -16,6 +17,7 @@ import (
 type MockAppChannel struct {
 	mock.Mock
 	requestsReceived map[string]*v1.InvokeMethodRequest
+	mutex            sync.Mutex
 }
 
 // GetAppConfig provides a mock function with given fields:
@@ -77,14 +79,18 @@ func (_m *MockAppChannel) HealthProbe(ctx context.Context) (bool, error) {
 }
 
 func (_m *MockAppChannel) Init() {
+	_m.mutex.Lock()
 	_m.requestsReceived = make(map[string]*v1.InvokeMethodRequest)
+	_m.mutex.Unlock()
 }
 
 // InvokeMethod provides a mock function with given fields: ctx, req
 func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
+	_m.mutex.Lock()
 	if _m.requestsReceived != nil {
 		_m.requestsReceived[req.Message().Method] = req
 	}
+	_m.mutex.Unlock()
 	ret := _m.Called(ctx, req)
 
 	var r0 *v1.InvokeMethodResponse
@@ -107,6 +113,8 @@ func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *v1.InvokeMethod
 }
 
 func (_m *MockAppChannel) GetInvokedRequest() map[string]*v1.InvokeMethodRequest {
+	_m.mutex.Lock()
+	defer _m.mutex.Unlock()
 	return _m.requestsReceived
 }
 
