@@ -187,11 +187,11 @@ func userDefinedMetadata(ctx context.Context) map[string]string {
 	return daprMetadata
 }
 
-func StartGRPCProducerSpanChildFromParent(ct context.Context, parentSpan trace.Span) (context.Context, trace.Span) {
+func StartGRPCProducerSpanChildFromParent(ct context.Context, parentSpan trace.Span, spanName string) (context.Context, trace.Span) {
 	netCtx := trace.ContextWithRemoteSpanContext(ct, parentSpan.SpanContext())
 	spanKind := trace.WithSpanKind(trace.SpanKindProducer)
 
-	ctx, span := tracer.Start(netCtx, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/", spanKind)
+	ctx, span := tracer.Start(netCtx, spanName, spanKind)
 
 	return ctx, span
 }

@@ -57,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/dapr/utils"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -1893,7 +1894,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	thepubsub, pubsubName, topic, sc, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
 	if errRes != nil {
 		respond(reqCtx, withError(sc, *errRes))
-		log.Debug(*errRes)
 
 		return
 	}
@@ -1998,7 +1998,6 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	thepubsub, pubsubName, topic, sc, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
 	if errRes != nil {
 		respond(reqCtx, withError(sc, *errRes))
-		log.Debug(*errRes)
 
 		return
 	}
@@ -2052,7 +2051,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		if entry.Metadata != nil {
 			// Populate entry metadata with request level metadata. Entry level metadata keys
 			// override request level metadata.
-			entries[i].Metadata = populateMetadataForBulkPublishEntry(metadata, entry.Metadata)
+			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		}
 		if _, ok := entryIdSet[entry.EntryId]; ok || entry.EntryId == "" {
 			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
@@ -2074,6 +2073,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			span.End()
 		}
 	}
+	features := thepubsub.Features()
 	if !rawPayload {
 		for i := range entries {
 			// For multiple events in a single bulk call traceParent is different for each event.
@@ -2101,8 +2101,6 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 				return
 			}
-
-			features := thepubsub.Features()
 
 			pubsub.ApplyMetadata(envelope, features, entries[i].Metadata)
 
@@ -2172,6 +2170,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, withJSON(status, resData), closeChildSpans)
 }
 
+// validateAndGetPubsubAndTopic takes input as request context and returns the pubsub interface, pubsub name, topic name,
+// or error status code and an ErrorResponse object.
 func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, int, *ErrorResponse) {
 	if a.pubsubAdapter == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
@@ -2213,21 +2213,6 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	}
 
 	return fasthttp.StatusOK
-}
-
-func populateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) map[string]string {
-	resMeta := map[string]string{}
-	for k, v := range entryMeta {
-		resMeta[k] = v
-	}
-	for k, v := range reqMeta {
-		if _, ok := resMeta[k]; !ok {
-			// Populate only metadata key that is already not present in the entry level metadata map
-			resMeta[k] = v
-		}
-	}
-
-	return resMeta
 }
 
 func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {

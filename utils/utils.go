@@ -145,3 +145,18 @@ func SocketExists(socketPath string) bool {
 	}
 	return false
 }
+
+func PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) map[string]string {
+	resMeta := map[string]string{}
+	for k, v := range entryMeta {
+		resMeta[k] = v
+	}
+	for k, v := range reqMeta {
+		if _, ok := resMeta[k]; !ok {
+			// Populate only metadata key that is already not present in the entry level metadata map
+			resMeta[k] = v
+		}
+	}
+
+	return resMeta
+}

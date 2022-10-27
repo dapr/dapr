@@ -200,3 +200,41 @@ func TestSocketExists(t *testing.T) {
 		assert.True(t, SocketExists(fileName))
 	})
 }
+
+func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
+	entryMeta := map[string]string{
+		"key1": "val1",
+		"ttl":  "22s",
+	}
+
+	t.Run("req Meta does not contain any key present in entryMeta", func(t *testing.T) {
+		reqMeta := map[string]string{
+			"rawPayload": "true",
+			"key2":       "val2",
+		}
+		resMeta := PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta)
+		assert.Equal(t, 4, len(resMeta), "expected length to match")
+		assert.Contains(t, resMeta, "key1", "expected key to be present")
+		assert.Equal(t, "val1", resMeta["key1"], "expected val to be equal")
+		assert.Contains(t, resMeta, "key2", "expected key to be present")
+		assert.Equal(t, "val2", resMeta["key2"], "expected val to be equal")
+		assert.Contains(t, resMeta, "ttl", "expected key to be present")
+		assert.Equal(t, "22s", resMeta["ttl"], "expected val to be equal")
+		assert.Contains(t, resMeta, "rawPayload", "expected key to be present")
+		assert.Equal(t, "true", resMeta["rawPayload"], "expected val to be equal")
+	})
+	t.Run("req Meta contains key present in entryMeta", func(t *testing.T) {
+		reqMeta := map[string]string{
+			"ttl":  "1m",
+			"key2": "val2",
+		}
+		resMeta := PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta)
+		assert.Equal(t, 3, len(resMeta), "expected length to match")
+		assert.Contains(t, resMeta, "key1", "expected key to be present")
+		assert.Equal(t, "val1", resMeta["key1"], "expected val to be equal")
+		assert.Contains(t, resMeta, "key2", "expected key to be present")
+		assert.Equal(t, "val2", resMeta["key2"], "expected val to be equal")
+		assert.Contains(t, resMeta, "ttl", "expected key to be present")
+		assert.Equal(t, "22s", resMeta["ttl"], "expected val to be equal")
+	})
+}
