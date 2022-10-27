@@ -99,7 +99,7 @@ module windowsCluster 'azure.bicep' = {
 // Deploy the Arm cluster in the third location
 resource ArmResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
   name: 'Dapr-E2E-${namePrefix}la'
-  location: 'eastus2'
+  location: 'westus2'
   tags: dateTag != '' ? {
     date: dateTag
   } : {}
@@ -109,7 +109,7 @@ module armCluster 'azure.bicep' = {
   scope: ArmResources
   params: {
     namePrefix: '${namePrefix}la'
-    location: 'eastus2'
+    location: 'westus2'
     enableWindows: false
     enableArm : true
     diagLogAnalyticsWorkspaceResourceId: armDiagLogAnalyticsWorkspaceResourceId
