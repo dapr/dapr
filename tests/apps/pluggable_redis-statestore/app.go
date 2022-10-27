@@ -15,12 +15,19 @@ package main
 
 import (
 	dapr "github.com/dapr-sandbox/components-go-sdk"
-	redis "github.com/dapr/components-contrib/state/redis"
+	"github.com/dapr-sandbox/components-go-sdk/state/v1"
+
+	"github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("redis-pluggable")
 
 func main() {
-	dapr.MustRun(dapr.UseStateStore(redis.NewRedisStateStore(log)))
+	dapr.Register("redis-pluggable",
+		dapr.WithStateStore(func() state.Store {
+			return redis.NewRedisStateStore(log)
+		}),
+	)
+	dapr.MustRun()
 }
