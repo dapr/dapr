@@ -64,7 +64,7 @@ type AppDescription struct {
 	NodeSelectors          []apiv1.NodeSelectorRequirement `json:",omitempty"` // If set, adds additional node selector requirements to the pod (note that os/arch are set automatically)
 	Volumes                []apiv1.Volume                  `json:",omitempty"`
 	InitContainers         []apiv1.Container               `json:",omitempty"`
-	PluggableComponents    map[string]apiv1.Container      `json:",omitempty"`
+	PluggableComponents    []apiv1.Container               `json:",omitempty"`
 	PlacementAddresses     []string                        `json:",omitempty"`
 	EnableAppHealthCheck   bool                            `json:",omitempty"`
 	AppHealthCheckPath     string                          `json:",omitempty"`

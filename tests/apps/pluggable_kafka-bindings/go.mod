@@ -5,15 +5,15 @@ go 1.19
 replace github.com/dapr/dapr => ../../../
 
 require (
-	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220928114348-32097c6273eb
-	github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938
+	github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8
+	github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650
 	github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5
 )
 
 require (
 	github.com/Shopify/sarama v1.37.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/dapr/dapr v1.8.4-0.20220927170932-1c498253f24b // indirect
+	github.com/dapr/dapr v1.9.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/eapache/go-resiliency v1.3.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
