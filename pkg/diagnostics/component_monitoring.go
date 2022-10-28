@@ -2,7 +2,7 @@ package diagnostics
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -28,6 +28,7 @@ const (
 	StateTransaction         = "transaction"
 	BulkGet                  = "bulk_get"
 	BulkDelete               = "bulk_delete"
+	CryptoOp                 = "crypto_op"
 )
 
 // componentMetrics holds dapr runtime metrics for components.
@@ -50,6 +51,9 @@ type componentMetrics struct {
 
 	secretCount   *stats.Int64Measure
 	secretLatency *stats.Float64Measure
+
+	cryptoCount   *stats.Int64Measure
+	cryptoLatency *stats.Float64Measure
 
 	appID     string
 	enabled   bool
@@ -115,6 +119,14 @@ func newComponentMetrics() *componentMetrics {
 			"component/secret/latencies",
 			"The latency of the response from the secret component.",
 			stats.UnitMilliseconds),
+		cryptoCount: stats.Int64(
+			"component/crypto/count",
+			"The number of operations performed on the crypto component.",
+			stats.UnitDimensionless),
+		cryptoLatency: stats.Float64(
+			"component/crypto/latencies",
+			"The latency of the response from the crypto component.",
+			stats.UnitMilliseconds),
 	}
 }
 
@@ -139,6 +151,8 @@ func (c *componentMetrics) Init(appID, namespace string) error {
 		diagUtils.NewMeasureView(c.configurationCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.secretLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(c.secretCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(c.cryptoLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(c.cryptoCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 	)
 }
 
@@ -164,13 +178,13 @@ func (c *componentMetrics) PubsubEgressEvent(ctx context.Context, component, top
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
 			c.pubsubEgressCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
 				c.pubsubEgressLatency.M(elapsed))
 		}
 	}
@@ -181,13 +195,13 @@ func (c *componentMetrics) InputBindingEvent(ctx context.Context, component stri
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success)),
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
 			c.inputBindingCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success)),
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
 				c.inputBindingLatency.M(elapsed))
 		}
 	}
@@ -198,13 +212,13 @@ func (c *componentMetrics) OutputBindingEvent(ctx context.Context, component, op
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			c.outputBindingCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.outputBindingLatency.M(elapsed))
 		}
 	}
@@ -215,13 +229,13 @@ func (c *componentMetrics) StateInvoked(ctx context.Context, component, operatio
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			c.stateCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.stateLatency.M(elapsed))
 		}
 	}
@@ -232,13 +246,13 @@ func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, 
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			c.configurationCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.configurationLatency.M(elapsed))
 		}
 	}
@@ -249,14 +263,31 @@ func (c *componentMetrics) SecretInvoked(ctx context.Context, component, operati
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			c.secretCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.secretLatency.M(elapsed))
+		}
+	}
+}
+
+// CryptoInvoked records the metrics for a crypto event.
+func (c *componentMetrics) CryptoInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
+	if c.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+			c.cryptoCount.M(1))
+
+		if elapsed > 0 {
+			stats.RecordWithTags(
+				ctx,
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+				c.cryptoLatency.M(elapsed))
 		}
 	}
 }

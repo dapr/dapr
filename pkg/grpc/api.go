@@ -109,19 +109,19 @@ type API interface {
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
 	// SubtleGetKey returns the public part of an asymmetric key stored in the vault.
-	SubtleGetKey(context.Context, *runtimev1pb.SubtleGetKeyRequest) (*runtimev1pb.SubtleGetKeyResponse, error)
+	SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequest) (*runtimev1pb.SubtleGetKeyResponse, error)
 	// SubtleEncrypt encrypts a small message using a key stored in the vault.
-	SubtleEncrypt(context.Context, *runtimev1pb.SubtleEncryptRequest) (*runtimev1pb.SubtleEncryptResponse, error)
+	SubtleEncrypt(ctx context.Context, in *runtimev1pb.SubtleEncryptRequest) (*runtimev1pb.SubtleEncryptResponse, error)
 	// SubtleDecrypt decrypts a small message using a key stored in the vault.
-	SubtleDecrypt(context.Context, *runtimev1pb.SubtleDecryptRequest) (*runtimev1pb.SubtleDecryptResponse, error)
+	SubtleDecrypt(ctx context.Context, in *runtimev1pb.SubtleDecryptRequest) (*runtimev1pb.SubtleDecryptResponse, error)
 	// SubtleWrapKey wraps a key using a key stored in the vault.
-	SubtleWrapKey(context.Context, *runtimev1pb.SubtleWrapKeyRequest) (*runtimev1pb.SubtleWrapKeyResponse, error)
+	SubtleWrapKey(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRequest) (*runtimev1pb.SubtleWrapKeyResponse, error)
 	// SubtleUnwrapKey unwraps a key using a key stored in the vault.
-	SubtleUnwrapKey(context.Context, *runtimev1pb.SubtleUnwrapKeyRequest) (*runtimev1pb.SubtleUnwrapKeyResponse, error)
+	SubtleUnwrapKey(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyRequest) (*runtimev1pb.SubtleUnwrapKeyResponse, error)
 	// SubtleSign signs a message using a key stored in the vault.
-	SubtleSign(context.Context, *runtimev1pb.SubtleSignRequest) (*runtimev1pb.SubtleSignResponse, error)
+	SubtleSign(ctx context.Context, in *runtimev1pb.SubtleSignRequest) (*runtimev1pb.SubtleSignResponse, error)
 	// SubtleVerify verifies the signature of a message using a key stored in the vault.
-	SubtleVerify(context.Context, *runtimev1pb.SubtleVerifyRequest) (*runtimev1pb.SubtleVerifyResponse, error)
+	SubtleVerify(ctx context.Context, in *runtimev1pb.SubtleVerifyRequest) (*runtimev1pb.SubtleVerifyResponse, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -557,7 +557,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
 	req := &bindings.InvokeRequest{
-		Metadata:  make(map[string]string),
+		Metadata:  make(map[string]string, len(in.Metadata)),
 		Operation: bindings.OperationKind(in.Operation),
 	}
 	for key, val := range in.Metadata {
@@ -1050,9 +1050,8 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
-	response := &runtimev1pb.GetSecretResponse{}
-	if getResponse.Data != nil {
-		response.Data = getResponse.Data
+	response := &runtimev1pb.GetSecretResponse{
+		Data: getResponse.Data,
 	}
 	return response, nil
 }

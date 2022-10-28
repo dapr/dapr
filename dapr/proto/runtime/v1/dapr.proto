@@ -620,21 +620,28 @@ message UnlockResponse {
 
 // SubtleGetKeyRequest is the request object for SubtleGetKey.
 message SubtleGetKeyRequest {
+  enum KeyFormat {
+    // PEM (PKIX) (default)
+    PEM = 0;
+    // JSON (JSON Web Key) as string
+    JSON = 1;
+  }
+ 
   // Name of the component
   string component_name = 1 [json_name="component"];
   // Name (or name/version) of the key to use in the key vault
   string name = 2;
+  // Response format
+  KeyFormat format = 3;
 }
 
 // SubtleGetKeyResponse is the response for SubtleGetKey.
 message SubtleGetKeyResponse {
-  // Name of the component
-  string component_name = 1 [json_name="component"];
   // Name (or name/version) of the key.
   // This is returned as response too in case there is a version.
-  string name = 2;
-  // Public key, encoded as SPKI (PEM)
-  string public_key = 3 [json_name="publicKey"];
+  string name = 1;
+  // Public key, encoded in the requested format
+  string public_key = 2 [json_name="publicKey"];
 }
 
 // SubtleEncryptRequest is the request for SubtleEncrypt.
@@ -656,13 +663,11 @@ message SubtleEncryptRequest {
 
 // SubtleEncryptResponse is the response for SubtleEncrypt.
 message SubtleEncryptResponse {
-  // Name of the component
-  string component_name = 1 [json_name="component"];
   // Encrypted ciphertext.
-  bytes ciphertext = 2;
+  bytes ciphertext = 1;
   // Authentication tag.
   // This is nil when not using an authenticated cipher.
-  bytes tag = 3;
+  bytes tag = 2;
 }
 
 // SubtleDecryptRequest is the request for SubtleDecrypt.
@@ -687,10 +692,8 @@ message SubtleDecryptRequest {
 
 // SubtleDecryptResponse is the response for SubtleDecrypt.
 message SubtleDecryptResponse {
-  // Name of the component
-  string component_name = 1 [json_name="component"];
   // Decrypted plaintext.
-  bytes plaintext = 2;
+  bytes plaintext = 1;
 }
 
 // SubtleWrapKeyRequest is the request for SubtleWrapKey.
@@ -712,13 +715,11 @@ message SubtleWrapKeyRequest {
 
 // SubtleWrapKeyResponse is the response for SubtleWrapKey.
 message SubtleWrapKeyResponse {
-  // Name of the component
-  string component_name = 1 [json_name="component"];
   // Wrapped key.
-  bytes wrapped_key = 2 [json_name="wrappedKey"];
+  bytes wrapped_key = 1 [json_name="wrappedKey"];
   // Authentication tag.
   // This is nil when not using an authenticated cipher.
-  bytes tag = 3;
+  bytes tag = 2;
 }
 
 // SubtleUnwrapKeyRequest is the request for SubtleUnwrapKey.
@@ -743,10 +744,8 @@ message SubtleUnwrapKeyRequest {
 
 // SubtleUnwrapKeyResponse is the response for SubtleUnwrapKey.
 message SubtleUnwrapKeyResponse {
-  // Name of the component
-  string component_name = 1 [json_name="component"];
   // Key in plaintext
-  bytes plaintext_key = 2 [json_name="plaintextKey"];
+  bytes plaintext_key = 1 [json_name="plaintextKey"];
 }
 
 // SubtleSignRequest is the request for SubtleSign.
@@ -763,10 +762,8 @@ message SubtleSignRequest {
 
 // SubtleSignResponse is the response for SubtleSign.
 message SubtleSignResponse {
-  // Name of the component
-  string component_name = 1 [json_name="component"];
   // The signature that was computed
-  bytes signature = 2;
+  bytes signature = 1;
 }
 
 // SubtleVerifyRequest is the request for SubtleVerify.
@@ -785,8 +782,6 @@ message SubtleVerifyRequest {
 
 // SubtleVerifyResponse is the response for SubtleVerify.
 message SubtleVerifyResponse {
-  // Name of the component
-  string component_name = 1 [json_name="component"];
   // True if the signature is valid.
-  bool valid = 2;
+  bool valid = 1;
 }
