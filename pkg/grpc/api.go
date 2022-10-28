@@ -24,12 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/components-contrib/lock"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/version"
-
-	"github.com/dapr/components-contrib/configuration"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -37,7 +31,10 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
+	contribCrypto "github.com/dapr/components-contrib/crypto"
+	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -46,6 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -61,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/version"
 )
 
 const (
@@ -109,6 +108,20 @@ type API interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
+	// SubtleGetKey returns the public part of an asymmetric key stored in the vault.
+	SubtleGetKey(context.Context, *runtimev1pb.SubtleGetKeyRequest) (*runtimev1pb.SubtleGetKeyResponse, error)
+	// SubtleEncrypt encrypts a small message using a key stored in the vault.
+	SubtleEncrypt(context.Context, *runtimev1pb.SubtleEncryptRequest) (*runtimev1pb.SubtleEncryptResponse, error)
+	// SubtleDecrypt decrypts a small message using a key stored in the vault.
+	SubtleDecrypt(context.Context, *runtimev1pb.SubtleDecryptRequest) (*runtimev1pb.SubtleDecryptResponse, error)
+	// SubtleWrapKey wraps a key using a key stored in the vault.
+	SubtleWrapKey(context.Context, *runtimev1pb.SubtleWrapKeyRequest) (*runtimev1pb.SubtleWrapKeyResponse, error)
+	// SubtleUnwrapKey unwraps a key using a key stored in the vault.
+	SubtleUnwrapKey(context.Context, *runtimev1pb.SubtleUnwrapKeyRequest) (*runtimev1pb.SubtleUnwrapKeyResponse, error)
+	// SubtleSign signs a message using a key stored in the vault.
+	SubtleSign(context.Context, *runtimev1pb.SubtleSignRequest) (*runtimev1pb.SubtleSignResponse, error)
+	// SubtleVerify verifies the signature of a message using a key stored in the vault.
+	SubtleVerify(context.Context, *runtimev1pb.SubtleVerifyRequest) (*runtimev1pb.SubtleVerifyResponse, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -125,6 +138,7 @@ type api struct {
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
+	cryptoProviders            map[string]contribCrypto.SubtleCrypto
 	lockStores                 map[string]lock.Store
 	pubsubAdapter              runtimePubsub.Adapter
 	id                         string
@@ -277,6 +291,7 @@ type APIOpts struct {
 	SecretStores                map[string]secretstores.SecretStore
 	SecretsConfiguration        map[string]config.SecretsScope
 	ConfigurationStores         map[string]configuration.Store
+	CryptoProviders             map[string]contribCrypto.SubtleCrypto
 	LockStores                  map[string]lock.Store
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
@@ -309,6 +324,7 @@ func NewAPI(opts APIOpts) API {
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               opts.SecretStores,
 		configurationStores:        opts.ConfigurationStores,
+		cryptoProviders:            opts.CryptoProviders,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
 		secretsConfiguration:       opts.SecretsConfiguration,

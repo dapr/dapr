@@ -78,6 +78,20 @@ type DaprClient interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SubtleGetKey returns the public part of an asymmetric key stored in the vault.
+	SubtleGetKey(ctx context.Context, in *SubtleGetKeyRequest, opts ...grpc.CallOption) (*SubtleGetKeyResponse, error)
+	// SubtleEncrypt encrypts a small message using a key stored in the vault.
+	SubtleEncrypt(ctx context.Context, in *SubtleEncryptRequest, opts ...grpc.CallOption) (*SubtleEncryptResponse, error)
+	// SubtleDecrypt decrypts a small message using a key stored in the vault.
+	SubtleDecrypt(ctx context.Context, in *SubtleDecryptRequest, opts ...grpc.CallOption) (*SubtleDecryptResponse, error)
+	// SubtleWrapKey wraps a key using a key stored in the vault.
+	SubtleWrapKey(ctx context.Context, in *SubtleWrapKeyRequest, opts ...grpc.CallOption) (*SubtleWrapKeyResponse, error)
+	// SubtleUnwrapKey unwraps a key using a key stored in the vault.
+	SubtleUnwrapKey(ctx context.Context, in *SubtleUnwrapKeyRequest, opts ...grpc.CallOption) (*SubtleUnwrapKeyResponse, error)
+	// SubtleSign signs a message using a key stored in the vault.
+	SubtleSign(ctx context.Context, in *SubtleSignRequest, opts ...grpc.CallOption) (*SubtleSignResponse, error)
+	// SubtleVerify verifies the signature of a message using a key stored in the vault.
+	SubtleVerify(ctx context.Context, in *SubtleVerifyRequest, opts ...grpc.CallOption) (*SubtleVerifyResponse, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -356,6 +370,69 @@ func (c *daprClient) SetMetadata(ctx context.Context, in *SetMetadataRequest, op
 	return out, nil
 }
 
+func (c *daprClient) SubtleGetKey(ctx context.Context, in *SubtleGetKeyRequest, opts ...grpc.CallOption) (*SubtleGetKeyResponse, error) {
+	out := new(SubtleGetKeyResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubtleGetKey", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SubtleEncrypt(ctx context.Context, in *SubtleEncryptRequest, opts ...grpc.CallOption) (*SubtleEncryptResponse, error) {
+	out := new(SubtleEncryptResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubtleEncrypt", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SubtleDecrypt(ctx context.Context, in *SubtleDecryptRequest, opts ...grpc.CallOption) (*SubtleDecryptResponse, error) {
+	out := new(SubtleDecryptResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubtleDecrypt", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SubtleWrapKey(ctx context.Context, in *SubtleWrapKeyRequest, opts ...grpc.CallOption) (*SubtleWrapKeyResponse, error) {
+	out := new(SubtleWrapKeyResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubtleWrapKey", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SubtleUnwrapKey(ctx context.Context, in *SubtleUnwrapKeyRequest, opts ...grpc.CallOption) (*SubtleUnwrapKeyResponse, error) {
+	out := new(SubtleUnwrapKeyResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubtleUnwrapKey", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SubtleSign(ctx context.Context, in *SubtleSignRequest, opts ...grpc.CallOption) (*SubtleSignResponse, error) {
+	out := new(SubtleSignResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubtleSign", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SubtleVerify(ctx context.Context, in *SubtleVerifyRequest, opts ...grpc.CallOption) (*SubtleVerifyResponse, error) {
+	out := new(SubtleVerifyResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubtleVerify", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/Shutdown", in, out, opts...)
@@ -423,6 +500,20 @@ type DaprServer interface {
 	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error)
+	// SubtleGetKey returns the public part of an asymmetric key stored in the vault.
+	SubtleGetKey(context.Context, *SubtleGetKeyRequest) (*SubtleGetKeyResponse, error)
+	// SubtleEncrypt encrypts a small message using a key stored in the vault.
+	SubtleEncrypt(context.Context, *SubtleEncryptRequest) (*SubtleEncryptResponse, error)
+	// SubtleDecrypt decrypts a small message using a key stored in the vault.
+	SubtleDecrypt(context.Context, *SubtleDecryptRequest) (*SubtleDecryptResponse, error)
+	// SubtleWrapKey wraps a key using a key stored in the vault.
+	SubtleWrapKey(context.Context, *SubtleWrapKeyRequest) (*SubtleWrapKeyResponse, error)
+	// SubtleUnwrapKey unwraps a key using a key stored in the vault.
+	SubtleUnwrapKey(context.Context, *SubtleUnwrapKeyRequest) (*SubtleUnwrapKeyResponse, error)
+	// SubtleSign signs a message using a key stored in the vault.
+	SubtleSign(context.Context, *SubtleSignRequest) (*SubtleSignResponse, error)
+	// SubtleVerify verifies the signature of a message using a key stored in the vault.
+	SubtleVerify(context.Context, *SubtleVerifyRequest) (*SubtleVerifyResponse, error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -511,6 +602,27 @@ func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*Ge
 }
 func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetMetadata not implemented")
+}
+func (UnimplementedDaprServer) SubtleGetKey(context.Context, *SubtleGetKeyRequest) (*SubtleGetKeyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubtleGetKey not implemented")
+}
+func (UnimplementedDaprServer) SubtleEncrypt(context.Context, *SubtleEncryptRequest) (*SubtleEncryptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubtleEncrypt not implemented")
+}
+func (UnimplementedDaprServer) SubtleDecrypt(context.Context, *SubtleDecryptRequest) (*SubtleDecryptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubtleDecrypt not implemented")
+}
+func (UnimplementedDaprServer) SubtleWrapKey(context.Context, *SubtleWrapKeyRequest) (*SubtleWrapKeyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubtleWrapKey not implemented")
+}
+func (UnimplementedDaprServer) SubtleUnwrapKey(context.Context, *SubtleUnwrapKeyRequest) (*SubtleUnwrapKeyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubtleUnwrapKey not implemented")
+}
+func (UnimplementedDaprServer) SubtleSign(context.Context, *SubtleSignRequest) (*SubtleSignResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubtleSign not implemented")
+}
+func (UnimplementedDaprServer) SubtleVerify(context.Context, *SubtleVerifyRequest) (*SubtleVerifyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubtleVerify not implemented")
 }
 func (UnimplementedDaprServer) Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
@@ -1016,6 +1128,132 @@ func _Dapr_SetMetadata_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_SubtleGetKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubtleGetKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SubtleGetKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubtleGetKey",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SubtleGetKey(ctx, req.(*SubtleGetKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubtleEncrypt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubtleEncryptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SubtleEncrypt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubtleEncrypt",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SubtleEncrypt(ctx, req.(*SubtleEncryptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubtleDecrypt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubtleDecryptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SubtleDecrypt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubtleDecrypt",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SubtleDecrypt(ctx, req.(*SubtleDecryptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubtleWrapKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubtleWrapKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SubtleWrapKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubtleWrapKey",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SubtleWrapKey(ctx, req.(*SubtleWrapKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubtleUnwrapKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubtleUnwrapKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SubtleUnwrapKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubtleUnwrapKey",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SubtleUnwrapKey(ctx, req.(*SubtleUnwrapKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubtleSign_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubtleSignRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SubtleSign(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubtleSign",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SubtleSign(ctx, req.(*SubtleSignRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubtleVerify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubtleVerifyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SubtleVerify(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubtleVerify",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SubtleVerify(ctx, req.(*SubtleVerifyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
@@ -1144,6 +1382,34 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetMetadata",
 			Handler:    _Dapr_SetMetadata_Handler,
+		},
+		{
+			MethodName: "SubtleGetKey",
+			Handler:    _Dapr_SubtleGetKey_Handler,
+		},
+		{
+			MethodName: "SubtleEncrypt",
+			Handler:    _Dapr_SubtleEncrypt_Handler,
+		},
+		{
+			MethodName: "SubtleDecrypt",
+			Handler:    _Dapr_SubtleDecrypt_Handler,
+		},
+		{
+			MethodName: "SubtleWrapKey",
+			Handler:    _Dapr_SubtleWrapKey_Handler,
+		},
+		{
+			MethodName: "SubtleUnwrapKey",
+			Handler:    _Dapr_SubtleUnwrapKey_Handler,
+		},
+		{
+			MethodName: "SubtleSign",
+			Handler:    _Dapr_SubtleSign_Handler,
+		},
+		{
+			MethodName: "SubtleVerify",
+			Handler:    _Dapr_SubtleVerify_Handler,
 		},
 		{
 			MethodName: "Shutdown",

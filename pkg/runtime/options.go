@@ -3,6 +3,7 @@ package runtime
 import (
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
@@ -22,6 +23,7 @@ type (
 		nameResolutionRegistry *nrLoader.Registry
 		bindingRegistry        *bindingsLoader.Registry
 		httpMiddlewareRegistry *httpMiddlewareLoader.Registry
+		cryptoProviderRegistry *cryptoLoader.Registry
 		componentsCallback     ComponentsCallback
 	}
 
@@ -50,6 +52,14 @@ func WithConfigurations(registry *configurationLoader.Registry) Option {
 	}
 }
 
+// WithCryptoProviders adds crypto provider components to the runtime.
+func WithCryptoProviders(registry *cryptoLoader.Registry) Option {
+	return func(o *runtimeOpts) {
+		o.cryptoProviderRegistry = registry
+	}
+}
+
+// WithLocks add lock store components to the runtime.
 func WithLocks(registry *lockLoader.Registry) Option {
 	return func(o *runtimeOpts) {
 		o.lockRegistry = registry

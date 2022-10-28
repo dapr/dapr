@@ -107,6 +107,27 @@ service Dapr {
   // Sets value in extended metadata of the sidecar
   rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
 
+  // SubtleGetKey returns the public part of an asymmetric key stored in the vault.
+  rpc SubtleGetKey(SubtleGetKeyRequest) returns (SubtleGetKeyResponse);
+
+  // SubtleEncrypt encrypts a small message using a key stored in the vault.
+  rpc SubtleEncrypt(SubtleEncryptRequest) returns (SubtleEncryptResponse);
+
+  // SubtleDecrypt decrypts a small message using a key stored in the vault.
+  rpc SubtleDecrypt(SubtleDecryptRequest) returns (SubtleDecryptResponse);
+
+  // SubtleWrapKey wraps a key using a key stored in the vault.
+  rpc SubtleWrapKey(SubtleWrapKeyRequest) returns (SubtleWrapKeyResponse);
+
+  // SubtleUnwrapKey unwraps a key using a key stored in the vault.
+  rpc SubtleUnwrapKey(SubtleUnwrapKeyRequest) returns (SubtleUnwrapKeyResponse);
+
+  // SubtleSign signs a message using a key stored in the vault.
+  rpc SubtleSign(SubtleSignRequest) returns (SubtleSignResponse);
+
+  // SubtleVerify verifies the signature of a message using a key stored in the vault.
+  rpc SubtleVerify(SubtleVerifyRequest) returns (SubtleVerifyResponse);
+
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
@@ -575,7 +596,6 @@ message TryLockRequest {
 
 
 message TryLockResponse {
-
   bool success = 1;
 }
 
@@ -596,4 +616,177 @@ message UnlockResponse {
   }
 
   Status status = 1;
+}
+
+// SubtleGetKeyRequest is the request object for SubtleGetKey.
+message SubtleGetKeyRequest {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Name (or name/version) of the key to use in the key vault
+  string name = 2;
+}
+
+// SubtleGetKeyResponse is the response for SubtleGetKey.
+message SubtleGetKeyResponse {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Name (or name/version) of the key.
+  // This is returned as response too in case there is a version.
+  string name = 2;
+  // Public key, encoded as SPKI (PEM)
+  string public_key = 3 [json_name="publicKey"];
+}
+
+// SubtleEncryptRequest is the request for SubtleEncrypt.
+message SubtleEncryptRequest {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Message to encrypt.
+  bytes plaintext = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key = 4;
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 6 [json_name="associatedData"];
+}
+
+// SubtleEncryptResponse is the response for SubtleEncrypt.
+message SubtleEncryptResponse {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Encrypted ciphertext.
+  bytes ciphertext = 2;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 3;
+}
+
+// SubtleDecryptRequest is the request for SubtleDecrypt.
+message SubtleDecryptRequest {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Message to decrypt.
+  bytes ciphertext = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key = 4;
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 6;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 7 [json_name="associatedData"];
+}
+
+// SubtleDecryptResponse is the response for SubtleDecrypt.
+message SubtleDecryptResponse {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Decrypted plaintext.
+  bytes plaintext = 2;
+}
+
+// SubtleWrapKeyRequest is the request for SubtleWrapKey.
+message SubtleWrapKeyRequest {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Key to wrap
+  bytes plaintext_key = 2 [json_name="plaintextKey"];
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key = 4;
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 6 [json_name="associatedData"];
+}
+
+// SubtleWrapKeyResponse is the response for SubtleWrapKey.
+message SubtleWrapKeyResponse {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Wrapped key.
+  bytes wrapped_key = 2 [json_name="wrappedKey"];
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 3;
+}
+
+// SubtleUnwrapKeyRequest is the request for SubtleUnwrapKey.
+message SubtleUnwrapKeyRequest {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Wrapped key.
+  bytes wrapped_key = 2 [json_name="wrappedKey"];
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key = 4;
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 6;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 7 [json_name="associatedData"];
+}
+
+// SubtleUnwrapKeyResponse is the response for SubtleUnwrapKey.
+message SubtleUnwrapKeyResponse {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Key in plaintext
+  bytes plaintext_key = 2 [json_name="plaintextKey"];
+}
+
+// SubtleSignRequest is the request for SubtleSign.
+message SubtleSignRequest {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Digest to sign.
+  bytes digest = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key = 4;
+}
+
+// SubtleSignResponse is the response for SubtleSign.
+message SubtleSignResponse {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // The signature that was computed
+  bytes signature = 2;
+}
+
+// SubtleVerifyRequest is the request for SubtleVerify.
+message SubtleVerifyRequest {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // Digest of the message.
+  bytes digest = 2;
+  // Signature to verify.
+  bytes signature = 3;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 4;
+  // Name (or name/version) of the key.
+  string key = 5;
+}
+
+// SubtleVerifyResponse is the response for SubtleVerify.
+message SubtleVerifyResponse {
+  // Name of the component
+  string component_name = 1 [json_name="component"];
+  // True if the signature is valid.
+  bool valid = 2;
 }

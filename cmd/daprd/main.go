@@ -25,6 +25,7 @@ import (
 
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
@@ -52,12 +53,13 @@ func main() {
 
 	secretstoresLoader.DefaultRegistry.Logger = logContrib
 	stateLoader.DefaultRegistry.Logger = logContrib
+	cryptoLoader.DefaultRegistry.Logger = logContrib
 	configurationLoader.DefaultRegistry.Logger = logContrib
 	lockLoader.DefaultRegistry.Logger = logContrib
 	pubsubLoader.DefaultRegistry.Logger = logContrib
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
-	httpMiddlewareLoader.DefaultRegistry.Logger = log
+	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
 	err = rt.Run(
 		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),

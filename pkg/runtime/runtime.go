@@ -77,6 +77,7 @@ import (
 
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
@@ -88,6 +89,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/middleware"
@@ -199,6 +201,9 @@ type DaprRuntime struct {
 	lockStoreRegistry *lockLoader.Registry
 	lockStores        map[string]lock.Store
 
+	cryptoProviderRegistry *cryptoLoader.Registry
+	cryptoProviders        map[string]contribCrypto.SubtleCrypto
+
 	pendingComponents          chan componentsV1alpha1.Component
 	pendingComponentDependents map[string][]componentsV1alpha1.Component
 
@@ -219,6 +224,7 @@ type ComponentRegistry struct {
 	OutputBindings  map[string]bindings.OutputBinding
 	SecretStores    map[string]secretstores.SecretStore
 	PubSubs         map[string]pubsub.PubSub
+	CryptoProviders map[string]contribCrypto.SubtleCrypto
 }
 
 type componentPreprocessRes struct {
@@ -264,6 +270,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretsConfiguration:       map[string]config.SecretsScope{},
 		configurationStores:        map[string]configuration.Store{},
 		lockStores:                 map[string]lock.Store{},
+		cryptoProviders:            map[string]contribCrypto.SubtleCrypto{},
 		pendingComponents:          make(chan componentsV1alpha1.Component),
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
@@ -426,6 +433,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.stateStoreRegistry = opts.stateRegistry
 	a.configurationStoreRegistry = opts.configurationRegistry
 	a.bindingsRegistry = opts.bindingRegistry
+	a.cryptoProviderRegistry = opts.cryptoProviderRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
 
@@ -1378,6 +1386,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		SecretStores:                a.secretStores,
 		SecretsConfiguration:        a.secretsConfiguration,
 		ConfigurationStores:         a.configurationStores,
+		CryptoProviders:             a.cryptoProviders,
 		LockStores:                  a.lockStores,
 		PubsubAdapter:               a.getPublishAdapter(),
 		DirectMessaging:             a.directMessaging,
@@ -2331,6 +2340,8 @@ func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp c
 		return a.initPubSub(comp)
 	case components.CategorySecretStore:
 		return a.initSecretStore(comp)
+	case components.CategoryCryptoProvider:
+		return a.initCryptoProvider(comp)
 	case components.CategoryStateStore:
 		return a.initState(comp)
 	case components.CategoryConfiguration:
@@ -2366,33 +2377,25 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	var merr error
 
 	// Close components if they implement `io.Closer`
+	for name, component := range a.secretStores {
+		closeComponent(component, "secret store "+name, &merr)
+	}
+	for name, component := range a.stateStores {
+		closeComponent(component, "state store "+name, &merr)
+	}
+	for name, component := range a.lockStores {
+		closeComponent(component, "lock store "+name, &merr)
+	}
+	for name, component := range a.configurationStores {
+		closeComponent(component, "configuration store "+name, &merr)
+	}
+	for name, component := range a.cryptoProviders {
+		closeComponent(component, "crypto provider "+name, &merr)
+	}
+	// Close outpub bindings
 	// Input bindings are closed when a.ctx is canceled
-	for name, binding := range a.outputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing output binding %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
-	}
-	for name, secretstore := range a.secretStores {
-		if closer, ok := secretstore.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing secret store %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
-	}
-	for name, stateStore := range a.stateStores {
-		if closer, ok := stateStore.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing state store %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
+	for name, component := range a.outputBindings {
+		closeComponent(component, "output binding "+name, &merr)
 	}
 	// Close pubsub publisher
 	// The subscriber part is closed when a.ctx is canceled
@@ -2400,21 +2403,21 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 		if pubSub.component == nil {
 			continue
 		}
-		if err := pubSub.component.Close(); err != nil {
-			err = fmt.Errorf("error closing pub sub %s: %w", name, err)
-			merr = multierror.Append(merr, err)
-			log.Warn(err)
-		}
+		closeComponent(pubSub.component, "pub sub "+name, &merr)
 	}
-	if closer, ok := a.nameResolver.(io.Closer); ok {
-		if err := closer.Close(); err != nil {
-			err = fmt.Errorf("error closing name resolver: %w", err)
-			merr = multierror.Append(merr, err)
-			log.Warn(err)
-		}
-	}
+	closeComponent(a.nameResolver, "name resolver", &merr)
 
 	return merr
+}
+
+func closeComponent(component any, logmsg string, merr *error) {
+	if closer, ok := component.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing %s: %w", logmsg, err)
+			*merr = multierror.Append(*merr, err)
+			log.Warn(err)
+		}
+	}
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
@@ -2651,6 +2654,26 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 			},
 		}
 	}
+}
+
+func (a *DaprRuntime) initCryptoProvider(c componentsV1alpha1.Component) error {
+	component, err := a.cryptoProviderRegistry.Create(c.Spec.Type, c.Spec.Version)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
+	}
+
+	err = component.Init(contribCrypto.Metadata{Base: a.toBaseMetadata(c)})
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
+	}
+
+	a.cryptoProviders[c.ObjectMeta.Name] = component
+	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
+	return nil
 }
 
 func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
