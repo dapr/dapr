@@ -48,19 +48,19 @@ var DaprPortEnv = []corev1.EnvVar{
 
 // AddDaprEnvVarsToContainers adds Dapr environment variables to all the containers in any Dapr-enabled pod.
 // The containers can be injected or user-defined.
-func AddDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
+func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []PatchOperation {
 	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", ContainersPath, i)
-		patchOps := getEnvPatchOperations(container.Env, DaprPortEnv, path)
+		patchOps := GetEnvPatchOperations(container.Env, DaprPortEnv, i)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps
 }
 
-// getEnvPatchOperations adds new environment variables only if they do not exist.
+// GetEnvPatchOperations adds new environment variables only if they do not exist.
 // It does not override existing values for those variables if they have been defined already.
-func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path string) []PatchOperation {
+func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, containerIdx int) []PatchOperation {
+	path := fmt.Sprintf("%s/%d/env", ContainersPath, containerIdx)
 	if len(envs) == 0 {
 		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
 		return []PatchOperation{
@@ -93,7 +93,7 @@ LoopEnv:
 }
 
 // AddSocketVolumeToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
-func AddSocketVolumeToContainers(containers []corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
+func AddSocketVolumeToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
 	if socketVolumeMount == nil {
 		return []PatchOperation{}
 	}
@@ -101,19 +101,19 @@ func AddSocketVolumeToContainers(containers []corev1.Container, socketVolumeMoun
 	return addVolumeToContainers(containers, *socketVolumeMount)
 }
 
-func addVolumeToContainers(containers []corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
+func addVolumeToContainers(containers map[int]corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
 	volumeMount := []corev1.VolumeMount{addMounts}
 	volumeMountPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/volumeMounts", ContainersPath, i)
-		patchOps := getVolumeMountPatchOperations(container.VolumeMounts, volumeMount, path)
+		patchOps := GetVolumeMountPatchOperations(container.VolumeMounts, volumeMount, i)
 		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
 	}
 	return volumeMountPatchOps
 }
 
 // It does not override existing values for those variables if they have been defined already.
-func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
+func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, containerIdx int) []PatchOperation {
+	path := fmt.Sprintf("%s/%d/volumeMounts", ContainersPath, containerIdx)
 	if len(volumeMounts) == 0 {
 		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
 		return []PatchOperation{
