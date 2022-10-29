@@ -71,6 +71,7 @@ func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequ
 			Type:  "PUBLIC KEY",
 			Bytes: der,
 		})
+
 	case runtimev1pb.SubtleGetKeyRequest_JSON: //nolint:nosnakecase
 		pk, err = json.Marshal(res)
 		if err != nil {
@@ -78,6 +79,11 @@ func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequ
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.SubtleGetKeyResponse{}, err
 		}
+
+	default:
+		err = status.Errorf(codes.InvalidArgument, "invalid key format")
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.SubtleGetKeyResponse{}, err
 	}
 
 	return &runtimev1pb.SubtleGetKeyResponse{
