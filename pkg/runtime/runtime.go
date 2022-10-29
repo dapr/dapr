@@ -124,6 +124,7 @@ var componentCategoriesNeedProcess = []components.Category{
 	components.CategoryStateStore,
 	components.CategoryMiddleware,
 	components.CategoryConfiguration,
+	components.CategoryCryptoProvider,
 	components.CategoryLock,
 }
 
@@ -2244,7 +2245,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Com
 
 func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) components.Category {
 	for _, category := range componentCategoriesNeedProcess {
-		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
+		if strings.HasPrefix(component.Spec.Type, string(category)+".") {
 			return category
 		}
 	}

@@ -51,24 +51,24 @@ func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) crypto
 
 // Create instantiates a crypto provider based on `name`.
 func (s *Registry) Create(name, version string) (crypto.SubtleCrypto, error) {
-	if method, ok := s.getSecretStore(name, version); ok {
+	if method, ok := s.getCryptoProvider(name, version); ok {
 		return method(), nil
 	}
 
 	return nil, fmt.Errorf("couldn't find crypto provider %s/%s", name, version)
 }
 
-func (s *Registry) getSecretStore(name, version string) (func() crypto.SubtleCrypto, bool) {
+func (s *Registry) getCryptoProvider(name, version string) (func() crypto.SubtleCrypto, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
-	secretStoreFn, ok := s.providers[nameLower+"/"+versionLower]
+	cryptoProviderFn, ok := s.providers[nameLower+"/"+versionLower]
 	if ok {
-		return s.wrapFn(secretStoreFn), true
+		return s.wrapFn(cryptoProviderFn), true
 	}
 	if components.IsInitialVersion(versionLower) {
-		secretStoreFn, ok = s.providers[nameLower]
+		cryptoProviderFn, ok = s.providers[nameLower]
 		if ok {
-			return s.wrapFn(secretStoreFn), true
+			return s.wrapFn(cryptoProviderFn), true
 		}
 	}
 	return nil, false

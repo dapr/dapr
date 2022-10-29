@@ -69,6 +69,7 @@ func main() {
 		runtime.WithPubSubs(pubsubLoader.DefaultRegistry),
 		runtime.WithNameResolutions(nrLoader.DefaultRegistry),
 		runtime.WithBindings(bindingsLoader.DefaultRegistry),
+		runtime.WithCryptoProviders(cryptoLoader.DefaultRegistry),
 		runtime.WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry),
 	)
 	if err != nil {
