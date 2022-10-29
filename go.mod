@@ -9,7 +9,7 @@ require (
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.9.1-0.20221020020823-038f63d30938
+	github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650
 	github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5
 	github.com/fasthttp/router v1.4.12
 	github.com/fsnotify/fsnotify v1.6.0
@@ -173,7 +173,7 @@ require (
 	github.com/eapache/go-resiliency v1.3.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/eclipse/paho.mqtt.golang v1.4.1 // indirect
+	github.com/eclipse/paho.mqtt.golang v1.4.2-0.20221018190109-a1800d8df9a4 // indirect
 	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
 	github.com/emirpasic/gods v1.12.0 // indirect
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
@@ -389,8 +389,6 @@ require (
 replace (
 	// this is a fork which addresses a performance issues due to go routines
 	dubbo.apache.org/dubbo-go/v3 => dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537
-	// this fork is used due to a feature missing from upstream
-	github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
 	// this is necessary for a license issue
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
