@@ -197,17 +197,97 @@ func (a *api) SubtleWrapKey(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRe
 
 // SubtleUnwrapKey unwraps a key using a key stored in the vault.
 func (a *api) SubtleUnwrapKey(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyRequest) (*runtimev1pb.SubtleUnwrapKeyResponse, error) {
-	panic("unimplemented")
+	component, err := a.cryptoValidateRequest(in.ComponentName)
+	if err != nil {
+		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
+	var plaintextText jwk.Key
+	err = policy(func(ctx context.Context) (rErr error) {
+		plaintextText, rErr = component.UnwrapKey(ctx, in.WrappedKey, in.Algorithm, in.Key, in.Nonce, in.Tag, in.AssociatedData)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
+
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
+	}
+
+	// Serialize the key
+	enc, err := contribCrypto.SerializeKey(plaintextText)
+	if err != nil {
+		err = status.Errorf(codes.Internal, "failed to serialize unwrapped key: %s", err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
+	}
+
+	return &runtimev1pb.SubtleUnwrapKeyResponse{
+		PlaintextKey: enc,
+	}, nil
 }
 
 // SubtleSign signs a message using a key stored in the vault.
 func (a *api) SubtleSign(ctx context.Context, in *runtimev1pb.SubtleSignRequest) (*runtimev1pb.SubtleSignResponse, error) {
-	panic("unimplemented")
+	component, err := a.cryptoValidateRequest(in.ComponentName)
+	if err != nil {
+		return &runtimev1pb.SubtleSignResponse{}, err
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
+	var sig []byte
+	err = policy(func(ctx context.Context) (rErr error) {
+		sig, rErr = component.Sign(ctx, in.Digest, in.Algorithm, in.Key)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
+
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.SubtleSignResponse{}, err
+	}
+
+	return &runtimev1pb.SubtleSignResponse{
+		Signature: sig,
+	}, nil
 }
 
 // SubtleVerify verifies the signature of a message using a key stored in the vault.
 func (a *api) SubtleVerify(ctx context.Context, in *runtimev1pb.SubtleVerifyRequest) (*runtimev1pb.SubtleVerifyResponse, error) {
-	panic("unimplemented")
+	component, err := a.cryptoValidateRequest(in.ComponentName)
+	if err != nil {
+		return &runtimev1pb.SubtleVerifyResponse{}, err
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
+	var valid bool
+	err = policy(func(ctx context.Context) (rErr error) {
+		valid, rErr = component.Verify(ctx, in.Digest, in.Signature, in.Algorithm, in.Key)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
+
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.SubtleVerifyResponse{}, err
+	}
+
+	return &runtimev1pb.SubtleVerifyResponse{
+		Valid: valid,
+	}, nil
 }
 
 // Internal method that checks if the request is for a valid crypto component.
