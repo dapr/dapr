@@ -899,6 +899,8 @@ github.com/influxdata/influxdb-client-go v1.4.0/go.mod h1:S+oZsPivqbcP1S9ur+T+Qq
 github.com/influxdata/influxdb1-client v0.0.0-20191209144304-8bf82d3c094d/go.mod h1:qj24IKcXYK6Iy9ceXlo3Tc+vtHo9lIhSX5JddghvEPo=
 github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 h1:W9WBk7wlPfJLvMCdtV4zPulc4uCPrlywQOmbFOhgQNU=
 github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839/go.mod h1:xaLFMmpvUxqXtVkUJfg9QmT88cDaCJ3ZKgdZ78oO8Qo=
+github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221029013402-77bdae61a254 h1:zXg+C/9z0B5RLKAtLqkHkBOoU2t8QSXlmtCBblhTXDM=
+github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221029013402-77bdae61a254/go.mod h1:X76BWvaVLAM/aEfXQAuCq7l1zpsq6uWNTmkY/zRZFNY=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b h1:C8S2+VttkHFdOOCXJe+YGfa4vHYwlt4Zx+IVXQ97jYg=

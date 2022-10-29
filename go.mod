@@ -407,11 +407,13 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => ../components-contrib
-
+// replace github.com/dapr/components-contrib => ../components-contrib
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
 
 // TEMP until https://github.com/dapr/kit/pull/26 is merged
 replace github.com/dapr/kit => github.com/ItalyPaleAle/dapr-kit v0.0.2-0.20221028195534-024a03463ed8
+
+// TEMP until https://github.com/dapr/components-contrib/pull/2237 is merged
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221029013402-77bdae61a254
