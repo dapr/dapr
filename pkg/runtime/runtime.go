@@ -1114,6 +1114,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	}
+	// span is nil if tracing is disabled (sampling rate is 0)
 	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
@@ -1123,13 +1124,15 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	}
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+		if span != nil {
+			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+		}
 
 		// Add workaround to fallback on checking traceparent header.
 		// As grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus, tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path.
 		// TODO: Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827.
-		if validTraceparent {
+		if validTraceparent && span != nil {
 			spanContextHeaders := make(map[string]string, 2)
 			diag.SpanContextToHTTPHeaders(span.SpanContext(), func(key string, val string) {
 				spanContextHeaders[key] = val
@@ -2016,7 +2019,10 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 			// no ops if trace is off
 			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			// span is nil if tracing is disabled (sampling rate is 0)
+			if span != nil {
+				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			}
 		} else {
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
