@@ -53,7 +53,7 @@ param enableServiceBus bool = true
 // Deploy the Linux cluster in the first location
 resource linuxResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
   name: 'Dapr-E2E-${namePrefix}l'
-  location: 'westus'
+  location: location1
   tags: dateTag != '' ? {
     date: dateTag
   } : {}
@@ -63,7 +63,7 @@ module linuxCluster 'azure.bicep' = {
   scope: linuxResources
   params: {
     namePrefix: '${namePrefix}l'
-    location: 'westus'
+    location: location1
     enableWindows: false
     enableArm : false
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
@@ -76,7 +76,7 @@ module linuxCluster 'azure.bicep' = {
 // Deploy the Windows cluster in the second location
 resource WindowsResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
   name: 'Dapr-E2E-${namePrefix}w'
-  location: 'westus'
+  location: location2
   tags: dateTag != '' ? {
     date: dateTag
   } : {}
@@ -86,7 +86,7 @@ module windowsCluster 'azure.bicep' = {
   scope: WindowsResources
   params: {
     namePrefix: '${namePrefix}w'
-    location: 'westus'
+    location: location2
     enableWindows: true
     enableArm : false
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
