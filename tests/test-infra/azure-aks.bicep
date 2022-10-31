@@ -47,7 +47,7 @@ var kubernetesVersion = '1.23.12'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2019-05-01' = {
   name: '${namePrefix}acr'
-  location: westus
+  location: location
   sku: {
     name: 'Standard'
   }
@@ -83,7 +83,7 @@ var networkProfileLinux = {
 }
 
 resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
-  location: westus
+  location: location
   name: '${namePrefix}-aks'
   properties: {
     kubernetesVersion: kubernetesVersion
@@ -192,7 +192,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
 }
 
 resource aksVNet 'Microsoft.Network/virtualNetworks@2020-11-01' = if (enableWindows) {
-  location: westus
+  location: location
   name: '${namePrefix}-vnet'
   properties: {
     subnets: [
