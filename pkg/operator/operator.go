@@ -30,10 +30,10 @@ import (
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
+	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
 

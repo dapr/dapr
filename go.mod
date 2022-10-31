@@ -9,9 +9,8 @@ require (
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650
-	github.com/dapr/kit v0.0.3-0.20221009070203-ca4d40d89ed5
+	github.com/dapr/kit v0.0.3-0.20221031180407-5a284d0d92b7
 	github.com/fasthttp/router v1.4.12
-	github.com/fsnotify/fsnotify v1.6.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3
 	github.com/gogo/protobuf v1.3.2
@@ -38,7 +37,7 @@ require (
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.37.0
 	github.com/sony/gobreaker v0.5.0
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 	github.com/tidwall/transform v0.0.0-20201103190739-32f242e2dbde
 	github.com/valyala/fasthttp v1.40.0
 	go.opencensus.io v0.23.0
@@ -179,6 +178,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5 // indirect
 	github.com/fatih/color v1.13.0 // indirect
+	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
 	github.com/go-kit/kit v0.10.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
@@ -316,7 +316,7 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stathat/consistent v1.0.0 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
-	github.com/stretchr/objx v0.4.0 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/supplyon/gremcos v0.1.38 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.518 // indirect

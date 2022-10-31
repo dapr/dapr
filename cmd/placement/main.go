@@ -24,13 +24,13 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/fswatcher"
 )
 
 var log = logger.NewLogger("dapr.placement")
