@@ -50,8 +50,8 @@ env:
   # Enable HA mode for tests
   HA_MODE: true
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "westus3"
-  AZURE_ARM_REGIONS: "westus2"
+  AZURE_REGIONS: "westus"
+  AZURE_ARM_REGIONS: "westus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
   # Whether to collect TCP dumps
