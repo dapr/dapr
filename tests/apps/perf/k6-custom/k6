@@ -1,0 +1,9 @@
+#!/bin/sh
+CMD=$(echo "$@" | cut -d " " -f 1)
+
+if [ $CMD == "archive" ]; then
+    TOTAL_WAIT=0
+    while [[ $TOTAL_WAIT -lt 30 ]] && [[ "$(curl -s -o /dev/null -w ''%{http_code}'' -X POST 127.0.0.1:3500/v1.0/shutdown)" != "204" ]]; do TOTAL_WAIT=$(expr $TOTAL_WAIT + 1);sleep 1; done
+fi
+
+exec xk6 "$@"
