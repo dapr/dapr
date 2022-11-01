@@ -88,18 +88,12 @@ func NewServer(opts NewServerOpts) Server {
 
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
-	handler := useAPIAuthentication(
-		s.useCors(
-			s.useComponents(
-				s.useRouter())))
-
+	handler := s.useRouter()
+	handler = s.useComponents(handler)
+	handler = s.useCors(handler)
+	handler = useAPIAuthentication(handler)
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
-
-	enableAPILogging := s.config.EnableAPILogging
-	if enableAPILogging {
-		handler = s.apiLoggingInfo(handler)
-	}
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -226,15 +220,15 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 	return next
 }
 
-func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (s *server) apiLoggingInfo(route string, next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		l := infoLog
+		fields := make(map[string]any, 2)
+		fields["method"] = string(ctx.Method()) + " " + route
 		if userAgent := string(ctx.Request.Header.Peek("User-Agent")); userAgent != "" {
-			l = l.WithFields(map[string]any{
-				"useragent": userAgent,
-			})
+			fields["useragent"] = userAgent
 		}
-		l.Info("HTTP API Called: " + string(ctx.Method()) + " " + string(ctx.Path()))
+
+		infoLog.WithFields(fields).Info("HTTP API Called")
 		next(ctx)
 	}
 }
@@ -300,20 +294,21 @@ func (s *server) getCorsHandler(allowedOrigins []string) *cors.CorsHandler {
 func (s *server) unescapeRequestParametersHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		parseError := false
-		unescapeRequestParameters := func(parameter []byte, value interface{}) {
-			switch value.(type) {
-			case string:
-				if !parseError {
-					parameterValue := fmt.Sprintf("%v", value)
-					parameterUnescapedValue, err := url.QueryUnescape(parameterValue)
-					if err == nil {
-						ctx.SetUserValueBytes(parameter, parameterUnescapedValue)
-					} else {
-						parseError = true
-						errorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %v. Error: %s", parameter, value, err.Error())
-						log.Debug(errorMessage)
-						ctx.Error(errorMessage, fasthttp.StatusBadRequest)
-					}
+		unescapeRequestParameters := func(parameter []byte, valI interface{}) {
+			value, ok := valI.(string)
+			if !ok {
+				return
+			}
+
+			if !parseError {
+				parameterUnescapedValue, err := url.QueryUnescape(value)
+				if err == nil {
+					ctx.SetUserValueBytes(parameter, parameterUnescapedValue)
+				} else {
+					parseError = true
+					errorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %s. Error: %s", parameter, value, err.Error())
+					log.Debug(errorMessage)
+					ctx.Error(errorMessage, fasthttp.StatusBadRequest)
 				}
 			}
 		}
@@ -347,12 +342,18 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 
 func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
 	for _, m := range e.Methods {
+		handler := e.Handler
+
 		pathIncludesParameters := parameterFinder.MatchString(path)
 		if pathIncludesParameters && !e.KeepParamUnescape {
-			router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
-		} else {
-			router.Handle(m, path, e.Handler)
+			handler = s.unescapeRequestParametersHandler(handler)
 		}
+
+		if s.config.EnableAPILogging {
+			handler = s.apiLoggingInfo(path, handler)
+		}
+
+		router.Handle(m, path, handler)
 	}
 }
 
