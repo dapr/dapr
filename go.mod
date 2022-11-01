@@ -52,7 +52,9 @@ require (
 	go.uber.org/atomic v1.10.0
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/ratelimit v0.2.0
+	golang.org/x/exp v0.0.0-20220929160808-de9c53c655b9
 	golang.org/x/net v0.1.0
+	golang.org/x/sync v0.0.0-20220929204114-8fcdb60fdcc0
 	google.golang.org/genproto v0.0.0-20221018160656-63c7b68cfc55
 	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1
@@ -350,7 +352,6 @@ require (
 	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/oauth2 v0.1.0 // indirect
-	golang.org/x/sync v0.0.0-20220929204114-8fcdb60fdcc0 // indirect
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/term v0.1.0 // indirect
 	golang.org/x/text v0.4.0 // indirect

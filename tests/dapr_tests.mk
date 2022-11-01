@@ -30,6 +30,7 @@ binding_input_grpc \
 binding_output \
 pubsub-publisher \
 pubsub-subscriber \
+pubsub-bulk-subscriber \
 pubsub-subscriber_grpc \
 pubsub-subscriber-routing \
 pubsub-subscriber-routing_grpc \
@@ -433,6 +434,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pubsub_no_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings_custom_route.yaml --namespace $(DAPR_TEST_NAMESPACE)

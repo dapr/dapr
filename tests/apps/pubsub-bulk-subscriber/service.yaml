@@ -1,0 +1,45 @@
+# In e2e test, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing e2e test.
+kind: Service
+apiVersion: v1
+metadata:
+  name: pubsub-bulk-subscriber
+  labels:
+    testapp: pubsub-bulk-subscriber
+spec:
+  selector:
+    testapp: pubsub-bulk-subscriber
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pubsub-bulk-subscriber
+  labels:
+    testapp: pubsub-bulk-subscriber
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: pubsub-bulk-subscriber
+  template:
+    metadata:
+      labels:
+        testapp: pubsub-bulk-subscriber
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "pubsub-bulk-subscriber"
+        dapr.io/app-port: "3000"
+    spec:
+      containers:
+      - name: pubsub-bulk-subscriber
+        image: docker.io/YOUR ID/e2e-pubsub-subscriber:dev
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always
