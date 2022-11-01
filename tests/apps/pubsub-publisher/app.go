@@ -23,12 +23,14 @@ import (
 	"net/http"
 	netUrl "net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 
+	daprhttp "github.com/dapr/dapr/pkg/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
@@ -38,10 +40,24 @@ const (
 	appPort      = 3000
 	daprPortHTTP = 3500
 	daprPortGRPC = 50001
-	PubSubEnvVar = "DAPR_TEST_PUBSUB_NAME"
+
+	metadataPrefix       = "metadata."
+	PubSubEnvVar         = "DAPR_TEST_PUBSUB_NAME"
+	bulkPubsubMetaKey    = "bulkPublishPubsubName"
+	bulkSubTopicIdentity = "sub-topic"
 )
 
-var pubsubName = "messagebus"
+type bulkPublishMessageEntry struct {
+	EntryId     string            `json:"entryId,omitempty"` //nolint:stylecheck
+	Event       interface{}       `json:"event"`
+	ContentType string            `json:"ContentType"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+var (
+	pubsubName  = "messagebus"
+	pubsubKafka = "kafka-messagebus"
+)
 
 func init() {
 	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
@@ -82,6 +98,275 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
+}
+
+func getBulkRequetMetadata(r *http.Request) map[string]string {
+	metadata := map[string]string{}
+	for k, v := range r.URL.Query() {
+		if strings.HasPrefix(k, metadataPrefix) {
+			m := strings.TrimPrefix(k, metadataPrefix)
+			metadata[m] = v[len(v)-1] // get only last occurring value?
+			log.Printf("found metadata %s = %s\n", m, v[len(v)-1])
+		}
+	}
+	return metadata
+}
+
+func getBulkPublishPubsubOrDefault(reqMeta map[string]string) string {
+	if v, ok := reqMeta[bulkPubsubMetaKey]; ok {
+		delete(reqMeta, bulkPubsubMetaKey)
+		return v
+	}
+	return pubsubName
+}
+
+// when called by the test, this function publishes to dapr
+func performBulkPublish(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	reqID := "s-" + uuid.New().String()
+
+	reqMetadata := getBulkRequetMetadata(r)
+	pubsubToPublish := getBulkPublishPubsubOrDefault(reqMetadata)
+	log.Printf("publishing to pubsub %s", pubsubToPublish)
+	var commands []publishCommand
+	err := json.NewDecoder(r.Body).Decode(&commands)
+	r.Body.Close()
+	if err != nil {
+		log.Printf("(%s) performBulkPublish() called. Failed to parse command body: %v", reqID, err)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: err.Error(),
+		})
+		return
+	}
+	topic := ""
+	protocol := ""
+	if len(commands) > 0 {
+		topic = commands[0].Topic
+		protocol = commands[0].Protocol
+	} else {
+		log.Printf("(%s) performBulkPublish() called. No commands to execute", reqID)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: fmt.Sprintf("(%s) performBulkPublish() called. No commands to execute", reqID),
+		})
+		return
+	}
+	bulkPublishMessage := make([]bulkPublishMessageEntry, len(commands))
+
+	for i, command := range commands {
+		if command.Topic != topic {
+			msg := fmt.Sprintf("(%s) performBulkPublish() called. Different topics given for different commands %s, %s", reqID, topic, command.Topic)
+			log.Print(msg)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(appResponse{
+				Message: msg,
+			})
+			return
+		}
+		if command.Protocol != protocol {
+			msg := fmt.Sprintf("(%s) performBulkPublish() called. Different protocols given for different commands %s, %s", reqID, protocol, command.Protocol)
+			log.Print(msg)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(appResponse{
+				Message: msg,
+			})
+			return
+		}
+		bulkPublishMessage[i].EntryId = strconv.Itoa(i)
+
+		if command.ReqID != "" {
+			reqID = command.ReqID
+		}
+
+		enc, _ := json.Marshal(command)
+		log.Printf("(%s) performBulkPublish() called with publishCommand=%s", reqID, string(enc))
+
+		bulkPublishMessage[i].Event = command.Data
+
+		contentType := command.ContentType
+		if contentType == "" {
+			msg := fmt.Sprintf("(%s) performBulkPublish() called. Missing contentType for some events", reqID)
+			log.Print(msg)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(appResponse{
+				Message: msg,
+			})
+			return
+		}
+
+		bulkPublishMessage[i].ContentType = contentType
+
+		if command.Metadata != nil {
+			bulkPublishMessage[i].Metadata = map[string]string{}
+			for k, v := range command.Metadata {
+				bulkPublishMessage[i].Metadata[k] = v
+			}
+		}
+	}
+	jsonValue, err := json.Marshal(bulkPublishMessage)
+	if err != nil {
+		log.Printf("(%s) Error Marshaling: %v", reqID, err)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: err.Error(),
+		})
+		return
+	}
+	// publish to dapr
+	if protocol == "http" {
+		bulkRes, status, err := performBulkPublishHTTP(reqID, pubsubToPublish, topic, jsonValue, reqMetadata)
+		if err != nil {
+			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
+			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes.ErrorCode)
+			for _, stat := range bulkRes.Statuses {
+				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryId, stat.Status, stat.Error)
+			}
+
+			w.WriteHeader(status)
+			json.NewEncoder(w).Encode(bulkRes)
+			return
+		}
+		// pass on status code to the calling application
+		w.WriteHeader(status)
+
+		endTime := time.Now()
+		duration := endTime.Sub(startTime)
+		if status == http.StatusOK || status == http.StatusNoContent {
+			log.Printf("(%s) BulkPublish succeeded in %v", reqID, formatDuration(duration))
+		} else {
+			log.Printf("(%s) BulkPublish failed in %v", reqID, formatDuration(duration))
+		}
+
+		json.NewEncoder(w).Encode(bulkRes)
+		return
+	} else if protocol == "grpc" {
+		// Build runtimev1pb.BulkPublishRequestEntry objects
+		entries := make([]*runtimev1pb.BulkPublishRequestEntry, 0, len(bulkPublishMessage))
+		for _, entry := range bulkPublishMessage {
+			e := &runtimev1pb.BulkPublishRequestEntry{
+				EntryId:     entry.EntryId,
+				ContentType: entry.ContentType,
+				Metadata:    entry.Metadata,
+			}
+			// All data coming into gRPC must be in bytes only
+			data, err := daprhttp.ConvertEventToBytes(entry.Event, entry.ContentType)
+			if err != nil {
+				log.Printf("(%s) Error Marshaling: %v", reqID, err)
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(appResponse{
+					Message: err.Error(),
+				})
+				return
+			}
+			e.Event = data
+			entries = append(entries, e)
+		}
+
+		bulkRes, status, err := performBulkPublishGRPC(reqID, pubsubToPublish, topic, entries, reqMetadata)
+		log.Printf("status code %d", status)
+		if err != nil {
+			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
+			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes)
+			for _, stat := range bulkRes.Statuses {
+				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryId, stat.Status, stat.Error)
+			}
+
+			w.WriteHeader(status)
+			json.NewEncoder(w).Encode(bulkRes)
+			return
+		}
+		// pass on status code to the calling application
+		w.WriteHeader(status)
+
+		endTime := time.Now()
+		duration := endTime.Sub(startTime)
+		if status == http.StatusOK || status == http.StatusNoContent {
+			log.Printf("(%s) BulkPublish succeeded in %v", reqID, formatDuration(duration))
+		} else {
+			log.Printf("(%s) BulkPublish failed in %v", reqID, formatDuration(duration))
+		}
+
+		json.NewEncoder(w).Encode("Done")
+		return
+	}
+	status := http.StatusBadRequest
+	// pass on status code to the calling application
+	w.WriteHeader(status)
+
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	if status == http.StatusOK || status == http.StatusNoContent {
+		log.Printf("(%s) BulkPublish succeeded in %v", reqID, formatDuration(duration))
+	} else {
+		log.Printf("(%s) BulkPublish failed in %v", reqID, formatDuration(duration))
+	}
+
+	json.NewEncoder(w).Encode("Done")
+}
+
+func performBulkPublishGRPC(reqID string, pubsubToPublish, topic string, entries []*runtimev1pb.BulkPublishRequestEntry, reqMeta map[string]string) (*runtimev1pb.BulkPublishResponse, int, error) {
+	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
+	log.Printf("Connecting to dapr using url %s", url)
+
+	// change from default pubsub
+	req := &runtimev1pb.BulkPublishRequest{
+		PubsubName: pubsubToPublish,
+		Topic:      topic,
+		Metadata:   reqMeta,
+		Entries:    entries,
+	}
+	log.Printf("Pubsub to publish to is %s", req.PubsubName)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	res, err := grpcClient.BulkPublishEventAlpha1(ctx, req)
+	cancel()
+	log.Printf("Error is there? %v", err != nil)
+	if err != nil {
+		log.Printf("(%s) Publish failed with response : %v", reqID, res)
+		log.Printf("(%s) Publish failed: %v", reqID, err)
+		return res, http.StatusInternalServerError, err
+	}
+	return res, http.StatusOK, nil
+}
+
+func performBulkPublishHTTP(reqID string, pubsubToPublish, topic string, jsonValue []byte, reqMeta map[string]string) (daprhttp.BulkPublishResponse, int, error) {
+	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/%s", daprPortHTTP, pubsubToPublish, topic)
+	if len(reqMeta) > 0 {
+		params := netUrl.Values{}
+		for k, v := range reqMeta {
+			params.Set(fmt.Sprintf("metadata.%s", k), v)
+		}
+		url = url + "?" + params.Encode()
+	}
+
+	log.Printf("(%s) BulkPublishing using url %s and body '%s'", reqID, url, jsonValue)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonValue))
+	if err != nil {
+		return daprhttp.BulkPublishResponse{}, 0, err
+	}
+	req.Header.Set("Content-Type", "applcation/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if resp != nil {
+			return daprhttp.BulkPublishResponse{}, resp.StatusCode, err
+		}
+		return daprhttp.BulkPublishResponse{}, http.StatusInternalServerError, err
+	}
+	defer resp.Body.Close()
+	resBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return daprhttp.BulkPublishResponse{}, http.StatusInternalServerError, fmt.Errorf("error read bulkres as bytes %w", err)
+	}
+	bulkRes := daprhttp.BulkPublishResponse{}
+	err = json.Unmarshal(resBytes, &bulkRes)
+	if err != nil {
+		return daprhttp.BulkPublishResponse{}, http.StatusInternalServerError, fmt.Errorf("error unmarshal bulkres %w", err)
+	}
+
+	return bulkRes, resp.StatusCode, nil
 }
 
 // when called by the test, this function publishes to dapr
@@ -165,7 +450,11 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 }
 
 func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, pubsubName, topic)
+	psName := pubsubName
+	if strings.Contains(topic, bulkSubTopicIdentity) {
+		psName = pubsubKafka
+	}
+	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, psName, topic)
 	if len(metadata) > 0 {
 		params := netUrl.Values{}
 		for k, v := range metadata {
@@ -196,11 +485,15 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 }
 
 func performPublishGRPC(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
+	psName := pubsubName
+	if strings.Contains(topic, bulkSubTopicIdentity) {
+		psName = pubsubKafka
+	}
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
 	log.Printf("Connecting to dapr using url %s", url)
 
 	req := &runtimev1pb.PublishEventRequest{
-		PubsubName:      pubsubName,
+		PubsubName:      psName,
 		Topic:           topic,
 		Data:            jsonValue,
 		DataContentType: contentType,
@@ -333,6 +626,7 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/tests/publish", performPublish).Methods("POST")
+	router.HandleFunc("/tests/bulkpublish", performBulkPublish).Methods("POST")
 	router.HandleFunc("/tests/callSubscriberMethod", callSubscriberMethod).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
