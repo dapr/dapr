@@ -25,6 +25,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/pkg/validation"
 )
@@ -86,29 +87,34 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		ReadOnly:  true,
 	})
 
+	// Pluggable components
+	appContainers, componentContainers := components.SplitContainers(pod)
+	componentPatchOps, componentsSocketVolumeMount := components.PatchOps(componentContainers, &pod)
+
 	// Projected volume with the token
 	tokenVolume := sidecar.GetTokenVolume()
 
 	// Get the sidecar container
 	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
-		AppID:                       appID,
-		Annotations:                 an,
-		CertChain:                   certChain,
-		CertKey:                     certKey,
-		ControlPlaneAddress:         apiSvcAddress,
-		DaprSidecarImage:            image,
-		Identity:                    req.Namespace + ":" + pod.Spec.ServiceAccountName,
-		IgnoreEntrypointTolerations: i.config.GetIgnoreEntrypointTolerations(),
-		ImagePullPolicy:             i.config.GetPullPolicy(),
-		MTLSEnabled:                 mTLSEnabled(daprClient),
-		Namespace:                   req.Namespace,
-		PlacementServiceAddress:     placementAddress,
-		SentryAddress:               sentryAddress,
-		Tolerations:                 pod.Spec.Tolerations,
-		TrustAnchors:                trustAnchors,
-		VolumeMounts:                volumeMounts,
-		RunAsNonRoot:                i.config.GetRunAsNonRoot(),
-		ReadOnlyRootFilesystem:      i.config.GetReadOnlyRootFilesystem(),
+		AppID:                        appID,
+		Annotations:                  an,
+		CertChain:                    certChain,
+		CertKey:                      certKey,
+		ControlPlaneAddress:          apiSvcAddress,
+		DaprSidecarImage:             image,
+		Identity:                     req.Namespace + ":" + pod.Spec.ServiceAccountName,
+		IgnoreEntrypointTolerations:  i.config.GetIgnoreEntrypointTolerations(),
+		ImagePullPolicy:              i.config.GetPullPolicy(),
+		MTLSEnabled:                  mTLSEnabled(daprClient),
+		Namespace:                    req.Namespace,
+		PlacementServiceAddress:      placementAddress,
+		SentryAddress:                sentryAddress,
+		Tolerations:                  pod.Spec.Tolerations,
+		TrustAnchors:                 trustAnchors,
+		VolumeMounts:                 volumeMounts,
+		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
+		RunAsNonRoot:                 i.config.GetRunAsNonRoot(),
+		ReadOnlyRootFilesystem:       i.config.GetReadOnlyRootFilesystem(),
 	})
 	if err != nil {
 		return nil, err
@@ -129,9 +135,9 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 			Value: sidecarContainer,
 		})
 		patchOps = append(patchOps,
-			sidecar.AddDaprEnvVarsToContainers(pod.Spec.Containers)...)
+			sidecar.AddDaprEnvVarsToContainers(appContainers)...)
 		patchOps = append(patchOps,
-			sidecar.AddSocketVolumeMountToContainers(pod.Spec.Containers, socketVolumeMount)...)
+			sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
 	}
 	volumePatchOps := sidecar.GetVolumesPatchOperations(
 		pod.Spec.Volumes,
@@ -139,6 +145,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		sidecar.PatchPathVolumes,
 	)
 	patchOps = append(patchOps, volumePatchOps...)
+	patchOps = append(patchOps, componentPatchOps...)
 
 	return patchOps, nil
 }

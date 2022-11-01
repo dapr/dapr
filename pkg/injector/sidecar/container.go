@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
@@ -34,24 +35,25 @@ import (
 
 // ContainerConfig contains the configuration for the sidecar container.
 type ContainerConfig struct {
-	AppID                       string
-	Annotations                 Annotations
-	CertChain                   string
-	CertKey                     string
-	ControlPlaneAddress         string
-	DaprSidecarImage            string
-	Identity                    string
-	IgnoreEntrypointTolerations []corev1.Toleration
-	ImagePullPolicy             corev1.PullPolicy
-	MTLSEnabled                 bool
-	Namespace                   string
-	PlacementServiceAddress     string
-	SentryAddress               string
-	Tolerations                 []corev1.Toleration
-	TrustAnchors                string
-	VolumeMounts                []corev1.VolumeMount
-	RunAsNonRoot                bool
-	ReadOnlyRootFilesystem      bool
+	AppID                        string
+	Annotations                  Annotations
+	CertChain                    string
+	CertKey                      string
+	ControlPlaneAddress          string
+	DaprSidecarImage             string
+	Identity                     string
+	IgnoreEntrypointTolerations  []corev1.Toleration
+	ImagePullPolicy              corev1.PullPolicy
+	MTLSEnabled                  bool
+	Namespace                    string
+	PlacementServiceAddress      string
+	SentryAddress                string
+	Tolerations                  []corev1.Toleration
+	TrustAnchors                 string
+	VolumeMounts                 []corev1.VolumeMount
+	ComponentsSocketsVolumeMount *corev1.VolumeMount
+	RunAsNonRoot                 bool
+	ReadOnlyRootFilesystem       bool
 }
 
 var (
@@ -265,6 +267,14 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 
 	if len(cfg.VolumeMounts) > 0 {
 		container.VolumeMounts = append(container.VolumeMounts, cfg.VolumeMounts...)
+	}
+
+	if cfg.ComponentsSocketsVolumeMount != nil {
+		container.VolumeMounts = append(container.VolumeMounts, *cfg.ComponentsSocketsVolumeMount)
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  pluggable.SocketFolderEnvVar,
+			Value: cfg.ComponentsSocketsVolumeMount.MountPath,
+		})
 	}
 
 	if cfg.Annotations.GetBoolOrDefault(annotations.KeyLogAsJSON, annotations.DefaultLogAsJSON) {

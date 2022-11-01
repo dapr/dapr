@@ -49,19 +49,19 @@ var DaprPortEnv = []corev1.EnvVar{
 
 // AddDaprEnvVarsToContainers adds Dapr environment variables to all the containers in any Dapr-enabled pod.
 // The containers can be injected or user-defined.
-func AddDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
+func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []PatchOperation {
 	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", PatchPathContainers, i)
-		patchOps := getEnvPatchOperations(container.Env, DaprPortEnv, path)
+		patchOps := GetEnvPatchOperations(container.Env, DaprPortEnv, i)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps
 }
 
-// getEnvPatchOperations adds new environment variables only if they do not exist.
+// GetEnvPatchOperations adds new environment variables only if they do not exist.
 // It does not override existing values for those variables if they have been defined already.
-func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path string) []PatchOperation {
+func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, containerIdx int) []PatchOperation {
+	path := fmt.Sprintf("%s/%d/env", PatchPathContainers, containerIdx)
 	if len(envs) == 0 {
 		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
 		return []PatchOperation{
@@ -103,7 +103,7 @@ func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path st
 }
 
 // AddSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
-func AddSocketVolumeMountToContainers(containers []corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
+func AddSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
 	if socketVolumeMount == nil {
 		return []PatchOperation{}
 	}
@@ -111,18 +111,19 @@ func AddSocketVolumeMountToContainers(containers []corev1.Container, socketVolum
 	return addVolumeMountToContainers(containers, *socketVolumeMount)
 }
 
-func addVolumeMountToContainers(containers []corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
+func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
 	volumeMount := []corev1.VolumeMount{addMounts}
 	volumeMountPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/volumeMounts", PatchPathContainers, i)
-		patchOps := getVolumeMountsPatchOperations(container.VolumeMounts, volumeMount, path)
+		patchOps := GetVolumeMountPatchOperations(container.VolumeMounts, volumeMount, i)
 		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
 	}
 	return volumeMountPatchOps
 }
 
-func getVolumeMountsPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
+// GetVolumeMountPatchOperations gets the patch operations for volume mounts
+func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, containerIdx int) []PatchOperation {
+	path := fmt.Sprintf("%s/%d/volumeMounts", PatchPathContainers, containerIdx)
 	if len(volumeMounts) == 0 {
 		// If there are no volume mounts defined in the container, we initialize a slice of volume mounts.
 		return []PatchOperation{
@@ -169,8 +170,7 @@ func getVolumeMountsPatchOperations(volumeMounts []corev1.VolumeMount, addMounts
 func AddServiceAccountTokenVolume(containers []corev1.Container) []PatchOperation {
 	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", PatchPathContainers, i)
-		patchOps := getEnvPatchOperations(container.Env, DaprPortEnv, path)
+		patchOps := GetEnvPatchOperations(container.Env, DaprPortEnv, i)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps

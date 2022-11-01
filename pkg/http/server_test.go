@@ -112,6 +112,11 @@ func TestAllowedAPISpec(t *testing.T) {
 						Version:  "v1.0",
 						Protocol: "http",
 					},
+					{
+						Name:     "publish",
+						Version:  "v1.0-alpha1",
+						Protocol: "http",
+					},
 				},
 			},
 		}
