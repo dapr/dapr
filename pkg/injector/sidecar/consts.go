@@ -31,5 +31,6 @@ const (
 	UserContainerDaprHTTPPortName = "DAPR_HTTP_PORT"          // Name of the variable exposed to the app containing the Dapr HTTP port.
 	UserContainerDaprGRPCPortName = "DAPR_GRPC_PORT"          // Name of the variable exposed to the app containing the Dapr gRPC port.
 	ContainersPath                = "/spec/containers"
+	VolumesPath                   = "/spec/volumes"
 	KubernetesMountPath           = "/var/run/secrets/kubernetes.io/serviceaccount" // Mount path for the Kubernetes service account volume.
 )
