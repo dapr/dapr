@@ -53,6 +53,13 @@ service AppCallbackHealthCheck {
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse) {}
 }
 
+// AppCallbackAlpha V1 is an optional extension to AppCallback V1 to opt
+// for Alpha RPCs.
+service AppCallbackAlpha {
+    // Subscribes bulk events from Pubsub
+  rpc OnBulkTopicEventAlpha1(TopicEventBulkRequest) returns (TopicEventBulkResponse) {}
+}
+
 // TopicEventRequest message is compatible with CloudEvent spec v1.0
 // https://github.com/cloudevents/spec/blob/v1.0/spec.md
 message TopicEventRequest {
@@ -105,6 +112,63 @@ message TopicEventResponse {
 
   // The list of output bindings.
   TopicEventResponseStatus status = 1;
+}
+
+// TopicEventBulkRequestEntry represents a single message inside a bulk request
+message TopicEventBulkRequestEntry {
+  // Unique identifier for the message.
+  string entry_id = 1;
+
+  // The content of the event.
+  bytes event = 2;
+  
+  // content type of the event contained.
+  string content_type = 3;
+  
+  // The metadata associated with the event.
+  map<string,string> metadata = 4;
+}
+
+// TopicEventBulkRequest represents request for bulk message
+message TopicEventBulkRequest {
+    // Unique identifier for the bulk request.
+  string id = 1;
+
+  // The list of items inside this bulk request.
+  repeated TopicEventBulkRequestEntry entries = 2;
+
+  // The metadata associated with the this bulk request.
+  map<string,string> metadata = 3;
+
+  // The pubsub topic which publisher sent to.
+  string topic = 4;
+    
+  // The name of the pubsub the publisher sent to.
+  string pubsub_name = 5;
+  
+  // The type of event related to the originating occurrence. 
+  string type = 6;
+
+  // The matching path from TopicSubscription/routes (if specified) for this event.
+  // This value is used by OnTopicEvent to "switch" inside the handler.
+  string path = 7;
+}
+
+// TopicEventBulkResponseEntry Represents single response, as part of TopicEventBulkResponse, to be
+// sent by subscibed App for the corresponding single message during bulk subscribe
+message TopicEventBulkResponseEntry {
+  // Unique identifier associated the message.
+  string entry_id = 1;
+
+  // The status of the response.
+  TopicEventResponse.TopicEventResponseStatus status = 2;
+}
+
+// AppBulkResponse is response from app on published message
+message TopicEventBulkResponse {
+
+  // The list of all responses for the bulk request.
+  repeated TopicEventBulkResponseEntry statuses = 1;
 }
 
 // BindingEventRequest represents input bindings event.
