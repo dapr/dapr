@@ -24,7 +24,7 @@ import (
 	"go.opentelemetry.io/otel/metric/instrument/syncfloat64"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
 	"go.opentelemetry.io/otel/metric/unit"
-	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 )
 
 const (
@@ -41,10 +41,16 @@ const (
 
 // componentMetrics holds dapr runtime metrics for components.
 type componentMetrics struct {
-	pubsubIngressCount   syncint64.Counter
-	pubsubIngressLatency syncfloat64.Histogram
-	pubsubEgressCount    syncint64.Counter
-	pubsubEgressLatency  syncfloat64.Histogram
+	pubsubIngressCount          syncint64.Counter
+	pubsubIngressLatency        syncfloat64.Histogram
+	bulkPubsubIngressCount      syncint64.Counter
+	bulkPubsubEventIngressCount syncint64.Counter
+	bulkPubsubIngressLatency    syncfloat64.Histogram
+	pubsubEgressCount           syncint64.Counter
+	pubsubEgressLatency         syncfloat64.Histogram
+	bulkPubsubEgressCount       syncint64.Counter
+	bulkPubsubEventEgressCount  syncint64.Counter
+	bulkPubsubEgressLatency     syncfloat64.Histogram
 
 	inputBindingCount    syncint64.Counter
 	inputBindingLatency  syncfloat64.Histogram
@@ -72,6 +78,18 @@ func (m *MetricClient) newComponentMetrics() *componentMetrics {
 		"component/pubsub_ingress/latencies",
 		instrument.WithDescription("The consuming app event processing latency."),
 		instrument.WithUnit(unit.Milliseconds))
+	cm.bulkPubsubIngressCount, _ = m.meter.SyncInt64().Counter(
+		"component/pubsub_ingress/bulk/count",
+		instrument.WithDescription("The number of incoming bulk subscribe calls arriving from the bulk pub/sub component."),
+		instrument.WithUnit(unit.Dimensionless))
+	cm.bulkPubsubEventIngressCount, _ = m.meter.SyncInt64().Counter(
+		"component/pubsub_ingress/bulk/event_count",
+		instrument.WithDescription("Total number of incoming messages arriving from the bulk pub/sub component via Bulk Subscribe."),
+		instrument.WithUnit(unit.Dimensionless))
+	cm.bulkPubsubIngressLatency, _ = m.meter.SyncFloat64().Histogram(
+		"component/pubsub_ingress/bulk/latencies",
+		instrument.WithDescription("The consuming app event processing latency for the bulk pub/sub component."),
+		instrument.WithUnit(unit.Milliseconds))
 	cm.pubsubEgressCount, _ = m.meter.SyncInt64().Counter(
 		"component/pubsub_egress/count",
 		instrument.WithDescription("The number of outgoing messages published to the pub/sub component."),
@@ -79,6 +97,18 @@ func (m *MetricClient) newComponentMetrics() *componentMetrics {
 	cm.pubsubEgressLatency, _ = m.meter.SyncFloat64().Histogram(
 		"component/pubsub_egress/latencies",
 		instrument.WithDescription("The latency of the response from the pub/sub component."),
+		instrument.WithUnit(unit.Milliseconds))
+	cm.bulkPubsubEgressCount, _ = m.meter.SyncInt64().Counter(
+		"component/pubsub_egress/bulk/count",
+		instrument.WithDescription("The number of bulk publish calls to the pub/sub component."),
+		instrument.WithUnit(unit.Dimensionless))
+	cm.bulkPubsubEventEgressCount, _ = m.meter.SyncInt64().Counter(
+		"component/pubsub_egress/bulk/event_count",
+		instrument.WithDescription("The number of outgoing messages to the pub/sub component published through bulk publish API."),
+		instrument.WithUnit(unit.Dimensionless))
+	cm.bulkPubsubEgressLatency, _ = m.meter.SyncFloat64().Histogram(
+		"component/pubsub_egress/bulk/latencies",
+		instrument.WithDescription("The latency of the response for the bulk publish call from the pub/sub component."),
 		instrument.WithUnit(unit.Milliseconds))
 	cm.inputBindingCount, _ = m.meter.SyncInt64().Counter(
 		"component/input_binding/count",
@@ -140,7 +170,61 @@ func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, pr
 	}
 }
 
-// PubsubEgressEvent records the metrics for a pub/sub egress event.
+// BulkPubsubIngressEvent records the metrics for a bulk pub/sub ingress event.
+func (c *componentMetrics) BulkPubsubIngressEvent(ctx context.Context, component, topic string, elapsed float64) {
+	if c == nil {
+		return
+	}
+	attributes := []attribute.KeyValue{
+		isemconv.ComponentNameKey.String(component),
+		isemconv.ComponentTopicKey.String(topic),
+	}
+	c.bulkPubsubIngressCount.Add(ctx, 1, attributes...)
+
+	if elapsed > 0 {
+		c.bulkPubsubIngressLatency.Record(ctx, elapsed, attributes...)
+	}
+}
+
+// BulkPubsubIngressEventEntries records the metrics for entries inside a bulk pub/sub ingress event.
+func (c *componentMetrics) BulkPubsubIngressEventEntries(ctx context.Context, component, topic string, processStatus string, eventCount int64) {
+	if c == nil {
+		return
+	}
+	if eventCount > 0 {
+		attributes := []attribute.KeyValue{
+			isemconv.ComponentNameKey.String(component),
+			isemconv.ComponentProcessStatusKey.String(processStatus),
+			isemconv.ComponentTopicKey.String(topic),
+		}
+		c.bulkPubsubEventIngressCount.Add(ctx, eventCount, attributes...)
+	}
+}
+
+// BulkPubsubEgressEvent records the metris for a pub/sub egress event.
+// eventCount if greater than zero implies successful publish of few/all events in the bulk publish call
+func (c *componentMetrics) BulkPubsubEgressEvent(ctx context.Context, component, topic string, success bool, eventCount int64, elapsed float64) {
+	if c == nil {
+		return
+	}
+
+	attributes := []attribute.KeyValue{
+		isemconv.ComponentNameKey.String(component),
+		isemconv.ComponentTopicKey.String(topic),
+		isemconv.ComponentSuccessKey.Bool(success),
+	}
+
+	c.bulkPubsubEgressCount.Add(ctx, 1, attributes...)
+	if eventCount > 0 {
+		// There is at leaset one success in the bulk publish call even if overall success of the call might be a failure
+		c.bulkPubsubEventEgressCount.Add(ctx, eventCount, attributes...)
+	}
+	if elapsed > 0 {
+		c.bulkPubsubEgressLatency.Record(ctx, elapsed, attributes...)
+	}
+}
+
+// PubsubEgressEvent records the metris for a pub/sub egress event.
 func (c *componentMetrics) PubsubEgressEvent(ctx context.Context, component, topic string, success bool, elapsed float64) {
 	if c == nil {
 		return

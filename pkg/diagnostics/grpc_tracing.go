@@ -23,7 +23,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	apitrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -128,6 +128,15 @@ func addSpanMetadataAndUpdateStatus(span apitrace.Span, fullMethod, appID string
 	}
 }
 
+func StartGRPCProducerSpanChildFromParent(ct context.Context, sc apitrace.SpanContext, spanName string) (context.Context, apitrace.Span) {
+	netCtx := apitrace.ContextWithRemoteSpanContext(ct, sc)
+	spanKind := apitrace.WithSpanKind(apitrace.SpanKindProducer)
+
+	ctx, span := defaultTracer.Start(netCtx, spanName, spanKind)
+
+	return ctx, span
+}
+
 // UpdateSpanStatusFromGRPCError updates tracer span status based on error object.
 func UpdateSpanStatusFromGRPCError(span apitrace.Span, err error) {
 	if span == nil || err == nil {
@@ -207,6 +216,11 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 			semconv.MessagingDestinationKey.String(s.GetTopic()),
 			semconv.MessagingDestinationKindTopic)
 
+	case *runtimev1pb.BulkPublishRequest:
+		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService),
+			semconv.MessagingSystemKey.String("pubsub"),
+			semconv.MessagingDestinationKey.String(s.GetTopic()),
+			semconv.MessagingDestinationKindTopic)
 	case *runtimev1pb.InvokeBindingRequest:
 		isExistComponent = true
 		m = append(m, isemconv.ComponentBindings,

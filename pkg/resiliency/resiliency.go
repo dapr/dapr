@@ -604,7 +604,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 							cache.Add(endpoint, cb)
 						}
 					}
-					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
+					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, diag.CircuitBreakerPolicy)
 				}
 			}
 		}
@@ -693,7 +693,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 							cache.Add(key, cb)
 						}
 					}
-					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
+					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, diag.CircuitBreakerPolicy)
 				}
 			}
 		}
@@ -744,7 +744,7 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string, c
 		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies)
 		if componentPolicies.Outbound.Timeout != "" {
 			t = r.timeouts[componentPolicies.Outbound.Timeout]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, diag.TimeoutPolicy)
 		}
 		if componentPolicies.Outbound.Retry != "" {
 			rc = r.retries[componentPolicies.Outbound.Retry]

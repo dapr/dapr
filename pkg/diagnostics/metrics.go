@@ -19,16 +19,12 @@ import (
 
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
-	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 )
 
 var (
@@ -75,8 +71,7 @@ type MetricClient struct {
 	Address string
 
 	meter    metric.Meter
-	pusher   *controller.Controller
-	exporter *otlpmetric.Exporter
+	exporter sdkmetric.Exporter
 }
 
 // InitMetrics initializes metrics.
@@ -119,43 +114,29 @@ func InitMetrics(serviceType ServiceType, address, appID, namespace string) (*Me
 func (m *MetricClient) init() error {
 	var err error
 	ctx := context.Background()
-	client := otlpmetricgrpc.NewClient(
+	opts := []otlpmetricgrpc.Option{
+		otlpmetricgrpc.WithEndpoint(m.Address),
 		otlpmetricgrpc.WithInsecure(),
-		otlpmetricgrpc.WithEndpoint(m.Address))
-	m.exporter, err = otlpmetric.New(ctx, client)
+	}
+	m.exporter, err = otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
 		return errors.Errorf("Failed to create the collector exporter: %v", err)
 	}
-	res, _ := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(m.AppID),
-			semconv.ServiceNamespaceKey.String(m.Namespace),
-		),
+	res := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(m.AppID),
+		semconv.ServiceNamespaceKey.String(m.Namespace),
 	)
-	// ::TODO https://github.com/open-telemetry/opentelemetry-go/issues/2678
-	// fake boundary
-	bounds := []float64{5, 10, 50, 100, 150, 200, 250, 300, 350, 400, 500, 600, 700, 800, 900, 1000}
-	m.pusher = controller.New(
-		processor.NewFactory(
-			simple.NewWithHistogramDistribution(
-				histogram.WithExplicitBoundaries(
-					bounds)),
-			m.exporter,
-		),
-		controller.WithExporter(m.exporter),
-		controller.WithCollectPeriod(DefaultReportingPeriod),
-		controller.WithCollectTimeout(30*time.Second),
-		controller.WithPushTimeout(30*time.Second),
-		controller.WithResource(res))
-	global.SetMeterProvider(m.pusher)
+	provider := sdkmetric.NewMeterProvider(
+		sdkmetric.WithResource(res),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(m.exporter)),
+	)
+	global.SetMeterProvider(provider)
 	// only global one meter, not multiple meters.
 	m.meter = global.Meter("dapr",
-		metric.WithInstrumentationVersion("v0.31.0"),
+		metric.WithInstrumentationVersion("v0.33.0"),
 		metric.WithSchemaURL("https://dapr.io"))
 
-	if err := m.pusher.Start(ctx); err != nil {
-		return errors.Errorf("could not start metric controller: %v", err)
-	}
 	return nil
 }
 
@@ -166,9 +147,6 @@ func (m *MetricClient) Close() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := m.pusher.Stop(ctx); err != nil {
-		otel.Handle(err)
-	}
 	if err := m.exporter.Shutdown(ctx); err != nil {
 		otel.Handle(err)
 	}

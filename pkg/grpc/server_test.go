@@ -1,19 +1,24 @@
 package grpc
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/kit/logger"
+	grpcGo "google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/logger"
 )
 
 func TestCertRenewal(t *testing.T) {
@@ -132,4 +137,55 @@ func TestClose(t *testing.T) {
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
 	})
+}
+
+func Test_server_getGRPCAPILoggingInfo(t *testing.T) {
+	logDest := &bytes.Buffer{}
+	infoLog := logger.NewLogger("test-api-logging")
+	infoLog.EnableJSONOutput(true)
+	infoLog.SetOutput(logDest)
+
+	s := &server{
+		infoLogger: infoLog,
+	}
+
+	dec := json.NewDecoder(logDest)
+	called := atomic.Int32{}
+	handler := func(ctx context.Context, req any) (any, error) {
+		called.Add(1)
+		return nil, nil
+	}
+
+	logInterceptor := s.getGRPCAPILoggingInfo()
+
+	runTest := func(userAgent string) func(t *testing.T) {
+		md := metadata.MD{}
+		if userAgent != "" {
+			md["user-agent"] = []string{userAgent}
+		}
+		ctx := metadata.NewIncomingContext(context.Background(), md)
+
+		return func(t *testing.T) {
+			logInterceptor(ctx, nil, &grpcGo.UnaryServerInfo{
+				FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+			}, handler)
+
+			logData := map[string]string{}
+			err := dec.Decode(&logData)
+			require.NoError(t, err)
+
+			assert.Equal(t, "test-api-logging", logData["scope"])
+			assert.Equal(t, "gRPC API Called", logData["msg"])
+			assert.Equal(t, "/dapr.proto.runtime.v1.Dapr/GetState", logData["method"])
+			if userAgent != "" {
+				assert.Equal(t, userAgent, logData["useragent"])
+			} else {
+				_, found := logData["useragent"]
+				assert.False(t, found)
+			}
+		}
+	}
+
+	t.Run("without user agent", runTest(""))
+	t.Run("with user agent", runTest("daprtest/1"))
 }

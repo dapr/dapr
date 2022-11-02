@@ -107,7 +107,7 @@ func init() {
 	}
 
 	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+	if err = logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		log.Fatal(err)
 	} else {
 		log.Infof("log level set to: %s", loggerOptions.OutputLevel)

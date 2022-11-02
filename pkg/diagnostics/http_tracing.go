@@ -21,7 +21,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	apitrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/diagnostics/propagation"
@@ -66,6 +66,14 @@ func startTracingClientSpanFromCarrier(supplier *propagation.FasthttpSupplier, s
 	ctx = apitrace.ContextWithRemoteSpanContext(ctx, sc)
 	newCtx, span := defaultTracer.Start(ctx, spanName, spanKind)
 	return newCtx, span
+}
+
+func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, sc apitrace.SpanContext) apitrace.Span {
+	path := string(ctx.Request.URI().Path())
+	netCtx := apitrace.ContextWithRemoteSpanContext(ctx, sc)
+	kindOption := apitrace.WithSpanKind(apitrace.SpanKindProducer)
+	_, span := defaultTracer.Start(netCtx, path, kindOption)
+	return span
 }
 
 func isHealthzRequest(name string) bool {

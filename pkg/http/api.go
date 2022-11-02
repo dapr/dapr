@@ -35,9 +35,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/version"
-
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -46,6 +43,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -58,6 +56,8 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/dapr/utils"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -292,6 +292,12 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 			Route:   "publish/{pubsubname}/{topic:*}",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
+			Route:   "publish/bulk/{pubsubname}/{topic:*}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onBulkPublish,
 		},
 	}
 }
@@ -1875,37 +1881,9 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	if a.pubsubAdapter == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
-	if pubsubName == "" {
-		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
-	if thepubsub == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	topic := reqCtx.UserValue(topicParam).(string)
-	if topic == "" {
-		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
+	thepubsub, pubsubName, topic, code, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
+	if errRes != nil {
+		respond(reqCtx, withError(code, *errRes))
 
 		return
 	}
@@ -1995,6 +1973,221 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respond(reqCtx, withEmpty())
 	}
+}
+
+type bulkPublishMessageEntry struct {
+	EntryId     string            `json:"entryId,omitempty"` //nolint:stylecheck
+	Event       interface{}       `json:"event"`
+	ContentType string            `json:"contentType"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
+	thepubsub, pubsubName, topic, code, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
+	if errRes != nil {
+		respond(reqCtx, withError(code, *errRes))
+
+		return
+	}
+
+	body := reqCtx.PostBody()
+	metadata := getMetadataFromRequest(reqCtx)
+	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
+	if metaErr != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
+			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+
+		return
+	}
+
+	// Extract trace context from context.
+	sc := trace.SpanContextFromContext(reqCtx)
+	// Populate W3C tracestate to cloudevent envelope
+	traceState := diagUtils.TraceStateToW3CString(sc)
+
+	incomingEntries := make([]bulkPublishMessageEntry, 0)
+	err := json.Unmarshal(body, &incomingEntries)
+	if err != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+			fmt.Sprintf(messages.ErrPubsubUnmarshal, topic, pubsubName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+
+		return
+	}
+	entries := make([]pubsub.BulkMessageEntry, len(incomingEntries))
+
+	entryIdSet := map[string]struct{}{} //nolint:stylecheck
+
+	for i, entry := range incomingEntries {
+		var dBytes []byte
+
+		dBytes, cErr := ConvertEventToBytes(entry.Event, entry.ContentType)
+		if cErr != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, cErr.Error()))
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+			log.Debug(msg)
+			return
+		}
+		entries[i] = pubsub.BulkMessageEntry{
+			Event:       dBytes,
+			ContentType: entry.ContentType,
+		}
+		if entry.Metadata != nil {
+			// Populate entry metadata with request level metadata. Entry level metadata keys
+			// override request level metadata.
+			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
+		}
+		if _, ok := entryIdSet[entry.EntryId]; ok || entry.EntryId == "" {
+			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: entryId is duplicated or not present for entry"))
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+			log.Debug(msg)
+
+			return
+		}
+		entryIdSet[entry.EntryId] = struct{}{}
+		entries[i].EntryId = entry.EntryId
+	}
+
+	spanMap := map[int]trace.Span{}
+	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
+	closeChildSpans := func(ctx *fasthttp.RequestCtx) {
+		for _, span := range spanMap {
+			diag.UpdateSpanStatusFromHTTPStatus(span, trace.SpanKindServer, ctx.Response.StatusCode())
+			span.End()
+		}
+	}
+	features := thepubsub.Features()
+	if !rawPayload {
+		for i := range entries {
+			// For multiple events in a single bulk call traceParent is different for each event.
+			childSpan := diag.StartProducerSpanChildFromParent(reqCtx, sc)
+			// Populate W3C traceparent to cloudevent envelope
+			traceparent := diagUtils.TraceparentToW3CString(childSpan.SpanContext())
+			spanMap[i] = childSpan
+
+			var envelope map[string]interface{}
+
+			envelope, err = runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+				ID:              a.id,
+				Topic:           topic,
+				DataContentType: entries[i].ContentType,
+				Data:            entries[i].Event,
+				TraceID:         traceparent,
+				TraceState:      traceState,
+				Pubsub:          pubsubName,
+			})
+			if err != nil {
+				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)
+				log.Debug(msg)
+
+				return
+			}
+
+			pubsub.ApplyMetadata(envelope, features, entries[i].Metadata)
+
+			entries[i].Event, err = json.Marshal(envelope)
+			if err != nil {
+				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+					fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
+				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)
+				log.Debug(msg)
+
+				return
+			}
+		}
+	}
+
+	req := pubsub.BulkPublishRequest{
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Entries:    entries,
+		Metadata:   metadata,
+	}
+
+	start := time.Now()
+	res, err := a.pubsubAdapter.BulkPublish(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	bulkRes := BulkPublishResponse{}
+	var eventsPublished int64 = 0
+	if len(res.Statuses) != 0 {
+		bulkRes.Statuses = make([]BulkPublishResponseEntry, len(res.Statuses))
+		for i, r := range res.Statuses {
+			bulkRes.Statuses[i].EntryId = r.EntryId
+			if r.Error != nil {
+				bulkRes.Statuses[i].Error = r.Error.Error()
+			} else {
+				// Only count the events that have been successfully published to the pub/sub component
+				eventsPublished++
+			}
+			bulkRes.Statuses[i].Status = string(r.Status)
+		}
+	}
+	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
+	status := fasthttp.StatusOK
+	if err != nil {
+		status = fasthttp.StatusInternalServerError
+		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
+
+		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
+			msg := NewErrorResponse("ERR_PUBSUB_FORBIDDEN", err.Error())
+			status = fasthttp.StatusForbidden
+			respond(reqCtx, withError(status, msg), closeChildSpans)
+			log.Debug(msg)
+
+			return
+		}
+
+		if errors.As(err, &runtimePubsub.NotFoundError{}) {
+			msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
+			status = fasthttp.StatusBadRequest
+			respond(reqCtx, withError(status, msg), closeChildSpans)
+			log.Debug(msg)
+
+			return
+		}
+	}
+	resData, _ := json.Marshal(bulkRes)
+	respond(reqCtx, withJSON(status, resData), closeChildSpans)
+}
+
+// validateAndGetPubsubAndTopic takes input as request context and returns the pubsub interface, pubsub name, topic name,
+// or error status code and an ErrorResponse object.
+func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, int, *ErrorResponse) {
+	if a.pubsubAdapter == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
+
+		return nil, "", "", fasthttp.StatusBadRequest, &msg
+	}
+
+	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
+	if pubsubName == "" {
+		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+
+	topic := reqCtx.UserValue(topicParam).(string)
+	if topic == "" {
+		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+	return thepubsub, pubsubName, topic, fasthttp.StatusOK, nil
 }
 
 // GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.

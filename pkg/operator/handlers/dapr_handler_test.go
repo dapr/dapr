@@ -155,8 +155,6 @@ func TestPatchDaprService(t *testing.T) {
 	err = cli.Get(ctx, myDaprService, &actualService)
 	assert.NoError(t, err)
 	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[appIDAnnotationKey])
-	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
 	assert.Len(t, actualService.OwnerReferences, 1)
 	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)

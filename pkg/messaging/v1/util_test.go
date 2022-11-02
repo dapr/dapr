@@ -52,7 +52,7 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 		"tracestate":    testValue2,
 	}
 
-	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout", "traceparent"}
+	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout", "traceparent", "tracestate"}
 	savedHeaderKeyNames := []string{}
 	ctx := context.Background()
 	InternalMetadataToHTTPHeader(ctx, fakeMetadata, func(k, v string) {
