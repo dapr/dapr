@@ -361,41 +361,30 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			},
 		},
 	}
-	bulkRes := BulkPublishResponse{
-		Statuses: []BulkPublishResponseEntry{
-			{
-				EntryId: "1",
-				Status:  "SUCCESS",
-			},
-			{
-				EntryId: "2",
-				Status:  "SUCCESS",
-			},
-		},
-	}
+
 	// setup
 	reqBytes, _ := json.Marshal(bulkRequest)
-	resBytes, _ := json.Marshal(bulkRes)
-	t.Run("Bulk Publish successfully - 200", func(t *testing.T) {
+	resBytes := []byte{}
+	t.Run("Bulk Publish successfully - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
 		}
 	})
 
-	t.Run("Bulk Publish multi path successfully - 200", func(t *testing.T) {
+	t.Run("Bulk Publish multi path successfully - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/A/B/C", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
 		}
 	})
@@ -566,14 +555,14 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Bulk Publish with topic name '/' - 200", func(t *testing.T) {
+	t.Run("Bulk Publish with topic name '/' - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname//", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "success publishing with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "success publishing with %s", method)
 			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
 		}
 	})
