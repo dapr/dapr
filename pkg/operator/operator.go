@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -167,7 +168,8 @@ func (o *operator) loadCertChain(ctx context.Context) (certChain *credentials.Ce
 	go func() {
 		log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
 		err := fswatcher.Watch(watchCtx, o.config.Credentials.Path(), fsevent)
-		if err != nil {
+		// Watch always returns an error, which is context.Canceled if everything went well
+		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatalf("error starting watch on filesystem: %s", err)
 		}
 		close(fsevent)

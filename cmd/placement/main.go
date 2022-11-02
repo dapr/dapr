@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"strconv"
@@ -127,7 +128,8 @@ func loadCertChains(certChainPath string) *credentials.CertChain {
 	go func() {
 		log.Infof("starting watch for certs on filesystem: %s", certChainPath)
 		err := fswatcher.Watch(ctx, tlsCreds.Path(), fsevent)
-		if err != nil {
+		// Watch always returns an error, which is context.Canceled if everything went well
+		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatalf("error starting watch on filesystem: %s", err)
 		}
 		close(fsevent)
