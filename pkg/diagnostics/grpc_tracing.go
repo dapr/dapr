@@ -20,74 +20,56 @@ import (
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/pkg/errors"
-	otelcodes "go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
+	apitrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/config"
+	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-const (
-	GRPCTraceContextKey = "grpc-trace-bin"
-	GRPCProxyAppIDKey   = "dapr-app-id"
-	daprPackagePrefix   = "/dapr.proto"
-)
-
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
-func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
+func GRPCTraceUnaryServerInterceptor(appID string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		var (
-			span             trace.Span
-			spanKind         trace.SpanStartOption
-			prefixedMetadata map[string]string
-			reqSpanAttr      map[string]string
+			span        apitrace.Span
+			spanKind    apitrace.SpanStartOption
+			reqSpanAttr []attribute.KeyValue
 		)
 		sc, _ := SpanContextFromIncomingGRPCMetadata(ctx)
 		// This middleware is shared by internal gRPC for service invocation and api
 		// so that it needs to handle separately.
 		if isInternalCalls(info.FullMethod) {
-			// For dapr.proto.internals package, this generates ServerSpan.
-			spanKind = trace.WithSpanKind(trace.SpanKindServer)
+			// For internals package, this generates ServerSpan.
+			spanKind = apitrace.WithSpanKind(apitrace.SpanKindServer)
 		} else {
-			// For dapr.proto.runtime package, this generates ClientSpan.
-			spanKind = trace.WithSpanKind(trace.SpanKindClient)
+			// For runtime package, this generates ClientSpan.
+			spanKind = apitrace.WithSpanKind(apitrace.SpanKindClient)
 		}
 
-		ctx = trace.ContextWithRemoteSpanContext(ctx, sc)
-		ctx, span = tracer.Start(ctx, info.FullMethod, spanKind)
-
-		isSampled := span.SpanContext().IsSampled()
-
-		if isSampled {
-			// users can add dapr- prefix if they want to see the header values in span attributes.
-			prefixedMetadata = userDefinedMetadata(ctx)
-			reqSpanAttr = spanAttributesMapFromGRPC(appID, req, info.FullMethod)
-		}
+		ctx = apitrace.ContextWithRemoteSpanContext(ctx, sc)
+		ctx, span = defaultTracer.Start(ctx, info.FullMethod, spanKind)
+		reqSpanAttr = spanAttributesMapFromGRPC(appID, req, info.FullMethod)
 
 		resp, err := handler(ctx, req)
-
-		if isSampled {
-			// Populates dapr- prefixed header first
-			for key, value := range reqSpanAttr {
-				prefixedMetadata[key] = value
-			}
-			AddAttributesToSpan(span, prefixedMetadata)
-
-			// Correct the span name based on API.
-			if sname, ok := reqSpanAttr[daprAPISpanNameInternal]; ok {
-				span.SetName(sname)
-			}
-		}
+		span.SetAttributes(reqSpanAttr...)
 
 		// Add grpc-trace-bin header for all non-invocation api's
 		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
-			traceContextBinary := diagUtils.BinaryFromSpanContext(span.SpanContext())
-			grpc.SetHeader(ctx, metadata.Pairs(GRPCTraceContextKey, string(traceContextBinary)))
+			sc := span.SpanContext()
+			traceparent := diagUtils.TraceparentToW3CString(sc)
+			tracestate := diagUtils.TraceStateToW3CString(sc)
+			pairs := metadata.Pairs(
+				diagUtils.TraceparentHeader, traceparent,
+				diagUtils.TracestateHeader, tracestate)
+			grpc.SetHeader(ctx, pairs)
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
@@ -98,42 +80,38 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 }
 
 // GRPCTraceStreamServerInterceptor sets the trace context or starts the trace client span based on request.
-func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grpc.StreamServerInterceptor {
+func GRPCTraceStreamServerInterceptor(appID string) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if strings.Index(info.FullMethod, daprPackagePrefix) == 0 {
-			return handler(srv, ss)
-		}
-
-		var span trace.Span
+		var span apitrace.Span
 		spanName := info.FullMethod
 
+		if ss == nil {
+			return nil
+		}
 		ctx := ss.Context()
 		md, _ := metadata.FromIncomingContext(ctx)
-
-		vals := md.Get(GRPCProxyAppIDKey)
+		vals := md.Get(DaprAppIDKey)
 		if len(vals) == 0 {
-			return errors.Errorf("cannot proxy request: missing %s metadata", GRPCProxyAppIDKey)
+			return errors.Errorf("cannot proxy request: missing %s metadata", DaprAppIDKey)
 		}
 
 		targetID := vals[0]
 		wrapped := grpcMiddleware.WrapServerStream(ss)
 		sc, _ := SpanContextFromIncomingGRPCMetadata(ctx)
-
-		var spanKind trace.SpanStartOption
+		var spanKind apitrace.SpanStartOption
 
 		if appID == targetID {
-			spanKind = trace.WithSpanKind(trace.SpanKindServer)
+			spanKind = apitrace.WithSpanKind(apitrace.SpanKindServer)
 		} else {
-			spanKind = trace.WithSpanKind(trace.SpanKindClient)
+			spanKind = apitrace.WithSpanKind(apitrace.SpanKindClient)
 		}
 
-		ctx = trace.ContextWithRemoteSpanContext(ctx, sc)
-		ctx, span = tracer.Start(ctx, spanName, spanKind)
-
+		ctx = apitrace.ContextWithRemoteSpanContext(ctx, sc)
+		ctx, span = defaultTracer.Start(ctx, spanName, spanKind)
 		wrapped.WrappedContext = ctx
 		err := handler(srv, wrapped)
 
-		addSpanMetadataAndUpdateStatus(ctx, span, info.FullMethod, appID, nil, true)
+		addSpanMetadataAndUpdateStatus(span, info.FullMethod, appID, nil, true)
 
 		UpdateSpanStatusFromGRPCError(span, err)
 		span.End()
@@ -142,102 +120,58 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 	}
 }
 
-func addSpanMetadataAndUpdateStatus(ctx context.Context, span trace.Span, fullMethod, appID string, req interface{}, stream bool) {
-	var prefixedMetadata map[string]string
-	if span.SpanContext().IsSampled() {
-		// users can add dapr- prefix if they want to see the header values in span attributes.
-		prefixedMetadata = userDefinedMetadata(ctx)
+func addSpanMetadataAndUpdateStatus(span apitrace.Span, fullMethod, appID string, req interface{}, stream bool) {
+	var attrs []attribute.KeyValue
+	if !stream {
+		attrs = spanAttributesMapFromGRPC(appID, req, fullMethod)
+		span.SetAttributes(attrs...)
 	}
-
-	if span.SpanContext().IsSampled() {
-		// Populates dapr- prefixed header first
-		AddAttributesToSpan(span, prefixedMetadata)
-
-		spanAttr := map[string]string{}
-		if !stream {
-			spanAttr = spanAttributesMapFromGRPC(appID, req, fullMethod)
-			AddAttributesToSpan(span, spanAttr)
-		} else {
-			spanAttr[daprAPISpanNameInternal] = fullMethod
-		}
-
-		// Correct the span name based on API.
-		if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
-			span.SetName(sname)
-		}
-	}
-}
-
-// userDefinedMetadata returns dapr- prefixed header from incoming metadata.
-// Users can add dapr- prefixed headers that they want to see in span attributes.
-func userDefinedMetadata(ctx context.Context) map[string]string {
-	daprMetadata := map[string]string{}
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return daprMetadata
-	}
-
-	for k, v := range md {
-		k = strings.ToLower(k)
-		if strings.HasPrefix(k, daprHeaderPrefix) && !strings.HasSuffix(k, daprHeaderBinSuffix) {
-			daprMetadata[k] = v[0]
-		}
-	}
-
-	return daprMetadata
 }
 
 // UpdateSpanStatusFromGRPCError updates tracer span status based on error object.
-func UpdateSpanStatusFromGRPCError(span trace.Span, err error) {
+func UpdateSpanStatusFromGRPCError(span apitrace.Span, err error) {
 	if span == nil || err == nil {
 		return
 	}
 
-	if e, ok := status.FromError(err); ok {
-		span.SetStatus(otelcodes.Error, e.Message())
+	_, ok := status.FromError(err)
+	if ok {
+		span.SetStatus(codes.Ok, "")
 	} else {
-		span.SetStatus(otelcodes.Error, err.Error())
+		span.SetStatus(codes.Error, err.Error())
 	}
 }
 
 // SpanContextFromIncomingGRPCMetadata returns the SpanContext stored in incoming metadata of context, or empty if there isn't one.
-func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext, bool) {
+func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (apitrace.SpanContext, bool) {
 	var (
-		sc trace.SpanContext
+		sc apitrace.SpanContext
 		md metadata.MD
 		ok bool
 	)
 	if md, ok = metadata.FromIncomingContext(ctx); !ok {
 		return sc, false
 	}
-	traceContext := md[GRPCTraceContextKey]
-	if len(traceContext) > 0 {
-		sc, ok = diagUtils.SpanContextFromBinary([]byte(traceContext[0]))
-	} else {
-		// add workaround to fallback on checking traceparent header
-		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
-		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
-		// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
-		traceContext = md[TraceparentHeader]
-		if len(traceContext) > 0 {
-			sc, ok = SpanContextFromW3CString(traceContext[0])
-			if ok && len(md[TracestateHeader]) > 0 {
-				ts := TraceStateFromW3CString(md[TracestateHeader][0])
-				sc.WithTraceState(*ts)
-			}
-		}
-	}
+	_, sc = otelgrpc.Extract(ctx, &md)
+
 	return sc, ok
 }
 
 // SpanContextToGRPCMetadata appends binary serialized SpanContext to the outgoing GRPC context.
-func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContext) context.Context {
-	traceContextBinary := diagUtils.BinaryFromSpanContext(spanContext)
-	if len(traceContextBinary) == 0 {
-		return ctx
-	}
+func SpanContextToGRPCMetadata(ctx context.Context) context.Context {
+	md := metadata.MD{}
+	otelgrpc.Inject(ctx, &md)
 
-	return metadata.AppendToOutgoingContext(ctx, GRPCTraceContextKey, string(traceContextBinary))
+	var kv []string
+	for k, vals := range md {
+		for _, v := range vals {
+			kv = append(kv, k, v)
+		}
+	}
+	if kv != nil {
+		ctx = metadata.AppendToOutgoingContext(ctx, kv...)
+	}
+	return ctx
 }
 
 func isInternalCalls(method string) bool {
@@ -245,67 +179,67 @@ func isInternalCalls(method string) bool {
 }
 
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.
-func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) map[string]string {
+func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) []attribute.KeyValue {
 	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
-	m := map[string]string{}
+	m := []attribute.KeyValue{}
 
-	var dbType string
+	var isExistComponent bool
 	switch s := req.(type) {
 	// Internal service invocation request
 	case *internalv1pb.InternalInvokeRequest:
-		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
+		m = append(m, semconv.RPCServiceKey.String(daprRPCServiceInvocationService))
 
-		// Rename spanname
-		if s.GetActor() == nil {
-			m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", appID, s.Message.GetMethod())
-			m[daprAPIInvokeMethod] = s.Message.GetMethod()
-		} else {
-			m[daprAPISpanNameInternal] = fmt.Sprintf("CallActor/%s/%s", s.GetActor().GetActorType(), s.Message.GetMethod())
-			m[daprAPIActorTypeID] = fmt.Sprintf("%s.%s", s.GetActor().GetActorType(), s.GetActor().GetActorId())
-		}
+		internalV := fmt.Sprintf("CallLocal/%s/%s", appID, s.Message.GetMethod())
+		m = append(m, daprAPISpanNameInternalKey.String(internalV),
+			isemconv.APIInvokeMethodKey.String(s.Message.GetMethod()))
 
 	// Dapr APIs
 	case *runtimev1pb.InvokeServiceRequest:
-		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
-		m[netPeerNameSpanAttributeKey] = s.GetId()
-		m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", s.GetId(), s.Message.GetMethod())
+		m = append(m,
+			semconv.RPCServiceKey.String(daprRPCServiceInvocationService),
+			semconv.NetPeerNameKey.String(s.GetId()))
+		internalV := fmt.Sprintf("CallLocal/%s/%s", s.GetId(), s.Message.GetMethod())
+		m = append(m, daprAPISpanNameInternalKey.String(internalV))
 
 	case *runtimev1pb.PublishEventRequest:
-		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService
-		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
-		m[messagingDestinationSpanAttributeKey] = s.GetTopic()
-		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationTopicKind
+		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService),
+			semconv.MessagingSystemKey.String("pubsub"),
+			semconv.MessagingDestinationKey.String(s.GetTopic()),
+			semconv.MessagingDestinationKindTopic)
 
 	case *runtimev1pb.InvokeBindingRequest:
-		dbType = bindingBuildingBlockType
-		m[dbNameSpanAttributeKey] = s.GetName()
+		isExistComponent = true
+		m = append(m, isemconv.ComponentBindings,
+			isemconv.ComponentNameKey.String(s.GetName()))
 
 	case *runtimev1pb.GetStateRequest:
-		dbType = stateBuildingBlockType
-		m[dbNameSpanAttributeKey] = s.GetStoreName()
+		isExistComponent = true
+		m = append(m, isemconv.ComponentStates,
+			isemconv.ComponentNameKey.String(s.GetStoreName()))
 
 	case *runtimev1pb.SaveStateRequest:
-		dbType = stateBuildingBlockType
-		m[dbNameSpanAttributeKey] = s.GetStoreName()
+		isExistComponent = true
+		m = append(m, isemconv.ComponentStates,
+			isemconv.ComponentNameKey.String(s.GetStoreName()))
 
 	case *runtimev1pb.DeleteStateRequest:
-		dbType = stateBuildingBlockType
-		m[dbNameSpanAttributeKey] = s.GetStoreName()
+		isExistComponent = true
+		m = append(m, isemconv.ComponentStates,
+			isemconv.ComponentNameKey.String(s.GetStoreName()))
 
 	case *runtimev1pb.GetSecretRequest:
-		dbType = secretBuildingBlockType
-		m[dbNameSpanAttributeKey] = s.GetStoreName()
+		isExistComponent = true
+		m = append(m, isemconv.ComponentSecrets,
+			isemconv.ComponentNameKey.String(s.GetStoreName()))
 	}
 
-	if _, ok := m[dbNameSpanAttributeKey]; ok {
-		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService
-		m[dbSystemSpanAttributeKey] = dbType
-		m[dbStatementSpanAttributeKey] = rpcMethod
-		m[dbConnectionStringSpanAttributeKey] = dbType
+	if isExistComponent {
+		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService),
+			isemconv.ComponentMethodKey.String(rpcMethod))
+	} else {
+		m = append(m, isemconv.APIKey.String(rpcMethod))
 	}
-
-	m[daprAPIProtocolSpanAttributeKey] = daprAPIGRPCSpanAttrValue
-	m[daprAPISpanAttributeKey] = rpcMethod
+	m = append(m, isemconv.APIProtocolGRPC)
 
 	return m
 }

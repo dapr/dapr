@@ -24,12 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/components-contrib/lock"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/version"
-
-	"github.com/dapr/components-contrib/configuration"
-
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -37,7 +32,9 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
+	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -46,6 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -61,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/version"
 )
 
 const (
@@ -416,12 +415,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, err
 	}
 
-	span := diagUtils.SpanFromContext(ctx)
-	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
-
+	sc := trace.SpanContextFromContext(ctx)
+	// Populate W3C traceparent to string.
+	traceparent := diagUtils.TraceparentToW3CString(sc)
+	// Populate W3C tracestate to string.
+	traceState := diagUtils.TraceStateToW3CString(sc)
 	body := []byte{}
 	if in.Data != nil {
 		body = in.Data
@@ -435,7 +433,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
 			Data:            body,
-			TraceID:         corID,
+			TraceID:         traceparent,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
 		})

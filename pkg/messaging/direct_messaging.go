@@ -31,7 +31,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
@@ -229,8 +228,7 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 }
 
 func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
-	span := diagUtils.SpanFromContext(ctx)
-	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	ctx = diag.SpanContextToGRPCMetadata(ctx)
 
 	return ctx
 }

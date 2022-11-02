@@ -33,13 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/exporters/zipkin"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
@@ -306,6 +300,41 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	return nil
 }
 
+func (a *DaprRuntime) initOpentelemetry() {
+	var err error
+	if a.globalConfig.Spec.MetricSpec.Enabled {
+		log.Info("initOpentelemetry start metric client....")
+		var metricClient *diag.MetricClient
+		if metricClient, err = diag.InitMetrics(
+			diag.Daprd,
+			a.globalConfig.Spec.MetricSpec.ExporterAddress,
+			a.runtimeConfig.ID, a.namespace); err != nil {
+			log.Errorf("failed to initialize metrics, err: %s", err.Error())
+		}
+		// add Close metric
+		if metricClient != nil {
+			a.apiClosers = append(a.apiClosers, metricClient)
+		}
+	}
+	if a.globalConfig.Spec.TracingSpec.Enabled {
+		log.Info("initOpentelemetry start tracing client....")
+		var tracingClient *diag.TracingClient
+		if tracingClient, err = diag.InitTracing(
+			a.globalConfig.Spec.TracingSpec.ExporterAddress,
+			a.globalConfig.Spec.TracingSpec.Token,
+			a.runtimeConfig.ID, a.namespace,
+			a.globalConfig.Spec.TracingSpec.SamplingRate,
+		); err != nil {
+			log.Errorf("failed to initialize tracing, err: %s", err.Error())
+		}
+		if tracingClient != nil {
+			a.apiClosers = append(a.apiClosers, tracingClient)
+		}
+	}
+
+	return
+}
+
 func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
@@ -325,78 +354,8 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	return nil, nil
 }
 
-// setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
-// but we do so here to explicitly call out the dependency on having `hostAddress` computed.
-func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
-	// Register stdout trace exporter if user wants to debug requests or log as Info level.
-	if a.globalConfig.Spec.TracingSpec.Stdout {
-		tpStore.RegisterExporter(diagUtils.NewStdOutExporter())
-	}
-
-	// Register zipkin trace exporter if ZipkinSpec is specified
-	if a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress != "" {
-		zipkinExporter, err := zipkin.New(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
-		if err != nil {
-			return err
-		}
-		tpStore.RegisterExporter(zipkinExporter)
-	}
-
-	// Register otel trace exporter if OtelSpec is specified
-	if a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress != "" && a.globalConfig.Spec.TracingSpec.Otel.Protocol != "" {
-		endpoint := a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress
-		protocol := a.globalConfig.Spec.TracingSpec.Otel.Protocol
-		if protocol != "http" && protocol != "grpc" {
-			return fmt.Errorf("invalid protocol %v provided for Otel endpoint", protocol)
-		}
-		isSecure := a.globalConfig.Spec.TracingSpec.Otel.IsSecure
-
-		var client otlptrace.Client
-		if protocol == "http" {
-			clientOptions := []otlptracehttp.Option{otlptracehttp.WithEndpoint(endpoint)}
-			if !isSecure {
-				clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
-			}
-			client = otlptracehttp.NewClient(clientOptions...)
-		} else {
-			clientOptions := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
-			if !isSecure {
-				clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
-			}
-			client = otlptracegrpc.NewClient(clientOptions...)
-		}
-		otelExporter, err := otlptrace.New(a.ctx, client)
-		if err != nil {
-			return err
-		}
-		tpStore.RegisterExporter(otelExporter)
-	}
-
-	// Register a resource
-	r := resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(a.runtimeConfig.ID),
-	)
-
-	tpStore.RegisterResource(r)
-
-	// Register a trace sampler based on Sampling settings
-	tpStore.RegisterSampler(diagUtils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
-
-	tpStore.RegisterTracerProvider()
-
-	return nil
-}
-
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.namespace = a.getNamespace()
-
-	// Initialize metrics only if MetricSpec is enabled.
-	if a.globalConfig.Spec.MetricSpec.Enabled {
-		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace); err != nil {
-			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
-		}
-	}
 
 	err := a.establishSecurity(a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
@@ -410,9 +369,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return errors.Wrap(err, "failed to determine host address")
-	}
-	if err = a.setupTracing(a.hostAddress, newOpentelemetryTracerProviderStore()); err != nil {
-		return errors.Wrap(err, "failed to setup tracing")
 	}
 	// Register and initialize name resolution for service discovery.
 	a.nameResolutionRegistry = opts.nameResolutionRegistry
@@ -1099,22 +1055,18 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 	// Check the grpc-trace-bin with fallback to traceparent.
 	validTraceparent := false
-	if val, ok := metadata[diag.GRPCTraceContextKey]; ok {
-		if sc, ok := diagUtils.SpanContextFromBinary([]byte(val)); ok {
-			spanContext = sc
-		}
-	} else if val, ok := metadata[diag.TraceparentHeader]; ok {
-		if sc, ok := diag.SpanContextFromW3CString(val); ok {
+	if val, ok := metadata[diagUtils.TraceparentHeader]; ok {
+		if sc := diagUtils.SpanContextFromW3CString(val); sc.IsValid() {
 			spanContext = sc
 			validTraceparent = true
 			// Only parse the tracestate if we've successfully parsed the traceparent.
-			if val, ok := metadata[diag.TracestateHeader]; ok {
-				ts := diag.TraceStateFromW3CString(val)
-				spanContext.WithTraceState(*ts)
+			if val, ok := metadata[diagUtils.TracestateHeader]; ok {
+				ts := diagUtils.TraceStateFromW3CString(val)
+				spanContext.WithTraceState(ts)
 			}
 		}
 	}
-	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext)
 
 	var appResponseBody []byte
 	path := a.inputBindingRoutes[bindingName]
@@ -1123,7 +1075,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	}
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+		ctx = diag.SpanContextToGRPCMetadata(ctx)
 
 		// Add workaround to fallback on checking traceparent header.
 		// As grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus, tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
@@ -1131,9 +1083,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		// TODO: Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827.
 		if validTraceparent {
 			spanContextHeaders := make(map[string]string, 2)
-			diag.SpanContextToHTTPHeaders(span.SpanContext(), func(key string, val string) {
+			setFunc := func(key string, val string) {
 				spanContextHeaders[key] = val
-			})
+			}
+			invokev1.ProcessSpanContextToMetadata(ctx, invokev1.SetFunc(setFunc), "", "")
 			for key, val := range spanContextHeaders {
 				ctx = md.AppendToOutgoingContext(ctx, key, val)
 			}
@@ -1162,12 +1115,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()
 		}
-		if diag.DefaultGRPCMonitoring.IsEnabled() {
-			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
-				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent",
-				status.Code(err).String(),
-				int64(len(resp.GetData())), start)
-		}
+		diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
+			"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent",
+			status.Code(err).String(),
+			int64(len(resp.GetData())), start)
 
 		if err != nil {
 			var body []byte
@@ -1230,7 +1181,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				nethttp.MethodPost+" /"+bindingName,
 			)
 			diag.AddAttributesToSpan(span, m)
-			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
+			diag.UpdateSpanStatusFromHTTPStatus(span, trace.SpanKindServer, int(resp.Status().Code))
 			span.End()
 		}
 		// ::TODO report metrics for http, such as grpc
@@ -1904,10 +1855,10 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	req.WithCustomHTTPMetadata(msg.metadata)
 
 	if cloudEvent[pubsub.TraceIDField] != nil {
-		traceID := cloudEvent[pubsub.TraceIDField].(string)
-		sc, _ := diag.SpanContextFromW3CString(traceID)
+		traceparent := cloudEvent[pubsub.TraceIDField].(string)
+		sc := diagUtils.SpanContextFromW3CString(traceparent)
 		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
-		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc)
 	}
 
 	start := time.Now()
@@ -1924,7 +1875,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	if span != nil {
 		m := diag.ConstructSubscriptionSpanAttributes(msg.topic)
 		diag.AddAttributesToSpan(span, m)
-		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
+		diag.UpdateSpanStatusFromHTTPStatus(span, trace.SpanKindServer, statusCode)
 		span.End()
 	}
 
@@ -2026,12 +1977,12 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	var span trace.Span
 	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
+			sc := diagUtils.SpanContextFromW3CString(traceID)
 			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
 			// no ops if trace is off
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc)
+			ctx = diag.SpanContextToGRPCMetadata(ctx)
 		} else {
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}

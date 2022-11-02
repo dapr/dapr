@@ -306,7 +306,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		b.featureSpec = []config.FeatureSpec{}
 	}
 
-	tracingSpec := config.TracingSpec{SamplingRate: "1"}
+	tracingSpec := config.TracingSpec{SamplingRate: 1.0}
 	store := fakeStore()
 	storeName := "actorStore"
 	if b.actorStore != nil {
@@ -328,7 +328,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 }
 
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
-	spec := config.TracingSpec{SamplingRate: "1"}
+	spec := config.TracingSpec{SamplingRate: 1.0}
 	store := fakeStore()
 	config := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
@@ -349,7 +349,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 }
 
 func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
-	spec := config.TracingSpec{SamplingRate: "1"}
+	spec := config.TracingSpec{SamplingRate: 1.0}
 	config := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{""},
@@ -367,7 +367,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 }
 
 func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
-	spec := config.TracingSpec{SamplingRate: "1"}
+	spec := config.TracingSpec{SamplingRate: 1.0}
 	var store state.Store
 	config := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
@@ -387,7 +387,7 @@ func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *acto
 }
 
 func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.AppChannel) *actorsRuntime {
-	spec := config.TracingSpec{SamplingRate: "1"}
+	spec := config.TracingSpec{SamplingRate: 1.0}
 	store := fakeStore()
 	appConfig := config.ApplicationConfig{
 		Entities:                   []string{"cat", "actor2"},

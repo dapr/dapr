@@ -23,9 +23,8 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/metrics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/operator"
-	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 )
@@ -37,6 +36,7 @@ var (
 	watchInterval           string
 	maxPodRestartsPerMinute int
 	disableLeaderElection   bool
+	metricClient            *diag.MetricClient
 )
 
 //nolint:gosec
@@ -89,9 +89,17 @@ func main() {
 	go operator.RunWebhooks(ctx, !disableLeaderElection)
 
 	<-ctx.Done() // Wait for SIGTERM and SIGINT.
+
+	if metricClient != nil {
+		metricClient.Close()
+	}
 }
 
 func init() {
+	var err error
+	var metricsExportedAddress string
+	var metricsEnabled bool
+
 	// This resets the flags on klog, which will otherwise try to log to the FS.
 	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(klogFlags)
@@ -99,9 +107,6 @@ func init() {
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.StringVar(&config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
@@ -114,21 +119,22 @@ func init() {
 	flag.IntVar(&maxPodRestartsPerMinute, "max-pod-restarts-per-minute", defaultMaxPodRestartsPerMinute, "Maximum number of pods in an invalid state that can be restarted per minute")
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
 
+	flag.BoolVar(&metricsEnabled, "enable-metrics", false, "Metric enabled, default false")
+	flag.StringVar(&metricsExportedAddress, "exporterAddress", "", "Metric exported address")
+
 	flag.Parse()
 
 	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+	if err = logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		log.Fatal(err)
 	} else {
 		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 	}
 
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
-
-	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
+	if metricsEnabled {
+		// Initialize injector service metrics
+		if metricClient, err = diag.InitMetrics(diag.Injector, metricsExportedAddress, "", ""); err != nil {
+			log.Fatal(err)
+		}
 	}
 }

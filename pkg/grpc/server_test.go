@@ -40,7 +40,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 		fakeServer := &server{
 			config: ServerConfig{},
 			tracingSpec: config.TracingSpec{
-				SamplingRate: "1",
+				SamplingRate: 1.0,
 			},
 			renewMutex: &sync.Mutex{},
 			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
@@ -55,7 +55,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 		fakeServer := &server{
 			config: ServerConfig{},
 			tracingSpec: config.TracingSpec{
-				SamplingRate: "0",
+				SamplingRate: 0.0,
 			},
 			renewMutex: &sync.Mutex{},
 			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
@@ -70,7 +70,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 		fakeServer := &server{
 			config: ServerConfig{},
 			tracingSpec: config.TracingSpec{
-				SamplingRate: "0",
+				SamplingRate: 0.0,
 			},
 			renewMutex: &sync.Mutex{},
 			logger:     logger.NewLogger("dapr.runtime.grpc.test"),

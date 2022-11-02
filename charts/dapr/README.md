@@ -84,8 +84,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
 | `global.ha.disruption.minimumAvailable`   | Minimum amount of available instances for control plane. This can either be effective count or %. | ``             |
 | `global.ha.disruption.maximumUnavailable` | Maximum amount of instances that are allowed to be unavailable for control plane. This can either be effective count or %. | `25%`             |
-| `global.prometheus.enabled`               | Prometheus metrics enablement for control plane services                | `true`                  |
-| `global.prometheus.port`                  | Prometheus scrape http endpoint port                                    | `9090`                  |
+| `global.metrics.enabled`               | Opentelemetry metrics enablement for control plane services                | `false`                  |
+| `global.metrics.exporterAddress`                  | Opentelemetry exported address for grpc |                                    | `localhost:8081`
 | `global.mtls.enabled`                     | Mutual TLS enablement                                                   | `true`                  |
 | `global.mtls.workloadCertTTL`             | TTL for workload cert                                                   | `24h`                   |
 | `global.mtls.allowedClockSkew`            | Allowed clock skew for workload cert rotation                           | `15m`                   |

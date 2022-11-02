@@ -55,7 +55,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 		{
 			Config:         "allowlistsappconfig",
@@ -64,7 +63,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 		},
 		{
 			Config:         "allowlistsgrpcappconfig",
@@ -73,7 +71,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
 		{
@@ -83,7 +80,6 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			AppProtocol:    "grpc",
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 		{
 			Config:         "allowlistsgrpcappconfig",
@@ -92,7 +88,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc_proxy_server",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 			AppPort:        50051,
 		},

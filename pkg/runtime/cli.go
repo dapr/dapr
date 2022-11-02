@@ -33,7 +33,6 @@ import (
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
 	"github.com/dapr/dapr/pkg/grpc"
-	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -84,10 +83,6 @@ func FromFlags() (*DaprRuntime, error) {
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
-	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
 	flag.Parse()
 
 	if *resourcesPath != "" {
@@ -121,11 +116,6 @@ func FromFlags() (*DaprRuntime, error) {
 
 	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
-
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
 
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {
@@ -295,7 +285,6 @@ func FromFlags() (*DaprRuntime, error) {
 		env.DaprPort:        strconv.Itoa(daprInternalGRPC),
 		env.DaprGRPCPort:    *daprAPIGRPCPort,
 		env.DaprHTTPPort:    *daprHTTPPort,
-		env.DaprMetricsPort: metricsExporter.Options().Port, // TODO - consider adding to runtime config
 		env.DaprProfilePort: *profilePort,
 	}
 
@@ -378,7 +367,11 @@ func FromFlags() (*DaprRuntime, error) {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
+
+	a := NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider)
+	a.initOpentelemetry()
+
+	return a, nil
 }
 
 func parsePlacementAddr(val string) []string {

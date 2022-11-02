@@ -24,39 +24,40 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
-	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/version"
 )
 
-var log = logger.NewLogger("dapr.placement")
+var (
+	metricClient *diag.MetricClient
+	log          = logger.NewLogger("dapr.placement")
+)
 
 const gracefulTimeout = 10 * time.Second
 
 func main() {
+	var err error
 	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 
 	cfg := newConfig()
 
 	// Apply options to all loggers.
-	if err := logger.ApplyOptionsToLoggers(&cfg.loggerOptions); err != nil {
+	if err = logger.ApplyOptionsToLoggers(&cfg.loggerOptions); err != nil {
 		log.Fatal(err)
 	}
 	log.Infof("log level set to: %s", cfg.loggerOptions.OutputLevel)
 
-	// Initialize dapr metrics for placement.
-	if err := cfg.metricsExporter.Init(); err != nil {
-		log.Fatal(err)
+	if cfg.metricsEnabled {
+		// Initialize injector service metrics
+		if metricClient, err = diag.InitMetrics(diag.Injector, cfg.metricsExportedAddress, "", ""); err != nil {
+			log.Fatal(err)
+		}
 	}
-
-	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
-	}
-
 	// Start Raft cluster.
 	raftServer := raft.New(cfg.raftID, cfg.raftInMemEnabled, cfg.raftPeers, cfg.raftLogStorePath)
 	if raftServer == nil {
@@ -95,6 +96,9 @@ func main() {
 		apiServer.Shutdown()
 		raftServer.Shutdown()
 		close(gracefulExitCh)
+		if metricClient != nil {
+			metricClient.Close()
+		}
 	}()
 
 	select {

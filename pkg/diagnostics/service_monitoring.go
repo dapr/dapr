@@ -3,364 +3,309 @@ package diagnostics
 import (
 	"context"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-)
-
-// Tag keys.
-var (
-	componentKey      = tag.MustNewKey("component")
-	failReasonKey     = tag.MustNewKey("reason")
-	operationKey      = tag.MustNewKey("operation")
-	actorTypeKey      = tag.MustNewKey("actor_type")
-	trustDomainKey    = tag.MustNewKey("trustDomain")
-	namespaceKey      = tag.MustNewKey("namespace")
-	policyActionKey   = tag.MustNewKey("policyAction")
-	resiliencyNameKey = tag.MustNewKey("name")
-	policyKey         = tag.MustNewKey("policy")
-	componentNameKey  = tag.MustNewKey("componentName")
+	"go.opentelemetry.io/otel/metric/instrument"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.opentelemetry.io/otel/metric/unit"
+	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
 type serviceMetrics struct {
 	// component metrics
-	componentLoaded        *stats.Int64Measure
-	componentInitCompleted *stats.Int64Measure
-	componentInitFailed    *stats.Int64Measure
+	componentLoaded        syncint64.Counter
+	componentInitCompleted syncint64.Counter
+	componentInitFailed    syncint64.Counter
 
 	// mTLS metrics
-	mtlsInitCompleted             *stats.Int64Measure
-	mtlsInitFailed                *stats.Int64Measure
-	mtlsWorkloadCertRotated       *stats.Int64Measure
-	mtlsWorkloadCertRotatedFailed *stats.Int64Measure
-
-	// Actor metrics
-	actorStatusReportTotal       *stats.Int64Measure
-	actorStatusReportFailedTotal *stats.Int64Measure
-	actorTableOperationRecvTotal *stats.Int64Measure
-	actorRebalancedTotal         *stats.Int64Measure
-	actorDeactivationTotal       *stats.Int64Measure
-	actorDeactivationFailedTotal *stats.Int64Measure
-	actorPendingCalls            *stats.Int64Measure
+	mtlsInitCompleted             syncint64.Counter
+	mtlsInitFailed                syncint64.Counter
+	mtlsWorkloadCertRotated       syncint64.Counter
+	mtlsWorkloadCertRotatedFailed syncint64.Counter
 
 	// Access Control Lists for Service Invocation metrics
-	appPolicyActionAllowed    *stats.Int64Measure
-	globalPolicyActionAllowed *stats.Int64Measure
-	appPolicyActionBlocked    *stats.Int64Measure
-	globalPolicyActionBlocked *stats.Int64Measure
+	appPolicyActionAllowed    syncint64.Counter
+	globalPolicyActionAllowed syncint64.Counter
+	appPolicyActionBlocked    syncint64.Counter
+	globalPolicyActionBlocked syncint64.Counter
 
-	appID   string
-	ctx     context.Context
-	enabled bool
+	actorStatusReportTotal       syncint64.Counter
+	actorStatusReportFailedTotal syncint64.Counter
+	actorTableOperationRecvTotal syncint64.Counter
+	actorRebalancedTotal         syncint64.Counter
+	actorDeactivationTotal       syncint64.Counter
+	actorDeactivationFailedTotal syncint64.Counter
+	actorPendingCalls            syncint64.Counter
 }
 
 // newServiceMetrics returns serviceMetrics instance with default service metric stats.
-func newServiceMetrics() *serviceMetrics {
-	return &serviceMetrics{
-		// Runtime Component metrics
-		componentLoaded: stats.Int64(
-			"runtime/component/loaded",
-			"The number of successfully loaded components.",
-			stats.UnitDimensionless),
-		componentInitCompleted: stats.Int64(
-			"runtime/component/init_total",
-			"The number of initialized components.",
-			stats.UnitDimensionless),
-		componentInitFailed: stats.Int64(
-			"runtime/component/init_fail_total",
-			"The number of component initialization failures.",
-			stats.UnitDimensionless),
+func (m *MetricClient) newServiceMetrics() *serviceMetrics {
+	sm := new(serviceMetrics)
+	// Runtime Component metrics
+	sm.componentLoaded, _ = m.meter.SyncInt64().Counter(
+		"runtime/component/loaded",
+		instrument.WithDescription("The number of successfully loaded components."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.componentInitCompleted, _ = m.meter.SyncInt64().Counter(
+		"runtime/component/init_total",
+		instrument.WithDescription("The number of initialized components."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.componentInitFailed, _ = m.meter.SyncInt64().Counter(
+		"runtime/component/init_fail_total",
+		instrument.WithDescription("The number of component initialization failures."),
+		instrument.WithUnit(unit.Dimensionless))
+	// mTLS
+	sm.mtlsInitCompleted, _ = m.meter.SyncInt64().Counter(
+		"runtime/mtls/init_total",
+		instrument.WithDescription("The number of successful mTLS authenticator initialization."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.mtlsInitFailed, _ = m.meter.SyncInt64().Counter(
+		"runtime/mtls/init_fail_total",
+		instrument.WithDescription("The number of mTLS authenticator init failures."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.mtlsWorkloadCertRotated, _ = m.meter.SyncInt64().Counter(
+		"runtime/mtls/workload_cert_rotated_total",
+		instrument.WithDescription("The number of the successful workload certificate rotations."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.mtlsWorkloadCertRotatedFailed, _ = m.meter.SyncInt64().Counter(
+		"runtime/mtls/workload_cert_rotated_fail_total",
+		instrument.WithDescription("The number of the failed workload certificate rotations."),
+		instrument.WithUnit(unit.Dimensionless))
+	// Access Control Lists for service invocation
+	sm.appPolicyActionAllowed, _ = m.meter.SyncInt64().Counter(
+		"runtime/acl/app_policy_action_allowed_total",
+		instrument.WithDescription("The number of requests allowed by the app specific action specified in the access control policy."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.globalPolicyActionAllowed, _ = m.meter.SyncInt64().Counter(
+		"runtime/acl/global_policy_action_allowed_total",
+		instrument.WithDescription("The number of requests allowed by the global action specified in the access control policy."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.appPolicyActionBlocked, _ = m.meter.SyncInt64().Counter(
+		"runtime/acl/app_policy_action_blocked_total",
+		instrument.WithDescription("The number of requests blocked by the app specific action specified in the access control policy."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.globalPolicyActionBlocked, _ = m.meter.SyncInt64().Counter(
+		"runtime/acl/global_policy_action_blocked_total",
+		instrument.WithDescription("The number of requests blocked by the global action specified in the access control policy."),
+		instrument.WithUnit(unit.Dimensionless))
 
-		// mTLS
-		mtlsInitCompleted: stats.Int64(
-			"runtime/mtls/init_total",
-			"The number of successful mTLS authenticator initialization.",
-			stats.UnitDimensionless),
-		mtlsInitFailed: stats.Int64(
-			"runtime/mtls/init_fail_total",
-			"The number of mTLS authenticator init failures.",
-			stats.UnitDimensionless),
-		mtlsWorkloadCertRotated: stats.Int64(
-			"runtime/mtls/workload_cert_rotated_total",
-			"The number of the successful workload certificate rotations.",
-			stats.UnitDimensionless),
-		mtlsWorkloadCertRotatedFailed: stats.Int64(
-			"runtime/mtls/workload_cert_rotated_fail_total",
-			"The number of the failed workload certificate rotations.",
-			stats.UnitDimensionless),
+	// Actor
+	sm.actorStatusReportTotal, _ = m.meter.SyncInt64().Counter(
+		"runtime/actor/status_report_total",
+		instrument.WithDescription("The number of the successful status reports to placement service."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.actorStatusReportFailedTotal, _ = m.meter.SyncInt64().Counter(
+		"runtime/actor/status_report_fail_total",
+		instrument.WithDescription("The number of the failed status reports to placement service."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.actorTableOperationRecvTotal, _ = m.meter.SyncInt64().Counter(
+		"runtime/actor/table_operation_recv_total",
+		instrument.WithDescription("The number of the received actor placement table operations."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.actorRebalancedTotal, _ = m.meter.SyncInt64().Counter(
+		"runtime/actor/rebalanced_total",
+		instrument.WithDescription("The number of the actor rebalance requests."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.actorDeactivationTotal, _ = m.meter.SyncInt64().Counter(
+		"runtime/actor/deactivated_total",
+		instrument.WithDescription("The number of the successful actor deactivation."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.actorDeactivationFailedTotal, _ = m.meter.SyncInt64().Counter(
+		"runtime/actor/deactivated_failed_total",
+		instrument.WithDescription("The number of the failed actor deactivation."),
+		instrument.WithUnit(unit.Dimensionless))
+	sm.actorPendingCalls, _ = m.meter.SyncInt64().Counter(
+		"runtime/actor/pending_actor_calls",
+		instrument.WithDescription("The number of pending actor calls waiting to acquire the per-actor lock."),
+		instrument.WithUnit(unit.Dimensionless))
 
-		// Actor
-		actorStatusReportTotal: stats.Int64(
-			"runtime/actor/status_report_total",
-			"The number of the successful status reports to placement service.",
-			stats.UnitDimensionless),
-		actorStatusReportFailedTotal: stats.Int64(
-			"runtime/actor/status_report_fail_total",
-			"The number of the failed status reports to placement service.",
-			stats.UnitDimensionless),
-		actorTableOperationRecvTotal: stats.Int64(
-			"runtime/actor/table_operation_recv_total",
-			"The number of the received actor placement table operations.",
-			stats.UnitDimensionless),
-		actorRebalancedTotal: stats.Int64(
-			"runtime/actor/rebalanced_total",
-			"The number of the actor rebalance requests.",
-			stats.UnitDimensionless),
-		actorDeactivationTotal: stats.Int64(
-			"runtime/actor/deactivated_total",
-			"The number of the successful actor deactivation.",
-			stats.UnitDimensionless),
-		actorDeactivationFailedTotal: stats.Int64(
-			"runtime/actor/deactivated_failed_total",
-			"The number of the failed actor deactivation.",
-			stats.UnitDimensionless),
-		actorPendingCalls: stats.Int64(
-			"runtime/actor/pending_actor_calls",
-			"The number of pending actor calls waiting to acquire the per-actor lock.",
-			stats.UnitDimensionless),
-
-		// Access Control Lists for service invocation
-		appPolicyActionAllowed: stats.Int64(
-			"runtime/acl/app_policy_action_allowed_total",
-			"The number of requests allowed by the app specific action specified in the access control policy.",
-			stats.UnitDimensionless),
-		globalPolicyActionAllowed: stats.Int64(
-			"runtime/acl/global_policy_action_allowed_total",
-			"The number of requests allowed by the global action specified in the access control policy.",
-			stats.UnitDimensionless),
-		appPolicyActionBlocked: stats.Int64(
-			"runtime/acl/app_policy_action_blocked_total",
-			"The number of requests blocked by the app specific action specified in the access control policy.",
-			stats.UnitDimensionless),
-		globalPolicyActionBlocked: stats.Int64(
-			"runtime/acl/global_policy_action_blocked_total",
-			"The number of requests blocked by the global action specified in the access control policy.",
-			stats.UnitDimensionless),
-
-		// TODO: use the correct context for each request
-		ctx:     context.Background(),
-		enabled: false,
-	}
-}
-
-// Init initialize metrics views for metrics.
-func (s *serviceMetrics) Init(appID string) error {
-	s.appID = appID
-	s.enabled = true
-	return view.Register(
-		diagUtils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
-		diagUtils.NewMeasureView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey, componentNameKey}, view.Count()),
-
-		diagUtils.NewMeasureView(s.mtlsInitCompleted, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(s.mtlsInitFailed, []tag.Key{appIDKey, failReasonKey}, view.Count()),
-		diagUtils.NewMeasureView(s.mtlsWorkloadCertRotated, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(s.mtlsWorkloadCertRotatedFailed, []tag.Key{appIDKey, failReasonKey}, view.Count()),
-
-		diagUtils.NewMeasureView(s.actorStatusReportTotal, []tag.Key{appIDKey, actorTypeKey, operationKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorStatusReportFailedTotal, []tag.Key{appIDKey, actorTypeKey, operationKey, failReasonKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorTableOperationRecvTotal, []tag.Key{appIDKey, actorTypeKey, operationKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorRebalancedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-
-		diagUtils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
-		diagUtils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
-		diagUtils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
-		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
-	)
+	return sm
 }
 
 // ComponentLoaded records metric when component is loaded successfully.
 func (s *serviceMetrics) ComponentLoaded() {
-	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(appIDKey, s.appID), s.componentLoaded.M(1))
+	if s == nil {
+		return
 	}
+	s.componentLoaded.Add(context.Background(), 1)
 }
 
 // ComponentInitialized records metric when component is initialized.
 func (s *serviceMetrics) ComponentInitialized(component string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, componentKey, component),
-			s.componentInitCompleted.M(1))
+	if s == nil {
+		return
 	}
+	s.componentInitCompleted.Add(context.Background(), 1,
+		isemconv.ComponentNameKey.String(component),
+	)
 }
 
 // ComponentInitFailed records metric when component initialization is failed.
-func (s *serviceMetrics) ComponentInitFailed(component string, reason string, name string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name),
-			s.componentInitFailed.M(1))
+func (s *serviceMetrics) ComponentInitFailed(typ string, reason string, component string) {
+	if s == nil {
+		return
 	}
+	s.componentInitFailed.Add(context.Background(), 1,
+		isemconv.ComponentTypeKey.String(typ),
+		isemconv.ComponentNameKey.String(component),
+		isemconv.FailReasonKey.String(reason),
+	)
 }
 
 // MTLSInitCompleted records metric when component is initialized.
 func (s *serviceMetrics) MTLSInitCompleted() {
-	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(appIDKey, s.appID), s.mtlsInitCompleted.M(1))
+	if s == nil {
+		return
 	}
+	s.mtlsInitCompleted.Add(context.Background(), 1)
 }
 
 // MTLSInitFailed records metric when component initialization is failed.
 func (s *serviceMetrics) MTLSInitFailed(reason string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, failReasonKey, reason),
-			s.mtlsInitFailed.M(1))
+	if s == nil {
+		return
 	}
+	s.mtlsInitFailed.Add(context.Background(), 1,
+		isemconv.FailReasonKey.String(reason),
+	)
 }
 
 // MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
-	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
+	if s == nil {
+		return
 	}
+	s.mtlsWorkloadCertRotated.Add(context.Background(), 1)
 }
 
 // MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, failReasonKey, reason),
-			s.mtlsWorkloadCertRotatedFailed.M(1))
+	if s == nil {
+		return
 	}
+	s.mtlsWorkloadCertRotatedFailed.Add(context.Background(), 1,
+		isemconv.FailReasonKey.String(reason),
+	)
 }
 
-// ActorStatusReported records metrics when status is reported to placement service.
-func (s *serviceMetrics) ActorStatusReported(operation string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, operationKey, operation),
-			s.actorStatusReportTotal.M(1))
+// RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app.
+func (s *serviceMetrics) RequestAllowedByAppAction(trustDomain, namespace, operation, httpverb string, policyAction bool) {
+	if s == nil {
+		return
 	}
+	s.appPolicyActionAllowed.Add(context.Background(), 1,
+		isemconv.ComponentOperationKey.String(operation),
+		semconv.HTTPMethodKey.String(httpverb),
+		isemconv.PolicyActionKey.Bool(policyAction),
+		isemconv.TrustDomainKey.String(trustDomain),
+	)
+}
+
+// RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app.
+func (s *serviceMetrics) RequestBlockedByAppAction(trustDomain, namespace, operation, httpverb string, policyAction bool) {
+	if s == nil {
+		return
+	}
+	s.appPolicyActionAllowed.Add(context.Background(), 1,
+		isemconv.ComponentOperationKey.String(operation),
+		semconv.HTTPMethodKey.String(httpverb),
+		isemconv.PolicyActionKey.Bool(policyAction),
+		isemconv.TrustDomainKey.String(trustDomain),
+	)
+}
+
+// RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy.
+func (s *serviceMetrics) RequestAllowedByGlobalAction(trustDomain, namespace, operation, httpverb string, policyAction bool) {
+	if s == nil {
+		return
+	}
+	s.globalPolicyActionAllowed.Add(context.Background(), 1,
+		isemconv.ComponentOperationKey.String(operation),
+		semconv.HTTPMethodKey.String(httpverb),
+		isemconv.PolicyActionKey.Bool(policyAction),
+		isemconv.TrustDomainKey.String(trustDomain),
+	)
+}
+
+// RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy.
+func (s *serviceMetrics) RequestBlockedByGlobalAction(trustDomain, namespace, operation, httpverb string, policyAction bool) {
+	if s == nil {
+		return
+	}
+	s.globalPolicyActionBlocked.Add(context.Background(), 1,
+		isemconv.ComponentOperationKey.String(operation),
+		semconv.HTTPMethodKey.String(httpverb),
+		isemconv.PolicyActionKey.Bool(policyAction),
+		isemconv.TrustDomainKey.String(trustDomain),
+	)
 }
 
 // ActorStatusReportFailed records metrics when status report to placement service is failed.
 func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, operationKey, operation, failReasonKey, reason),
-			s.actorStatusReportFailedTotal.M(1))
+	if s == nil {
+		return
 	}
+	s.actorStatusReportFailedTotal.Add(context.Background(), 1,
+		isemconv.FailReasonKey.String(reason),
+		isemconv.ComponentOperationKey.String(operation),
+	)
+}
+
+// ActorStatusReported records metrics when status is reported to placement service.
+func (s *serviceMetrics) ActorStatusReported(operation string) {
+	if s == nil {
+		return
+	}
+	s.actorStatusReportTotal.Add(context.Background(), 1,
+		isemconv.ComponentOperationKey.String(operation),
+	)
 }
 
 // ActorPlacementTableOperationReceived records metric when runtime receives table operation.
 func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, operationKey, operation),
-			s.actorTableOperationRecvTotal.M(1))
+	if s == nil {
+		return
 	}
+	s.actorTableOperationRecvTotal.Add(context.Background(), 1,
+		isemconv.ComponentOperationKey.String(operation),
+	)
 }
 
 // ActorRebalanced records metric when actors are drained.
 func (s *serviceMetrics) ActorRebalanced(actorType string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorRebalancedTotal.M(1))
+	if s == nil {
+		return
 	}
+	s.actorRebalancedTotal.Add(context.Background(), 1,
+		isemconv.APIActorTypeKey.String(actorType))
 }
 
 // ActorDeactivated records metric when actor is deactivated.
 func (s *serviceMetrics) ActorDeactivated(actorType string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorDeactivationTotal.M(1))
+	if s == nil {
+		return
 	}
+	s.actorDeactivationTotal.Add(context.Background(), 1,
+		isemconv.APIActorTypeKey.String(actorType))
 }
 
 // ActorDeactivationFailed records metric when actor deactivation is failed.
 func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
-			s.actorDeactivationFailedTotal.M(1))
+	if s == nil {
+		return
 	}
+
+	s.actorDeactivationFailedTotal.Add(context.Background(), 1,
+		isemconv.FailReasonKey.String(reason),
+		isemconv.APIActorTypeKey.String(actorType))
 }
 
 // ReportActorPendingCalls records the current pending actor locks.
 func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks int32) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorPendingCalls.M(int64(pendingLocks)))
+	if s == nil {
+		return
 	}
-}
-
-// RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app.
-func (s *serviceMetrics) RequestAllowedByAppAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(
-				appIDKey, appID,
-				trustDomainKey, trustDomain,
-				namespaceKey, namespace,
-				operationKey, operation,
-				httpMethodKey, httpverb,
-				policyActionKey, policyAction),
-			s.appPolicyActionAllowed.M(1))
-	}
-}
-
-// RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app.
-func (s *serviceMetrics) RequestBlockedByAppAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(
-				appIDKey, appID,
-				trustDomainKey, trustDomain,
-				namespaceKey, namespace,
-				operationKey, operation,
-				httpMethodKey, httpverb,
-				policyActionKey, policyAction),
-			s.appPolicyActionBlocked.M(1))
-	}
-}
-
-// RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy.
-func (s *serviceMetrics) RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(
-				appIDKey, appID,
-				trustDomainKey, trustDomain,
-				namespaceKey, namespace,
-				operationKey, operation,
-				httpMethodKey, httpverb,
-				policyActionKey, policyAction),
-			s.globalPolicyActionAllowed.M(1))
-	}
-}
-
-// RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy.
-func (s *serviceMetrics) RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(
-				appIDKey, appID,
-				trustDomainKey, trustDomain,
-				namespaceKey, namespace,
-				operationKey, operation,
-				httpMethodKey, httpverb,
-				policyActionKey, policyAction),
-			s.globalPolicyActionBlocked.M(1))
-	}
+	s.actorPendingCalls.Add(context.Background(), int64(pendingLocks),
+		isemconv.APIActorTypeKey.String(actorType))
 }

@@ -57,9 +57,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/zipkin"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -86,7 +83,6 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
@@ -909,105 +905,6 @@ func TestInitNameResolution(t *testing.T) {
 		// assert
 		assert.NoError(t, err, "expected no error")
 	})
-}
-
-func TestSetupTracing(t *testing.T) {
-	testcases := []struct {
-		name              string
-		tracingConfig     config.TracingSpec
-		hostAddress       string
-		expectedExporters []sdktrace.SpanExporter
-		expectedErr       string
-	}{{
-		name:          "no trace exporter",
-		tracingConfig: config.TracingSpec{},
-	}, {
-		name: "bad host address, failing zipkin",
-		tracingConfig: config.TracingSpec{
-			Zipkin: config.ZipkinSpec{
-				EndpointAddress: "localhost",
-			},
-		},
-		expectedErr: "invalid collector URL \"localhost\": no scheme or host",
-	}, {
-		name: "zipkin trace exporter",
-		tracingConfig: config.TracingSpec{
-			Zipkin: config.ZipkinSpec{
-				EndpointAddress: "http://foo.bar",
-			},
-		},
-		expectedExporters: []sdktrace.SpanExporter{&zipkin.Exporter{}},
-	}, {
-		name: "otel trace http exporter",
-		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
-				EndpointAddress: "foo.bar",
-				IsSecure:        false,
-				Protocol:        "http",
-			},
-		},
-		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
-	}, {
-		name: "invalid otel trace exporter protocol",
-		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
-				EndpointAddress: "foo.bar",
-				IsSecure:        false,
-				Protocol:        "tcp",
-			},
-		},
-		expectedErr: "invalid protocol tcp provided for Otel endpoint",
-	}, {
-		name: "stdout trace exporter",
-		tracingConfig: config.TracingSpec{
-			Stdout: true,
-		},
-		expectedExporters: []sdktrace.SpanExporter{&diagUtils.StdoutExporter{}},
-	}, {
-		name: "all trace exporters",
-		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
-				EndpointAddress: "http://foo.bar",
-				IsSecure:        false,
-				Protocol:        "http",
-			},
-			Zipkin: config.ZipkinSpec{
-				EndpointAddress: "http://foo.bar",
-			},
-			Stdout: true,
-		},
-		expectedExporters: []sdktrace.SpanExporter{&diagUtils.StdoutExporter{}, &zipkin.Exporter{}, &otlptrace.Exporter{}},
-	}}
-
-	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
-			rt := NewTestDaprRuntime(modes.StandaloneMode)
-			defer stopRuntime(t, rt)
-			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
-			if tc.hostAddress != "" {
-				rt.hostAddress = tc.hostAddress
-			}
-			// Setup tracing with the fake tracer provider  store to confirm
-			// the right exporter was registered.
-			tpStore := newFakeTracerProviderStore()
-			if err := rt.setupTracing(rt.hostAddress, tpStore); tc.expectedErr != "" {
-				assert.Contains(t, err.Error(), tc.expectedErr)
-			} else {
-				assert.Nil(t, err)
-			}
-			for i, exporter := range tpStore.exporters {
-				// Exporter types don't expose internals, so we can only validate that
-				// the right type of  exporter was registered.
-				assert.Equal(t, reflect.TypeOf(tc.expectedExporters[i]), reflect.TypeOf(exporter))
-			}
-			// Setup tracing with the OpenTelemetry trace provider store.
-			// We have no way to validate the result, but we can at least
-			// confirm that nothing blows up.
-			if tc.expectedErr == "" {
-				rt.setupTracing(rt.hostAddress, newOpentelemetryTracerProviderStore())
-			}
-		})
-	}
 }
 
 func TestMetadataUUID(t *testing.T) {

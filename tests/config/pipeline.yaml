@@ -4,7 +4,7 @@ metadata:
   name: pipeline
 spec:
   tracing:
-    samplingRate: "1"
+    samplingRate: 1.0
   httpPipeline:
     handlers:
     - type: middleware.http.uppercase

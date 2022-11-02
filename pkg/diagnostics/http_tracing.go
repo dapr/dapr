@@ -14,33 +14,23 @@ limitations under the License.
 package diagnostics
 
 import (
+	"context"
 	"fmt"
-	"net/http"
-	"net/textproto"
-	"strconv"
 	"strings"
 
 	"github.com/valyala/fasthttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
+	apitrace "go.opentelemetry.io/otel/trace"
 
-	otelcodes "go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
-	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics/propagation"
+	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
-// We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
-// Reference : https://github.com/census-instrumentation/opencensus-go/blob/master/plugin/ochttp/propagation/tracecontext/propagation.go
-const (
-	supportedVersion  = 0
-	maxVersion        = 254
-	maxTracestateLen  = 512
-	TraceparentHeader = "traceparent"
-	TracestateHeader  = "tracestate"
-)
-
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
-func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
+func HTTPTraceMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		path := string(ctx.Request.URI().Path())
 		if isHealthzRequest(path) {
@@ -48,72 +38,34 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 			return
 		}
 
-		ctx, span := startTracingClientSpanFromHTTPContext(ctx, path, spec)
-		headers := make(map[string]string)
-		ctx.Request.Header.VisitAll(func(key []byte, value []byte) {
-			headers[string(key)] = string(value)
-		})
+		supplier := propagation.NewFasthttpSupplier(&ctx.Request.Header)
+		newCtx, span := startTracingClientSpanFromCarrier(supplier, path)
+		otel.GetTextMapPropagator().Inject(newCtx, supplier)
 		next(ctx)
 
-		// Add span attributes only if it is sampled, which reduced the perf impact.
-		if span.SpanContext().IsSampled() {
-			AddAttributesToSpan(span, userDefinedHTTPHeaders(ctx))
-			spanAttr := spanAttributesMapFromHTTPContext(ctx)
-			AddAttributesToSpan(span, spanAttr)
-
-			// Correct the span name based on API.
-			if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
-				span.SetName(sname)
-			}
-		}
+		attrs := spanAttributesMapFromHTTPContext(ctx)
+		span.SetAttributes(attrs...)
 
 		// Check if response has traceparent header and add if absent
-		if ctx.Response.Header.Peek(TraceparentHeader) == nil {
-			span = diagUtils.SpanFromContext(ctx)
-			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
+		if ctx.Response.Header.Peek(diagUtils.TraceparentHeader) == nil {
+			diagUtils.SpanContextToMetadata(span.SpanContext(), ctx.Response.Header.Set)
 		}
-
-		UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
+		UpdateSpanStatusFromHTTPStatus(span,
+			apitrace.SpanKindClient,
+			ctx.Response.StatusCode())
 		span.End()
 	}
 }
 
-// userDefinedHTTPHeaders returns dapr- prefixed header from incoming metadata.
-// Users can add dapr- prefixed headers that they want to see in span attributes.
-func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
-	m := map[string]string{}
+func startTracingClientSpanFromCarrier(supplier *propagation.FasthttpSupplier, spanName string) (context.Context, apitrace.Span) {
+	ctx := context.Background()
+	ctx = otel.GetTextMapPropagator().Extract(ctx, supplier)
+	sc := apitrace.SpanContextFromContext(ctx)
 
-	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
-		k := strings.ToLower(string(key))
-		if strings.HasPrefix(k, daprHeaderPrefix) {
-			m[k] = string(value)
-		}
-	})
-
-	return m
-}
-
-func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (*fasthttp.RequestCtx, trace.Span) {
-	sc, _ := SpanContextFromRequest(&ctx.Request)
-	netCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
-	kindOption := trace.WithSpanKind(trace.SpanKindClient)
-	_, span := tracer.Start(netCtx, spanName, kindOption)
-	diagUtils.SpanToFastHTTPContext(ctx, span)
-	return ctx, span
-}
-
-// SpanContextFromRequest extracts a span context from incoming requests.
-func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok bool) {
-	h, ok := getRequestHeader(req, TraceparentHeader)
-	if !ok {
-		return trace.SpanContext{}, false
-	}
-	sc, ok = SpanContextFromW3CString(h)
-	if ok {
-		ts := tracestateFromRequest(req)
-		sc = sc.WithTraceState(*ts)
-	}
-	return sc, ok
+	spanKind := apitrace.WithSpanKind(apitrace.SpanKindClient)
+	ctx = apitrace.ContextWithRemoteSpanContext(ctx, sc)
+	newCtx, span := defaultTracer.Start(ctx, spanName, spanKind)
+	return newCtx, span
 }
 
 func isHealthzRequest(name string) bool {
@@ -121,58 +73,13 @@ func isHealthzRequest(name string) bool {
 }
 
 // UpdateSpanStatusFromHTTPStatus updates trace span status based on response code.
-func UpdateSpanStatusFromHTTPStatus(span trace.Span, code int) {
-	if span != nil {
-		statusCode, statusDescription := traceStatusFromHTTPCode(code)
-		span.SetStatus(statusCode, statusDescription)
-	}
-}
-
-// https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/http.md#status
-func traceStatusFromHTTPCode(httpCode int) (otelcodes.Code, string) {
-	code := otelcodes.Unset
-
-	if httpCode >= 400 {
-		code = otelcodes.Error
-		statusText := http.StatusText(httpCode)
-		if statusText == "" {
-			statusText = "Unknown"
-		}
-		codeDescription := "Code(" + strconv.FormatInt(int64(httpCode), 10) + "): " + statusText
-		return code, codeDescription
-	}
-	return code, ""
-}
-
-func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
-	s := string(req.Header.Peek(textproto.CanonicalMIMEHeaderKey(name)))
-	if s == "" {
-		return "", false
-	}
-
-	return s, true
-}
-
-func tracestateFromRequest(req *fasthttp.Request) *trace.TraceState {
-	h, _ := getRequestHeader(req, TracestateHeader)
-	return TraceStateFromW3CString(h)
-}
-
-// SpanContextToHTTPHeaders adds the spancontext in traceparent and tracestate headers.
-func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, string)) {
-	// if sc is empty context, no ops.
-	if sc.Equal(trace.SpanContext{}) {
+func UpdateSpanStatusFromHTTPStatus(span apitrace.Span, kind apitrace.SpanKind, httpCode int) {
+	if span == nil {
 		return
 	}
-	h := SpanContextToW3CString(sc)
-	setHeader(TraceparentHeader, h)
-	tracestateToHeader(sc, setHeader)
-}
 
-func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
-	if h := TraceStateToW3CString(sc); h != "" && len(h) <= maxTracestateLen {
-		setHeader(TracestateHeader, h)
-	}
+	code, desc := semconv.SpanStatusFromHTTPStatusCodeAndSpanKind(httpCode, kind)
+	span.SetStatus(code, desc)
 }
 
 func getContextValue(ctx *fasthttp.RequestCtx, key string) string {
@@ -199,87 +106,61 @@ func getAPIComponent(apiPath string) (string, string) {
 	return tokens[1], tokens[2]
 }
 
-func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]string {
-	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) []attribute.KeyValue {
+	var isExistComponent bool
 	path := string(ctx.Request.URI().Path())
 	method := string(ctx.Request.Header.Method())
 	statusCode := ctx.Response.StatusCode()
 
-	m := map[string]string{}
+	m := []attribute.KeyValue{}
 	_, componentType := getAPIComponent(path)
 
-	var dbType string
 	switch componentType {
 	case "state":
-		dbType = stateBuildingBlockType
-		m[dbNameSpanAttributeKey] = getContextValue(ctx, "storeName")
+		isExistComponent = true
+		m = append(m, isemconv.ComponentStates)
+		name := getContextValue(ctx, "storeName")
+		m = append(m, isemconv.ComponentNameKey.String(name))
 
 	case "secrets":
-		dbType = secretBuildingBlockType
-		m[dbNameSpanAttributeKey] = getContextValue(ctx, "secretStoreName")
+		isExistComponent = true
+		m = append(m, isemconv.ComponentSecrets)
+		name := getContextValue(ctx, "secretStoreName")
+		m = append(m, isemconv.ComponentNameKey.String(name))
 
 	case "bindings":
-		dbType = bindingBuildingBlockType
-		m[dbNameSpanAttributeKey] = getContextValue(ctx, "name")
+		isExistComponent = true
+		m = append(m, isemconv.ComponentBindings)
+		name := getContextValue(ctx, "name")
+		m = append(m, isemconv.ComponentNameKey.String(name))
 
 	case "invoke":
-		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
+		m = append(m, semconv.RPCServiceKey.String(daprRPCServiceInvocationService))
 		targetID := getContextValue(ctx, "id")
-		m[netPeerNameSpanAttributeKey] = targetID
-		m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", targetID, getContextValue(ctx, "method"))
+		m = append(m, semconv.NetPeerNameKey.String(targetID))
+		method = fmt.Sprintf("CallLocal/%s/%s", targetID, getContextValue(ctx, "method"))
+		m = append(m, isemconv.APIKey.String(method))
 
 	case "publish":
-		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
-		m[messagingDestinationSpanAttributeKey] = getContextValue(ctx, "topic")
-		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationTopicKind
-
-	case "actors":
-		dbType = populateActorParams(ctx, m)
+		isExistComponent = true
+		m = append(m, semconv.MessagingSystemKey.String("pubsub"),
+			semconv.MessagingDestinationKindTopic)
+		topic := getContextValue(ctx, "topic")
+		m = append(m, semconv.MessagingDestinationKey.String(topic))
 	}
 
 	// Populate the rest of database attributes.
-	if _, ok := m[dbNameSpanAttributeKey]; ok {
-		m[dbSystemSpanAttributeKey] = dbType
-		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, path)
-		m[dbConnectionStringSpanAttributeKey] = dbType
+	if isExistComponent {
+		tmpMethod := fmt.Sprintf("%s %s", method, path)
+		m = append(m, isemconv.ComponentMethodKey.String(tmpMethod))
+	} else {
+		tmpMethod := fmt.Sprintf("%s %s", method, path)
+		m = append(m, isemconv.APIKey.String(tmpMethod))
 	}
 
 	// Populate dapr original api attributes.
-	m[daprAPIProtocolSpanAttributeKey] = daprAPIHTTPSpanAttrValue
-	m[daprAPISpanAttributeKey] = fmt.Sprintf("%s %s", method, path)
-	m[daprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
+	m = append(m, isemconv.APIProtocolHTTP,
+		isemconv.APIStatusCodeKey.Int(statusCode))
 
 	return m
-}
-
-func populateActorParams(ctx *fasthttp.RequestCtx, m map[string]string) string {
-	actorType := getContextValue(ctx, "actorType")
-	actorID := getContextValue(ctx, "actorId")
-	if actorType == "" || actorID == "" {
-		return ""
-	}
-
-	path := string(ctx.Request.URI().Path())
-	// Split up to 7 delimiters in '/v1.0/actors/{actorType}/{actorId}/method/{method}'
-	// to get component api type and value
-	tokens := strings.SplitN(path, "/", 7)
-	if len(tokens) < 7 {
-		return ""
-	}
-
-	m[daprAPIActorTypeID] = fmt.Sprintf("%s.%s", actorType, actorID)
-
-	dbType := ""
-	switch tokens[5] {
-	case "method":
-		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
-		m[netPeerNameSpanAttributeKey] = m[daprAPIActorTypeID]
-		m[daprAPISpanNameInternal] = fmt.Sprintf("CallActor/%s/%s", actorType, getContextValue(ctx, "method"))
-
-	case "state":
-		dbType = stateBuildingBlockType
-		m[dbNameSpanAttributeKey] = "actor"
-	}
-
-	return dbType
 }

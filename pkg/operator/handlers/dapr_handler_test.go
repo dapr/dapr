@@ -112,23 +112,14 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 		Name:      "test",
 	}
 	deployment := getDeployment("test", "true")
-	deployment.GetTemplateAnnotations()[daprMetricsPortKey] = "12345"
 
 	service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 	require.NotNil(t, service)
 	assert.Equal(t, "test", service.ObjectMeta.Annotations[appIDAnnotationKey])
-	assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "12345", service.ObjectMeta.Annotations["prometheus.io/port"])
-	assert.Equal(t, "/", service.ObjectMeta.Annotations["prometheus.io/path"])
-
-	deployment.GetTemplateAnnotations()[daprEnableMetricsKey] = "false"
 
 	service = testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 	require.NotNil(t, service)
 	assert.Equal(t, "test", service.ObjectMeta.Annotations[appIDAnnotationKey])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/port"])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
 }
 
 func TestPatchDaprService(t *testing.T) {
@@ -155,8 +146,6 @@ func TestPatchDaprService(t *testing.T) {
 	err = cli.Get(ctx, myDaprService, &actualService)
 	assert.NoError(t, err)
 	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[appIDAnnotationKey])
-	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
 	assert.Len(t, actualService.OwnerReferences, 1)
 	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
@@ -171,40 +160,6 @@ func TestPatchDaprService(t *testing.T) {
 	assert.Len(t, actualService.OwnerReferences, 1)
 	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
-}
-
-func TestGetMetricsPort(t *testing.T) {
-	testDaprHandler := getTestDaprHandler()
-	t.Run("metrics port override", func(t *testing.T) {
-		// Arrange
-		deployment := getDeploymentWithMetricsPortAnnotation("test_id", "true", "5050")
-
-		// Act
-		p := testDaprHandler.getMetricsPort(deployment)
-
-		// Assert
-		assert.Equal(t, 5050, p)
-	})
-	t.Run("invalid metrics port override", func(t *testing.T) {
-		// Arrange
-		deployment := getDeploymentWithMetricsPortAnnotation("test_id", "true", "abc")
-
-		// Act
-		p := testDaprHandler.getMetricsPort(deployment)
-
-		// Assert
-		assert.Equal(t, defaultMetricsPort, p)
-	})
-	t.Run("no metrics port override", func(t *testing.T) {
-		// Arrange
-		deployment := getDeployment("test_id", "true")
-
-		// Act
-		p := testDaprHandler.getMetricsPort(deployment)
-
-		// Assert
-		assert.Equal(t, defaultMetricsPort, p)
-	})
 }
 
 func TestWrapper(t *testing.T) {
@@ -290,12 +245,6 @@ func TestInit(t *testing.T) {
 	})
 }
 
-func getDeploymentWithMetricsPortAnnotation(daprID string, daprEnabled string, metricsPort string) ObjectWrapper {
-	d := getDeployment(daprID, daprEnabled)
-	d.GetTemplateAnnotations()[daprMetricsPortKey] = metricsPort
-	return d
-}
-
 func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 	// Arrange
 	metadata := metaV1.ObjectMeta{
@@ -304,7 +253,6 @@ func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 		Annotations: map[string]string{
 			appIDAnnotationKey:       appID,
 			daprEnabledAnnotationKey: daprEnabled,
-			daprEnableMetricsKey:     "true",
 		},
 	}
 
@@ -338,7 +286,6 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 		Annotations: map[string]string{
 			appIDAnnotationKey:       appID,
 			daprEnabledAnnotationKey: daprEnabled,
-			daprEnableMetricsKey:     "true",
 		},
 	}
 

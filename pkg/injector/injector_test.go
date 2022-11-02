@@ -166,31 +166,6 @@ func TestAnnotations(t *testing.T) {
 		})
 	})
 
-	t.Run("GetMetricsPort", func(t *testing.T) {
-		t.Run("metrics port override", func(t *testing.T) {
-			m := map[string]string{annotations.KeyMetricsPort: "5050"}
-			an := sidecar.Annotations(m)
-			pod := corev1.Pod{}
-			pod.Annotations = m
-			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
-			assert.Equal(t, int32(5050), p)
-		})
-		t.Run("invalid metrics port override", func(t *testing.T) {
-			m := map[string]string{annotations.KeyMetricsPort: "abc"}
-			an := sidecar.Annotations(m)
-			pod := corev1.Pod{}
-			pod.Annotations = m
-			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
-			assert.Equal(t, int32(annotations.DefaultMetricsPort), p)
-		})
-		t.Run("no metrics port defined", func(t *testing.T) {
-			pod := corev1.Pod{}
-			an := sidecar.Annotations(pod.Annotations)
-			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
-			assert.Equal(t, int32(annotations.DefaultMetricsPort), p)
-		})
-	})
-
 	t.Run("GetSidecarContainer", func(t *testing.T) {
 		c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 			DaprSidecarImage: "image",

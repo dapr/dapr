@@ -17,7 +17,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -613,15 +612,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 
 	respHeaders := map[string][]string{}
 	for k, vals := range header {
-		var listValue []string
-		if strings.HasSuffix(k, "-bin") {
-			for _, val := range vals {
-				listValue = append(listValue, base64.StdEncoding.EncodeToString([]byte(val)))
-			}
-		} else {
-			listValue = append(listValue, vals...)
-		}
-		respHeaders[k] = listValue
+		respHeaders[k] = vals
 	}
 
 	respHeaderString, _ := json.Marshal(respHeaders)
@@ -706,15 +697,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 
 	respHeaders := map[string][]string{}
 	for k, vals := range header {
-		var listValue []string
-		if strings.HasSuffix(k, "-bin") {
-			for _, val := range vals {
-				listValue = append(listValue, base64.StdEncoding.EncodeToString([]byte(val)))
-			}
-		} else {
-			listValue = append(listValue, vals...)
-		}
-		respHeaders[k] = listValue
+		respHeaders[k] = vals
 	}
 
 	respHeaderString, _ := json.Marshal(respHeaders)

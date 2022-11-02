@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -16,27 +15,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/dapr/pkg/operator/monitoring"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 const (
 	daprEnabledAnnotationKey        = "dapr.io/enabled"
 	appIDAnnotationKey              = "dapr.io/app-id"
-	daprEnableMetricsKey            = "dapr.io/enable-metrics"
-	daprMetricsPortKey              = "dapr.io/metrics-port"
 	daprSidecarHTTPPortName         = "dapr-http"
 	daprSidecarAPIGRPCPortName      = "dapr-grpc"
 	daprSidecarInternalGRPCPortName = "dapr-internal"
-	daprSidecarMetricsPortName      = "dapr-metrics"
 	daprSidecarHTTPPort             = 3500
 	daprSidecarAPIGRPCPort          = 50001
 	daprSidecarInternalGRPCPort     = 50002
-	defaultMetricsEnabled           = true
-	defaultMetricsPort              = 9090
 	clusterIPNone                   = "None"
 	daprServiceOwnerField           = ".metadata.controller"
 )
@@ -188,7 +181,7 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 		return err
 	}
 
-	monitoring.RecordServiceUpdatedCount(appID)
+	diag.DefaultOperatorMonitoring.RecordServiceUpdatedCount(appID)
 	return nil
 }
 
@@ -204,24 +197,13 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 		return err
 	}
 	log.Debugf("created service: %s", expectedService)
-	monitoring.RecordServiceCreatedCount(appID)
+	diag.DefaultOperatorMonitoring.RecordServiceCreatedCount(appID)
 	return nil
 }
 
 func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper, appID string) *corev1.Service {
-	enableMetrics := h.getEnableMetrics(wrapper)
-	metricsPort := h.getMetricsPort(wrapper)
-	log.Debugf("enableMetrics: %v", enableMetrics)
-
 	annotations := map[string]string{
 		appIDAnnotationKey: appID,
-	}
-
-	if enableMetrics {
-		annotations["prometheus.io/probe"] = "true"
-		annotations["prometheus.io/scrape"] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
-		annotations["prometheus.io/port"] = strconv.Itoa(metricsPort)
-		annotations["prometheus.io/path"] = "/"
 	}
 
 	return &corev1.Service{
@@ -253,12 +235,6 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 					TargetPort: intstr.FromInt(daprSidecarInternalGRPCPort),
 					Name:       daprSidecarInternalGRPCPortName,
 				},
-				{
-					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(metricsPort),
-					TargetPort: intstr.FromInt(metricsPort),
-					Name:       daprSidecarMetricsPortName,
-				},
 			},
 		},
 	}
@@ -279,26 +255,4 @@ func (h *DaprHandler) isAnnotatedForDapr(wrapper ObjectWrapper) bool {
 		return false
 	}
 	return utils.IsTruthy(enabled)
-}
-
-func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {
-	annotations := wrapper.GetTemplateAnnotations()
-	enableMetrics := defaultMetricsEnabled
-	if val, ok := annotations[daprEnableMetricsKey]; ok {
-		if v, err := strconv.ParseBool(val); err == nil {
-			enableMetrics = v
-		}
-	}
-	return enableMetrics
-}
-
-func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int {
-	annotations := wrapper.GetTemplateAnnotations()
-	metricsPort := defaultMetricsPort
-	if val, ok := annotations[daprMetricsPortKey]; ok {
-		if v, err := strconv.Atoi(val); err == nil {
-			metricsPort = v
-		}
-	}
-	return metricsPort
 }

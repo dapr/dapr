@@ -33,7 +33,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -211,21 +210,16 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, authConsts.APITokenHeader))
 	}
 
-	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
-		s.logger.Info("enabled gRPC tracing middleware")
-		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
-		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
-	}
+	s.logger.Info("enabled gRPC tracing middleware")
+	intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID))
+	intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID))
+	s.logger.Info("enabled gRPC metrics middleware")
+	intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 
-	if s.metricSpec.Enabled {
-		s.logger.Info("enabled gRPC metrics middleware")
-		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
-
-		if s.kind == apiServer {
-			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingServerInterceptor())
-		} else if s.kind == internalServer {
-			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingClientInterceptor())
-		}
+	if s.kind == apiServer {
+		intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingServerInterceptor())
+	} else if s.kind == internalServer {
+		intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingClientInterceptor())
 	}
 
 	enableAPILogging := s.config.EnableAPILogging

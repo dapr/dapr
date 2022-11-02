@@ -45,7 +45,6 @@ func TestMain(m *testing.M) {
 			ImageName:         "perf-tester",
 			Replicas:          1,
 			IngressEnabled:    true,
-			MetricsEnabled:    true,
 			AppPort:           3001,
 			DaprCPULimit:      "4.0",
 			DaprCPURequest:    "0.1",

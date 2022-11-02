@@ -129,7 +129,7 @@ type SelectorField struct {
 
 // TracingSpec defines distributed tracing configuration.
 type TracingSpec struct {
-	SamplingRate string `json:"samplingRate"`
+	SamplingRate float64 `json:"samplingRate"`
 	// +optional
 	Stdout bool `json:"stdout"`
 	// +optional

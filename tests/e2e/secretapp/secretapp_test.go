@@ -218,7 +218,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-secretapp",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 		{
 			Config:             "secretappconfig",
@@ -227,7 +226,6 @@ func TestMain(m *testing.M) {
 			ImageName:          "e2e-secretapp",
 			Replicas:           1,
 			IngressEnabled:     true,
-			MetricsEnabled:     true,
 			SecretStoreDisable: true,
 		},
 	}

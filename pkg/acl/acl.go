@@ -275,16 +275,16 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 	if action {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diag.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestAllowedByAppAction(trustDomain, namespace, operation, verb, action)
 		case config.ActionPolicyGlobal:
-			diag.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestAllowedByGlobalAction(trustDomain, namespace, operation, verb, action)
 		}
 	} else {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diag.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestBlockedByAppAction(trustDomain, namespace, operation, verb, action)
 		case config.ActionPolicyGlobal:
-			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestBlockedByGlobalAction(trustDomain, namespace, operation, verb, action)
 		}
 	}
 }

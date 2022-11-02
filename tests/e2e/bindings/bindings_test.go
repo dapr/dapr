@@ -115,7 +115,6 @@ func TestMain(m *testing.M) {
 			ImageName:      e2eInputBindingImage,
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 		{
 			AppName:        outputBindingAppName,
@@ -123,7 +122,6 @@ func TestMain(m *testing.M) {
 			ImageName:      e2eOutputBindingImage,
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 		{
 			AppName:        inputBindingGRPCAppName,
@@ -131,7 +129,6 @@ func TestMain(m *testing.M) {
 			ImageName:      e2eInputBindingGRPCImage,
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
 	}
@@ -156,7 +153,6 @@ func TestMain(m *testing.M) {
 				ImageName:           e2eInputBindingImage,
 				Replicas:            1,
 				IngressEnabled:      true,
-				MetricsEnabled:      true,
 				PluggableComponents: pluggableComponents,
 				AppEnv:              appEnv,
 			},
@@ -166,7 +162,6 @@ func TestMain(m *testing.M) {
 				ImageName:           e2eOutputBindingImage,
 				Replicas:            1,
 				IngressEnabled:      true,
-				MetricsEnabled:      true,
 				PluggableComponents: pluggableComponents,
 				AppEnv:              appEnv,
 			},
@@ -176,7 +171,6 @@ func TestMain(m *testing.M) {
 				ImageName:           e2eInputBindingGRPCImage,
 				Replicas:            1,
 				IngressEnabled:      true,
-				MetricsEnabled:      true,
 				AppProtocol:         "grpc",
 				PluggableComponents: pluggableComponents,
 				AppEnv:              appEnv,

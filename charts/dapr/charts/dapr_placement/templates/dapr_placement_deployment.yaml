@@ -28,12 +28,6 @@ spec:
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-{{- if eq .Values.global.prometheus.enabled true }}
-      annotations:
-        prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
-        prometheus.io/port: "{{ .Values.global.prometheus.port }}"
-        prometheus.io/path: "/"
-{{- end }}
     spec:
       containers:
       - name: dapr-placement-server
@@ -86,11 +80,6 @@ spec:
             name: api
           - containerPort: {{ .Values.ports.raftRPCPort }}
             name: raft-node
-{{- if eq .Values.global.prometheus.enabled true }}
-          - name: metrics
-            containerPort: {{ .Values.global.prometheus.port }}
-            protocol: TCP
-{{- end }}
         command:
 {{- if eq .Values.debug.enabled false }}
         - "/placement"
@@ -127,14 +116,12 @@ spec:
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
-{{- if eq .Values.global.prometheus.enabled true }}
-        - "--enable-metrics"
+{{- if eq .Values.global.metrics.enabled true }}
+        - "--enable-metrics=true"
         - "--replicationFactor"
         - "{{ .Values.replicationFactor }}"
-        - "--metrics-port"
-        - "{{ .Values.global.prometheus.port }}"
-{{- else }}
-        - "--enable-metrics=false"
+        - "--exporterAddress"
+        - "{{ .Values.global.metrics.exporterAddress }}"
 {{- end }}
         - "--tls-enabled"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}

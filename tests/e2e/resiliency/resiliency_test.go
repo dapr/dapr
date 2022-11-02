@@ -64,7 +64,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-resiliencyapp",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			Config:         "resiliencyconfig",
 		},
 		{
@@ -73,7 +72,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-resiliencyapp_grpc",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			Config:         "resiliencyconfig",
 			AppProtocol:    "grpc",
 		},

@@ -74,9 +74,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		appPortStr = strconv.Itoa(int(appPort))
 	}
 
-	metricsEnabled := cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableMetrics, annotations.DefaultEnableMetric)
 	apiLoggingEnabled := cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableAPILogging, annotations.DefaultEnableAPILogging)
-	metricsPort := int(cfg.Annotations.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort))
 	sidecarListenAddresses := cfg.Annotations.GetStringOrDefault(annotations.KeySidecarListenAddresses, annotations.DefaultSidecarListenAddresses)
 	disableBuiltinK8sSecretStore := cfg.Annotations.GetBoolOrDefault(annotations.KeyDisableBuiltinK8sSecretStore, annotations.DefaultDisableBuiltinK8sSecretStore)
 
@@ -117,10 +115,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 			ContainerPort: int32(SidecarInternalGRPCPort),
 			Name:          SidecarInternalGRPCPortName,
 		},
-		{
-			ContainerPort: int32(metricsPort),
-			Name:          SidecarMetricsPortName,
-		},
 	}
 
 	cmd := []string{"/daprd"}
@@ -141,8 +135,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--log-level", cfg.Annotations.GetStringOrDefault(annotations.KeyLogLevel, annotations.DefaultLogLevel),
 		"--app-max-concurrency", strconv.Itoa(int(maxConcurrency)),
 		"--sentry-address", cfg.SentryAddress,
-		"--enable-metrics=" + strconv.FormatBool(metricsEnabled),
-		"--metrics-port", strconv.Itoa(metricsPort),
 		"--dapr-http-max-request-size", strconv.Itoa(int(requestBodySize)),
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),

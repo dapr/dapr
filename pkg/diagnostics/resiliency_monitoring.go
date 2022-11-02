@@ -3,11 +3,12 @@ package diagnostics
 import (
 	"context"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric/instrument"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.opentelemetry.io/otel/metric/unit"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
 )
 
 var (
@@ -19,59 +20,47 @@ var (
 type PolicyType string
 
 type resiliencyMetrics struct {
-	policiesLoadCount *stats.Int64Measure
-	executionCount    *stats.Int64Measure
-
-	appID   string
-	ctx     context.Context
-	enabled bool
+	policiesLoadCount syncint64.Counter
+	executionCount    syncint64.Counter
 }
 
-func newResiliencyMetrics() *resiliencyMetrics {
-	return &resiliencyMetrics{ //nolint:exhaustruct
-		policiesLoadCount: stats.Int64(
-			"resiliency/loaded",
-			"Number of resiliency policies loaded.",
-			stats.UnitDimensionless),
-		executionCount: stats.Int64(
-			"resiliency/count",
-			"Number of times a resiliency policyKey has been executed.",
-			stats.UnitDimensionless),
+func (m *MetricClient) newResiliencyMetrics() *resiliencyMetrics {
+	rm := new(resiliencyMetrics)
+	rm.policiesLoadCount, _ = m.meter.SyncInt64().Counter(
+		"resiliency/loaded",
+		instrument.WithDescription("The number of incoming messages arriving from the pub/sub component."),
+		instrument.WithUnit(unit.Dimensionless))
+	rm.executionCount, _ = m.meter.SyncInt64().Counter(
+		"resiliency/count",
+		instrument.WithDescription("Number of times a resiliency policyKey has been executed."),
+		instrument.WithUnit(unit.Dimensionless))
 
-		// TODO: how to use correct context
-		ctx:     context.Background(),
-		enabled: false,
-	}
-}
-
-// Init registers the resiliency metrics views.
-func (m *resiliencyMetrics) Init(id string) error {
-	m.enabled = true
-	m.appID = id
-	return view.Register(
-		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
-		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey}, view.Count()),
-	)
+	return rm
 }
 
 // PolicyLoaded records metric when policy is loaded.
-func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
-	if m.enabled {
-		_ = stats.RecordWithTags(
-			m.ctx,
-			diagUtils.WithTags(appIDKey, m.appID, resiliencyNameKey, resiliencyName, namespaceKey, namespace),
-			m.policiesLoadCount.M(1),
-		)
+func (m *resiliencyMetrics) PolicyLoaded(resiliencyName string) {
+	if m == nil {
+		return
 	}
+
+	attributes := []attribute.KeyValue{
+		isemconv.ResiliencyNameKey.String(resiliencyName),
+	}
+
+	m.policiesLoadCount.Add(context.Background(), 1, attributes...)
 }
 
 // PolicyExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, policy PolicyType) {
-	if m.enabled {
-		_ = stats.RecordWithTags(
-			m.ctx,
-			diagUtils.WithTags(appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace),
-			m.executionCount.M(1),
-		)
+func (m *resiliencyMetrics) PolicyExecuted(resiliencyName string, policy PolicyType) {
+	if m == nil {
+		return
 	}
+
+	attributes := []attribute.KeyValue{
+		isemconv.ResiliencyNameKey.String(resiliencyName),
+		isemconv.ResiliencyPolicyKey.String(string(policy)),
+	}
+
+	m.executionCount.Add(context.Background(), 1, attributes...)
 }

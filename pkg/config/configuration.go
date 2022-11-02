@@ -145,28 +145,18 @@ type SelectorField struct {
 	Value string `json:"value" yaml:"value"`
 }
 
+// TracingSpec configuration for tracing.
 type TracingSpec struct {
-	SamplingRate string     `json:"samplingRate" yaml:"samplingRate"`
-	Stdout       bool       `json:"stdout" yaml:"stdout"`
-	Zipkin       ZipkinSpec `json:"zipkin" yaml:"zipkin"`
-	Otel         OtelSpec   `json:"otel" yaml:"otel"`
-}
-
-// ZipkinSpec defines Zipkin exporter configurations.
-type ZipkinSpec struct {
-	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
-}
-
-// OtelSpec defines Otel exporter configurations.
-type OtelSpec struct {
-	Protocol        string `json:"protocol" yaml:"protocol"`
-	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
-	IsSecure        bool   `json:"isSecure" yaml:"isSecure"`
+	Enabled         bool    `json:"enabled" yaml:"enabled"`
+	SamplingRate    float64 `json:"samplingRate" yaml:"samplingRate"`
+	ExporterAddress string  `json:"exporterAddress" yaml:"exporterAddress"`
+	Token           string  `json:"token" yaml:"token"`
 }
 
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
-	Enabled bool `json:"enabled" yaml:"enabled"`
+	Enabled         bool   `json:"enabled" yaml:"enabled"`
+	ExporterAddress string `json:"exporterAddress" yaml:"exporterAddress"`
 }
 
 // AppPolicySpec defines the policy data structure for each app.
@@ -228,13 +218,11 @@ func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
-				SamplingRate: "",
-				Otel: OtelSpec{
-					IsSecure: true,
-				},
+				SamplingRate: 0.0001,
+				Enabled:      false,
 			},
 			MetricSpec: MetricSpec{
-				Enabled: true,
+				Enabled: false,
 			},
 			AccessControlSpec: AccessControlSpec{
 				DefaultAction: AllowAccess,

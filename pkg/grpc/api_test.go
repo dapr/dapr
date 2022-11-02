@@ -66,7 +66,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
 )
 
@@ -201,29 +200,15 @@ func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Re
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
-	span := diagUtils.SpanFromContext(ctx)
-	return []byte(SerializeSpanContext(span.SpanContext()))
+	sc := trace.SpanContextFromContext(ctx)
+	return []byte(diagUtils.TraceparentToW3CString(sc))
 }
 
-// SerializeSpanContext serializes a span context into a simple string.
-func SerializeSpanContext(ctx trace.SpanContext) string {
-	return fmt.Sprintf("%s;%s;%d", ctx.SpanID(), ctx.TraceID(), ctx.TraceFlags())
-}
-
-func configureTestTraceExporter(buffer *string) {
-	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
-	exporter.Register("fakeID")
-}
-
-func startTestServerWithTracing(port int) (*grpc.Server, *string) {
+func startTestServerWithTracing(port int) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	buffer := ""
-	configureTestTraceExporter(&buffer)
-
-	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc.NewServer(
-		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
+		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id"))),
 	)
 
 	go func() {
@@ -236,7 +221,7 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 	// wait until server starts
 	time.Sleep(maxGRPCServerUptime)
 
-	return server, &buffer
+	return server
 }
 
 func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
@@ -308,7 +293,7 @@ func createTestClient(port int) *grpc.ClientConn {
 func TestCallActorWithTracing(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	server, _ := startTestServerWithTracing(port)
+	server := startTestServerWithTracing(port)
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -327,7 +312,7 @@ func TestCallActorWithTracing(t *testing.T) {
 func TestCallRemoteAppWithTracing(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	server, _ := startTestServerWithTracing(port)
+	server := startTestServerWithTracing(port)
 	defer server.Stop()
 
 	clientConn := createTestClient(port)

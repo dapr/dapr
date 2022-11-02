@@ -28,7 +28,6 @@ func TestBuildDeploymentObject(t *testing.T) {
 		RegistryName:   "dariotest",
 		Replicas:       1,
 		IngressEnabled: true,
-		MetricsEnabled: true,
 	}
 
 	t.Run("Unix socket", func(t *testing.T) {
@@ -109,7 +108,6 @@ func TestBuildServiceObject(t *testing.T) {
 		RegistryName:   "dariotest",
 		Replicas:       1,
 		IngressEnabled: true,
-		MetricsEnabled: true,
 	}
 
 	t.Run("Ingress is enabled", func(t *testing.T) {

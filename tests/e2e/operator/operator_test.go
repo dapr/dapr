@@ -50,7 +50,6 @@ func TestMain(m *testing.M) {
 			ImageName:         "e2e-hellodapr",
 			Replicas:          1,
 			IngressEnabled:    false,
-			MetricsEnabled:    true,
 			DaprMemoryLimit:   "200Mi",
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",

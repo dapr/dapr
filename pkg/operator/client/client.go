@@ -29,12 +29,10 @@ func GetOperatorClient(address, serverName string, certChain *daprCredentials.Ce
 
 	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
-		unaryClientInterceptor = grpcMiddleware.ChainUnaryClient(
-			unaryClientInterceptor,
-			diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
-		)
-	}
+	unaryClientInterceptor = grpcMiddleware.ChainUnaryClient(
+		unaryClientInterceptor,
+		diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
+	)
 
 	opts := []grpc.DialOption{grpc.WithUnaryInterceptor(unaryClientInterceptor)}
 

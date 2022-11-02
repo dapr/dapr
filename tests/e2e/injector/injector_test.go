@@ -73,7 +73,6 @@ func TestMain(m *testing.M) {
 			ImageName:         fmt.Sprintf("e2e-%s", appName),
 			Replicas:          1,
 			IngressEnabled:    true,
-			MetricsEnabled:    true,
 			DaprMemoryLimit:   "200Mi",
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",

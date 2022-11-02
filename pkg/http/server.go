@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
@@ -93,8 +92,8 @@ func (s *server) StartNonBlocking() error {
 			s.useComponents(
 				s.useRouter())))
 
-	handler = s.useMetrics(handler)
-	handler = s.useTracing(handler)
+	handler = diag.HTTPTraceMiddleware(handler)
+	handler = diag.DefaultHTTPMonitoring.FastHTTPMiddleware(handler)
 
 	enableAPILogging := s.config.EnableAPILogging
 	if enableAPILogging {
@@ -143,8 +142,8 @@ func (s *server) StartNonBlocking() error {
 
 	if s.config.PublicPort != nil {
 		publicHandler := s.usePublicRouter()
-		publicHandler = s.useMetrics(publicHandler)
-		publicHandler = s.useTracing(publicHandler)
+		publicHandler = diag.HTTPTraceMiddleware(publicHandler)
+		publicHandler = diag.DefaultHTTPMonitoring.FastHTTPMiddleware(publicHandler)
 
 		healthServer := &fasthttp.Server{
 			Handler:            publicHandler,
@@ -206,24 +205,6 @@ func (s *server) Close() error {
 	}
 
 	return merr
-}
-
-func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
-		log.Infof("enabled tracing http middleware")
-		return diag.HTTPTraceMiddleware(next, s.config.AppID, s.tracingSpec)
-	}
-	return next
-}
-
-func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	if s.metricSpec.Enabled {
-		log.Infof("enabled metrics http middleware")
-
-		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
-	}
-
-	return next
 }
 
 func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {

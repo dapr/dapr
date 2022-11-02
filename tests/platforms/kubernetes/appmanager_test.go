@@ -59,7 +59,6 @@ func testAppDescription() AppDescription {
 		RegistryName:   "dapriotest",
 		Replicas:       1,
 		IngressEnabled: true,
-		MetricsEnabled: true,
 	}
 }
 

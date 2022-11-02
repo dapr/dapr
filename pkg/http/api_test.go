@@ -62,7 +62,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
 	"github.com/dapr/kit/logger"
@@ -447,10 +446,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 
 func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	buffer := ""
-	spec := config.TracingSpec{SamplingRate: "1"}
-
-	createExporters(&buffer)
+	spec := config.TracingSpec{SamplingRate: 1.0}
 
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
@@ -467,7 +463,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
-			buffer = ""
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 
@@ -489,7 +484,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
-			buffer = ""
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 
@@ -828,10 +822,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	fakeServer := newFakeHTTPServer()
 
-	buffer := ""
-	spec := config.TracingSpec{SamplingRate: "1"}
-
-	createExporters(&buffer)
+	spec := config.TracingSpec{SamplingRate: 1.0}
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -841,7 +832,6 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		buffer = ""
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -869,7 +859,6 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with dapr-app-id - 200 OK", func(t *testing.T) {
-		buffer = ""
 		apiPath := "fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -892,7 +881,6 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
-		buffer = ""
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
@@ -1847,19 +1835,10 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
-func createExporters(buffer *string) {
-	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
-	exporter.Register("fakeID")
-}
-
 func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
-	buffer := ""
-	spec := config.TracingSpec{SamplingRate: "1"}
-
-	createExporters(&buffer)
-
+	spec := config.TracingSpec{SamplingRate: 1.0}
 	testAPI := &api{
 		actor:       nil,
 		tracingSpec: spec,
@@ -1878,7 +1857,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		testMethods := []string{"GET"}
 
 		for _, method := range testMethods {
-			buffer = ""
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
@@ -1889,7 +1867,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
-		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
@@ -1917,7 +1894,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Transaction - 204 No Content", func(t *testing.T) {
-		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
 		testTransactionalOperations := []actors.TransactionalOperation{
@@ -2121,11 +2097,8 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	fakeServer := newFakeHTTPServer()
 
-	buffer := ""
-	spec := config.TracingSpec{SamplingRate: "1.0"}
+	spec := config.TracingSpec{SamplingRate: 1.0}
 	pipe := httpMiddleware.Pipeline{}
-
-	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -2533,8 +2506,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 	fakeServer := newFakeHTTPServer()
 
-	buffer := ""
-	spec := config.TracingSpec{SamplingRate: "1.0"}
+	spec := config.TracingSpec{SamplingRate: 1.0}
 
 	pipeline := buildHTTPPineline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
@@ -2545,8 +2517,6 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 		},
 	})
 
-	createExporters(&buffer)
-
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
@@ -2555,7 +2525,6 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		buffer = ""
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -2600,8 +2569,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 
 	fakeServer := newFakeHTTPServer()
 
-	buffer := ""
-	spec := config.TracingSpec{SamplingRate: "0"}
+	spec := config.TracingSpec{SamplingRate: 0.0}
 
 	pipeline := buildHTTPPineline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
@@ -2612,8 +2580,6 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 		},
 	})
 
-	createExporters(&buffer)
-
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
@@ -2622,7 +2588,6 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		buffer = ""
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -2646,7 +2611,6 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }
@@ -2692,7 +2656,7 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(router.Handler, "fakeAppID", spec)); err != nil {
+		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(router.Handler, spec)); err != nil {
 			panic(fmt.Errorf("failed to set tracing span context: %v", err))
 		}
 	}()
@@ -2733,7 +2697,7 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 				nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler),
 			),
 		)
-		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(handler, "fakeAppID", spec)); err != nil {
+		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(handler, spec)); err != nil {
 			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
 	}()

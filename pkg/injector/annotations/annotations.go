@@ -28,8 +28,6 @@ const (
 	KeyAppTokenSecret                   = "dapr.io/app-token-secret" /* #nosec */
 	KeyLogAsJSON                        = "dapr.io/log-as-json"
 	KeyAppMaxConcurrency                = "dapr.io/app-max-concurrency"
-	KeyEnableMetrics                    = "dapr.io/enable-metrics"
-	KeyMetricsPort                      = "dapr.io/metrics-port"
 	KeyEnableDebug                      = "dapr.io/enable-debug"
 	KeyDebugPort                        = "dapr.io/debug-port"
 	KeyEnv                              = "dapr.io/env"
@@ -73,8 +71,6 @@ const (
 	DefaultLogAsJSON                         = false
 	DefaultAppSSL                            = false
 	DefaultAppProtocol                       = "http"
-	DefaultEnableMetric                      = true
-	DefaultMetricsPort                       = 9090
 	DefaultEnableDebug                       = false
 	DefaultDebugPort                         = 40000
 	DefaultSidecarListenAddresses            = "[::1],127.0.0.1"

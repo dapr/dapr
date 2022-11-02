@@ -15,214 +15,155 @@ package diagnostics
 
 import (
 	"context"
-	"encoding/hex"
-	"fmt"
-	"strings"
+	"time"
+
+	"github.com/pkg/errors"
+
+	itrace "github.com/dapr/dapr/pkg/diagnostics/sdk/trace"
+	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
-
-	"github.com/dapr/dapr/pkg/config"
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-
-	// We currently don't depend on the Otel SDK since it has not GAed.
-	// This package, however, only contains the conventions from the Otel Spec,
-	// which we do depend on.
-	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
+	apitrace "go.opentelemetry.io/otel/trace"
 )
 
 const (
-	daprHeaderPrefix    = "dapr-"
-	daprHeaderBinSuffix = "-bin"
-
 	// daprInternalSpanAttrPrefix is the internal span attribution prefix.
 	// Middleware will not populate it if the span key starts with this prefix.
 	daprInternalSpanAttrPrefix = "__dapr."
 	// daprAPISpanNameInternal is the internal attribution, but not populated
 	// to span attribution.
-	daprAPISpanNameInternal = daprInternalSpanAttrPrefix + "spanname"
+	daprAPISpanNameInternalKey = attribute.Key(daprInternalSpanAttrPrefix + "spanname")
 
-	// span attribute keys
-	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	//
-	// The upstream constants may be used directly, but that would
-	// proliferate the imports of go.opentelemetry.io/otel/... packages,
-	// which we don't want to do widely before upstream goes GA.
-	dbSystemSpanAttributeKey           = string(semconv.DBSystemKey)
-	dbNameSpanAttributeKey             = string(semconv.DBNameKey)
-	dbStatementSpanAttributeKey        = string(semconv.DBStatementKey)
-	dbConnectionStringSpanAttributeKey = string(semconv.DBConnectionStringKey)
-
-	messagingSystemSpanAttributeKey          = string(semconv.MessagingSystemKey)
-	messagingDestinationSpanAttributeKey     = string(semconv.MessagingDestinationKey)
-	messagingDestinationKindSpanAttributeKey = string(semconv.MessagingDestinationKindKey)
-
-	gRPCServiceSpanAttributeKey = string(semconv.RPCServiceKey)
-	netPeerNameSpanAttributeKey = string(semconv.NetPeerNameKey)
-
-	daprAPISpanAttributeKey           = "dapr.api"
-	daprAPIStatusCodeSpanAttributeKey = "dapr.status_code"
-	daprAPIProtocolSpanAttributeKey   = "dapr.protocol"
-	daprAPIInvokeMethod               = "dapr.invoke_method"
-	daprAPIActorTypeID                = "dapr.actor"
-
-	daprAPIHTTPSpanAttrValue = "http"
-	daprAPIGRPCSpanAttrValue = "grpc"
-
-	stateBuildingBlockType   = "state"
-	secretBuildingBlockType  = "secrets"
-	bindingBuildingBlockType = "bindings"
-	pubsubBuildingBlockType  = "pubsub"
-
-	daprGRPCServiceInvocationService = "ServiceInvocation"
-	daprGRPCDaprService              = "Dapr"
-
-	tracerName = "dapr-diagnostics"
+	daprRPCServiceInvocationService = "ServiceInvocation"
+	daprRPCDaprService              = "Dapr"
+	defaultTracingExporterAddr      = "localhost:4318"
+	defaultMetricExporterAddr       = "localhost:4318"
 )
 
-var tracer trace.Tracer = otel.Tracer(tracerName)
+var defaultTracer apitrace.Tracer = apitrace.
+	NewNoopTracerProvider().Tracer("")
 
-// Effectively const, but isn't a const from upstream.
-var messagingDestinationTopicKind = semconv.MessagingDestinationKindTopic.Value.AsString()
-
-// SpanContextToW3CString returns the SpanContext string representation.
-func SpanContextToW3CString(sc trace.SpanContext) string {
-	traceID := sc.TraceID()
-	spanID := sc.SpanID()
-	traceFlags := sc.TraceFlags()
-	return fmt.Sprintf("%x-%x-%x-%x",
-		[]byte{supportedVersion},
-		traceID[:],
-		spanID[:],
-		[]byte{byte(traceFlags)})
+// StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
+func StartInternalCallbackSpan(ctx context.Context, spanName string, parent apitrace.SpanContext) (context.Context, apitrace.Span) {
+	ctx = apitrace.ContextWithRemoteSpanContext(ctx, parent)
+	return defaultTracer.Start(ctx, spanName,
+		apitrace.WithSpanKind(apitrace.SpanKindServer))
 }
 
-// TraceStateToW3CString extracts the TraceState from given SpanContext and returns its string representation.
-func TraceStateToW3CString(sc trace.SpanContext) string {
-	return sc.TraceState().String()
+type TracingClient struct {
+	AppID     string
+	Namespace string
+	// Address collector receiver address.
+	Address string
+	Token   string
+
+	sampleRatio float64
+	exporter    *otlptrace.Exporter
+	provider    *sdktrace.TracerProvider
 }
 
-// SpanContextFromW3CString extracts a span context from given string which got earlier from SpanContextToW3CString format.
-func SpanContextFromW3CString(h string) (sc trace.SpanContext, ok bool) {
-	if h == "" {
-		return trace.SpanContext{}, false
+// InitTracing init tracing client.
+func InitTracing(address, token, appID, namespace string, sampleRatio float64) (*TracingClient, error) {
+	if address == "" {
+		address = defaultTracingExporterAddr
 	}
-	sections := strings.Split(h, "-")
-	if len(sections) < 4 {
-		return trace.SpanContext{}, false
+	client := &TracingClient{
+		Address:     address,
+		Token:       token,
+		AppID:       appID,
+		Namespace:   namespace,
+		sampleRatio: sampleRatio,
 	}
-
-	if len(sections[0]) != 2 {
-		return trace.SpanContext{}, false
-	}
-	ver, err := hex.DecodeString(sections[0])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	version := int(ver[0])
-	if version > maxVersion {
-		return trace.SpanContext{}, false
+	if err := client.init(); err != nil {
+		return nil, err
 	}
 
-	if version == 0 && len(sections) != 4 {
-		return trace.SpanContext{}, false
-	}
-
-	if len(sections[1]) != 32 {
-		return trace.SpanContext{}, false
-	}
-	tid, err := trace.TraceIDFromHex(sections[1])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	sc = sc.WithTraceID(tid)
-
-	if len(sections[2]) != 16 {
-		return trace.SpanContext{}, false
-	}
-	sid, err := trace.SpanIDFromHex(sections[2])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	sc = sc.WithSpanID(sid)
-
-	opts, err := hex.DecodeString(sections[3])
-	if err != nil || len(opts) < 1 {
-		return trace.SpanContext{}, false
-	}
-	sc = sc.WithTraceFlags(trace.TraceFlags(opts[0]))
-
-	// Don't allow all zero trace or span ID.
-	if sc.TraceID() == [16]byte{} || sc.SpanID() == [8]byte{} {
-		return trace.SpanContext{}, false
-	}
-
-	return sc, true
+	return client, nil
 }
 
-// TraceStateFromW3CString extracts a span tracestate from given string which got earlier from TraceStateFromW3CString format.
-func TraceStateFromW3CString(h string) *trace.TraceState {
-	if h == "" {
-		ts := trace.TraceState{}
-		return &ts
-	}
-
-	ts, err := trace.ParseTraceState(h)
+func (t *TracingClient) init() error {
+	var err error
+	client := otlptracegrpc.NewClient(
+		otlptracegrpc.WithEndpoint(t.Address),
+		otlptracegrpc.WithInsecure(),
+	)
+	t.exporter, err = otlptrace.New(context.Background(), client)
 	if err != nil {
-		ts = trace.TraceState{}
-		return &ts
+		return errors.Errorf("creating OTLP trace exporter: %v", err)
 	}
 
-	return &ts
+	ssp := sdktrace.NewBatchSpanProcessor(t.exporter,
+		sdktrace.WithBatchTimeout(5*time.Second))
+	t.provider = sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(ssp),
+		sdktrace.WithSampler(itrace.TraceIDBasedParentAndRatio(t.sampleRatio)),
+		sdktrace.WithResource(
+			resource.NewWithAttributes(
+				semconv.SchemaURL,
+				semconv.ServiceNameKey.String(t.AppID),
+				semconv.ServiceNamespaceKey.String(t.Namespace),
+				attribute.String("token", t.Token),
+			)),
+	)
+	otel.SetTracerProvider(t.provider)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+
+	defaultTracer = otel.GetTracerProvider().Tracer(
+		"dapr",
+		apitrace.WithInstrumentationVersion("v0.31.0"),
+		apitrace.WithSchemaURL("https://dapr.io"),
+	)
+
+	return nil
+}
+
+// Close close tracing client.
+func (t *TracingClient) Close() error {
+	if t == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := t.provider.Shutdown(ctx); err != nil {
+		return err
+	}
+	if err := t.exporter.Shutdown(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 // AddAttributesToSpan adds the given attributes in the span.
-func AddAttributesToSpan(span trace.Span, attributes map[string]string) {
+func AddAttributesToSpan(span apitrace.Span, attrs []attribute.KeyValue) {
 	if span == nil {
 		return
 	}
-	var attrs []attribute.KeyValue
-	for k, v := range attributes {
-		// Skip if key is for internal use.
-		if !strings.HasPrefix(k, daprInternalSpanAttrPrefix) && v != "" {
-			attrs = append(attrs, attribute.String(k, v))
-		}
-	}
-
 	if len(attrs) > 0 {
 		span.SetAttributes(attrs...)
 	}
 }
 
 // ConstructInputBindingSpanAttributes creates span attributes for InputBindings.
-func ConstructInputBindingSpanAttributes(bindingName, url string) map[string]string {
-	return map[string]string{
-		dbNameSpanAttributeKey:             bindingName,
-		gRPCServiceSpanAttributeKey:        daprGRPCDaprService,
-		dbSystemSpanAttributeKey:           bindingBuildingBlockType,
-		dbConnectionStringSpanAttributeKey: url,
+func ConstructInputBindingSpanAttributes(bindingName, url string) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		isemconv.ComponentBindings,
+		isemconv.ComponentNameKey.String(bindingName),
+		isemconv.ComponentMethodKey.String(url),
 	}
 }
 
 // ConstructSubscriptionSpanAttributes creates span attributes for Pubsub subscription.
-func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
-	return map[string]string{
-		messagingSystemSpanAttributeKey:          pubsubBuildingBlockType,
-		messagingDestinationSpanAttributeKey:     topic,
-		messagingDestinationKindSpanAttributeKey: messagingDestinationTopicKind,
+func ConstructSubscriptionSpanAttributes(topic string) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		isemconv.ComponentPubsub,
+		isemconv.ComponentTopicKey.String(topic),
 	}
-}
-
-// StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
-func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, trace.Span) {
-	traceEnabled := diagUtils.IsTracingEnabled(spec.SamplingRate)
-	if !traceEnabled {
-		return ctx, nil
-	}
-
-	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
-	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
-
-	return ctx, span
 }

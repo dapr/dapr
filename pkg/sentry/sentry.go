@@ -9,13 +9,13 @@ import (
 
 	"github.com/pkg/errors"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/dapr/dapr/pkg/sentry/identity/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/identity/selfhosted"
 	k8s "github.com/dapr/dapr/pkg/sentry/kubernetes"
-	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
 	"github.com/dapr/kit/logger"
 )
@@ -89,7 +89,7 @@ func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) 
 		// Need to be in an else block for the linter
 		log.Infof("trust root bundle loaded. issuer cert expiry: %s", certExpiry.String())
 	}
-	monitoring.IssuerCertExpiry(certExpiry)
+	diag.DefaultSentryMonitoring.IssuerCertExpiry(certExpiry)
 
 	// Create identity validator
 	v, validatorErr := s.createValidator()

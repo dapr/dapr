@@ -23,14 +23,12 @@ import (
 	"os"
 	"strconv"
 
-	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -91,7 +89,7 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	requestMD := map[string][]string{}
-	fmt.Print("incoming md: ")
+	fmt.Println("incoming md: ")
 	for k, vals := range md {
 		requestMD[k] = vals
 		fmt.Printf("%s='%q' ", k, vals)
@@ -102,19 +100,13 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 		"DaprTest-Response-1", "DaprTest-Response-Value-1",
 		"DaprTest-Response-2", "DaprTest-Response-Value-2")
 
-	// following traceid byte is of expectedTraceID "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-	scConfig := trace.SpanContextConfig{
-		TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-		SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-		TraceFlags: trace.TraceFlags(1),
-	}
-	sc := trace.NewSpanContext(scConfig)
-	header.Set("grpc-trace-bin", string(diagUtils.BinaryFromSpanContext(sc)))
-
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(
 		"DaprTest-Trailer-1", "DaprTest-Trailer-Value-1",
 		"DaprTest-Trailer-2", "DaprTest-Trailer-Value-2")
+	if val, ok := md["daprtest-traceid"]; ok {
+		trailer.Append("traceparent", val[0])
+	}
 	grpc.SetTrailer(ctx, trailer)
 
 	return json.Marshal(requestMD)

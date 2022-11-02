@@ -131,9 +131,6 @@ const (
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
 	pubsubnameparam          = "pubsubname"
-	traceparentHeader        = "traceparent"
-	tracestateHeader         = "tracestate"
-	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
@@ -490,19 +487,12 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// pass the trace context to output binding in metadata
-	if span := diagUtils.SpanFromContext(reqCtx); span != nil {
-		sc := span.SpanContext()
-		if req.Metadata == nil {
-			req.Metadata = map[string]string{}
-		}
-		// if sc is not empty context, set traceparent Header.
-		if !sc.Equal(trace.SpanContext{}) {
-			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
-		}
-		if sc.TraceState().Len() == 0 {
-			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
-		}
+	sc := trace.SpanContextFromContext(reqCtx)
+	if sc.IsValid() {
+		// Populate W3C traceparent to string.
+		req.Metadata[diagUtils.TraceparentHeader] = diagUtils.TraceparentToW3CString(sc)
+		// Populate W3C tracestate to string.
+		req.Metadata[diagUtils.TracestateHeader] = diagUtils.TraceStateToW3CString(sc)
 	}
 
 	start := time.Now()
@@ -1452,12 +1442,12 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 // 3. HTTP header: 'dapr-app-id'.
 func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 	if id := reqCtx.UserValue(idParam); id == nil {
-		if appID := reqCtx.Request.Header.Peek(daprAppID); appID == nil {
+		if appID := reqCtx.Request.Header.Peek(invokev1.DaprAppIDKey); appID == nil {
 			if auth := reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization); auth != nil &&
 				strings.HasPrefix(string(auth), "Basic ") {
 				if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(auth), "Basic ")); err == nil {
 					pair := strings.Split(string(s), ":")
-					if len(pair) == 2 && pair[0] == daprAppID {
+					if len(pair) == 2 && pair[0] == invokev1.DaprAppIDKey {
 						return pair[1]
 					}
 				}
@@ -1933,13 +1923,11 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Extract trace context from context.
-	span := diagUtils.SpanFromContext(reqCtx)
-	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
-
+	sc := trace.SpanContextFromContext(reqCtx)
+	// Populate W3C traceparent to string.
+	traceparent := diagUtils.TraceparentToW3CString(sc)
+	// Populate W3C tracestate to string.
+	traceState := diagUtils.TraceStateToW3CString(sc)
 	data := body
 
 	if !rawPayload {
@@ -1948,7 +1936,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
-			TraceID:         corID,
+			TraceID:         traceparent,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
 		})

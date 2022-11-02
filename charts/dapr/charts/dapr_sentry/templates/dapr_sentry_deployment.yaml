@@ -48,12 +48,6 @@ spec:
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-{{- if eq .Values.global.prometheus.enabled true }}
-      annotations:
-        prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
-        prometheus.io/port: "{{ .Values.global.prometheus.port }}"
-        prometheus.io/path: "/"
-{{- end }}
     spec:
       containers:
       - name: dapr-sentry
@@ -101,11 +95,6 @@ spec:
               fieldPath: metadata.namespace
         ports:
         - containerPort: 50001
-{{- if eq .Values.global.prometheus.enabled true }}
-        - name: metrics
-          containerPort: {{ .Values.global.prometheus.port }}
-          protocol: TCP
-{{- end }}
 {{- if eq .Values.debug.enabled true }}
         - name: debug
           containerPort: {{ .Values.debug.port }}
@@ -139,12 +128,10 @@ spec:
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
-{{- if eq .Values.global.prometheus.enabled true }}
-        - "--enable-metrics"
-        - "--metrics-port"
-        - "{{ .Values.global.prometheus.port }}"
-{{- else }}
-        - "--enable-metrics=false"
+{{- if eq .Values.global.metrics.enabled true }}
+        - "--enable-metrics=true"
+        - "--exporterAddress"
+        - "{{ .Values.global.metrics.exporterAddress }}"
 {{- end }}
         - "--trust-domain"
         - {{ .Values.tls.trustDomain }}

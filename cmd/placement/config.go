@@ -20,7 +20,6 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement/raft"
 )
 
@@ -49,8 +48,9 @@ type config struct {
 	replicationFactor int
 
 	// Log and metrics configurations
-	loggerOptions   logger.Options
-	metricsExporter metrics.Exporter
+	loggerOptions          logger.Options
+	metricsEnabled         bool
+	metricsExportedAddress string
 }
 
 func newConfig() *config {
@@ -82,11 +82,11 @@ func newConfig() *config {
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 
+	flag.BoolVar(&cfg.metricsEnabled, "enable-metrics", false, "Metric enabled, default false")
+	flag.StringVar(&cfg.metricsExportedAddress, "exporterAddress", "", "Metric exported address")
+
 	cfg.loggerOptions = logger.DefaultOptions()
 	cfg.loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	cfg.metricsExporter = metrics.NewExporter(metrics.DefaultMetricNamespace)
-	cfg.metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
 

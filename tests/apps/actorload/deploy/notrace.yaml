@@ -5,4 +5,4 @@ metadata:
   namespace: loadtest
 spec:
   tracing:
-    samplingRate: "0"
+    samplingRate: 0.0

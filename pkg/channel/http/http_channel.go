@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -195,17 +194,14 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	diag.DefaultHTTPMonitoring.AppHealthProbeStarted(ctx)
 	startRequest := time.Now()
 
 	channelResp, err := h.client.Do(channelReq)
 
-	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
-
 	if err != nil {
 		// Errors here are network-level errors, so we are not returning them as errors
 		// Instead, we just return a failed probe
-		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), elapsedMs)
+		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), startRequest)
 		//nolint:nilerr
 		return false, nil
 	}
@@ -215,7 +211,7 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	channelResp.Body.Close()
 
 	status := channelResp.StatusCode >= 200 && channelResp.StatusCode < 300
-	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(channelResp.StatusCode), elapsedMs)
+	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(channelResp.StatusCode), startRequest)
 
 	return status, nil
 }
@@ -326,13 +322,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	channelReq.Header.Set("content-type", ct)
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
-	span := diagUtils.SpanFromContext(ctx)
-	tp := diag.SpanContextToW3CString(span.SpanContext())
-	ts := diag.TraceStateToW3CString(span.SpanContext())
-	channelReq.Header.Set("traceparent", tp)
-	if ts != "" {
-		channelReq.Header.Set("tracestate", ts)
-	}
+	invokev1.ProcessSpanContextToMetadata(ctx, &channelReq.Header, "", "")
 
 	if h.appHeaderToken != "" {
 		channelReq.Header.Set(authConsts.APITokenHeader, h.appHeaderToken)

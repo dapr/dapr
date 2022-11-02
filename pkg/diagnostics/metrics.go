@@ -14,55 +14,163 @@ limitations under the License.
 package diagnostics
 
 import (
+	"context"
 	"time"
 
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
 )
-
-// appIDKey is a tag key for App ID.
-var appIDKey = tag.MustNewKey("app_id")
 
 var (
 	// DefaultReportingPeriod is the default view reporting period.
-	DefaultReportingPeriod = 1 * time.Minute
+	DefaultReportingPeriod = 60 * time.Second
 
 	// DefaultMonitoring holds service monitoring metrics definitions.
-	DefaultMonitoring = newServiceMetrics()
+	DefaultMonitoring *serviceMetrics
 	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middlewares.
-	DefaultGRPCMonitoring = newGRPCMetrics()
+	DefaultGRPCMonitoring *grpcMetrics
 	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middlewares.
-	DefaultHTTPMonitoring = newHTTPMetrics()
+	DefaultHTTPMonitoring *httpMetrics
 	// DefaultComponentMonitoring holds component specific metrics.
-	DefaultComponentMonitoring = newComponentMetrics()
+	DefaultComponentMonitoring *componentMetrics
 	// DefaultResiliencyMonitoring holds resiliency specific metrics.
-	DefaultResiliencyMonitoring = newResiliencyMetrics()
+	DefaultResiliencyMonitoring *resiliencyMetrics
+
+	// DefaultPlacementMonitoring holds placement specific metrics.
+	DefaultPlacementMonitoring *placementMetrics
+	// DefaultSentryMonitoring holds sentry specific metrics.
+	DefaultSentryMonitoring *sentryMetrics
+	// DefaultOperatorMonitoring holds operator specific metrics.
+	DefaultOperatorMonitoring *operatorMetrics
+	// DefaultInjectorMonitoring holds injector specific metrics.
+	DefaultInjectorMonitoring *injectorMetrics
 )
 
+// ServiceType service type, such as dapr system service or dapr sidecar.
+type ServiceType string
+
+const (
+	Daprd     ServiceType = "daprd"
+	Placement ServiceType = "placement"
+	Sentry    ServiceType = "sentry"
+	Injector  ServiceType = "injector"
+	Operator  ServiceType = "operator"
+)
+
+// MetricClient is a metric client.
+type MetricClient struct {
+	AppID     string
+	Namespace string
+	// Address collector receiver address.
+	Address string
+
+	meter    metric.Meter
+	pusher   *controller.Controller
+	exporter *otlpmetric.Exporter
+}
+
 // InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string) error {
-	if err := DefaultMonitoring.Init(appID); err != nil {
-		return err
+func InitMetrics(serviceType ServiceType, address, appID, namespace string) (*MetricClient, error) {
+	var err error
+	if address == "" {
+		address = defaultMetricExporterAddr
+	}
+	client := &MetricClient{
+		AppID:     appID,
+		Namespace: namespace,
+		Address:   address,
+	}
+	if err = client.init(); err != nil {
+		return nil, err
 	}
 
-	if err := DefaultGRPCMonitoring.Init(appID); err != nil {
-		return err
+	switch serviceType {
+	case Daprd:
+		DefaultMonitoring = client.newServiceMetrics()
+		DefaultGRPCMonitoring = client.newGRPCMetrics()
+		DefaultHTTPMonitoring = client.newHTTPMetrics()
+		DefaultComponentMonitoring = client.newComponentMetrics()
+		DefaultResiliencyMonitoring = client.newResiliencyMetrics()
+	case Placement:
+		DefaultPlacementMonitoring = client.newPlacementMetrics()
+	case Operator:
+		DefaultOperatorMonitoring = client.newOperatorMetrics()
+	case Injector:
+		DefaultInjectorMonitoring = client.newInjectorMetrics()
+	case Sentry:
+		DefaultSentryMonitoring = client.newSentryMetrics()
+	default:
+		return nil, errors.Errorf("unknown service type: %s", serviceType)
 	}
 
-	if err := DefaultHTTPMonitoring.Init(appID); err != nil {
-		return err
+	return client, nil
+}
+
+func (m *MetricClient) init() error {
+	var err error
+	ctx := context.Background()
+	client := otlpmetricgrpc.NewClient(
+		otlpmetricgrpc.WithInsecure(),
+		otlpmetricgrpc.WithEndpoint(m.Address))
+	m.exporter, err = otlpmetric.New(ctx, client)
+	if err != nil {
+		return errors.Errorf("Failed to create the collector exporter: %v", err)
 	}
+	res, _ := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(m.AppID),
+			semconv.ServiceNamespaceKey.String(m.Namespace),
+		),
+	)
+	// ::TODO https://github.com/open-telemetry/opentelemetry-go/issues/2678
+	// fake boundary
+	bounds := []float64{5, 10, 50, 100, 150, 200, 250, 300, 350, 400, 500, 600, 700, 800, 900, 1000}
+	m.pusher = controller.New(
+		processor.NewFactory(
+			simple.NewWithHistogramDistribution(
+				histogram.WithExplicitBoundaries(
+					bounds)),
+			m.exporter,
+		),
+		controller.WithExporter(m.exporter),
+		controller.WithCollectPeriod(DefaultReportingPeriod),
+		controller.WithCollectTimeout(30*time.Second),
+		controller.WithPushTimeout(30*time.Second),
+		controller.WithResource(res))
+	global.SetMeterProvider(m.pusher)
+	// only global one meter, not multiple meters.
+	m.meter = global.Meter("dapr",
+		metric.WithInstrumentationVersion("v0.31.0"),
+		metric.WithSchemaURL("https://dapr.io"))
 
-	if err := DefaultComponentMonitoring.Init(appID, namespace); err != nil {
-		return err
+	if err := m.pusher.Start(ctx); err != nil {
+		return errors.Errorf("could not start metric controller: %v", err)
 	}
+	return nil
+}
 
-	if err := DefaultResiliencyMonitoring.Init(appID); err != nil {
-		return err
+// Close close metric client.
+func (m *MetricClient) Close() error {
+	if m == nil {
+		return nil
 	}
-
-	// Set reporting period of views
-	view.SetReportingPeriod(DefaultReportingPeriod)
-
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := m.pusher.Stop(ctx); err != nil {
+		otel.Handle(err)
+	}
+	if err := m.exporter.Shutdown(ctx); err != nil {
+		otel.Handle(err)
+	}
 	return nil
 }
