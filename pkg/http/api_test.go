@@ -308,13 +308,21 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					err := fmt.Errorf("Error from pubsub %s", req.PubsubName)
 					res := pubsub.BulkPublishResponse{}
 					for _, entry := range req.Entries {
-						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-							EntryId: entry.EntryId,
-							Status:  pubsub.PublishFailed,
-							Error:   err,
-						})
+						_, shouldErr := entry.Metadata["shouldErr"]
+						if shouldErr {
+							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+								EntryId: entry.EntryId,
+								Status:  pubsub.PublishFailed,
+								Error:   err.Error(),
+							})
+						} else {
+							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+								EntryId: entry.EntryId,
+								Status:  pubsub.PublishSucceeded,
+							})
+						}
 					}
-					return pubsub.BulkPublishResponse{}, err
+					return res, err
 				case "errnotfound":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				case "errnotallowed":
@@ -360,6 +368,14 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				"md2": "mdVal2",
 			},
 		},
+		{
+			EntryId: "3",
+			Event: map[string]string{
+				"key":   "third",
+				"value": "third value",
+			},
+			ContentType: "application/json",
+		},
 	}
 
 	// setup
@@ -389,15 +405,95 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Bulk Publish unsuccessfully - 500 InternalError", func(t *testing.T) {
+	t.Run("Bulk Publish complete failure - 500 InternalError", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
+
+		errBulkRequest := []bulkPublishMessageEntry{}
+		for _, entry := range bulkRequest {
+			if entry.Metadata == nil {
+				entry.Metadata = map[string]string{}
+			}
+			entry.Metadata["shouldErr"] = "true"
+			errBulkRequest = append(errBulkRequest, entry)
+		}
+
+		errBulkResponse := pubsub.BulkPublishResponse{
+			Statuses: []pubsub.BulkPublishResponseEntry{
+				{
+					EntryId: "1",
+					Status:  pubsub.PublishFailed,
+					Error:   "Error from pubsub errorpubsub",
+				},
+				{
+					EntryId: "2",
+					Status:  pubsub.PublishFailed,
+					Error:   "Error from pubsub errorpubsub",
+				},
+				{
+					EntryId: "3",
+					Status:  pubsub.PublishFailed,
+					Error:   "Error from pubsub errorpubsub",
+				},
+			},
+			ErrorCode: "ERR_PUBSUB_PUBLISH_MESSAGE",
+		}
+
+		errReqBytes, _ := json.Marshal(errBulkRequest)
+		errResBytes, _ := json.Marshal(errBulkResponse)
+
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errResBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish partial failure - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+
+		errBulkRequest := []bulkPublishMessageEntry{}
+		for _, entry := range bulkRequest {
+			// Fail entries 2 and 3
+			if entry.EntryId == "2" || entry.EntryId == "3" {
+				if entry.Metadata == nil {
+					entry.Metadata = map[string]string{}
+				}
+				entry.Metadata["shouldErr"] = "true"
+			}
+			errBulkRequest = append(errBulkRequest, entry)
+		}
+
+		errBulkResponse := pubsub.BulkPublishResponse{
+			Statuses: []pubsub.BulkPublishResponseEntry{
+				{
+					EntryId: "2",
+					Status:  pubsub.PublishFailed,
+					Error:   "Error from pubsub errorpubsub",
+				},
+				{
+					EntryId: "3",
+					Status:  pubsub.PublishFailed,
+					Error:   "Error from pubsub errorpubsub",
+				},
+			},
+			ErrorCode: "ERR_PUBSUB_PUBLISH_MESSAGE",
+		}
+
+		errReqBytes, _ := json.Marshal(errBulkRequest)
+		errResBytes, _ := json.Marshal(errBulkResponse)
+
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errResBytes, resp.RawBody, "failed to match response on bulk publish")
 		}
 	})
 

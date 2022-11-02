@@ -64,7 +64,7 @@ func (p *defaultBulkPublisher) bulkPublishSerial(req *contribPubsub.BulkPublishR
 
 	for _, entry := range req.Entries {
 		status := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
-		if status.Error != nil {
+		if status.Error != "" {
 			err = ErrBulkPublishFailure
 		}
 
@@ -90,7 +90,7 @@ func (p *defaultBulkPublisher) bulkPublishParallel(req *contribPubsub.BulkPublis
 		eg.Go(func() error {
 			status := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
 			statusChan <- status
-			return status.Error
+			return errors.New(status.Error)
 		})
 	}
 
@@ -118,7 +118,7 @@ func (p *defaultBulkPublisher) bulkPublishSingleEntry(pubsubName, topic string, 
 		return contribPubsub.BulkPublishResponseEntry{
 			EntryId: entry.EntryId,
 			Status:  contribPubsub.PublishFailed,
-			Error:   err,
+			Error:   err.Error(),
 		}
 	}
 
