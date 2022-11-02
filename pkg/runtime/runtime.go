@@ -113,7 +113,12 @@ const (
 	componentFormat = "%s (%s/%s)"
 
 	defaultComponentInitTimeout = time.Second * 5
+
+	// Metadata needed to call bulk subscribe
+	BulkSubscribe = "bulkSubscribe"
 )
+
+type ComponentCategory string
 
 var componentCategoriesNeedProcess = []components.Category{
 	components.CategoryBindings,
@@ -678,9 +683,19 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
+	routeMetadata := route.metadata
+	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
+		err := a.bulkSubscribeTopic(ctx, policy, name, topic, route)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
+		}
+		a.topicCtxCancels[subKey] = cancel
+		return nil
+	}
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    topic,
-		Metadata: route.metadata,
+		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
@@ -1778,6 +1793,22 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	return policy(func(ctx context.Context) (err error) {
 		return ps.component.Publish(req)
 	})
+}
+
+func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	ps, ok := a.pubSubs[req.PubsubName]
+	if !ok {
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
+	}
+
+	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
+	}
+	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
+		return bulkPublisher.BulkPublish(context.TODO(), req)
+	}
+	log.Debugf("pubsub %s does not implement the bulkPublish API, defaulting to normal publish", req.PubsubName)
+	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
