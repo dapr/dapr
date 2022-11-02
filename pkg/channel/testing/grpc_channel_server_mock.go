@@ -16,6 +16,7 @@ package testing
 import (
 	context "context"
 	"encoding/json"
+	"sync"
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -30,11 +31,21 @@ import (
 //
 //nolint:nosnakecase
 type MockServer struct {
-	Error                    error
-	Subscriptions            []*runtimev1pb.TopicSubscription
-	Bindings                 []string
-	BindingEventResponse     runtimev1pb.BindingEventResponse
-	TopicEventResponseStatus runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+	Error                          error
+	Subscriptions                  []*runtimev1pb.TopicSubscription
+	Bindings                       []string
+	BindingEventResponse           runtimev1pb.BindingEventResponse
+	TopicEventResponseStatus       runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+	ListTopicSubscriptionsResponse *runtimev1pb.ListTopicSubscriptionsResponse
+	RequestsReceived               map[string]*runtimev1pb.TopicEventBulkRequest
+	BulkResponsePerPath            map[string]*runtimev1pb.TopicEventBulkResponse
+	initialized                    bool
+	mutex                          sync.Mutex
+}
+
+func (m *MockServer) Init() {
+	m.initialized = true
+	m.RequestsReceived = make(map[string]*runtimev1pb.TopicEventBulkRequest)
 }
 
 func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
@@ -55,6 +66,9 @@ func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest)
 }
 
 func (m *MockServer) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+	if m.ListTopicSubscriptionsResponse.Subscriptions != nil {
+		return m.ListTopicSubscriptionsResponse, m.Error
+	}
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
 		Subscriptions: m.Subscriptions,
 	}, m.Error
@@ -74,6 +88,19 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 	return &runtimev1pb.TopicEventResponse{
 		Status: m.TopicEventResponseStatus,
 	}, m.Error
+}
+
+func (m *MockServer) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if m.initialized != true {
+		m.Init()
+	}
+	m.RequestsReceived[in.Path] = in
+	if m.BulkResponsePerPath != nil {
+		return m.BulkResponsePerPath[in.Path], m.Error
+	}
+	return nil, m.Error
 }
 
 func (m *MockServer) HealthCheck(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.HealthCheckResponse, error) {
