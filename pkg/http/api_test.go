@@ -313,7 +313,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
 								EntryId: entry.EntryId,
 								Status:  pubsub.PublishFailed,
-								Error:   err.Error(),
+								Error:   err,
 							})
 						} else {
 							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
@@ -423,24 +423,22 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				{
 					EntryId: "1",
 					Status:  pubsub.PublishFailed,
-					Error:   "Error from pubsub errorpubsub",
+					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "2",
 					Status:  pubsub.PublishFailed,
-					Error:   "Error from pubsub errorpubsub",
+					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "3",
 					Status:  pubsub.PublishFailed,
-					Error:   "Error from pubsub errorpubsub",
+					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 			},
-			ErrorCode: "ERR_PUBSUB_PUBLISH_MESSAGE",
 		}
 
 		errReqBytes, _ := json.Marshal(errBulkRequest)
-		errResBytes, _ := json.Marshal(errBulkResponse)
 
 		for _, method := range testMethods {
 			// act
@@ -448,7 +446,15 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
-			assert.Equal(t, errResBytes, resp.RawBody, "failed to match response on bulk publish")
+
+			bulkResp := BulkPublishResponse{}
+			assert.NoError(t, json.Unmarshal([]byte(resp.RawBody), &bulkResp))
+			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
+			for i, entry := range bulkResp.Statuses {
+				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
+				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
+				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			}
 		}
 	})
 
@@ -473,19 +479,17 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				{
 					EntryId: "2",
 					Status:  pubsub.PublishFailed,
-					Error:   "Error from pubsub errorpubsub",
+					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "3",
 					Status:  pubsub.PublishFailed,
-					Error:   "Error from pubsub errorpubsub",
+					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 			},
-			ErrorCode: "ERR_PUBSUB_PUBLISH_MESSAGE",
 		}
 
 		errReqBytes, _ := json.Marshal(errBulkRequest)
-		errResBytes, _ := json.Marshal(errBulkResponse)
 
 		for _, method := range testMethods {
 			// act
@@ -493,7 +497,15 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
-			assert.Equal(t, errResBytes, resp.RawBody, "failed to match response on bulk publish")
+
+			bulkResp := BulkPublishResponse{}
+			assert.NoError(t, json.Unmarshal([]byte(resp.RawBody), &bulkResp))
+			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
+			for i, entry := range bulkResp.Statuses {
+				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
+				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
+				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			}
 		}
 	})
 

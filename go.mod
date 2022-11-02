@@ -389,7 +389,6 @@ require (
 replace (
 	// this is a fork which addresses a performance issues due to go routines
 	dubbo.apache.org/dubbo-go/v3 => dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537
-	github.com/dapr/components-contrib => github.com/shubham1172/components-contrib v0.0.0-20221102124719-cfcb645c8edc
 	// this is necessary for a license issue
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5

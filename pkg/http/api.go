@@ -2134,10 +2134,10 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	if len(res.Statuses) != 0 {
 		bulkRes.Statuses = make([]BulkPublishResponseEntry, 0, len(res.Statuses))
 		for _, r := range res.Statuses {
-			if r.Error != "" {
+			if r.Error != nil {
 				bulkRes.Statuses = append(bulkRes.Statuses, BulkPublishResponseEntry{
 					EntryId: r.EntryId,
-					Error:   r.Error,
+					Error:   r.Error.Error(),
 					Status:  string(r.Status),
 				})
 			} else {

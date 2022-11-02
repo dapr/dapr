@@ -411,6 +411,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
+github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650 h1:ow01K9XkIyvVHyvIenyEVYl1sJcn4VBx7HfI1FchQts=
+github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650/go.mod h1:kJUEIl8aisjgepaWZApm/D2W4quCyO2hAeWhpmC2l2c=
 github.com/dapr/kit v0.0.3-0.20221031180407-5a284d0d92b7 h1:kEoh1QvxoiQq4Ua+qzWjMuHsrpfvCG1VtKJM0gbDHAk=
 github.com/dapr/kit v0.0.3-0.20221031180407-5a284d0d92b7/go.mod h1:i9t09QZw346M2RbuK7oJhssOP0HCAQObz61U4SBNJSU=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1126,7 +1128,7 @@ github.com/nats-io/jwt v0.3.2 h1:+RB5hMpXUUA2dfxuhBTEkMOrYmM+gKIZYS1KjSostMI=
 github.com/nats-io/jwt v0.3.2/go.mod h1:/euKqTS1ZD+zzjYrY7pseZrTtWQSjujC7xjPc8wL6eU=
 github.com/nats-io/jwt/v2 v2.3.0 h1:z2mA1a7tIf5ShggOFlR1oBPgd6hGqcDYsISxZByUzdI=
 github.com/nats-io/nats-server/v2 v2.1.2/go.mod h1:Afk+wRZqkMQs/p45uXdrVLuab3gwv3Z8C4HTBu8GD/k=
-github.com/nats-io/nats-server/v2 v2.9.4 h1:GvRgv1936J/zYUwMg/cqtYaJ6L+bgeIOIvPslbesdow=
+github.com/nats-io/nats-server/v2 v2.9.3 h1:HrfzA7G9LNetKkm1z+jU/e9kuAe+E6uaBuuq9EB5sQQ=
 github.com/nats-io/nats-streaming-server v0.25.2 h1:cWjytvYksYPgnXnSocqnRWVrSgLclusnPGBNHQR4SqI=
 github.com/nats-io/nats.go v1.9.1/go.mod h1:ZjDU1L/7fJ09jvUSRVBR2e7+RnLiiIQyqyzEE/Zbp4w=
 github.com/nats-io/nats.go v1.16.0/go.mod h1:BPko4oXsySz4aSWeFgOHLZs3G4Jq4ZAyE6/zMCxRT6w=
@@ -1324,8 +1326,6 @@ github.com/shirou/gopsutil v3.20.11+incompatible h1:LJr4ZQK4mPpIV5gOa4jCOKOGb4ty
 github.com/shirou/gopsutil v3.20.11+incompatible/go.mod h1:5b4v6he4MtMOwMlS0TUMTu2PcXUg8+E1lC7eC3UO/RA=
 github.com/shirou/gopsutil/v3 v3.21.6 h1:vU7jrp1Ic/2sHB7w6UNs7MIkn7ebVtTb5D9j45o9VYE=
 github.com/shirou/gopsutil/v3 v3.21.6/go.mod h1:JfVbDpIBLVzT8oKbvMg9P3wEIMDDpVn+LwHTKj0ST88=
-github.com/shubham1172/components-contrib v0.0.0-20221102124719-cfcb645c8edc h1:+IrhwqXLVB70h7/0Rx7AyGdiWxgf4EtxWF1yn9T72Z0=
-github.com/shubham1172/components-contrib v0.0.0-20221102124719-cfcb645c8edc/go.mod h1:iFmhJh7F/Y4xJ4w1CPXucJyX59GbxRFugx0IzlIMPs4=
 github.com/shurcooL/sanitized_anchor_name v1.0.0/go.mod h1:1NzhyTcUVG4SuEtjjoZeVRXNmyL/1OwPU0+IJeTBvfc=
 github.com/sijms/go-ora/v2 v2.5.3 h1:klGKmhqRONVTtIzTdfYTvrW94kdJkdmZl93u2A3vchI=
 github.com/sijms/go-ora/v2 v2.5.3/go.mod h1:EHxlY6x7y9HAsdfumurRfTd+v8NrEOTR3Xl4FWlH6xk=
