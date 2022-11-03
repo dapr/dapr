@@ -274,7 +274,7 @@ func (p *ActorPlacement) Start() {
 			}()
 
 			if err != nil {
-				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
+				diag.DefaultMonitoring.ActorStatusReportFailed(context.Background(), "send", "status")
 				log.Debugf("failed to report status to placement service : %v", err)
 			}
 
@@ -283,7 +283,7 @@ func (p *ActorPlacement) Start() {
 			streamConnAlive := p.streamConnAlive
 			p.streamConnectedCond.L.Unlock()
 			if streamConnAlive {
-				diag.DefaultMonitoring.ActorStatusReported("send")
+				diag.DefaultMonitoring.ActorStatusReported(context.Background(), "send")
 				time.Sleep(statusReportHeartbeatInterval)
 			}
 		}
@@ -381,7 +381,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 
 func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	log.Debugf("placement order received: %s", in.Operation)
-	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
+	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(context.Background(), in.Operation)
 
 	// lock all incoming calls when an updated table arrives
 	p.operationUpdateLock.Lock()

@@ -36,7 +36,9 @@ func (a *authenticatorMock) GetCurrentSignedCert() *security.SignedCertificate {
 	return nil
 }
 
-func (a *authenticatorMock) CreateSignedWorkloadCert(id, namespace, trustDomain string) (*security.SignedCertificate, error) {
+func (a *authenticatorMock) CreateSignedWorkloadCert(ctx context.Context,
+	id, namespace, trustDomain string,
+) (*security.SignedCertificate, error) {
 	return nil, nil
 }
 

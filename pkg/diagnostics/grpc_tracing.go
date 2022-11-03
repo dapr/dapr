@@ -62,7 +62,7 @@ func GRPCTraceUnaryServerInterceptor(appID string) grpc.UnaryServerInterceptor {
 		span.SetAttributes(reqSpanAttr...)
 
 		// Add grpc-trace-bin header for all non-invocation api's
-		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
+		if info.FullMethod != DaprInvokeServiceMethod {
 			sc := span.SpanContext()
 			traceparent := diagUtils.TraceparentToW3CString(sc)
 			tracestate := diagUtils.TraceStateToW3CString(sc)
@@ -212,13 +212,13 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 
 	case *runtimev1pb.PublishEventRequest:
 		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService),
-			semconv.MessagingSystemKey.String("pubsub"),
+			isemconv.ComponentPubsub,
 			semconv.MessagingDestinationKey.String(s.GetTopic()),
 			semconv.MessagingDestinationKindTopic)
 
 	case *runtimev1pb.BulkPublishRequest:
 		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService),
-			semconv.MessagingSystemKey.String("pubsub"),
+			isemconv.ComponentPubsub,
 			semconv.MessagingDestinationKey.String(s.GetTopic()),
 			semconv.MessagingDestinationKindTopic)
 	case *runtimev1pb.InvokeBindingRequest:

@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -92,7 +93,7 @@ func (a *actor) channel() chan struct{} {
 // lock holds the lock for turn-based concurrency.
 func (a *actor) lock(reentrancyID *string) error {
 	pending := a.pendingActorCalls.Inc()
-	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
+	diag.DefaultMonitoring.ReportActorPendingCalls(context.Background(), a.actorType, pending)
 
 	err := a.actorLock.Lock(reentrancyID)
 	if err != nil {
@@ -129,5 +130,5 @@ func (a *actor) unlock() {
 	}
 
 	a.actorLock.Unlock()
-	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
+	diag.DefaultMonitoring.ReportActorPendingCalls(context.Background(), a.actorType, pending)
 }

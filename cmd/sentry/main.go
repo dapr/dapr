@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"os/signal"
@@ -91,7 +92,7 @@ func main() {
 
 	if metricsEnabled {
 		// Initialize injector service metrics
-		if metricClient, err = diag.InitMetrics(diag.Injector, metricsExportedAddress, "", ""); err != nil {
+		if metricClient, err = diag.InitMetrics(diag.Sentry, metricsExportedAddress, "", ""); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -130,7 +131,7 @@ func main() {
 		for {
 			select {
 			case <-issuerEvent:
-				diag.DefaultSentryMonitoring.IssuerCertChanged()
+				diag.DefaultSentryMonitoring.IssuerCertChanged(context.Background())
 				log.Debug("received issuer credentials changed signal")
 				// Batch all signals within 2s of each other
 				if restart == nil {

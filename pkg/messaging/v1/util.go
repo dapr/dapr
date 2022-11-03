@@ -45,10 +45,6 @@ const (
 	// DaprHeaderPrefix is the prefix if metadata is defined by non user-defined http headers.
 	DaprHeaderPrefix = "dapr-"
 
-	// W3C trace correlation headers.
-	traceparentHeader = "traceparent"
-	tracestateHeader  = "tracestate"
-
 	// DestinationIDHeader is the header carrying the value of the invoked app id.
 	DestinationIDHeader = "destination-app-id"
 	DaprAppIDKey        = "dapr-app-id"
@@ -131,10 +127,10 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
 		switch keyName {
-		case traceparentHeader:
+		case diagUtils.TraceparentHeader:
 			traceparentValue = listVal.Values[0]
 			continue
-		case tracestateHeader:
+		case diagUtils.TracestateHeader:
 			tracestateValue = listVal.Values[0]
 			continue
 		case DestinationIDHeader:
@@ -181,10 +177,10 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
 		switch keyName {
-		case traceparentHeader:
+		case diagUtils.TraceparentHeader:
 			traceparentValue = listVal.Values[0]
 			continue
-		case tracestateHeader:
+		case diagUtils.TracestateHeader:
 			tracestateValue = listVal.Values[0]
 			continue
 		case DestinationIDHeader:

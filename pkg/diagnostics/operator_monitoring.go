@@ -47,28 +47,28 @@ func (m *MetricClient) newOperatorMetrics() *operatorMetrics {
 }
 
 // RecordServiceCreatedCount records the number of dapr service created.
-func (o *operatorMetrics) RecordServiceCreatedCount(appID string) {
+func (o *operatorMetrics) RecordServiceCreatedCount(ctx context.Context, appID string) {
 	if o == nil {
 		return
 	}
-	o.serviceCreatedTotal.Add(context.Background(), 1,
+	o.serviceCreatedTotal.Add(ctx, 1,
 		semconv.ServiceNameKey.String(appID))
 }
 
 // RecordServiceDeletedCount records the number of dapr service deleted.
-func (o *operatorMetrics) RecordServiceDeletedCount(appID string) {
+func (o *operatorMetrics) RecordServiceDeletedCount(ctx context.Context, appID string) {
 	if o == nil {
 		return
 	}
-	o.serviceDeletedTotal.Add(context.Background(), 1,
+	o.serviceDeletedTotal.Add(ctx, 1,
 		semconv.ServiceNameKey.String(appID))
 }
 
 // RecordServiceUpdatedCount records the number of dapr service updated.
-func (o *operatorMetrics) RecordServiceUpdatedCount(appID string) {
+func (o *operatorMetrics) RecordServiceUpdatedCount(ctx context.Context, appID string) {
 	if o == nil {
 		return
 	}
-	o.serviceUpdatedTotal.Add(context.Background(), 1,
+	o.serviceUpdatedTotal.Add(ctx, 1,
 		semconv.ServiceNameKey.String(appID))
 }

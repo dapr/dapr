@@ -151,7 +151,7 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) []attribute.KeyV
 
 	case "publish":
 		isExistComponent = true
-		m = append(m, semconv.MessagingSystemKey.String("pubsub"),
+		m = append(m, isemconv.ComponentPubsub,
 			semconv.MessagingDestinationKindTopic)
 		topic := getContextValue(ctx, "topic")
 		m = append(m, semconv.MessagingDestinationKey.String(topic))

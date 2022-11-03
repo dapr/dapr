@@ -580,7 +580,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 		if !rawPayload {
 			// For multiple events in a single bulk call traceParent is different for each event.
-			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, sc, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
+			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, sc, diag.DaprBulkPublishEventMethod)
 			// Populate W3C traceparent to cloudevent envelope
 			traceparent := diagUtils.TraceparentToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan

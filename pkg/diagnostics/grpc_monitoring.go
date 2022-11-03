@@ -31,11 +31,6 @@ import (
 	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
 )
 
-const (
-	appHealthCheckMethod = "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck"
-	DaprAppIDKey         = "dapr-app-id"
-)
-
 type grpcMetrics struct {
 	serverReceivedBytes syncint64.Histogram
 	serverSentBytes     syncint64.Histogram
@@ -102,7 +97,7 @@ func (g *grpcMetrics) ServerRequestReceived(ctx context.Context, method string, 
 		return time.Time{}
 	}
 	g.serverReceivedBytes.Record(ctx, contentSize,
-		semconv.RPCSystemKey.String("grpc"),
+		isemconv.APIProtocolGRPC,
 		semconv.RPCMethodKey.String(method),
 		isemconv.RPCTypeServer,
 	)
@@ -116,7 +111,7 @@ func (g *grpcMetrics) ServerRequestSent(ctx context.Context, method, status stri
 	}
 	elapsed := float64(time.Since(start) / time.Millisecond)
 	attributes := []attribute.KeyValue{
-		semconv.RPCSystemKey.String("grpc"),
+		isemconv.APIProtocolGRPC,
 		semconv.RPCMethodKey.String(method),
 		isemconv.RPCTypeServer,
 		isemconv.RPCStatusKey.String(status),
@@ -131,7 +126,7 @@ func (g *grpcMetrics) ClientRequestSent(ctx context.Context, method string, cont
 		return time.Time{}
 	}
 	g.clientSentBytes.Record(ctx, contentSize,
-		semconv.RPCSystemKey.String("grpc"),
+		isemconv.APIProtocolGRPC,
 		semconv.RPCMethodKey.String(method),
 		isemconv.RPCTypeClient,
 	)
@@ -145,7 +140,7 @@ func (g *grpcMetrics) ClientRequestReceived(ctx context.Context, method, status 
 	}
 	elapsed := float64(time.Since(start) / time.Millisecond)
 	attributes := []attribute.KeyValue{
-		semconv.RPCSystemKey.String("grpc"),
+		isemconv.APIProtocolGRPC,
 		semconv.RPCMethodKey.String(method),
 		isemconv.RPCTypeClient,
 		isemconv.RPCStatusKey.String(status),
@@ -162,7 +157,7 @@ func (g *grpcMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 
 	elapsed := float64(time.Since(start) / time.Millisecond)
 	attributes := []attribute.KeyValue{
-		semconv.RPCSystemKey.String("grpc"),
+		isemconv.APIProtocolGRPC,
 		isemconv.RPCTypeClient,
 		isemconv.RPCStatusKey.String(status),
 	}
@@ -199,7 +194,7 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 			size  int
 		)
 
-		if method == appHealthCheckMethod {
+		if method == AppHealthCheckMethod {
 			start = time.Now()
 		} else {
 			start = g.ClientRequestSent(ctx, method, int64(g.getPayloadSize(req)))
@@ -210,7 +205,7 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 			size = g.getPayloadSize(reply)
 		}
 
-		if method == appHealthCheckMethod {
+		if method == AppHealthCheckMethod {
 			g.AppHealthProbeCompleted(ctx, status.Code(err).String(), start)
 		} else {
 			g.ClientRequestReceived(ctx, method, status.Code(err).String(), int64(size), start)
@@ -260,7 +255,7 @@ func (g *grpcMetrics) StreamServerRequestSent(ctx context.Context, method, statu
 		return
 	}
 	attributes := []attribute.KeyValue{
-		semconv.RPCSystemKey.String("grpc"),
+		isemconv.APIProtocolGRPC,
 		semconv.RPCMethodKey.String(method),
 		isemconv.RPCTypeServer,
 		isemconv.RPCStatusKey.String(status),
@@ -275,7 +270,7 @@ func (g *grpcMetrics) StreamClientRequestSent(ctx context.Context, method, statu
 		return
 	}
 	attributes := []attribute.KeyValue{
-		semconv.RPCSystemKey.String("grpc"),
+		isemconv.APIProtocolGRPC,
 		semconv.RPCMethodKey.String(method),
 		isemconv.RPCTypeClient,
 		isemconv.RPCStatusKey.String(status),

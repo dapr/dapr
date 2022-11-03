@@ -102,6 +102,7 @@ func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path st
 		return
 	}
 	attributes := []attribute.KeyValue{
+		isemconv.APIProtocolHTTP,
 		semconv.HTTPMethodKey.String(method),
 		semconv.HTTPTargetKey.String(path),
 	}
@@ -114,6 +115,7 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 	attributes := []attribute.KeyValue{
+		isemconv.APIProtocolHTTP,
 		semconv.HTTPMethodKey.String(method),
 		semconv.HTTPTargetKey.String(path),
 		semconv.HTTPStatusCodeKey.String(status),
@@ -129,6 +131,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	}
 	path = h.convertPathToMetricLabel(path)
 	attributes := []attribute.KeyValue{
+		isemconv.APIProtocolHTTP,
 		semconv.HTTPMethodKey.String(method),
 		semconv.HTTPTargetKey.String(path),
 	}
@@ -141,6 +144,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	}
 	path = h.convertPathToMetricLabel(path)
 	attributes := []attribute.KeyValue{
+		isemconv.APIProtocolHTTP,
 		semconv.HTTPMethodKey.String(method),
 		semconv.HTTPTargetKey.String(path),
 		semconv.HTTPStatusCodeKey.String(status),
@@ -225,7 +229,7 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 
 	elapsed := float64(time.Since(start) / time.Millisecond)
 	attributes := []attribute.KeyValue{
-		semconv.RPCSystemKey.String("http"),
+		isemconv.APIProtocolHTTP,
 		isemconv.RPCTypeClient,
 		isemconv.RPCStatusKey.String(status),
 	}

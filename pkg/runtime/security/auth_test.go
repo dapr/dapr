@@ -1,13 +1,14 @@
 package security
 
 import (
+	"context"
 	"crypto/x509"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func mockGenCSR(id string) ([]byte, []byte, error) {
+func mockGenCSR(ctx context.Context, id string) ([]byte, []byte, error) {
 	return []byte{1}, []byte{2}, nil
 }
 

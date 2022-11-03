@@ -269,19 +269,20 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	ctx := context.Background()
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
+		diag.DefaultMonitoring.ActorDeactivationFailed(context.Background(), actorType, "invoke")
 		return err
 	}
 
 	if resp.Status().Code != nethttp.StatusOK {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
+		diag.DefaultMonitoring.ActorDeactivationFailed(context.Background(),
+			actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
 		_, body := resp.RawData()
 		return errors.Errorf("error from actor service: %s", string(body))
 	}
 
 	actorKey := constructCompositeKey(actorType, actorID)
 	a.actorsTable.Delete(actorKey)
-	diag.DefaultMonitoring.ActorDeactivated(actorType)
+	diag.DefaultMonitoring.ActorDeactivated(context.Background(), actorType)
 	log.Debugf("deactivated actor type=%s, id=%s\n", actorType, actorID)
 
 	return nil
@@ -701,7 +702,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				// don't allow state changes
 				a.actorsTable.Delete(key)
 
-				diag.DefaultMonitoring.ActorRebalanced(actorType)
+				diag.DefaultMonitoring.ActorRebalanced(context.Background(), actorType)
 
 				for {
 					// wait until actor is not busy, then deactivate

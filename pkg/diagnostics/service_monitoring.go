@@ -132,21 +132,21 @@ func (s *serviceMetrics) ComponentLoaded() {
 }
 
 // ComponentInitialized records metric when component is initialized.
-func (s *serviceMetrics) ComponentInitialized(component string) {
+func (s *serviceMetrics) ComponentInitialized(ctx context.Context, component string) {
 	if s == nil {
 		return
 	}
-	s.componentInitCompleted.Add(context.Background(), 1,
+	s.componentInitCompleted.Add(ctx, 1,
 		isemconv.ComponentNameKey.String(component),
 	)
 }
 
 // ComponentInitFailed records metric when component initialization is failed.
-func (s *serviceMetrics) ComponentInitFailed(typ string, reason string, component string) {
+func (s *serviceMetrics) ComponentInitFailed(ctx context.Context, typ string, reason string, component string) {
 	if s == nil {
 		return
 	}
-	s.componentInitFailed.Add(context.Background(), 1,
+	s.componentInitFailed.Add(ctx, 1,
 		isemconv.ComponentTypeKey.String(typ),
 		isemconv.ComponentNameKey.String(component),
 		isemconv.FailReasonKey.String(reason),
@@ -154,47 +154,46 @@ func (s *serviceMetrics) ComponentInitFailed(typ string, reason string, componen
 }
 
 // MTLSInitCompleted records metric when component is initialized.
-func (s *serviceMetrics) MTLSInitCompleted() {
+func (s *serviceMetrics) MTLSInitCompleted(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.mtlsInitCompleted.Add(context.Background(), 1)
+	s.mtlsInitCompleted.Add(ctx, 1)
 }
 
 // MTLSInitFailed records metric when component initialization is failed.
-func (s *serviceMetrics) MTLSInitFailed(reason string) {
+func (s *serviceMetrics) MTLSInitFailed(ctx context.Context, reason string) {
 	if s == nil {
 		return
 	}
-	s.mtlsInitFailed.Add(context.Background(), 1,
-		isemconv.FailReasonKey.String(reason),
-	)
+	s.mtlsInitFailed.Add(ctx, 1, isemconv.FailReasonKey.String(reason))
 }
 
 // MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded.
-func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
+func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.mtlsWorkloadCertRotated.Add(context.Background(), 1)
+	s.mtlsWorkloadCertRotated.Add(ctx, 1)
 }
 
 // MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed.
-func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
+func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(ctx context.Context, reason string) {
 	if s == nil {
 		return
 	}
-	s.mtlsWorkloadCertRotatedFailed.Add(context.Background(), 1,
-		isemconv.FailReasonKey.String(reason),
-	)
+	s.mtlsWorkloadCertRotatedFailed.Add(ctx, 1,
+		isemconv.FailReasonKey.String(reason))
 }
 
 // RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app.
-func (s *serviceMetrics) RequestAllowedByAppAction(trustDomain, namespace, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestAllowedByAppAction(ctx context.Context,
+	trustDomain, namespace, operation, httpverb string, policyAction bool,
+) {
 	if s == nil {
 		return
 	}
-	s.appPolicyActionAllowed.Add(context.Background(), 1,
+	s.appPolicyActionAllowed.Add(ctx, 1,
 		isemconv.ComponentOperationKey.String(operation),
 		semconv.HTTPMethodKey.String(httpverb),
 		isemconv.PolicyActionKey.Bool(policyAction),
@@ -203,11 +202,13 @@ func (s *serviceMetrics) RequestAllowedByAppAction(trustDomain, namespace, opera
 }
 
 // RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app.
-func (s *serviceMetrics) RequestBlockedByAppAction(trustDomain, namespace, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestBlockedByAppAction(ctx context.Context,
+	trustDomain, namespace, operation, httpverb string, policyAction bool,
+) {
 	if s == nil {
 		return
 	}
-	s.appPolicyActionAllowed.Add(context.Background(), 1,
+	s.appPolicyActionAllowed.Add(ctx, 1,
 		isemconv.ComponentOperationKey.String(operation),
 		semconv.HTTPMethodKey.String(httpverb),
 		isemconv.PolicyActionKey.Bool(policyAction),
@@ -216,11 +217,13 @@ func (s *serviceMetrics) RequestBlockedByAppAction(trustDomain, namespace, opera
 }
 
 // RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy.
-func (s *serviceMetrics) RequestAllowedByGlobalAction(trustDomain, namespace, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestAllowedByGlobalAction(ctx context.Context,
+	trustDomain, namespace, operation, httpverb string, policyAction bool,
+) {
 	if s == nil {
 		return
 	}
-	s.globalPolicyActionAllowed.Add(context.Background(), 1,
+	s.globalPolicyActionAllowed.Add(ctx, 1,
 		isemconv.ComponentOperationKey.String(operation),
 		semconv.HTTPMethodKey.String(httpverb),
 		isemconv.PolicyActionKey.Bool(policyAction),
@@ -229,11 +232,13 @@ func (s *serviceMetrics) RequestAllowedByGlobalAction(trustDomain, namespace, op
 }
 
 // RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy.
-func (s *serviceMetrics) RequestBlockedByGlobalAction(trustDomain, namespace, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestBlockedByGlobalAction(ctx context.Context,
+	trustDomain, namespace, operation, httpverb string, policyAction bool,
+) {
 	if s == nil {
 		return
 	}
-	s.globalPolicyActionBlocked.Add(context.Background(), 1,
+	s.globalPolicyActionBlocked.Add(ctx, 1,
 		isemconv.ComponentOperationKey.String(operation),
 		semconv.HTTPMethodKey.String(httpverb),
 		isemconv.PolicyActionKey.Bool(policyAction),
@@ -242,70 +247,70 @@ func (s *serviceMetrics) RequestBlockedByGlobalAction(trustDomain, namespace, op
 }
 
 // ActorStatusReportFailed records metrics when status report to placement service is failed.
-func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string) {
+func (s *serviceMetrics) ActorStatusReportFailed(ctx context.Context, operation string, reason string) {
 	if s == nil {
 		return
 	}
-	s.actorStatusReportFailedTotal.Add(context.Background(), 1,
+	s.actorStatusReportFailedTotal.Add(ctx, 1,
 		isemconv.FailReasonKey.String(reason),
 		isemconv.ComponentOperationKey.String(operation),
 	)
 }
 
 // ActorStatusReported records metrics when status is reported to placement service.
-func (s *serviceMetrics) ActorStatusReported(operation string) {
+func (s *serviceMetrics) ActorStatusReported(ctx context.Context, operation string) {
 	if s == nil {
 		return
 	}
-	s.actorStatusReportTotal.Add(context.Background(), 1,
+	s.actorStatusReportTotal.Add(ctx, 1,
 		isemconv.ComponentOperationKey.String(operation),
 	)
 }
 
 // ActorPlacementTableOperationReceived records metric when runtime receives table operation.
-func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) {
+func (s *serviceMetrics) ActorPlacementTableOperationReceived(ctx context.Context, operation string) {
 	if s == nil {
 		return
 	}
-	s.actorTableOperationRecvTotal.Add(context.Background(), 1,
+	s.actorTableOperationRecvTotal.Add(ctx, 1,
 		isemconv.ComponentOperationKey.String(operation),
 	)
 }
 
 // ActorRebalanced records metric when actors are drained.
-func (s *serviceMetrics) ActorRebalanced(actorType string) {
+func (s *serviceMetrics) ActorRebalanced(ctx context.Context, actorType string) {
 	if s == nil {
 		return
 	}
-	s.actorRebalancedTotal.Add(context.Background(), 1,
+	s.actorRebalancedTotal.Add(ctx, 1,
 		isemconv.APIActorTypeKey.String(actorType))
 }
 
 // ActorDeactivated records metric when actor is deactivated.
-func (s *serviceMetrics) ActorDeactivated(actorType string) {
+func (s *serviceMetrics) ActorDeactivated(ctx context.Context, actorType string) {
 	if s == nil {
 		return
 	}
-	s.actorDeactivationTotal.Add(context.Background(), 1,
+	s.actorDeactivationTotal.Add(ctx, 1,
 		isemconv.APIActorTypeKey.String(actorType))
 }
 
 // ActorDeactivationFailed records metric when actor deactivation is failed.
-func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
+func (s *serviceMetrics) ActorDeactivationFailed(ctx context.Context, actorType, reason string) {
 	if s == nil {
 		return
 	}
 
-	s.actorDeactivationFailedTotal.Add(context.Background(), 1,
+	s.actorDeactivationFailedTotal.Add(ctx, 1,
 		isemconv.FailReasonKey.String(reason),
 		isemconv.APIActorTypeKey.String(actorType))
 }
 
 // ReportActorPendingCalls records the current pending actor locks.
-func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks int32) {
+func (s *serviceMetrics) ReportActorPendingCalls(ctx context.Context, actorType string, pendingLocks int32) {
 	if s == nil {
 		return
 	}
-	s.actorPendingCalls.Add(context.Background(), int64(pendingLocks),
+	s.actorPendingCalls.Add(ctx, int64(pendingLocks),
 		isemconv.APIActorTypeKey.String(actorType))
 }

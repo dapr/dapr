@@ -116,8 +116,8 @@ func (t *TracingClient) init() error {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	defaultTracer = otel.GetTracerProvider().Tracer(
-		"dapr",
-		apitrace.WithInstrumentationVersion("v0.31.0"),
+		daprRPCDaprService,
+		apitrace.WithInstrumentationVersion("v0.33.0"),
 		apitrace.WithSchemaURL("https://dapr.io"),
 	)
 

@@ -79,7 +79,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 			if s.certificate == nil || needsRefresh(s.certificate, serverCertExpiryBuffer) {
 				cert, err := s.getServerCertificate()
 				if err != nil {
-					diag.DefaultSentryMonitoring.ServerCertIssueFailed("server_cert")
+					diag.DefaultSentryMonitoring.ServerCertIssueFailed(context.Background(), "server_cert")
 					log.Error(err)
 					return nil, errors.Wrap(err, "failed to get TLS server certificate")
 				}
@@ -127,7 +127,7 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 // The method receives a request with an identity and initial cert and returns
 // A signed certificate including the trust chain to the caller along with an expiry date.
 func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
-	diag.DefaultSentryMonitoring.CertSignRequestReceived()
+	diag.DefaultSentryMonitoring.CertSignRequestReceived(ctx)
 
 	csrPem := req.GetCertificateSigningRequest()
 
@@ -135,7 +135,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if err != nil {
 		err = errors.Wrap(err, "cannot parse certificate signing request pem")
 		log.Error(err)
-		diag.DefaultSentryMonitoring.CertSignFailed("cert_parse")
+		diag.DefaultSentryMonitoring.CertSignFailed(ctx, "cert_parse")
 		return nil, err
 	}
 
@@ -143,7 +143,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if err != nil {
 		err = errors.Wrap(err, "error validating csr")
 		log.Error(err)
-		diag.DefaultSentryMonitoring.CertSignFailed("cert_validation")
+		diag.DefaultSentryMonitoring.CertSignFailed(ctx, "cert_validation")
 		return nil, err
 	}
 
@@ -151,7 +151,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if err != nil {
 		err = errors.Wrap(err, "error validating requester identity")
 		log.Error(err)
-		diag.DefaultSentryMonitoring.CertSignFailed("req_id_validation")
+		diag.DefaultSentryMonitoring.CertSignFailed(ctx, "req_id_validation")
 		return nil, err
 	}
 
@@ -160,7 +160,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if err != nil {
 		err = errors.Wrap(err, "error signing csr")
 		log.Error(err)
-		diag.DefaultSentryMonitoring.CertSignFailed("cert_sign")
+		diag.DefaultSentryMonitoring.CertSignFailed(ctx, "cert_sign")
 		return nil, err
 	}
 
@@ -176,7 +176,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if len(certPem) == 0 {
 		err = errors.New("insufficient data in certificate signing request, no certs signed")
 		log.Error(err)
-		diag.DefaultSentryMonitoring.CertSignFailed("insufficient_data")
+		diag.DefaultSentryMonitoring.CertSignFailed(ctx, "insufficient_data")
 		return nil, err
 	}
 
@@ -191,7 +191,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		ValidUntil:             expiry,
 	}
 
-	diag.DefaultSentryMonitoring.CertSignSucceed()
+	diag.DefaultSentryMonitoring.CertSignSucceed(ctx)
 
 	return resp, nil
 }

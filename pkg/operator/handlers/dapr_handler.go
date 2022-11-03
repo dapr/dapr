@@ -181,7 +181,7 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 		return err
 	}
 
-	diag.DefaultOperatorMonitoring.RecordServiceUpdatedCount(appID)
+	diag.DefaultOperatorMonitoring.RecordServiceUpdatedCount(ctx, appID)
 	return nil
 }
 
@@ -197,7 +197,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 		return err
 	}
 	log.Debugf("created service: %s", expectedService)
-	diag.DefaultOperatorMonitoring.RecordServiceCreatedCount(appID)
+	diag.DefaultOperatorMonitoring.RecordServiceCreatedCount(ctx, appID)
 	return nil
 }
 

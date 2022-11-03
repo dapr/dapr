@@ -49,28 +49,28 @@ func (m *MetricClient) newInjectorMetrics() *injectorMetrics {
 }
 
 // RecordSidecarInjectionRequestsCount records the total number of sidecar injection requests.
-func (i *injectorMetrics) RecordSidecarInjectionRequestsCount() {
+func (i *injectorMetrics) RecordSidecarInjectionRequestsCount(ctx context.Context) {
 	if i == nil {
 		return
 	}
-	i.sidecarInjectionRequestsTotal.Add(context.Background(), 1)
+	i.sidecarInjectionRequestsTotal.Add(ctx, 1)
 }
 
 // RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections.
-func (i *injectorMetrics) RecordSuccessfulSidecarInjectionCount(appID string) {
+func (i *injectorMetrics) RecordSuccessfulSidecarInjectionCount(ctx context.Context, appID string) {
 	if i == nil {
 		return
 	}
-	i.succeededSidecarInjectedTotal.Add(context.Background(), 1,
+	i.succeededSidecarInjectedTotal.Add(ctx, 1,
 		semconv.ServiceNameKey.String(appID))
 }
 
 // RecordFailedSidecarInjectionCount records the number of failed sidecar injections.
-func (i *injectorMetrics) RecordFailedSidecarInjectionCount(appID, reason string) {
+func (i *injectorMetrics) RecordFailedSidecarInjectionCount(ctx context.Context, appID, reason string) {
 	if i == nil {
 		return
 	}
-	i.failedSidecarInjectedTotal.Add(context.Background(), 1,
+	i.failedSidecarInjectedTotal.Add(ctx, 1,
 		semconv.ServiceNameKey.String(appID),
 		isemconv.FailReasonKey.String(reason))
 }

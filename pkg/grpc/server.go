@@ -178,7 +178,8 @@ func (s *server) Close() error {
 
 func (s *server) generateWorkloadCert() error {
 	s.logger.Info("sending workload csr request to sentry")
-	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
+	signedCert, err := s.authenticator.CreateSignedWorkloadCert(context.Background(),
+		s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
 	if err != nil {
 		return errors.Wrap(err, "error from authenticator CreateSignedWorkloadCert")
 	}
@@ -300,7 +301,7 @@ func (s *server) startWorkloadCertRotation() {
 				s.renewMutex.Unlock()
 				continue
 			}
-			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
+			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted(context.Background())
 		}
 		s.renewMutex.Unlock()
 	}

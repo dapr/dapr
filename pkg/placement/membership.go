@@ -14,6 +14,7 @@ limitations under the License.
 package placement
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -278,8 +279,8 @@ func (p *Service) performTableDissemination() {
 	p.streamConnPoolLock.RUnlock()
 	nTargetConns := len(p.raftNode.FSM().State().Members())
 
-	diag.DefaultPlacementMonitoring.RecordRuntimesCount(int64(nStreamConnPool))
-	diag.DefaultPlacementMonitoring.RecordActorRuntimesCount(int64(nTargetConns))
+	diag.DefaultPlacementMonitoring.RecordRuntimesCount(context.Background(), int64(nStreamConnPool))
+	diag.DefaultPlacementMonitoring.RecordActorRuntimesCount(context.Background(), int64(nTargetConns))
 
 	// ignore dissemination if there is no member update.
 	if cnt := p.memberUpdateCount.Load(); cnt > 0 {

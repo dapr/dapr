@@ -27,6 +27,14 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 )
 
+const (
+	AppHealthCheckMethod       = "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck"
+	DaprInvokeServiceMethod    = "/dapr.proto.runtime.v1.Dapr/InvokeService"
+	DaprOnBindingEventMethod   = "/dapr.proto.runtime.v1.AppCallback/OnBindingEvent"
+	DaprBulkPublishEventMethod = "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1"
+	DaprAppIDKey               = "dapr-app-id"
+)
+
 var (
 	// DefaultReportingPeriod is the default view reporting period.
 	DefaultReportingPeriod = 60 * time.Second

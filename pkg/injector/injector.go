@@ -201,7 +201,8 @@ func (i *injector) Run(ctx context.Context, onReady func()) {
 }
 
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
-	diag.DefaultInjectorMonitoring.RecordSidecarInjectionRequestsCount()
+	ctx := r.Context()
+	diag.DefaultInjectorMonitoring.RecordSidecarInjectionRequestsCount(ctx)
 
 	var body []byte
 	var err error
@@ -252,7 +253,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		admissionResponse = errorToAdmissionResponse(err)
 		log.Errorf("Sidecar injector failed to inject for app '%s'. Error: %s", diagAppID, err)
-		diag.DefaultInjectorMonitoring.RecordFailedSidecarInjectionCount(diagAppID, "patch")
+		diag.DefaultInjectorMonitoring.RecordFailedSidecarInjectionCount(ctx, diagAppID, "patch")
 	} else if len(patchOps) == 0 {
 		admissionResponse = &v1.AdmissionResponse{
 			Allowed: true,
@@ -288,22 +289,22 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Errorf("Sidecar injector failed to inject for app '%s'. Can't serialize response: %s", diagAppID, err)
-		diag.DefaultInjectorMonitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
+		diag.DefaultInjectorMonitoring.RecordFailedSidecarInjectionCount(ctx, diagAppID, "response")
 		return
 	}
 	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
 	_, err = w.Write(respBytes)
 	if err != nil {
 		log.Errorf("Sidecar injector failed to inject for app '%s'. Failed to write response: %v", diagAppID, err)
-		diag.DefaultInjectorMonitoring.RecordFailedSidecarInjectionCount(diagAppID, "write_response")
+		diag.DefaultInjectorMonitoring.RecordFailedSidecarInjectionCount(ctx, diagAppID, "write_response")
 		return
 	}
 
 	if patchedSuccessfully {
 		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
-		diag.DefaultInjectorMonitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
+		diag.DefaultInjectorMonitoring.RecordSuccessfulSidecarInjectionCount(ctx, diagAppID)
 	} else {
 		log.Errorf("Admission succeeded, but pod was not patched. No sidecar injected for '%s'", diagAppID)
-		diag.DefaultInjectorMonitoring.RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
+		diag.DefaultInjectorMonitoring.RecordFailedSidecarInjectionCount(ctx, diagAppID, "pod_patch")
 	}
 }

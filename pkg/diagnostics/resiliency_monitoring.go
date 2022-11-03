@@ -52,7 +52,7 @@ func (m *resiliencyMetrics) PolicyLoaded(resiliencyName string) {
 }
 
 // PolicyExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) PolicyExecuted(resiliencyName string, policy PolicyType) {
+func (m *resiliencyMetrics) PolicyExecuted(ctx context.Context, resiliencyName string, policy PolicyType) {
 	if m == nil {
 		return
 	}
@@ -62,5 +62,5 @@ func (m *resiliencyMetrics) PolicyExecuted(resiliencyName string, policy PolicyT
 		isemconv.ResiliencyPolicyKey.String(string(policy)),
 	}
 
-	m.executionCount.Add(context.Background(), 1, attributes...)
+	m.executionCount.Add(ctx, 1, attributes...)
 }

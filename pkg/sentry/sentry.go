@@ -56,7 +56,7 @@ func (s *sentry) Start(ctx context.Context, conf config.SentryConfig) error {
 
 	// Create the CA server
 	s.conf = conf
-	certAuth, v := s.createCAServer()
+	certAuth, v := s.createCAServer(ctx)
 
 	// Start the server in background
 	s.ctx, s.cancel = context.WithCancel(ctx)
@@ -69,7 +69,7 @@ func (s *sentry) Start(ctx context.Context, conf config.SentryConfig) error {
 }
 
 // Loads the trust anchors and issuer certs, then creates a new CA.
-func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) {
+func (s *sentry) createCAServer(ctx context.Context) (ca.CertificateAuthority, identity.Validator) {
 	// Create CA
 	certAuth, authorityErr := ca.NewCertificateAuthority(s.conf)
 	if authorityErr != nil {
@@ -89,7 +89,7 @@ func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) 
 		// Need to be in an else block for the linter
 		log.Infof("trust root bundle loaded. issuer cert expiry: %s", certExpiry.String())
 	}
-	diag.DefaultSentryMonitoring.IssuerCertExpiry(certExpiry)
+	diag.DefaultSentryMonitoring.IssuerCertExpiry(ctx, certExpiry)
 
 	// Create identity validator
 	v, validatorErr := s.createValidator()

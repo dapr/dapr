@@ -332,7 +332,7 @@ func ElapsedSince(start time.Time) float64 {
 func InputComponentBindings(name, url string) []attribute.KeyValue {
 	return []attribute.KeyValue{
 		isemconv.ComponentNameKey.String(name),
-		semconv.RPCServiceKey.String("Dapr"),
+		semconv.RPCServiceKey.String(daprRPCDaprService),
 		semconv.RPCMethodKey.String(url),
 		isemconv.ComponentBindings,
 	}

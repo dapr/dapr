@@ -54,7 +54,7 @@ func main() {
 
 	if cfg.metricsEnabled {
 		// Initialize injector service metrics
-		if metricClient, err = diag.InitMetrics(diag.Injector, cfg.metricsExportedAddress, "", ""); err != nil {
+		if metricClient, err = diag.InitMetrics(diag.Placement, cfg.metricsExportedAddress, "", ""); err != nil {
 			log.Fatal(err)
 		}
 	}

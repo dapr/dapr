@@ -133,7 +133,7 @@ func init() {
 
 	if metricsEnabled {
 		// Initialize injector service metrics
-		if metricClient, err = diag.InitMetrics(diag.Injector, metricsExportedAddress, "", ""); err != nil {
+		if metricClient, err = diag.InitMetrics(diag.Operator, metricsExportedAddress, "", ""); err != nil {
 			log.Fatal(err)
 		}
 	}

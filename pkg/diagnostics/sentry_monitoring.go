@@ -65,50 +65,49 @@ func (m *MetricClient) newSentryMetrics() *sentryMetrics {
 }
 
 // CertSignRequestReceived counts when CSR received.
-func (s *sentryMetrics) CertSignRequestReceived() {
+func (s *sentryMetrics) CertSignRequestReceived(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.csrReceivedTotal.Add(context.Background(), 1)
+	s.csrReceivedTotal.Add(ctx, 1)
 }
 
 // CertSignSucceed counts succeeded cert issuance.
-func (s *sentryMetrics) CertSignSucceed() {
+func (s *sentryMetrics) CertSignSucceed(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.certSignSuccessTotal.Add(context.Background(), 1)
+	s.certSignSuccessTotal.Add(ctx, 1)
 }
 
 // CertSignFailed counts succeeded cert issuance.
-func (s *sentryMetrics) CertSignFailed(reason string) {
+func (s *sentryMetrics) CertSignFailed(ctx context.Context, reason string) {
 	if s == nil {
 		return
 	}
-	s.certSignFailedTotal.Add(context.Background(), 1,
-		isemconv.FailReasonKey.String(reason))
+	s.certSignFailedTotal.Add(ctx, 1, isemconv.FailReasonKey.String(reason))
 }
 
 // IssuerCertExpiry records root cert expiry.
-func (s *sentryMetrics) IssuerCertExpiry(expiry *time.Time) {
+func (s *sentryMetrics) IssuerCertExpiry(ctx context.Context, expiry *time.Time) {
 	if s == nil {
 		return
 	}
-	s.issuerCertExpiryTimestamp.Add(context.Background(), expiry.Unix())
+	s.issuerCertExpiryTimestamp.Add(ctx, expiry.Unix())
 }
 
 // ServerCertIssueFailed records server cert issue failure.
-func (s *sentryMetrics) ServerCertIssueFailed(reason string) {
+func (s *sentryMetrics) ServerCertIssueFailed(ctx context.Context, reason string) {
 	if s == nil {
 		return
 	}
-	s.serverTLSCertIssueFailedTotal.Add(context.Background(), 1)
+	s.serverTLSCertIssueFailedTotal.Add(ctx, 1)
 }
 
 // IssuerCertChanged records issuer credential change.
-func (s *sentryMetrics) IssuerCertChanged() {
+func (s *sentryMetrics) IssuerCertChanged(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.issuerCertChangedTotal.Add(context.Background(), 1)
+	s.issuerCertChangedTotal.Add(ctx, 1)
 }

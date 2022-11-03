@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"runtime"
 	"testing"
 
@@ -53,12 +54,12 @@ func TestGenerateSidecarCSR(t *testing.T) {
 	}
 
 	t.Run("empty id", func(t *testing.T) {
-		_, _, err := generateCSRAndPrivateKey("")
+		_, _, err := generateCSRAndPrivateKey(context.Background(), "")
 		assert.NotNil(t, err)
 	})
 
 	t.Run("with id", func(t *testing.T) {
-		csr, pk, err := generateCSRAndPrivateKey("test")
+		csr, pk, err := generateCSRAndPrivateKey(context.Background(), "test")
 		assert.Nil(t, err)
 		assert.True(t, len(csr) > 0)
 		assert.True(t, len(pk) > 0)
