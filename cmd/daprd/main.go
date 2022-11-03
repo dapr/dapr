@@ -57,7 +57,7 @@ func main() {
 	pubsubLoader.DefaultRegistry.Logger = logContrib
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
-	httpMiddlewareLoader.DefaultRegistry.Logger = log
+	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
 	err = rt.Run(
 		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),
