@@ -15,8 +15,6 @@ package diagnostics
 
 import (
 	"context"
-	crand "crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -163,7 +161,8 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
 		numTraces := 100000
 		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", 0)
-		require.Greater(t, sampledCount, 0, "Expected to sample at least one span, but did not sample any!")
+		// We use a fixed seed for the RNG so we can use an exact number here
+		require.Equal(t, sampledCount, 1012, "Expected to sample 1012 traces but only sampled %d", sampledCount)
 		require.Less(t, sampledCount, numTraces, "Expected to sample fewer than the total number of traces, but sampled all of them!")
 	})
 
@@ -180,7 +179,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	})
 }
 
-func runTraces(t *testing.T, test_name string, numTraces int, samplingRate string, parentTraceFlag int) int {
+func runTraces(t *testing.T, testName string, numTraces int, samplingRate string, parentTraceFlag int) int {
 	d := NewDaprTraceSampler(samplingRate)
 	tracerOptions := []sdktrace.TracerProviderOption{
 		sdktrace.WithSampler(d),
@@ -188,7 +187,7 @@ func runTraces(t *testing.T, test_name string, numTraces int, samplingRate strin
 
 	tp := sdktrace.NewTracerProvider(tracerOptions...)
 
-	tracerName := fmt.Sprintf("%s_%s", test_name, samplingRate)
+	tracerName := fmt.Sprintf("%s_%s", testName, samplingRate)
 	otel.SetTracerProvider(tp)
 	tracer := otel.Tracer(tracerName)
 
@@ -334,9 +333,9 @@ func (gen *randomIDGenerator) NewIDs(ctx context.Context) (trace.TraceID, trace.
 }
 
 func defaultIDGenerator() IDGenerator {
-	gen := &randomIDGenerator{}
-	var rngSeed int64
-	_ = binary.Read(crand.Reader, binary.LittleEndian, &rngSeed)
-	gen.randSource = rand.New(rand.NewSource(rngSeed))
+	gen := &randomIDGenerator{
+		// Use a fixed seed to make the tests deterministic.
+		randSource: rand.New(rand.NewSource(1)), //nolint:gosec
+	}
 	return gen
 }
