@@ -304,7 +304,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
-./pkg/fswatcher/... \
 ./pkg/grpc/... \
 ./pkg/health/... \
 ./pkg/http/... \
