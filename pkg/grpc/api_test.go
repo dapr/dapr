@@ -28,7 +28,6 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 
-	"github.com/agrea/ptr"
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -68,6 +67,7 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -1053,7 +1053,7 @@ func TestGetState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.String("test-etag"),
+			ETag: ptr.Of("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
@@ -1662,7 +1662,7 @@ func TestGetBulkState(t *testing.T) {
 		})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.String("test-etag"),
+			ETag: ptr.Of("test-etag"),
 		}, nil)
 	fakeStore.On("Get",
 		mock.AnythingOfType("*context.valueCtx"),
