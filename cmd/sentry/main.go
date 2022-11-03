@@ -26,13 +26,13 @@ import (
 
 	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/sentry"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
 

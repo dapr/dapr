@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"strconv"
@@ -25,12 +26,12 @@ import (
 
 	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/fswatcher"
 )
 
 var (
@@ -131,7 +132,8 @@ func loadCertChains(certChainPath string) *credentials.CertChain {
 	go func() {
 		log.Infof("starting watch for certs on filesystem: %s", certChainPath)
 		err := fswatcher.Watch(ctx, tlsCreds.Path(), fsevent)
-		if err != nil {
+		// Watch always returns an error, which is context.Canceled if everything went well
+		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatalf("error starting watch on filesystem: %s", err)
 		}
 		close(fsevent)

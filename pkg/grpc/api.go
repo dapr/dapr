@@ -669,8 +669,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
 	req := &bindings.InvokeRequest{
-		Metadata:  make(map[string]string),
+		Metadata:  make(map[string]string, len(in.Metadata)),
 		Operation: bindings.OperationKind(in.Operation),
+		Data:      in.Data,
 	}
 	for key, val := range in.Metadata {
 		req.Metadata[key] = val
@@ -682,10 +683,6 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			req.Metadata[sanitizedKey] = val[0]
 		}
-	}
-
-	if in.Data != nil {
-		req.Data = in.Data
 	}
 
 	r := &runtimev1pb.InvokeBindingResponse{}
@@ -1162,11 +1159,9 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
-	response := &runtimev1pb.GetSecretResponse{}
-	if getResponse.Data != nil {
-		response.Data = getResponse.Data
-	}
-	return response, nil
+	return &runtimev1pb.GetSecretResponse{
+		Data: getResponse.Data,
+	}, nil
 }
 
 func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error) {

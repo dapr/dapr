@@ -382,13 +382,13 @@ endif
 
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
+	$(HELM) upgrade --install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
 delete-test-env-redis:
 	${HELM} del dapr-redis --namespace ${DAPR_TEST_NAMESPACE}
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade --install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
 # delete kafka from cluster
 delete-test-env-kafka:
@@ -396,7 +396,7 @@ delete-test-env-kafka:
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
-	$(HELM) install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
+	$(HELM) upgrade --install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
 
 # delete mongodb from cluster
 delete-test-env-mongodb:

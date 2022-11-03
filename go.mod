@@ -5,12 +5,10 @@ go 1.19
 require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.2.0
-	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/dapr/components-contrib v1.9.1-0.20221025205611-e38369028650
 	github.com/dapr/kit v0.0.3-0.20221031180407-5a284d0d92b7
 	github.com/fasthttp/router v1.4.12
-	github.com/fsnotify/fsnotify v1.6.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3
 	github.com/gogo/protobuf v1.3.2
@@ -116,6 +114,7 @@ require (
 	github.com/aerospike/aerospike-client-go v4.5.2+incompatible // indirect
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5 // indirect
 	github.com/agnivade/levenshtein v1.1.1 // indirect
+	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b // indirect
 	github.com/alibaba/sentinel-golang v1.0.4 // indirect
 	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.4 // indirect
 	github.com/alibabacloud-go/darabonba-openapi v0.2.1 // indirect
@@ -179,6 +178,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5 // indirect
 	github.com/fatih/color v1.13.0 // indirect
+	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
 	github.com/go-kit/kit v0.10.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
