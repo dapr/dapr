@@ -34,6 +34,9 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # export GOOS=linux
     # export GOARCH=amd64
 
+    # If you want to use a single container image `dapr` for all Dapr components, uncomment and set this.
+    # export USE_DEV_IMAGE=true
+
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
 

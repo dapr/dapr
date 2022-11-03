@@ -121,6 +121,7 @@ dlv test ./pkg/actors
 
 - **DAPR_REGISTRY** : should be set to `docker.io/<your_docker_hub_account>`.
 - **DAPR_TAG** : should be set to whatever value you wish to use for a container image tag (`dev` is a common choice).
+- **USE_DEV_IMAGE**: should be set to `true` to use the a single container image (`dapr`) for all Dapr components.
 
 On Linux/macOS:
 
