@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,6 +34,7 @@ type workflowActor struct {
 	actors    actors.Actors
 	states    map[string]*workflowState
 	scheduler workflowScheduler
+	rwLock    sync.RWMutex
 }
 
 type workflowState struct {
@@ -103,6 +105,9 @@ func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerN
 
 // DeactivateActor implements actors.InternalActor
 func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) error {
+	wf.rwLock.Lock()
+	defer wf.rwLock.Unlock()
+
 	wfLogger.Debugf("deactivating workflow actor '%s'", actorID)
 	delete(wf.states, actorID)
 	return nil
@@ -124,7 +129,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		return errors.New("invalid execution start event")
 	}
 
-	// We block creation of existing workflows unless they are in a completed state.
+	// We block (re)creation of existing workflows unless they are in a completed state.
 	if exists {
 		runtimeState := getRuntimeState(actorID, state)
 		if runtimeState.IsCompleted() {
@@ -214,8 +219,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	}
 
 	if len(state.inbox) == 0 {
-		// This is never expected - all run requests should be triggered by some inbox event
-		wfLogger.Warnf("%s: ignoring run request for workflow with empty inbox", actorID)
+		// This can happen after multiple events are processed in batches; there may still be reminders around
+		// for some of those already processed events.
+		wfLogger.Debugf("%s: ignoring run request for reminder '%s' because the workflow inbox is empty", reminderName, actorID)
 		return nil
 	}
 
@@ -232,7 +238,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// will trigger this callback channel.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
-	wf.scheduler.ScheduleWorkflow(wi)
+	if err := wf.scheduler.ScheduleWorkflow(ctx, wi); err != nil {
+		return fmt.Errorf("failed to schedule a workflow execution: %w", err)
+	}
+
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
 		return ctx.Err()
@@ -331,6 +340,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 }
 
 func (wf *workflowActor) loadInternalState(actorID string) (*workflowState, bool, error) {
+	wf.rwLock.RLock()
+	defer wf.rwLock.RUnlock()
+
 	// see if the state for this actor is already cached in memory
 	state, ok := wf.states[actorID]
 	if ok {
@@ -343,6 +355,9 @@ func (wf *workflowActor) loadInternalState(actorID string) (*workflowState, bool
 }
 
 func (wf *workflowActor) saveInternalState(actorID string, state *workflowState) error {
+	wf.rwLock.Lock()
+	defer wf.rwLock.Unlock()
+
 	wf.states[actorID] = state
 	return nil // TODO: Implement persistence this after validating reminders
 }

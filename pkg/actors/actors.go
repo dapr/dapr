@@ -82,6 +82,14 @@ type Actors interface {
 	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
 }
 
+// PlacementService allows for interacting with the actor placement service.
+type PlacementService interface {
+	Start()
+	Stop()
+	WaitUntilPlacementTableIsReady()
+	LookupActor(actorType, actorID string) (host string, appID string)
+}
+
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
 type GRPCConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
 
@@ -89,7 +97,7 @@ type actorsRuntime struct {
 	externalAppChannel     channel.AppChannel
 	store                  state.Store
 	transactionalStore     state.TransactionalStore
-	placement              *internal.ActorPlacement
+	placement              PlacementService
 	grpcConnectionFn       GRPCConnectionFn
 	config                 Config
 	actorsTable            *sync.Map
@@ -156,6 +164,9 @@ type ActorsOpts struct {
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	InternalActors   map[string]InternalActor
+
+	// MockPlacement is a placement service implementation used for testing
+	MockPlacement PlacementService
 }
 
 // NewActors create a new actors runtime with given config.
@@ -177,6 +188,7 @@ func NewActors(opts ActorsOpts) Actors {
 		tracingSpec:            opts.TracingSpec,
 		resiliency:             opts.Resiliency,
 		storeName:              opts.StateStoreName,
+		placement:              opts.MockPlacement,
 		transactionalStore:     transactionalStore,
 		actorsTable:            &sync.Map{},
 		activeTimers:           &sync.Map{},
@@ -232,11 +244,13 @@ func (a *actorsRuntime) Init() error {
 	}
 	appHealthFn := func() bool { return a.appHealthy.Load() }
 
-	a.placement = internal.NewActorPlacement(
-		a.config.PlacementAddresses, a.certChain,
-		a.config.AppID, hostname, a.config.HostedActorTypes,
-		appHealthFn,
-		afterTableUpdateFn)
+	if a.placement == nil {
+		a.placement = internal.NewActorPlacement(
+			a.config.PlacementAddresses, a.certChain,
+			a.config.AppID, hostname, a.config.HostedActorTypes,
+			appHealthFn,
+			afterTableUpdateFn)
+	}
 
 	go a.placement.Start()
 	a.startDeactivationTicker(a.config)

@@ -28,8 +28,8 @@ import (
 
 // workflowScheduler is an interface for pushing work items into the backend
 type workflowScheduler interface {
-	ScheduleWorkflow(wi *backend.OrchestrationWorkItem)
-	ScheduleActivity(wi *backend.ActivityWorkItem)
+	ScheduleWorkflow(ctx context.Context, wi *backend.OrchestrationWorkItem) error
+	ScheduleActivity(ctx context.Context, wi *backend.ActivityWorkItem) error
 }
 
 type actorBackend struct {
@@ -50,13 +50,23 @@ func (be *actorBackend) SetActorRuntime(actors actors.Actors) {
 }
 
 // ScheduleActivity implements workflowScheduler
-func (be *actorBackend) ScheduleActivity(wi *backend.ActivityWorkItem) {
-	be.activityWorkItemChan <- wi
+func (be *actorBackend) ScheduleActivity(ctx context.Context, wi *backend.ActivityWorkItem) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case be.activityWorkItemChan <- wi:
+		return nil
+	}
 }
 
 // ScheduleWorkflow implements workflowScheduler
-func (be *actorBackend) ScheduleWorkflow(wi *backend.OrchestrationWorkItem) {
-	be.orchestrationWorkItemChan <- wi
+func (be *actorBackend) ScheduleWorkflow(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case be.orchestrationWorkItemChan <- wi:
+		return nil
+	}
 }
 
 // CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.

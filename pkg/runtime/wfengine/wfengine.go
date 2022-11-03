@@ -65,7 +65,13 @@ func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
 
 func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
 	wfLogger.Info("configuring workflow engine gRPC endpoint")
-	wfe.executor = backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger)
+	wfe.ConfigureExecutor(func(be backend.Backend) backend.Executor {
+		return backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger)
+	})
+}
+
+func (wfe *WorkflowEngine) ConfigureExecutor(factory func(be backend.Backend) backend.Executor) {
+	wfe.executor = factory(wfe.backend)
 }
 
 func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) {
@@ -80,9 +86,11 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 		return errors.New("grpc executor is not yet configured")
 	}
 
-	// TODO: Enable concurrency for orchestrations (workflows) and activities.
-	orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfLogger, backend.NewWorkerOptions())
-	activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfLogger, backend.NewWorkerOptions())
+	// TODO: Determine whether a more dynamic parallelism configuration is necessary.
+	parallelismOpts := backend.WithMaxParallelism(100)
+
+	orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
+	activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
 	taskHubWorker := backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfLogger)
 	if err := taskHubWorker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
