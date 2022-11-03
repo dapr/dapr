@@ -2,15 +2,17 @@ replicaCount: 1
 logLevel: info
 component: sidecar-injector
 
-# Specify full docker image name including registry url to use the custom side car image
-# Otherwise, helm chart will use {{ .Values.global.registry }}/daprd:{{ .Values.global.tag }}
+# Override this to use a custom sidecar image.
+# If the image name contains a "/", it is assumed to be a full docker image name, including the registry url and tag.
+# Otherwise, the helm chart will use {{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.global.tag }}
 image:
-  name: ""
+  name: "daprd"
 
-# Specify full docker image name including registry url to use a custom injector service image
-# Otherwise, helm chart will use {{ .Values.global.registry }}/injector:{{ .Values.global.tag }}
+# Override this to use a custom injector service image.
+# If the image name contains a "/", it is assumed to be a full docker image name, including the registry url and tag.
+# Otherwise, the helm chart will use {{ .Values.global.registry }}/{{ .Values.injectorImage.name }}:{{ .Values.global.tag }}
 injectorImage:
-  name: ""
+  name: "injector"
 
 nameOverride: ""
 fullnameOverride: ""
