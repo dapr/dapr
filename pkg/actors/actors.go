@@ -1137,7 +1137,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	defer a.activeRemindersLock.Unlock()
 	if r, exists := a.getReminder(req.Name, req.ActorType, req.ActorID); exists {
 		if a.reminderRequiresUpdate(req, r) {
-			err := a.DeleteReminder(ctx, &DeleteReminderRequest{
+			err := a.doDeleteReminder(ctx, &DeleteReminderRequest{
 				ActorID:   req.ActorID,
 				ActorType: req.ActorType,
 				Name:      req.Name,
@@ -1725,6 +1725,12 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+	a.activeRemindersLock.Lock()
+	defer a.activeRemindersLock.Unlock()
+	return a.doDeleteReminder(ctx, req)
+}
+
+func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -1841,6 +1847,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		return err
 	}
 
+	log.Infof("Deleted reminder with key: %v", reminderKey)
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Delete(&state.DeleteRequest{
@@ -1867,7 +1874,7 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 	}
 
 	// delete old reminder
-	err := a.DeleteReminder(ctx, &DeleteReminderRequest{
+	err := a.doDeleteReminder(ctx, &DeleteReminderRequest{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
 		Name:      req.OldName,
