@@ -2134,15 +2134,17 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	if len(res.Statuses) != 0 {
 		bulkRes.Statuses = make([]BulkPublishResponseEntry, 0, len(res.Statuses))
 		for _, r := range res.Statuses {
-			if r.Error != nil {
-				bulkRes.Statuses = append(bulkRes.Statuses, BulkPublishResponseEntry{
-					EntryId: r.EntryId,
-					Error:   r.Error.Error(),
-					Status:  string(r.Status),
-				})
-			} else {
+			if r.Status == pubsub.PublishSucceeded {
 				// Only count the events that have been successfully published to the pub/sub component
 				eventsPublished++
+			} else {
+				resEntry := BulkPublishResponseEntry{}
+				resEntry.EntryId = r.EntryId
+				resEntry.Status = string(pubsub.PublishFailed)
+				if r.Error != nil {
+					resEntry.Error = r.Error.Error()
+				}
+				bulkRes.Statuses = append(bulkRes.Statuses, resEntry)
 			}
 		}
 	}
