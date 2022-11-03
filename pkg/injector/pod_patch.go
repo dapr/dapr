@@ -26,6 +26,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/pkg/validation"
 )
@@ -74,26 +75,31 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(context.TODO(), kubeClient, namespace)
 	socketVolumeMount := sidecar.GetUnixDomainSocketVolume(&pod)
+	appContainers, componentContainers := components.SplitContainers(pod)
+	componentPathOps, componentsSocketVolumeMount := components.PatchOps(componentContainers, &pod)
 
 	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
-		AppID:                       appID,
-		Annotations:                 an,
-		CertChain:                   certChain,
-		CertKey:                     certKey,
-		ControlPlaneAddress:         apiSvcAddress,
-		DaprSidecarImage:            image,
-		Identity:                    fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName),
-		IgnoreEntrypointTolerations: i.config.GetIgnoreEntrypointTolerations(),
-		ImagePullPolicy:             i.config.GetPullPolicy(),
-		MTLSEnabled:                 mTLSEnabled(daprClient),
-		Namespace:                   req.Namespace,
-		PlacementServiceAddress:     placementAddress,
-		SentryAddress:               sentryAddress,
-		SocketVolumeMount:           socketVolumeMount,
-		TokenVolumeMount:            sidecar.GetTokenVolumeMount(pod.Spec),
-		Tolerations:                 pod.Spec.Tolerations,
-		TrustAnchors:                trustAnchors,
-		VolumeMounts:                sidecar.GetVolumeMounts(pod),
+		AppID:                        appID,
+		Annotations:                  an,
+		CertChain:                    certChain,
+		CertKey:                      certKey,
+		ControlPlaneAddress:          apiSvcAddress,
+		DaprSidecarImage:             image,
+		Identity:                     fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName),
+		IgnoreEntrypointTolerations:  i.config.GetIgnoreEntrypointTolerations(),
+		ImagePullPolicy:              i.config.GetPullPolicy(),
+		MTLSEnabled:                  mTLSEnabled(daprClient),
+		Namespace:                    req.Namespace,
+		PlacementServiceAddress:      placementAddress,
+		SentryAddress:                sentryAddress,
+		SocketVolumeMount:            socketVolumeMount,
+		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
+		TokenVolumeMount:             sidecar.GetTokenVolumeMount(pod.Spec),
+		Tolerations:                  pod.Spec.Tolerations,
+		TrustAnchors:                 trustAnchors,
+		VolumeMounts:                 sidecar.GetVolumeMounts(pod),
+		RunAsNonRoot:                 i.config.GetRunAsNonRoot(),
+		ReadOnlyRootFilesystem:       i.config.GetReadOnlyRootFilesystem(),
 	})
 	if err != nil {
 		return nil, err
@@ -109,8 +115,8 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		path = sidecar.ContainersPath
 		value = []corev1.Container{*sidecarContainer}
 	} else {
-		envPatchOps = sidecar.AddDaprEnvVarsToContainers(pod.Spec.Containers)
-		socketVolumePatchOps = sidecar.AddSocketVolumeToContainers(pod.Spec.Containers, socketVolumeMount)
+		envPatchOps = sidecar.AddDaprEnvVarsToContainers(appContainers)
+		socketVolumePatchOps = sidecar.AddSocketVolumeToContainers(appContainers, socketVolumeMount)
 		path = sidecar.ContainersPath + "/-"
 		value = sidecarContainer
 	}
@@ -124,6 +130,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 	patchOps = append(patchOps, envPatchOps...)
 	patchOps = append(patchOps, socketVolumePatchOps...)
+	patchOps = append(patchOps, componentPathOps...)
 
 	return patchOps, nil
 }

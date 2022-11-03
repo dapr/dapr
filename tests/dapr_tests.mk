@@ -30,6 +30,7 @@ binding_input_grpc \
 binding_output \
 pubsub-publisher \
 pubsub-subscriber \
+pubsub-bulk-subscriber \
 pubsub-subscriber_grpc \
 pubsub-subscriber-routing \
 pubsub-subscriber-routing_grpc \
@@ -282,9 +283,6 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 .PHONY: test-deps
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
-	# In golang >=1.16 there is a new way to do this with `go install gotest.tools/gotestsum@latest`
-	# But this doesn't work with <=1.15.
-	# (see: https://golang.org/ref/mod#go-install)
 	command -v gotestsum || go install gotest.tools/gotestsum@latest
 
 # start all e2e tests
@@ -384,13 +382,13 @@ endif
 
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
+	$(HELM) upgrade --install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
 delete-test-env-redis:
 	${HELM} del dapr-redis --namespace ${DAPR_TEST_NAMESPACE}
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade --install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
 # delete kafka from cluster
 delete-test-env-kafka:
@@ -398,7 +396,7 @@ delete-test-env-kafka:
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
-	$(HELM) install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
+	$(HELM) upgrade --install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
 
 # delete mongodb from cluster
 delete-test-env-mongodb:
@@ -436,6 +434,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pubsub_no_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings_custom_route.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -529,6 +528,14 @@ describe-minikube-env:
 	export DAPR_TEST_REGISTRY=\n\
 	export MINIKUBE_NODE_IP="
 
-# Setup minikube
+# Delete minikube
 delete-minikube:
 	minikube delete
+
+# Delete all stored test results
+.PHONY: test-clean
+test-clean:
+	-rm -rv ./tests/e2e/*/dist
+	-rm -rv ./tests/perf/*/dist
+	-rm test_report_*.json
+	-rm test_report_*.xml

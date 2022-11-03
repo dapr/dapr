@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,10 +31,10 @@ import (
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
+	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
 
@@ -167,7 +168,8 @@ func (o *operator) loadCertChain(ctx context.Context) (certChain *credentials.Ce
 	go func() {
 		log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
 		err := fswatcher.Watch(watchCtx, o.config.Credentials.Path(), fsevent)
-		if err != nil {
+		// Watch always returns an error, which is context.Canceled if everything went well
+		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatalf("error starting watch on filesystem: %s", err)
 		}
 		close(fsevent)
