@@ -16,9 +16,10 @@ package http
 import (
 	"testing"
 
-	"github.com/agrea/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/kit/ptr"
 )
 
 func TestHeaders(t *testing.T) {
@@ -40,7 +41,7 @@ func TestHeaders(t *testing.T) {
 	t.Run("Respond with ETag JSON", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 		etagValue := "etagValue"
-		respond(ctx, withJSON(200, nil), withEtag(ptr.String(etagValue)))
+		respond(ctx, withJSON(200, nil), withEtag(ptr.Of(etagValue)))
 
 		assert.Equal(t, etagValue, string(ctx.Response.Header.Peek(etagHeader)))
 	})
