@@ -83,7 +83,9 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
-	a.scheduler.ScheduleActivity(wi)
+	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
+		return fmt.Errorf("failed to schedule an activity execution: %w", err)
+	}
 
 loop:
 	for {

@@ -21,18 +21,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/microsoft/durabletask-go/api"
+	"github.com/microsoft/durabletask-go/backend"
+	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/kit/logger"
 )
+
+const testAppID = "wf-app"
 
 // The fake state store code was copied from actors_test.go.
 // TODO: Find a way to share the code instead of copying it, if it makes sense to do so.
@@ -174,13 +183,224 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	return nil
 }
 
+type mockPlacement struct{}
+
+func NewMockPlacement() actors.PlacementService {
+	return &mockPlacement{}
+}
+
+// LookupActor implements internal.PlacementService
+func (*mockPlacement) LookupActor(actorType string, actorID string) (name string, appID string) {
+	return "localhost", testAppID
+}
+
+// Start implements internal.PlacementService
+func (*mockPlacement) Start() {
+	// no-op
+}
+
+// Stop implements internal.PlacementService
+func (*mockPlacement) Stop() {
+	// no-op
+}
+
+// WaitUntilPlacementTableIsReady implements internal.PlacementService
+func (*mockPlacement) WaitUntilPlacementTableIsReady() {
+	// no-op
+}
+
 // TestStartWorkflowEngine validates that starting the workflow engine returns no errors.
 func TestStartWorkflowEngine(t *testing.T) {
 	ctx := context.Background()
+	engine := getEngine()
+	grpcServer := grpc.NewServer()
+	engine.ConfigureGrpc(grpcServer)
+	err := engine.Start(ctx)
+	assert.NoError(t, err)
+}
+
+// TestEmptyWorkflow executes a no-op workflow end-to-end and verifies all workflow metadata is correctly initialized.
+func TestEmptyWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("EmptyWorkflow", func(*task.OrchestrationContext) (any, error) {
+		return nil, nil
+	})
+
+	ctx := context.Background()
+	client := startEngine(ctx, r)
+	preStartTime := time.Now().UTC()
+	id, err := client.ScheduleNewOrchestration(ctx, "EmptyWorkflow")
+	if assert.NoError(t, err) {
+		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+		if assert.NoError(t, err) {
+			assert.Equal(t, id, metadata.InstanceID)
+			assert.True(t, metadata.IsComplete())
+			assert.GreaterOrEqual(t, metadata.CreatedAt, preStartTime)
+			assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
+			assert.Empty(t, metadata.SerializedInput)
+			assert.Empty(t, metadata.SerializedOutput)
+			assert.Empty(t, metadata.SerializedCustomStatus)
+			assert.Nil(t, metadata.FailureDetails)
+		}
+	}
+}
+
+// TestSingleTimerWorkflow executes a workflow schedules a timer and completes, verifying that timers
+// can be used to resume a workflow. This test does not attempt to verify delay accuracy.
+func TestSingleTimerWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("SingleTimer", func(ctx *task.OrchestrationContext) (any, error) {
+		err := ctx.CreateTimer(time.Duration(0)).Await(nil)
+		return nil, err
+	})
+
+	ctx := context.Background()
+	client := startEngine(ctx, r)
+
+	id, err := client.ScheduleNewOrchestration(ctx, "SingleTimer")
+	if assert.NoError(t, err) {
+		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+		if assert.NoError(t, err) {
+			assert.True(t, metadata.IsComplete())
+			assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
+		}
+	}
+}
+
+// TestSingleActivityWorkflow executes a workflow that calls a single activity and completes. The input
+// passed to the workflow is also passed to the activity, and the activity's return value is also returned
+// by the workflow, allowing the test to verify input and output handling, as well as activity execution.
+func TestSingleActivityWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		var output string
+		err := ctx.CallActivity("SayHello", input).Await(&output)
+		return output, err
+	})
+	r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
+		var name string
+		if err := ctx.GetInput(&name); err != nil {
+			return nil, err
+		}
+		return fmt.Sprintf("Hello, %s!", name), nil
+	})
+
+	ctx := context.Background()
+	client := startEngine(ctx, r)
+
+	id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"))
+	if assert.NoError(t, err) {
+		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+		if assert.NoError(t, err) {
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `"世界"`, metadata.SerializedInput)
+			assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
+		}
+	}
+}
+
+// TestActivityChainingWorkflow verifies that a workflow can call multiple activities in a sequence,
+// passing the output of the previous activity as the input of the next activity.
+func TestActivityChainingWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ActivityChain", func(ctx *task.OrchestrationContext) (any, error) {
+		val := 0
+		for i := 0; i < 10; i++ {
+			if err := ctx.CallActivity("PlusOne", val).Await(&val); err != nil {
+				return nil, err
+			}
+		}
+		return val, nil
+	})
+	r.AddActivityN("PlusOne", func(ctx task.ActivityContext) (any, error) {
+		var input int
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input + 1, nil
+	})
+
+	ctx := context.Background()
+	client := startEngine(ctx, r)
+
+	id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
+	if assert.NoError(t, err) {
+		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+		if assert.NoError(t, err) {
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
+		}
+	}
+}
+
+// TestConcurrentActivityExecution verifies that a workflow can execute multiple activities in parallel
+// and wait for all of them to complete before completing itself.
+func TestConcurrentActivityExecution(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ActivityFanOut", func(ctx *task.OrchestrationContext) (any, error) {
+		tasks := []task.Task{}
+		for i := 0; i < 10; i++ {
+			tasks = append(tasks, ctx.CallActivity("ToString", i))
+		}
+		results := []string{}
+		for _, t := range tasks {
+			var result string
+			if err := t.Await(&result); err != nil {
+				return nil, err
+			}
+			results = append(results, result)
+		}
+		sort.Sort(sort.Reverse(sort.StringSlice(results)))
+		return results, nil
+	})
+	r.AddActivityN("ToString", func(ctx task.ActivityContext) (any, error) {
+		var input int
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		// Sleep for 1 second to ensure that the test passes only if all activities execute in parallel.
+		time.Sleep(1 * time.Second)
+		return fmt.Sprintf("%d", input), nil
+	})
+
+	ctx := context.Background()
+	client := startEngine(ctx, r)
+
+	id, err := client.ScheduleNewOrchestration(ctx, "ActivityFanOut")
+	if assert.NoError(t, err) {
+		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+		if assert.NoError(t, err) {
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
+
+			// Because all the activities run in parallel, they should complete very quickly
+			assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
+		}
+	}
+}
+
+func startEngine(ctx context.Context, r *task.TaskRegistry) backend.TaskHubClient {
+	var client backend.TaskHubClient
+	engine := getEngine()
+	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
+		client = backend.NewTaskHubClient(be)
+		return task.NewTaskExecutor(r)
+	})
+	if err := engine.Start(ctx); err != nil {
+		panic(err)
+	}
+	return client
+}
+
+func getEngine() *wfengine.WorkflowEngine {
 	engine := wfengine.NewWorkflowEngine()
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
-		AppID:              "wf-app",
+		AppID:              testAppID,
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          config.ApplicationConfig{},
 	})
@@ -189,13 +409,13 @@ func TestStartWorkflowEngine(t *testing.T) {
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		InternalActors: engine.InternalActors(),
+		MockPlacement:  NewMockPlacement(),
+		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+
+	if err := actors.Init(); err != nil {
+		panic(err)
+	}
 	engine.SetActorRuntime(actors)
-
-	grpcServer := grpc.NewServer()
-	engine.ConfigureGrpc(grpcServer)
-	err := engine.Start(ctx)
-	assert.NoError(t, err)
+	return engine
 }
-
-// TODO: Integration tests that actually run workflows (requires a Go SDK of some kind)
