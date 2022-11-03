@@ -68,11 +68,6 @@ func GetTraceSamplingRate(rate string) float64 {
 	return f
 }
 
-// TraceSampler returns Probability Sampler option.
-func TraceSampler(samplingRate string) sdktrace.Sampler {
-	return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(GetTraceSamplingRate(samplingRate)))
-}
-
 // IsTracingEnabled parses the given rate and returns false if sampling rate is explicitly set 0.
 func IsTracingEnabled(rate string) bool {
 	return GetTraceSamplingRate(rate) != 0
