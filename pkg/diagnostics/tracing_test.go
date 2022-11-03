@@ -287,6 +287,8 @@ func (o *otelFakeSpanProcessor) ForceFlush(ctx context.Context) error {
 
 // This was taken from the otel testing to generate IDs
 // origin: go.opentelemetry.io/otel/sdk@v1.11.1/trace/id_generator.go
+// Copyright: The OpenTelemetry Authors
+// License (Apache 2.0): https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.11.1/LICENSE
 
 // IDGenerator allows custom generators for TraceID and SpanID.
 type IDGenerator interface {
