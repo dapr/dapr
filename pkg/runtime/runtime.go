@@ -328,14 +328,16 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
 // but we do so here to explicitly call out the dependency on having `hostAddress` computed.
 func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
+	tracingSpec := a.globalConfig.Spec.TracingSpec
+
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
-	if a.globalConfig.Spec.TracingSpec.Stdout {
+	if tracingSpec.Stdout {
 		tpStore.RegisterExporter(diagUtils.NewStdOutExporter())
 	}
 
 	// Register zipkin trace exporter if ZipkinSpec is specified
-	if a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress != "" {
-		zipkinExporter, err := zipkin.New(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
+	if tracingSpec.Zipkin.EndpointAddress != "" {
+		zipkinExporter, err := zipkin.New(tracingSpec.Zipkin.EndpointAddress)
 		if err != nil {
 			return err
 		}
@@ -343,13 +345,13 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	}
 
 	// Register otel trace exporter if OtelSpec is specified
-	if a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress != "" && a.globalConfig.Spec.TracingSpec.Otel.Protocol != "" {
-		endpoint := a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress
-		protocol := a.globalConfig.Spec.TracingSpec.Otel.Protocol
+	if tracingSpec.Otel.EndpointAddress != "" && tracingSpec.Otel.Protocol != "" {
+		endpoint := tracingSpec.Otel.EndpointAddress
+		protocol := tracingSpec.Otel.Protocol
 		if protocol != "http" && protocol != "grpc" {
 			return fmt.Errorf("invalid protocol %v provided for Otel endpoint", protocol)
 		}
-		isSecure := a.globalConfig.Spec.TracingSpec.Otel.IsSecure
+		isSecure := tracingSpec.Otel.IsSecure
 
 		var client otlptrace.Client
 		if protocol == "http" {
@@ -381,7 +383,10 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	tpStore.RegisterResource(r)
 
 	// Register a trace sampler based on Sampling settings
-	tpStore.RegisterSampler(diagUtils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
+	daprTraceSampler := diag.NewDaprTraceSampler(tracingSpec.SamplingRate)
+	log.Infof("Dapr trace sampler initialized: %s", daprTraceSampler.Description())
+
+	tpStore.RegisterSampler(daprTraceSampler)
 
 	tpStore.RegisterTracerProvider()
 
