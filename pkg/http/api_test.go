@@ -448,7 +448,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
 
 			bulkResp := BulkPublishResponse{}
-			assert.NoError(t, json.Unmarshal([]byte(resp.RawBody), &bulkResp))
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
 			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
 			for i, entry := range bulkResp.Statuses {
 				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
@@ -499,7 +499,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
 
 			bulkResp := BulkPublishResponse{}
-			assert.NoError(t, json.Unmarshal([]byte(resp.RawBody), &bulkResp))
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
 			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
 			for i, entry := range bulkResp.Statuses {
 				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)

@@ -2149,9 +2149,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
-	status := fasthttp.StatusOK
 	if err != nil {
-		status = fasthttp.StatusInternalServerError
+		status := fasthttp.StatusInternalServerError
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
 
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
