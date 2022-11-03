@@ -2701,7 +2701,7 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode, "Accessing configuration store with bad key should return 500")
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_GET", resp.ErrorBody["errorCode"])
-		assert.Equal(t, "fail to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
+		assert.Equal(t, "failed to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
 	})
 
 	t.Run("Get with none exist configurations store", func(t *testing.T) {
@@ -2711,7 +2711,7 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode, "Accessing configuration store with none exist configurations store should return 400")
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, "error configuration stores nonExistStore not found", resp.ErrorBody["message"])
+		assert.Equal(t, "configuration store nonExistStore not found", resp.ErrorBody["message"])
 	})
 }
 
