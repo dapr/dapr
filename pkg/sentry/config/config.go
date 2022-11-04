@@ -3,16 +3,16 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/kit/logger"
-
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	daprDaprConfig "github.com/dapr/dapr/pkg/config"
+	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -39,7 +39,15 @@ type SentryConfig struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
+	Features         []daprGlobalConfig.FeatureSpec
 	TokenAudience    *string
+}
+
+func (c SentryConfig) GetTokenAudiences() (audiences []string) {
+	if c.TokenAudience != nil && *c.TokenAudience != "" {
+		audiences = strings.Split(*c.TokenAudience, ",")
+	}
+	return
 }
 
 var configGetters = map[string]func(string) (SentryConfig, error){
@@ -112,10 +120,10 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 		if i.GetName() == configName {
 			spec, _ := json.Marshal(i.Spec)
 
-			var configSpec daprDaprConfig.ConfigurationSpec
+			var configSpec daprGlobalConfig.ConfigurationSpec
 			json.Unmarshal(spec, &configSpec)
 
-			conf := daprDaprConfig.Configuration{
+			conf := daprGlobalConfig.Configuration{
 				Spec: configSpec,
 			}
 			return parseConfiguration(defaultConfig, &conf)
@@ -126,7 +134,7 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 
 func getSelfhostedConfig(configName string) (SentryConfig, error) {
 	defaultConfig := getDefaultConfig()
-	daprConfig, _, err := daprDaprConfig.LoadStandaloneConfiguration(configName)
+	daprConfig, _, err := daprGlobalConfig.LoadStandaloneConfiguration(configName)
 	if err != nil {
 		return defaultConfig, err
 	}
@@ -137,7 +145,7 @@ func getSelfhostedConfig(configName string) (SentryConfig, error) {
 	return defaultConfig, nil
 }
 
-func parseConfiguration(conf SentryConfig, daprConfig *daprDaprConfig.Configuration) (SentryConfig, error) {
+func parseConfiguration(conf SentryConfig, daprConfig *daprGlobalConfig.Configuration) (SentryConfig, error) {
 	if daprConfig.Spec.MTLSSpec.WorkloadCertTTL != "" {
 		d, err := time.ParseDuration(daprConfig.Spec.MTLSSpec.WorkloadCertTTL)
 		if err != nil {
@@ -155,6 +163,8 @@ func parseConfiguration(conf SentryConfig, daprConfig *daprDaprConfig.Configurat
 
 		conf.AllowedClockSkew = d
 	}
+
+	conf.Features = daprConfig.Spec.Features
 
 	return conf, nil
 }
