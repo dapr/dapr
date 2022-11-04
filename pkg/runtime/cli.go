@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -89,6 +90,20 @@ func FromFlags() (*DaprRuntime, error) {
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
+
+	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
+	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
+	// It's not the prettiest approach, but…
+	if !*enableAPILogging {
+		enableAPILogging = nil
+		for _, v := range os.Args {
+			if strings.HasPrefix(v, "--enable-api-logging") || strings.HasPrefix(v, "-enable-api-logging") {
+				// This means that enable-api-logging was explicitly set to false
+				enableAPILogging = ptr.Of(false)
+				break
+			}
+		}
+	}
 
 	if *resourcesPath != "" {
 		componentsPath = resourcesPath
@@ -376,7 +391,11 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	// API logging can be enabled for this app or for every app, globally in the config
-	runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.Enabled || *enableAPILogging
+	if enableAPILogging != nil {
+		runtimeConfig.EnableAPILogging = *enableAPILogging
+	} else {
+		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.DefaultEnabled
+	}
 
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
 }
