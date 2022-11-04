@@ -272,7 +272,6 @@ func FromFlags() (*DaprRuntime, error) {
 		UnixDomainSocket:             *unixDomainSocket,
 		ReadBufferSize:               readBufferSize,
 		GracefulShutdownDuration:     gracefulShutdownDuration,
-		EnableAPILogging:             *enableAPILogging,
 		DisableBuiltinK8sSecretStore: *disableBuiltinK8sSecretStore,
 		EnableAppHealthCheck:         *enableAppHealthCheck,
 		AppHealthCheckPath:           *appHealthCheckPath,
@@ -326,14 +325,12 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	var accessControlList *daprGlobalConfig.AccessControlList
-	var namespace string
-	var podName string
+	namespace := os.Getenv("NAMESPACE")
+	podName := os.Getenv("POD_NAME")
 
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			namespace = os.Getenv("NAMESPACE")
-			podName = os.Getenv("POD_NAME")
 			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
@@ -361,7 +358,6 @@ func FromFlags() (*DaprRuntime, error) {
 		var resiliencyConfigs []*resiliencyV1alpha.Resiliency
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			namespace = os.Getenv("NAMESPACE")
 			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
 		case modes.StandaloneMode:
 			resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
@@ -378,6 +374,10 @@ func FromFlags() (*DaprRuntime, error) {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
+
+	// API logging can be enabled for this app or for every app, globally in the config
+	runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.Enabled || *enableAPILogging
+
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
 }
 

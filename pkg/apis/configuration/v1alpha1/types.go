@@ -57,6 +57,8 @@ type ConfigurationSpec struct {
 	APISpec APISpec `json:"api,omitempty"`
 	// +optional
 	ComponentsSpec ComponentsSpec `json:"components,omitempty"`
+	// +optional
+	LoggingSpec LoggingSpec `json:"logging,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -207,6 +209,24 @@ type ConfigurationList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Configuration `json:"items"`
+}
+
+// LoggingSpec defines the configuration for logging.
+type LoggingSpec struct {
+	// Configure API logging.
+	// +optional
+	APILogging APILoggingSpec `json:"apiLogging" yaml:"apiLogging"`
+}
+
+// APILoggingSpec defines the configuration for API logging.
+type APILoggingSpec struct {
+	// If true, forces sidecars to have API logging enabled (overriding `enable-api-logging`). Default: false
+	// +optional
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// If true, health checks are not reported in API logs. Default: false.
+	// This option has no effect if API logging is disabled.
+	// +optional
+	OmitHealthChecks bool `json:"omitHealthChecks" yaml:"omitHealthChecks"`
 }
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value.

@@ -101,6 +101,7 @@ type ConfigurationSpec struct {
 	Features            []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
 	APISpec             APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
 	ComponentsSpec      ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
+	LoggingSpec         LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -223,6 +224,21 @@ type FeatureSpec struct {
 type ComponentsSpec struct {
 	// Denylist of component types that cannot be instantiated
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
+}
+
+// LoggingSpec defines the configuration for logging.
+type LoggingSpec struct {
+	// Configure API logging.
+	APILogging APILoggingSpec `json:"apiLogging,omitempty" yaml:"apiLogging,omitempty"`
+}
+
+// APILoggingSpec defines the configuration for API logging.
+type APILoggingSpec struct {
+	// If true, forces sidecars to have API logging enabled (overriding `enable-api-logging`). Default: false
+	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	// If true, health checks are not reported in API logs. Default: false.
+	// This option has no effect if API logging is disabled.
+	OmitHealthChecks bool `json:"omitHealthChecks,omitempty" yaml:"omitHealthChecks,omitempty"`
 }
 
 // LoadDefaultConfiguration returns the default config.
