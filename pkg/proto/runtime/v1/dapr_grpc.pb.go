@@ -42,6 +42,8 @@ type DaprClient interface {
 	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Bulk Publishes multiple events to the specified topic.
+	BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -179,6 +181,15 @@ func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteSta
 func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishEvent", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error) {
+	out := new(BulkPublishResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -464,6 +475,8 @@ type DaprServer interface {
 	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
+	// Bulk Publishes multiple events to the specified topic.
+	BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -548,6 +561,9 @@ func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *Execute
 }
 func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
+}
+func (UnimplementedDaprServer) BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method BulkPublishEventAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
@@ -797,6 +813,24 @@ func _Dapr_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).PublishEvent(ctx, req.(*PublishEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_BulkPublishEventAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkPublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).BulkPublishEventAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).BulkPublishEventAlpha1(ctx, req.(*BulkPublishRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1314,6 +1348,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PublishEvent",
 			Handler:    _Dapr_PublishEvent_Handler,
+		},
+		{
+			MethodName: "BulkPublishEventAlpha1",
+			Handler:    _Dapr_BulkPublishEventAlpha1_Handler,
 		},
 		{
 			MethodName: "InvokeBinding",

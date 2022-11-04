@@ -31,6 +31,8 @@ const (
 	ErrPubsubPublishMessage     = "error when publish to topic %s in pubsub %s: %s"
 	ErrPubsubForbidden          = "topic %s is not allowed for app id %s"
 	ErrPubsubCloudEventCreation = "cannot create cloudevent: %s"
+	ErrPubsubUnmarshal          = "error when unmarshaling the request for topic %s pubsub %s: %s"
+	ErrPubsubMarshal            = "error marshaling events to bytes for topic %s pubsub %s: %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
@@ -85,7 +87,7 @@ const (
 	ErrCryptoGetKey                 = "failed to retrieve key %s: %s"
 	ErrCryptoOperation              = "failed to to perform operation: %s"
 
-	//	Lock
+	// Lock.
 	ErrLockStoresNotConfigured    = "lock store is not configured"
 	ErrResourceIDEmpty            = "ResourceId is empty in lock store %s"
 	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
