@@ -1849,27 +1849,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	newCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// empty list means subscribing to all configuration keys
-	if len(request.Keys) == 0 {
-		getConfigurationReq := &runtimev1pb.GetConfigurationRequest{
-			StoreName: request.StoreName,
-			Keys:      []string{},
-			Metadata:  request.GetMetadata(),
-		}
-		resp, err2 := a.GetConfigurationAlpha1(newCtx, getConfigurationReq)
-		if err2 != nil {
-			err2 = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationGet, request.Keys, request.StoreName, err2))
-			apiServerLogger.Debug(err2)
-			return err2
-		}
-
-		items := resp.GetItems()
-		for key := range items {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, key)]; !ok {
-				subscribeKeys = append(subscribeKeys, key)
-			}
-		}
-	} else {
+	if len(request.Keys) > 0 {
 		subscribeKeys = append(subscribeKeys, request.Keys...)
 	}
 
