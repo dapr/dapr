@@ -20,7 +20,7 @@ export GOPROXY ?= https://proxy.golang.org
 export GOSUMDB ?= sum.golang.org
 
 GIT_COMMIT  = $(shell git rev-list -1 HEAD)
-GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
+GIT_VERSION ?= $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
 BINARIES    ?= daprd placement operator injector sentry
@@ -248,7 +248,7 @@ ifneq ($(ADDITIONAL_HELM_SET),)
 endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
-	$(HELM) install \
+	$(HELM) upgrade --install \
 		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s \
 		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
@@ -297,7 +297,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
-./pkg/fswatcher/... \
 ./pkg/grpc/... \
 ./pkg/health/... \
 ./pkg/http/... \

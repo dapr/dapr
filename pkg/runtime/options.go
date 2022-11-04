@@ -50,6 +50,7 @@ func WithConfigurations(registry *configurationLoader.Registry) Option {
 	}
 }
 
+// WithLocks add lock store components to the runtime.
 func WithLocks(registry *lockLoader.Registry) Option {
 	return func(o *runtimeOpts) {
 		o.lockRegistry = registry

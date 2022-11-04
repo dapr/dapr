@@ -92,7 +92,9 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 // WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
 	imr.r.Message.ContentType = contentType
-	imr.r.Message.Data = &anypb.Any{Value: data}
+	imr.r.Message.Data = &anypb.Any{
+		Value: data,
+	}
 	return imr
 }
 
@@ -131,11 +133,11 @@ func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *In
 // EncodeHTTPQueryString generates querystring for http using http extension object.
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	m := imr.r.Message
-	if m == nil || m.GetHttpExtension() == nil {
+	if m == nil || m.HttpExtension == nil {
 		return ""
 	}
 
-	return m.GetHttpExtension().Querystring
+	return m.HttpExtension.Querystring
 }
 
 // APIVersion gets API version of InvokeMethodRequest.
@@ -145,7 +147,7 @@ func (imr *InvokeMethodRequest) APIVersion() internalv1pb.APIVersion {
 
 // Metadata gets Metadata of InvokeMethodRequest.
 func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
-	return imr.r.GetMetadata()
+	return imr.r.Metadata
 }
 
 // Proto returns InternalInvokeRequest Proto object.
@@ -155,7 +157,7 @@ func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
 
 // Actor returns actor type and id.
 func (imr *InvokeMethodRequest) Actor() *internalv1pb.Actor {
-	return imr.r.GetActor()
+	return imr.r.Actor
 }
 
 // Message gets InvokeRequest Message object.
@@ -170,10 +172,7 @@ func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 		return "", nil
 	}
 
-	contentType := m.GetContentType()
-	dataValue := m.GetData().GetValue()
-
-	return contentType, dataValue
+	return m.ContentType, m.Data.Value
 }
 
 // Adds a new header to the existing set.

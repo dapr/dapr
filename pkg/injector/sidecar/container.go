@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
@@ -34,24 +35,25 @@ import (
 
 // ContainerConfig contains the configuration for the sidecar container.
 type ContainerConfig struct {
-	AppID                       string
-	Annotations                 Annotations
-	CertChain                   string
-	CertKey                     string
-	ControlPlaneAddress         string
-	DaprSidecarImage            string
-	Identity                    string
-	IgnoreEntrypointTolerations []corev1.Toleration
-	ImagePullPolicy             corev1.PullPolicy
-	MTLSEnabled                 bool
-	Namespace                   string
-	PlacementServiceAddress     string
-	SentryAddress               string
-	SocketVolumeMount           *corev1.VolumeMount
-	TokenVolumeMount            *corev1.VolumeMount
-	Tolerations                 []corev1.Toleration
-	TrustAnchors                string
-	VolumeMounts                []corev1.VolumeMount
+	AppID                        string
+	Annotations                  Annotations
+	CertChain                    string
+	CertKey                      string
+	ControlPlaneAddress          string
+	DaprSidecarImage             string
+	Identity                     string
+	IgnoreEntrypointTolerations  []corev1.Toleration
+	ImagePullPolicy              corev1.PullPolicy
+	MTLSEnabled                  bool
+	Namespace                    string
+	PlacementServiceAddress      string
+	SentryAddress                string
+	Tolerations                  []corev1.Toleration
+	TrustAnchors                 string
+	VolumeMounts                 []corev1.VolumeMount
+	ComponentsSocketsVolumeMount *corev1.VolumeMount
+	RunAsNonRoot                 bool
+	ReadOnlyRootFilesystem       bool
 }
 
 var (
@@ -191,6 +193,8 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		ImagePullPolicy: cfg.ImagePullPolicy,
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: ptr.Of(false),
+			RunAsNonRoot:             ptr.Of(cfg.RunAsNonRoot),
+			ReadOnlyRootFilesystem:   ptr.Of(cfg.ReadOnlyRootFilesystem),
 		},
 		Ports: ports,
 		Args:  append(cmd, args...),
@@ -208,6 +212,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 				},
 			},
 		},
+		VolumeMounts: []corev1.VolumeMount{},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        probeHTTPHandler,
 			InitialDelaySeconds: cfg.Annotations.GetInt32OrDefault(annotations.KeyReadinessProbeDelaySeconds, annotations.DefaultHealthzProbeDelaySeconds),
@@ -249,20 +254,27 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 			container.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
 				RunAsUserName: ptr.Of("ContainerAdministrator"),
 			}
+
+			// We also need to set RunAsNonRoot and ReadOnlyRootFilesystem to false, which would impact Linux too.
+			// The injector has no way to know if the pod is going to be deployed on Windows or Linux, so we need to err on the side of most compatibility.
+			// On Linux, our containers run with a non-root user, so the net effect shouldn't change: daprd is running as non-root and has no permission to write on the root FS.
+			// However certain security scanner may complain about this.
+			container.SecurityContext.RunAsNonRoot = ptr.Of(false)
+			container.SecurityContext.ReadOnlyRootFilesystem = ptr.Of(false)
 			break
 		}
 	}
 
-	if cfg.SocketVolumeMount != nil {
-		container.VolumeMounts = []corev1.VolumeMount{*cfg.SocketVolumeMount}
-	}
-
-	if cfg.TokenVolumeMount != nil {
-		container.VolumeMounts = append(container.VolumeMounts, *cfg.TokenVolumeMount)
-	}
-
 	if len(cfg.VolumeMounts) > 0 {
 		container.VolumeMounts = append(container.VolumeMounts, cfg.VolumeMounts...)
+	}
+
+	if cfg.ComponentsSocketsVolumeMount != nil {
+		container.VolumeMounts = append(container.VolumeMounts, *cfg.ComponentsSocketsVolumeMount)
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  pluggable.SocketFolderEnvVar,
+			Value: cfg.ComponentsSocketsVolumeMount.MountPath,
+		})
 	}
 
 	if cfg.Annotations.GetBoolOrDefault(annotations.KeyLogAsJSON, annotations.DefaultLogAsJSON) {
