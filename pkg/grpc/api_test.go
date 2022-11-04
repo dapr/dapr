@@ -2026,7 +2026,7 @@ func TestBulkPublish(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 4, len(res.Statuses))
 	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status)
+		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
 	}
 
 	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
@@ -2037,7 +2037,7 @@ func TestBulkPublish(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(res.Statuses))
 	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status)
+		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
 	}
 }
 
