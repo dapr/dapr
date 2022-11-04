@@ -66,7 +66,7 @@ func TestComponentsPatch(t *testing.T) {
 			[]sidecar.PatchOperation{
 				{
 					Op:    "add",
-					Path:  sidecar.VolumesPath,
+					Path:  sidecar.PatchPathVolumes,
 					Value: []corev1.Volume{sharedComponentsSocketVolume()},
 				},
 				{
@@ -103,7 +103,7 @@ func TestComponentsPatch(t *testing.T) {
 			[]sidecar.PatchOperation{
 				{
 					Op:    "add",
-					Path:  sidecar.VolumesPath + "/-",
+					Path:  sidecar.PatchPathVolumes + "/-",
 					Value: sharedComponentsSocketVolume(),
 				},
 				{
