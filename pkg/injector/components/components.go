@@ -49,8 +49,8 @@ func sharedComponentsUnixSocketVolumeMount(mountPath string) corev1.VolumeMount 
 
 // SplitContainers split containers between appContainers and componentContainers.
 func SplitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, componentContainers map[int]corev1.Container) {
-	appContainers = make(map[int]corev1.Container, 0)
-	componentContainers = make(map[int]corev1.Container, 0)
+	appContainers = make(map[int]corev1.Container, len(pod.Spec.Containers))
+	componentContainers = make(map[int]corev1.Container, len(pod.Spec.Containers))
 	pluggableComponents := sidecar.Annotations(pod.Annotations).GetString(annotations.KeyPluggableComponents)
 	componentsNames := strings.Split(pluggableComponents, ",")
 	isComponent := make(map[string]bool, len(componentsNames))
@@ -87,13 +87,13 @@ func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]
 	if len(pod.Spec.Volumes) == 0 {
 		patches = append(patches, sidecar.PatchOperation{
 			Op:    "add",
-			Path:  sidecar.VolumesPath,
+			Path:  sidecar.PatchPathVolumes,
 			Value: []corev1.Volume{sharedSocketVolume},
 		})
 	} else {
 		patches = append(patches, sidecar.PatchOperation{
 			Op:    "add",
-			Path:  sidecar.VolumesPath + "/-",
+			Path:  sidecar.PatchPathVolumes + "/-",
 			Value: sharedSocketVolume,
 		})
 	}

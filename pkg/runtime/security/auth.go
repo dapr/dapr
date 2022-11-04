@@ -23,7 +23,7 @@ const (
 	TLSServerName     = "cluster.local"
 	sentrySignTimeout = time.Second * 5
 	certType          = "CERTIFICATE"
-	kubeTknPath       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
 	sentryMaxRetries  = 100
 )
 
