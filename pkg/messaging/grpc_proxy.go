@@ -81,7 +81,7 @@ func nopTeardown(destroy bool) {
 func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(destroy bool), error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
-	v := md.Get(diagnostics.GRPCProxyAppIDKey)
+	v := md[diagnostics.GRPCProxyAppIDKey]
 	if len(v) == 0 {
 		return ctx, nil, nil, nopTeardown, errors.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
 	}

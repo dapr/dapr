@@ -18,10 +18,10 @@ import (
 	"encoding/json"
 	"sync"
 
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
