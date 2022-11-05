@@ -17,12 +17,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 	"google.golang.org/grpc"
 	grpcMetadata "google.golang.org/grpc/metadata"
+
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 )
 
 type fakeProxyStream struct {
