@@ -24,7 +24,6 @@ import (
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -234,9 +233,9 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	}
 
 	return []grpcGo.ServerOption{
-		grpcMiddleware.ChainUnaryServer(intr...),
-		grpcMiddleware.ChainStreamServer(intrStream...),
-		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
+		grpcGo.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(intr...)),
+		grpcGo.StreamInterceptor(grpcMiddleware.ChainStreamServer(intrStream...)),
+		grpcGo.InTapHandle(metadata.SetMetadataInTapHandle),
 	}
 }
 
