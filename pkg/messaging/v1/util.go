@@ -165,7 +165,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 		}
 
 		if httpHeaderConversion && isPermanentHTTPHeader(k) {
-			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
+			keyName = DaprHeaderPrefix + keyName
 		}
 
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {

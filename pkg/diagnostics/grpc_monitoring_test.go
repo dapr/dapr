@@ -17,10 +17,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 )
 
 type fakeProxyStream struct {
@@ -29,23 +31,24 @@ type fakeProxyStream struct {
 
 func (f *fakeProxyStream) Context() context.Context {
 	if f.appID == "" {
-		return context.TODO()
+		return context.Background()
 	}
 
-	ctx := context.TODO()
-	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{GRPCProxyAppIDKey: f.appID}))
+	ctx := context.Background()
+	ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.New(map[string]string{GRPCProxyAppIDKey: f.appID}))
+	ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
 	return ctx
 }
 
-func (f *fakeProxyStream) SetHeader(metadata.MD) error {
+func (f *fakeProxyStream) SetHeader(grpcMetadata.MD) error {
 	return nil
 }
 
-func (f *fakeProxyStream) SendHeader(metadata.MD) error {
+func (f *fakeProxyStream) SendHeader(grpcMetadata.MD) error {
 	return nil
 }
 
-func (f *fakeProxyStream) SetTrailer(metadata.MD) {
+func (f *fakeProxyStream) SetTrailer(grpcMetadata.MD) {
 }
 
 func (f *fakeProxyStream) SendMsg(m interface{}) error {
@@ -95,15 +98,15 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		rows, err := view.RetrieveData("grpc.io/server/completed_rpcs")
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(rows))
+		require.NoError(t, err)
+		require.Equal(t, 1, len(rows))
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 		assert.Equal(t, "grpc_server_method", rows[0].Tags[1].Key.Name())
 		assert.Equal(t, "grpc_server_status", rows[0].Tags[2].Key.Name())
 
 		rows, err = view.RetrieveData("grpc.io/server/server_latency")
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(rows))
+		require.NoError(t, err)
+		require.Equal(t, 1, len(rows))
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 		assert.Equal(t, "grpc_server_method", rows[0].Tags[1].Key.Name())
 	})

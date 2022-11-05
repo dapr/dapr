@@ -21,7 +21,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -103,16 +103,16 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		g.ch <- struct{}{}
 	}
 
-	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
+	md := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
 
 	if g.appMetadataToken != "" {
-		grpcMetadata.Set(authConsts.APITokenHeader, g.appMetadataToken)
+		md.Set(authConsts.APITokenHeader, g.appMetadataToken)
 	}
 
 	// Prepare gRPC Metadata
-	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
+	ctx = grpcMetadata.NewOutgoingContext(context.Background(), md)
 
-	var header, trailer metadata.MD
+	var header, trailer grpcMetadata.MD
 
 	var opts []grpc.CallOption
 	opts = append(

@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
@@ -46,7 +47,10 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed to create listener: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(metadata.SetMetadataInContextUnary),
+		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
+	)
 	mockServer = &channelt.MockServer{}
 	go func() {
 		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)

@@ -37,7 +37,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -57,6 +57,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -246,7 +247,9 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	server := grpc.NewServer()
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(metadata.SetMetadataInContextUnary),
+	)
 	go func() {
 		runtimev1pb.RegisterDaprServer(server, srv)
 		if err := server.Serve(lis); err != nil {
@@ -280,11 +283,17 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	opts := []grpc.ServerOption{}
+	interceptors := []grpc.UnaryServerInterceptor{
+		metadata.SetMetadataInContextUnary,
+	}
 	if token != "" {
-		opts = append(opts,
-			grpc.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token")),
+		interceptors = append(interceptors,
+			setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token"),
 		)
+	}
+	opts := []grpc.ServerOption{
+		grpc.ChainUnaryInterceptor(interceptors...),
+		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
 	}
 
 	server := grpc.NewServer(opts...)
@@ -458,8 +467,8 @@ func TestAPIToken(t *testing.T) {
 				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
-		md := metadata.Pairs("dapr-api-token", token)
-		ctx := metadata.NewOutgoingContext(context.Background(), md)
+		md := grpcMetadata.Pairs("dapr-api-token", token)
+		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
 		_, err := client.InvokeService(ctx, req)
 
 		// assert
@@ -506,8 +515,8 @@ func TestAPIToken(t *testing.T) {
 				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
-		md := metadata.Pairs("dapr-api-token", "4567")
-		ctx := metadata.NewOutgoingContext(context.Background(), md)
+		md := grpcMetadata.Pairs("dapr-api-token", "4567")
+		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
 		_, err := client.InvokeService(ctx, req)
 
 		// assert
@@ -640,7 +649,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 					Data:   &anypb.Any{Value: []byte("testData")},
 				},
 			}
-			var header metadata.MD
+			var header grpcMetadata.MD
 			_, err := client.InvokeService(context.Background(), req, grpc.Header(&header))
 
 			// assert
@@ -2010,7 +2019,7 @@ func TestInvokeBinding(t *testing.T) {
 	_, err = client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	ctx := metadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
+	ctx := grpcMetadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
 	assert.Nil(t, err)
 	assert.NotNil(t, resp)
