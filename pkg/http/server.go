@@ -349,7 +349,7 @@ func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string,
 			handler = s.unescapeRequestParametersHandler(handler)
 		}
 
-		if s.config.EnableAPILogging {
+		if s.config.EnableAPILogging && (!e.IsHealthCheck || s.config.APILogHealthChecks) {
 			handler = s.apiLoggingInfo(path, handler)
 		}
 
