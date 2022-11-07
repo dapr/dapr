@@ -20,7 +20,9 @@ DOCKERFILE_DIR?=./docker
 # This is a "kitchen sink" image that contains all the components.
 # The Helm charts will also be configured to use this image.
 # This is useful for faster development and testing experience.
-USE_DEV_IMAGE?=false
+# If set to false, individual images for daprd, operator, sentry, injector, 
+# and placement will be built and pushed to the registry.
+ONLY_DAPR_IMAGE?=false
 
 DAPR_SYSTEM_IMAGE_NAME?=$(RELEASE_NAME)
 DAPR_RUNTIME_IMAGE_NAME?=daprd
@@ -103,7 +105,7 @@ endif
 docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
 ifeq ($(TARGET_ARCH),amd64)
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 else
 	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
@@ -116,7 +118,7 @@ endif
 else
 	-$(DOCKER) buildx create --use --name daprbuild
 	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 else
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
@@ -132,7 +134,7 @@ endif
 docker-push: docker-build
 	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
 ifeq ($(TARGET_ARCH),amd64)
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) push $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 else
 	$(DOCKER) push $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
@@ -145,7 +147,7 @@ endif
 else
 	-$(DOCKER) buildx create --use --name daprbuild
 	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
 else
 	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
@@ -159,7 +161,7 @@ endif
 # push docker image to kind cluster
 docker-push-kind: docker-build
 	$(info Pushing $(DOCKER_IMAGE_TAG) docker image to kind cluster...)
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	kind load docker-image $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 else
 	kind load docker-image $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
@@ -172,7 +174,7 @@ endif
 
 # publish muti-arch docker image to the registry
 docker-manifest-create: check-docker-env
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
 else
 	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
@@ -183,7 +185,7 @@ else
 	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-%)
 endif
 ifeq ($(LATEST_RELEASE),true)
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
 else
 	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
@@ -196,7 +198,7 @@ endif
 endif
 
 docker-publish: docker-manifest-create
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) manifest push $(DOCKER_IMAGE_TAG)
 else
 	$(DOCKER) manifest push $(DOCKER_IMAGE_TAG)
@@ -207,7 +209,7 @@ else
 	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)
 endif
 ifeq ($(LATEST_RELEASE),true)
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) manifest push $(DOCKER_IMAGE_LATEST_TAG)
 else
 	$(DOCKER) manifest push $(DOCKER_IMAGE_LATEST_TAG)

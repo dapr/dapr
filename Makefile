@@ -246,7 +246,7 @@ ADDITIONAL_HELM_SET ?= ""
 ifneq ($(ADDITIONAL_HELM_SET),)
 	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
 endif
-ifeq ($(USE_DEV_IMAGE),true)
+ifeq ($(ONLY_DAPR_IMAGE),true)
 	ADDITIONAL_HELM_SET := $(ADDITIONAL_HELM_SET) \
 		--set dapr_operator.image.name=$(RELEASE_NAME) \
 		--set dapr_placement.image.name=$(RELEASE_NAME) \
