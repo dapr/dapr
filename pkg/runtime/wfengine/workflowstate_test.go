@@ -18,7 +18,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dapr/kit/logger"
 	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
@@ -28,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/kit/logger"
 )
 
 func TestNoWorkflowState(t *testing.T) {
@@ -121,7 +121,7 @@ func TestLoadSavedState(t *testing.T) {
 	assert.Equal(t, 0, deleteCount)
 
 	actors := getActorRuntime()
-	if err := actors.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
+	if err = actors.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
 		return
 	}
 
@@ -155,7 +155,7 @@ func TestResetLoadedState(t *testing.T) {
 	}
 
 	actorRuntime := getActorRuntime()
-	if err := actorRuntime.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
+	if err = actorRuntime.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
 		return
 	}
 

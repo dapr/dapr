@@ -20,9 +20,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors"
 	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/backend"
+
+	"github.com/dapr/dapr/pkg/actors"
 )
 
 const (
@@ -57,37 +58,37 @@ func NewWorkflowState(generation uuid.UUID) *workflowState {
 	}
 }
 
-func (state *workflowState) Reset() {
-	state.inboxRemovedCount += len(state.Inbox)
-	state.Inbox = nil
-	state.historyRemovedCount += len(state.History)
-	state.History = nil
-	state.CustomStatus = ""
-	state.Generation = uuid.New()
+func (s *workflowState) Reset() {
+	s.inboxRemovedCount += len(s.Inbox)
+	s.Inbox = nil
+	s.historyRemovedCount += len(s.History)
+	s.History = nil
+	s.CustomStatus = ""
+	s.Generation = uuid.New()
 }
 
-func (state *workflowState) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
+func (s *workflowState) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
 	if runtimeState.ContinuedAsNew() {
-		state.historyRemovedCount += len(state.History)
-		state.History = nil
+		s.historyRemovedCount += len(s.History)
+		s.History = nil
 	}
 
 	newHistoryEvents := runtimeState.NewEvents()
-	state.History = append(state.History, newHistoryEvents...)
-	state.historyAddedCount += len(newHistoryEvents)
+	s.History = append(s.History, newHistoryEvents...)
+	s.historyAddedCount += len(newHistoryEvents)
 
-	state.CustomStatus = runtimeState.CustomStatus.GetValue()
+	s.CustomStatus = runtimeState.CustomStatus.GetValue()
 }
 
-func (state *workflowState) AddToInbox(e *backend.HistoryEvent) {
-	state.Inbox = append(state.Inbox, e)
-	state.inboxAddedCount++
+func (s *workflowState) AddToInbox(e *backend.HistoryEvent) {
+	s.Inbox = append(s.Inbox, e)
+	s.inboxAddedCount++
 }
 
-func (state *workflowState) ClearInbox() {
-	state.inboxRemovedCount += len(state.Inbox)
-	state.Inbox = nil
-	state.inboxAddedCount = 0
+func (s *workflowState) ClearInbox() {
+	s.inboxRemovedCount += len(s.Inbox)
+	s.Inbox = nil
+	s.inboxAddedCount = 0
 }
 
 func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalRequest, error) {
@@ -182,7 +183,8 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		if err = json.Unmarshal(res.Data, &historyBytes); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal JSON from inbox state key entry: %w", err)
 		}
-		e, err := backend.UnmarshalHistoryEvent(historyBytes)
+		var e *backend.HistoryEvent
+		e, err = backend.UnmarshalHistoryEvent(historyBytes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
 		}
@@ -199,7 +201,8 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		if err = json.Unmarshal(res.Data, &historyBytes); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal JSON from inbox state key entry: %w", err)
 		}
-		e, err := backend.UnmarshalHistoryEvent(historyBytes)
+		var e *backend.HistoryEvent
+		e, err = backend.UnmarshalHistoryEvent(historyBytes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
 		}
