@@ -35,8 +35,8 @@ type WorkflowEngine struct {
 	backend  *actorBackend
 	executor backend.Executor
 
-	WorkflowActor actors.InternalActor
-	ActivityActor actors.InternalActor
+	workflowActor *workflowActor
+	activityActor *activityActor
 }
 
 var wfLogger = logger.NewLogger("dapr.runtime.wfengine")
@@ -49,8 +49,8 @@ func NewWorkflowEngine() *WorkflowEngine {
 	be := NewActorBackend()
 	engine := &WorkflowEngine{
 		backend:       be,
-		WorkflowActor: NewWorkflowActor(be),
-		ActivityActor: NewActivityActor(be),
+		workflowActor: NewWorkflowActor(be),
+		activityActor: NewActivityActor(be),
 	}
 	return engine
 }
@@ -58,8 +58,8 @@ func NewWorkflowEngine() *WorkflowEngine {
 // InternalActors returns a map of internal actors that are used to implement workflows
 func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
 	internalActors := make(map[string]actors.InternalActor)
-	internalActors[WorkflowActorType] = wfe.WorkflowActor
-	internalActors[ActivityActorType] = wfe.ActivityActor
+	internalActors[WorkflowActorType] = wfe.workflowActor
+	internalActors[ActivityActorType] = wfe.activityActor
 	return internalActors
 }
 
@@ -77,6 +77,14 @@ func (wfe *WorkflowEngine) ConfigureExecutor(factory func(be backend.Backend) ba
 func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) {
 	wfLogger.Info("configuring workflow engine with actors backend")
 	wfe.backend.SetActorRuntime(actorRuntime)
+}
+
+// DisableWorkflowCaching turns off the default caching done by the workflow actor.
+// This method is primarily intended to be used for testing to ensure correct behavior
+// when actors are newly activated on nodes, but without requiring the actor to actually
+// go through activation.
+func (wfe *WorkflowEngine) DisableWorkflowCaching(disable bool) {
+	wfe.workflowActor.cachingDisabled = disable
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) error {

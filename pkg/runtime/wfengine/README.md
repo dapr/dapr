@@ -24,7 +24,7 @@ DEBUG=1 make build
 After building, the following command can be run from the project root to test the code:
 
 ```bash
-./dist/linux_amd64/debug/daprd --app-id foo --dapr-grpc-port 4001 --placement-host-address :50005 ~/.dapr/components/
+./dist/linux_amd64/debug/daprd --app-id foo --dapr-grpc-port 4001 --placement-host-address :50005 --components-path ~/.dapr/components/
 ```
 * The gRPC port is set to `4001` since that's what the Durable Task test clients default to.
 * This assumes a placement service running locally on port `50005` (the default).
@@ -64,6 +64,36 @@ In the future, instructions will be added for how to tests in a more automated w
 
 The Dapr Workflow engine introduced a new concept of *internal actors*. These are actors that are registered and implemented directly in Daprd with no host application dependency. Just like regular actors, they have turn-based concurrency, support reminders, and are scaled out using the placement service. Internal actors also leverage the configured state store for actors. The workflow engine uses these actors as the core runtime primitives for workflows.
 
-Each workflow instance corresponds to a single `dapr.wfengine.workflow` actor instance. The ID of the workflow instance is the same as the internal actor ID. The internal actor is responsible for triggering workflow execution and for storing workflow state. The actual workflow logic lives outside the Dapr sidecar in a host application. The host application uses a new gRPC endpoint on the daprd gRPC API server to send and receive workflow-specific commands to/from the actor-based workflow engine. The workflow app doesn't need to take on any actor dependencies, nor is it aware that actors are involved in the execution of the workflows. Actors are purely an implementation detail.
+Each workflow instance corresponds to a single `dapr.internal.wfengine.workflow` actor instance. The ID of the workflow instance is the same as the internal actor ID. The internal actor is responsible for triggering workflow execution and for storing workflow state. The actual workflow logic lives outside the Dapr sidecar in a host application. The host application uses a new gRPC endpoint on the daprd gRPC API server to send and receive workflow-specific commands to/from the actor-based workflow engine. The workflow app doesn't need to take on any actor dependencies, nor is it aware that actors are involved in the execution of the workflows. Actors are purely an implementation detail.
 
-TODO: More information on activity actors, the details of state storage, and information about how reminders are used to ensure reliability.
+### State storage
+
+Each workflow actor saves its state using the following keys:
+
+* `metadata`: Contains meta information about the workflow as a JSON blob. Includes information such as the length of the inbox, the length of the history, and a UUID representing the workflow generation (for cases where the instance ID gets reused). The length information is used to determine which keys need to be read or written to when loading or saving workflow state updates.
+* `inbox-NNNNNN`: Multiple keys containing an ordered list of workflow inbox events. Each key holds the data for a single event. The inbox is effectively a FIFO queue of events that the workflow needs to process, with items removed from the earlier indeces and added to the end indices.
+* `history-NNNNNN`: Multiple keys containing an ordered list of history events. Each key holds the data for a single event. History events are only added and never removed, except in the case of "continue as new", where all history events are purged.
+* `customStatus`: Contains a user-defined workflow status value.
+
+The `inbox-NNNNNN` and `history-NNNNNN` key schemes are used to enable arbitrarily large amounts of data. These schemes are also designed for efficient updates. An alternate design would be to store the workflow history as a blob in a single key. However, this would limit the maximum size of the history and would make updates more expensive, since the full history would need to be serialized instead of just inserting incremental additions (the history is an append-only log of events).
+
+The tradeoff with this key scheme design is that loading workflow state becomes more expensive since it's spread out across multiple keys. This is mitigated by the fact that actor state can be cached in memory, removing the need for any reads while the actors are active. However, it could be a problem if workflow histories get large and if actors get moved around or activated frequently.
+
+Below is an example of what keys would be used to store the state of a simple workflow execution with ID '797f67f0c10846f592d0ac82dea1f248', as shown using `redis-cli`.
+
+```
+127.0.0.1:6379> keys *797f67f0c10846f592d0ac82dea1f248*
+1) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||history-000002"
+2) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||customStatus"
+3) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||metadata"
+4) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||history-000003"
+5) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||history-000005"
+6) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||history-000001"
+7) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||history-000000"
+8) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||history-000004"
+9) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||inbox-000000"
+```
+
+### Resiliency
+
+TODO
