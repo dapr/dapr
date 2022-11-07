@@ -1330,6 +1330,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
 		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
 		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
+		APILogHealthChecks: !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
 	}
 
 	server := http.NewServer(http.NewServerOpts{
