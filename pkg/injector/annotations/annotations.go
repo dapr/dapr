@@ -83,7 +83,6 @@ const (
 	DefaultHealthzProbePeriodSeconds         = 6
 	DefaultHealthzProbeThreshold             = 3
 	DefaultMtlsEnabled                       = true
-	DefaultEnableAPILogging                  = false
 	DefaultEnableProfiling                   = false
 	DefaultDisableBuiltinK8sSecretStore      = false
 	DefaultEnableAppHealthCheck              = false

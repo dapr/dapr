@@ -27,4 +27,5 @@ type ServerConfig struct {
 	UnixDomainSocket   string
 	ReadBufferSize     int
 	EnableAPILogging   bool
+	APILogHealthChecks bool
 }
