@@ -246,6 +246,14 @@ ADDITIONAL_HELM_SET ?= ""
 ifneq ($(ADDITIONAL_HELM_SET),)
 	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
 endif
+ifeq ($(ONLY_DAPR_IMAGE),true)
+	ADDITIONAL_HELM_SET := $(ADDITIONAL_HELM_SET) \
+		--set dapr_operator.image.name=$(RELEASE_NAME) \
+		--set dapr_placement.image.name=$(RELEASE_NAME) \
+		--set dapr_sentry.image.name=$(RELEASE_NAME) \
+		--set dapr_sidecar_injector.image.name=$(RELEASE_NAME) \
+		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME)
+endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) upgrade --install \
