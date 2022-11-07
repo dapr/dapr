@@ -76,6 +76,15 @@ var endpoints = map[string][]string{
 	"unlock.v1alpha1": {
 		"/dapr.proto.runtime.v1.Dapr/UnlockAlpha1",
 	},
+	"subtlecrypto": {
+		"/dapr.proto.runtime.v1.Dapr/SubtleGetKey",
+		"/dapr.proto.runtime.v1.Dapr/SubtleEncrypt",
+		"/dapr.proto.runtime.v1.Dapr/SubtleDecrypt",
+		"/dapr.proto.runtime.v1.Dapr/SubtleSign",
+		"/dapr.proto.runtime.v1.Dapr/SubtleVerify",
+		"/dapr.proto.runtime.v1.Dapr/SubtleWrapKey",
+		"/dapr.proto.runtime.v1.Dapr/SubtleUnwrapKey",
+	},
 	"shutdown.v1": {
 		"/dapr.proto.runtime.v1.Dapr/Shutdown",
 	},
