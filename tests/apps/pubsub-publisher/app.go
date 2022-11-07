@@ -100,7 +100,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
 }
 
-func getBulkRequetMetadata(r *http.Request) map[string]string {
+func getBulkRequestMetadata(r *http.Request) map[string]string {
 	metadata := map[string]string{}
 	for k, v := range r.URL.Query() {
 		if strings.HasPrefix(k, metadataPrefix) {
@@ -125,7 +125,7 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	reqID := "s-" + uuid.New().String()
 
-	reqMetadata := getBulkRequetMetadata(r)
+	reqMetadata := getBulkRequestMetadata(r)
 	pubsubToPublish := getBulkPublishPubsubOrDefault(reqMetadata)
 	log.Printf("publishing to pubsub %s", pubsubToPublish)
 	var commands []publishCommand
@@ -355,6 +355,12 @@ func performBulkPublishHTTP(reqID string, pubsubToPublish, topic string, jsonVal
 		}
 		return daprhttp.BulkPublishResponse{}, http.StatusInternalServerError, err
 	}
+
+	// Success scenario, no content is returned.
+	if resp.StatusCode != http.StatusNoContent {
+		return daprhttp.BulkPublishResponse{}, resp.StatusCode, nil
+	}
+
 	defer resp.Body.Close()
 	resBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
