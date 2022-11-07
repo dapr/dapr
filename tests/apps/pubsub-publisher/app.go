@@ -357,7 +357,7 @@ func performBulkPublishHTTP(reqID string, pubsubToPublish, topic string, jsonVal
 	}
 
 	// Success scenario, no content is returned.
-	if resp.StatusCode != http.StatusNoContent {
+	if resp.StatusCode == http.StatusNoContent {
 		return daprhttp.BulkPublishResponse{}, resp.StatusCode, nil
 	}
 
