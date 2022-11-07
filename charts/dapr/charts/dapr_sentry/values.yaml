@@ -12,6 +12,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 tokenAudience: ""
+args: []
 
 ports:
   protocol: TCP

@@ -137,6 +137,20 @@ spec:
         - "--enable-metrics=false"
 {{- end }}
         - "--tls-enabled"
+{{- with .Values.global.issuerFilenames }}
+{{- if hasKey . "ca" }}
+        - --issuer-ca-filename={{ get . "ca" }}
+{{- end }}
+{{- if hasKey . "cert" }}
+        - --issuer-certificate-filename={{ get . "cert" }}
+{{- end }}
+{{- if hasKey . "key" }}
+        - --issuer-key-filename={{ get . "key" }}
+{{- end }}
+{{- end }}
+{{- with .Values.args }}
+        - {{ . }}
+{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}

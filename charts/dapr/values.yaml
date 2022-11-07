@@ -28,3 +28,4 @@ global:
     app.kubernetes.io/part-of: "dapr"
     app.kubernetes.io/managed-by: "helm"
     app.kubernetes.io/component: "{{ .Values.component }}" # Should be set in each subchart
+  issuerFilenames: {}
