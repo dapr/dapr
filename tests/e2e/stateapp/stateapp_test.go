@@ -380,19 +380,21 @@ func generateSpecificLengthSample(sizeInBytes int) requestResponse {
 	}
 }
 
-var tr *runner.TestRunner
-var stateStoreApps []struct {
-	name       string
-	stateStore string
-} = []struct {
-	name       string
-	stateStore string
-}{
-	{
-		name:       appName,
-		stateStore: "statestore",
-	},
-}
+var (
+	tr             *runner.TestRunner
+	stateStoreApps []struct {
+		name       string
+		stateStore string
+	} = []struct {
+		name       string
+		stateStore string
+	}{
+		{
+			name:       appName,
+			stateStore: "statestore",
+		},
+	}
+)
 
 func TestMain(m *testing.M) {
 	utils.SetupLogs("stateapp")
@@ -488,7 +490,6 @@ func TestStateApp(t *testing.T) {
 			})
 		}
 	}
-
 }
 
 func TestStateTransactionApps(t *testing.T) {
