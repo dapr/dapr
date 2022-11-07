@@ -223,7 +223,7 @@ type APILoggingSpec struct {
 	// Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly.
 	// The default value is false.
 	// +optional
-	DefaultEnabled bool `json:"defaultEnabled" yaml:"defaultEnabled"`
+	Enabled bool `json:"enabled" yaml:"enabled"`
 	// If true, health checks are not reported in API logs. Default: false.
 	// This option has no effect if API logging is disabled.
 	// +optional

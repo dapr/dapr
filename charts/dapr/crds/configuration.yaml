@@ -207,7 +207,7 @@ spec:
                   apiLogging:
                     description: Configure API logging.
                     properties:
-                      defaultEnabled:
+                      enabled:
                         description: Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly. The default value is false.
                         type: boolean
                       omitHealthChecks:

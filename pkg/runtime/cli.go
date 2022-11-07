@@ -394,7 +394,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if enableAPILogging != nil {
 		runtimeConfig.EnableAPILogging = *enableAPILogging
 	} else {
-		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.DefaultEnabled
+		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.Enabled
 	}
 
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
