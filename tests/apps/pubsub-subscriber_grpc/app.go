@@ -455,8 +455,7 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 		var msg string
 		if strings.HasPrefix(in.Topic, pubsubCEBulkSubTopic) {
 			log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.GetCloudEvent().Data))
-			var ceMsg map[string]interface{}
-			err := json.Unmarshal(entry.GetCloudEvent().Data, &ceMsg)
+			err := json.Unmarshal(entry.GetCloudEvent().Data, &msg)
 			if err != nil {
 				log.Printf("(%s) Error extracing ce event in bulk subscribe for entryId: %s: %v", reqID, entry.EntryId, err)
 				bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
@@ -465,7 +464,6 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 				}
 				continue
 			}
-			msg = ceMsg["data"].(string)
 			log.Printf("(%s) Value of ce event in bulk subscribe for entryId: %s: %s", reqID, entry.EntryId, msg)
 		} else {
 			log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.GetBytes()))
