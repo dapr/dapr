@@ -411,7 +411,7 @@ func (c *cmdE2EPerf) getIncludes() []string {
 func hashFilesInDir(basePath string, ignores *gitignore.GitIgnore) ([]string, error) {
 	files := []string{}
 
-	err := filepath.WalkDir(basePath, func(path string, d fs.DirEntry, _err error) error {
+	err := filepath.WalkDir(basePath, func(path string, d fs.DirEntry, _ error) error {
 		// Check if the file is ignored
 		relPath, err := filepath.Rel(basePath, path)
 		if err != nil {
