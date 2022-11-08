@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
@@ -1708,6 +1707,117 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
+	t.Run("test bulk publish, topic allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic0",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(res.Statuses))
+		assert.Equal(t, "1", res.Statuses[0].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+
+		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					ContentType: "text/plain",
+				},
+				{
+					EntryId:     "2",
+					Event:       []byte("test 2"),
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(res.Statuses))
+		expectedIds := []string{"1", "2"}
+		assert.Contains(t, expectedIds, res.Statuses[0].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+		assert.Contains(t, expectedIds, res.Statuses[1].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[1].Status)
+	})
+
+	t.Run("test bulk publish, topic not allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			require.Nil(t, err)
+		}
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
+
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+	})
+
 	t.Run("test publish, topic allowed", func(t *testing.T) {
 		initMockPubSubForRuntime(rt)
 
@@ -1985,8 +2095,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
 				called++
 				return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-					return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-						return func(ctx *fasthttp.RequestCtx) {}
+					return func(next http.Handler) http.Handler {
+						return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 					}, nil
 				}
 			},
@@ -3403,27 +3513,27 @@ func TestPubsubWithResiliency(t *testing.T) {
 	defer stopRuntime(t, r)
 
 	failingPubsub := daprt.FailingPubsub{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingTopic": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutTopic": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	failingAppChannel := daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingSubTopic": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutSubTopic": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			rawData := req.Message().Data.Value
 			data := make(map[string]string)
@@ -3450,7 +3560,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		err := r.Publish(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingPubsub.Failure.CallCount["failingTopic"])
+		assert.Equal(t, 2, failingPubsub.Failure.CallCount("failingTopic"))
 	})
 
 	t.Run("pubsub publish times out with resiliency", func(t *testing.T) {
@@ -3464,7 +3574,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingPubsub.Failure.CallCount["timeoutTopic"])
+		assert.Equal(t, 2, failingPubsub.Failure.CallCount("timeoutTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3497,7 +3607,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		err := r.beginPubSub("failPubsub")
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
+		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("failingSubTopic"))
 	})
 
 	t.Run("pubsub times out sending event to app with resiliency", func(t *testing.T) {
@@ -3529,21 +3639,29 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 		// This is eaten, technically.
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["timeoutSubTopic"])
+		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("timeoutSubTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }
 
 // mockSubscribePubSub is an in-memory pubsub component.
 type mockSubscribePubSub struct {
-	handlers map[string]pubsub.Handler
-	pubCount map[string]int
+	bulkHandlers    map[string]pubsub.BulkHandler
+	handlers        map[string]pubsub.Handler
+	pubCount        map[string]int
+	bulkPubCount    map[string]int
+	isBulkSubscribe bool
+	bulkReponse     pubsub.BulkSubscribeResponse
 }
+
+// type BulkSubscribeResponse struct {
 
 // Init is a mock initialization method.
 func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
+	m.bulkHandlers = make(map[string]pubsub.BulkHandler)
 	m.handlers = make(map[string]pubsub.Handler)
 	m.pubCount = make(map[string]int)
+	m.bulkPubCount = make(map[string]int)
 	return nil
 }
 
@@ -3556,9 +3674,51 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 			Topic: req.Topic,
 		}
 		handler(context.Background(), pubsubMsg)
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		m.bulkPubCount[req.Topic]++
+		nbei := pubsub.BulkMessageEntry{
+			EntryId: "0",
+			Event:   req.Data,
+		}
+		msgArr := []pubsub.BulkMessageEntry{nbei}
+		nbm := &pubsub.BulkMessage{
+			Entries: msgArr,
+			Topic:   req.Topic,
+		}
+		bulkHandler(context.Background(), nbm)
+	}
+	return nil
+}
+
+// BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
+func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	m.bulkPubCount[req.Topic]++
+	res := pubsub.BulkPublishResponse{}
+	if handler, ok := m.handlers[req.Topic]; ok {
+		for _, entry := range req.Entries {
+			m.pubCount[req.Topic]++
+			// TODO this needs to be modified as part of BulkSubscribe deadletter test
+			pubsubMsg := &pubsub.NewMessage{
+				Data:  entry.Event,
+				Topic: req.Topic,
+			}
+			handler(context.Background(), pubsubMsg)
+			res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+				EntryId: entry.EntryId,
+				Status:  pubsub.PublishSucceeded,
+			})
+		}
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		nbm := &pubsub.BulkMessage{
+			Entries: req.Entries,
+			Topic:   req.Topic,
+		}
+		bulkResponses, err := bulkHandler(context.Background(), nbm)
+		m.bulkReponse.Statuses = bulkResponses
+		m.bulkReponse.Error = err
 	}
 
-	return nil
+	return res, nil
 }
 
 // Subscribe is a mock subscribe method.
@@ -3572,6 +3732,12 @@ func (m *mockSubscribePubSub) Close() error {
 }
 
 func (m *mockSubscribePubSub) Features() []pubsub.Feature {
+	return nil
+}
+
+func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
+	m.isBulkSubscribe = true
+	m.bulkHandlers[req.Topic] = handler
 	return nil
 }
 
@@ -3887,10 +4053,10 @@ func TestMTLS(t *testing.T) {
 }
 
 type mockBinding struct {
-	hasError bool
-	data     string
-	metadata map[string]string
-	closeErr error
+	readErrorCh chan bool
+	data        string
+	metadata    map[string]string
+	closeErr    error
 }
 
 func (b *mockBinding) Init(metadata bindings.Metadata) error {
@@ -3909,7 +4075,9 @@ func (b *mockBinding) Read(ctx context.Context, handler bindings.Handler) error 
 			Metadata: metadata,
 			Data:     []byte(b.data),
 		})
-		b.hasError = err != nil
+		if b.readErrorCh != nil {
+			b.readErrorCh <- (err != nil)
+		}
 	}()
 
 	return nil
@@ -3998,12 +4166,13 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
-		assert.False(t, b.hasError)
+		assert.False(t, <-ch)
 	})
 
 	t.Run("app returns error", func(t *testing.T) {
@@ -4034,12 +4203,13 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
-		assert.True(t, b.hasError)
+		assert.True(t, <-ch)
 	})
 
 	t.Run("binding has data and metadata", func(t *testing.T) {
@@ -4070,9 +4240,10 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
 		assert.Equal(t, string(testInputBindingData), b.data)
@@ -4300,6 +4471,25 @@ func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 	return nil
 }
 
+// BulkPublish is a mock bulk publish method returning a success all the time.
+func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	res := pubsub.BulkPublishResponse{}
+
+	for _, entry := range req.Entries {
+		e := pubsub.BulkPublishResponseEntry{
+			EntryId: entry.EntryId,
+			Status:  pubsub.PublishSucceeded,
+			Error:   nil,
+		}
+		res.Statuses = append(res.Statuses, e)
+	}
+	return res, nil
+}
+
+func (m *mockPublishPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
+	return pubsub.BulkSubscribeResponse{}, nil
+}
+
 // Subscribe is a mock subscribe method.
 func (m *mockPublishPubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	return nil
@@ -4488,15 +4678,15 @@ func TestBindingResiliency(t *testing.T) {
 	defer stopRuntime(t, r)
 
 	failingChannel := daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"inputFailingKey": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"inputTimeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			return string(req.Message().Data.Value)
 		},
@@ -4506,15 +4696,15 @@ func TestBindingResiliency(t *testing.T) {
 	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"outputFailingKey": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"outputTimeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	r.bindingsRegistry.RegisterOutputBinding(
@@ -4538,7 +4728,7 @@ func TestBindingResiliency(t *testing.T) {
 		_, err := r.sendToOutputBinding("failOutput", req)
 
 		assert.Nil(t, err)
-		assert.Equal(t, 2, failingBinding.Failure.CallCount["outputFailingKey"])
+		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputFailingKey"))
 	})
 
 	t.Run("output binding times out with resiliency", func(t *testing.T) {
@@ -4551,7 +4741,7 @@ func TestBindingResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.NotNil(t, err)
-		assert.Equal(t, 2, failingBinding.Failure.CallCount["outputTimeoutKey"])
+		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputTimeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -4559,7 +4749,7 @@ func TestBindingResiliency(t *testing.T) {
 		_, err := r.sendBindingEventToApp("failingInputBinding", []byte("inputFailingKey"), map[string]string{})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingChannel.Failure.CallCount["inputFailingKey"])
+		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputFailingKey"))
 	})
 
 	t.Run("input binding times out with resiliency", func(t *testing.T) {
@@ -4568,7 +4758,7 @@ func TestBindingResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingChannel.Failure.CallCount["inputTimeoutKey"])
+		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputTimeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }

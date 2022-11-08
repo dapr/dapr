@@ -279,12 +279,13 @@ func TestInvokeActor(t *testing.T) {
 
 func TestInvokeActorWithResiliency(t *testing.T) {
 	failingActors := actors.FailingActors{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingActor": 1,
 			},
-			CallCount: map[string]int{},
-		},
+			nil,
+			map[string]int{},
+		),
 	}
 
 	port, _ := freeport.GetFreePort()
@@ -307,6 +308,6 @@ func TestInvokeActorWithResiliency(t *testing.T) {
 		_, err := client.InvokeActor(context.Background(), req)
 		assert.NoError(t, err)
 		assert.Equal(t, codes.OK, status.Code(err))
-		assert.Equal(t, 2, failingActors.Failure.CallCount["failingActor"])
+		assert.Equal(t, 2, failingActors.Failure.CallCount("failingActor"))
 	})
 }

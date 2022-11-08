@@ -173,7 +173,10 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			assert.Equal(t, host.Name, memberChange.host.Name)
 			assert.Equal(t, host.Id, memberChange.host.AppID)
 			assert.EqualValues(t, host.Entities, memberChange.host.Entities)
-			assert.Equal(t, 1, len(testServer.streamConnPool))
+			testServer.streamConnPoolLock.Lock()
+			l := len(testServer.streamConnPool)
+			testServer.streamConnPoolLock.Unlock()
+			assert.Equal(t, 1, l)
 
 		case <-time.After(testStreamSendLatency):
 			require.True(t, false, "no membership change")

@@ -69,6 +69,11 @@ type service struct {
 
 type reflectServiceClient interface {
 	ListServices() ([]string, error)
+	Reset()
+}
+type grpcConnectionCloser interface {
+	grpc.ClientConnInterface
+	Close() error
 }
 
 // serviceDiscovery returns all available discovered pluggable components services.
@@ -145,6 +150,14 @@ func callback(services []service) {
 	}
 }
 
+// reflectServiceConnectionCloser is used for cleanup the stream created to be used for the reflection service.
+func reflectServiceConnectionCloser(conn grpcConnectionCloser, client reflectServiceClient) func() {
+	return func() {
+		client.Reset()
+		conn.Close()
+	}
+}
+
 // Discover discover the pluggable components and callback the service discovery with the given component name and grpc dialer.
 func Discover(ctx context.Context) error {
 	services, err := serviceDiscovery(func(socket string) (reflectServiceClient, func(), error) {
@@ -156,9 +169,8 @@ func Discover(ctx context.Context) error {
 		if err != nil {
 			return nil, nil, err
 		}
-		return grpcreflect.NewClient(ctx, reflectpb.NewServerReflectionClient(conn)), func() {
-			conn.Close()
-		}, nil
+		client := grpcreflect.NewClient(ctx, reflectpb.NewServerReflectionClient(conn))
+		return client, reflectServiceConnectionCloser(conn, client), nil
 	})
 	if err != nil {
 		return err
