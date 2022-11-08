@@ -718,8 +718,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 				{EntryId: "2222222b", IsError: false},
 			},
 		}
-		assert.Contains(t, string((mockServer.RequestsReceived["orders"].GetEntries()[0].GetEvent())), `{"orderId":"1"}`)
-		assert.Contains(t, string((mockServer.RequestsReceived["orders"].GetEntries()[1].GetEvent())), `{"orderId":"2"}`)
+		assert.Contains(t, string(mockServer.RequestsReceived["orders"].GetEntries()[0].GetBytes()), `{"orderId":"1"}`)
+		assert.Contains(t, string(mockServer.RequestsReceived["orders"].GetEntries()[1].GetBytes()), `{"orderId":"2"}`)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
 
