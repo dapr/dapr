@@ -415,6 +415,77 @@ func TestConcurrentActivityExecution(t *testing.T) {
 	}
 }
 
+// TestContinueAsNewWorkflow verifies that a workflow can "continue-as-new" to restart itself with a new input.
+func TestContinueAsNewWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ContinueAsNewTest", func(ctx *task.OrchestrationContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+
+		if input < 10 {
+			if err := ctx.CreateTimer(0).Await(nil); err != nil {
+				return nil, err
+			}
+			ctx.ContinueAsNew(input + 1)
+		}
+		return input, nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `10`, metadata.SerializedOutput)
+				}
+			}
+		})
+	}
+}
+
+// TestRecreateCompletedWorkflow verifies that completed workflows can be restarted with new inputs externally.
+func TestRecreateCompletedWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("EchoWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		var input any
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input, nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			// First workflow
+			var metadata *api.OrchestrationMetadata
+			id, err := client.ScheduleNewOrchestration(ctx, "EchoWorkflow", api.WithInput("echo!"))
+			if assert.NoError(t, err) {
+				if metadata, err = client.WaitForOrchestrationCompletion(ctx, id); assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `"echo!"`, metadata.SerializedOutput)
+				}
+			}
+
+			// Second workflow, using the same ID as the first but a different input
+			_, err = client.ScheduleNewOrchestration(ctx, "EchoWorkflow", api.WithInstanceID(id), api.WithInput(42))
+			if assert.NoError(t, err) {
+				if metadata, err = client.WaitForOrchestrationCompletion(ctx, id); assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `42`, metadata.SerializedOutput)
+				}
+			}
+		})
+	}
+}
+
 func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
 	var client backend.TaskHubClient
 	engine := getEngine()

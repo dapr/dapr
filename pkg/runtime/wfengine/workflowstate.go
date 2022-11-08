@@ -59,8 +59,10 @@ func NewWorkflowState(generation uuid.UUID) *workflowState {
 }
 
 func (s *workflowState) Reset() {
+	s.inboxAddedCount = 0
 	s.inboxRemovedCount += len(s.Inbox)
 	s.Inbox = nil
+	s.historyAddedCount = 0
 	s.historyRemovedCount += len(s.History)
 	s.History = nil
 	s.CustomStatus = ""
@@ -70,6 +72,7 @@ func (s *workflowState) Reset() {
 func (s *workflowState) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
 	if runtimeState.ContinuedAsNew() {
 		s.historyRemovedCount += len(s.History)
+		s.historyAddedCount = 0
 		s.History = nil
 	}
 
