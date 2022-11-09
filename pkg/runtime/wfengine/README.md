@@ -71,7 +71,7 @@ Each workflow instance corresponds to a single `dapr.internal.wfengine.workflow`
 Each workflow actor saves its state using the following keys:
 
 * `metadata`: Contains meta information about the workflow as a JSON blob. Includes information such as the length of the inbox, the length of the history, and a UUID representing the workflow generation (for cases where the instance ID gets reused). The length information is used to determine which keys need to be read or written to when loading or saving workflow state updates.
-* `inbox-NNNNNN`: Multiple keys containing an ordered list of workflow inbox events. Each key holds the data for a single event. The inbox is effectively a FIFO queue of events that the workflow needs to process, with items removed from the earlier indeces and added to the end indices.
+* `inbox-NNNNNN`: Multiple keys containing an ordered list of workflow inbox events. Each key holds the data for a single event. The inbox is effectively a FIFO queue of events that the workflow needs to process, with items removed from the earlier indices and added to the end indices.
 * `history-NNNNNN`: Multiple keys containing an ordered list of history events. Each key holds the data for a single event. History events are only added and never removed, except in the case of "continue as new", where all history events are purged.
 * `customStatus`: Contains a user-defined workflow status value.
 

@@ -486,6 +486,37 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 	}
 }
 
+// TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
+func TestRecreateRunningWorkflowFails(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("SleepyWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		err := ctx.CreateTimer(24 * time.Hour).Await(nil)
+		return nil, err
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			// Start the first workflow, which will not complete
+			var metadata *api.OrchestrationMetadata
+			id, err := client.ScheduleNewOrchestration(ctx, "SleepyWorkflow")
+			if assert.NoError(t, err) {
+				if metadata, err = client.WaitForOrchestrationStart(ctx, id); assert.NoError(t, err) {
+					assert.False(t, metadata.IsComplete())
+				}
+			}
+
+			// Attempting to start a second workflow with the same ID should fail
+			_, err = client.ScheduleNewOrchestration(ctx, "SleepyWorkflow", api.WithInstanceID(id))
+			if assert.Error(t, err) {
+				// We expect that the workflow instance ID is included in the error message
+				assert.Contains(t, err.Error(), id)
+			}
+		})
+	}
+}
+
 func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
 	var client backend.TaskHubClient
 	engine := getEngine()
