@@ -16,6 +16,7 @@ package wfengine
 
 import (
 	"context"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"strings"
@@ -30,20 +31,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
-type workflowActor struct {
-	actors    actors.Actors
-	states    map[string]*workflowState
-	scheduler workflowScheduler
-	rwLock    sync.RWMutex
-}
-
-type workflowState struct {
-	inbox        []*backend.HistoryEvent
-	history      []*backend.HistoryEvent
-	timers       map[string]*backend.HistoryEvent
-	customStatus string
-}
-
 const (
 	CallbackChannelProperty = "dapr.callback"
 
@@ -52,7 +39,29 @@ const (
 	AddWorkflowEventMethod       = "AddWorkflowEvent"
 )
 
-func NewWorkflowActor(scheduler workflowScheduler) actors.InternalActor {
+type workflowActor struct {
+	actors          actors.Actors
+	states          map[string]*workflowState
+	scheduler       workflowScheduler
+	rwLock          sync.RWMutex
+	cachingDisabled bool
+}
+
+type durableTimer struct {
+	Bytes      []byte
+	Generation uuid.UUID
+}
+
+func init() {
+	// gob is used to serialize internal actor reminder data
+	gob.Register(durableTimer{})
+}
+
+func NewDurableTimer(bytes []byte, generation uuid.UUID) durableTimer {
+	return durableTimer{bytes, generation}
+}
+
+func NewWorkflowActor(scheduler workflowScheduler) *workflowActor {
 	return &workflowActor{
 		states:    make(map[string]*workflowState),
 		scheduler: scheduler,
@@ -75,7 +84,7 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 	case CreateWorkflowInstanceMethod:
 		err = wf.createWorkflowInstance(ctx, actorID, request)
 	case GetWorkflowMetadataMethod:
-		result, err = wf.getWorkflowMetadata(actorID)
+		result, err = wf.getWorkflowMetadata(ctx, actorID)
 	case AddWorkflowEventMethod:
 		err = wf.addWorkflowEvent(ctx, actorID, request)
 	default:
@@ -91,7 +100,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second) // TODO: Configurable
 	defer cancelTimeout()
-	if err := wf.runWorkflow(timeoutCtx, actorID, reminderName); err != nil {
+	if err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data); err != nil {
 		return err
 	}
 
@@ -115,11 +124,11 @@ func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) er
 
 func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID string, startEventBytes []byte) error {
 	// create a new state entry if one doesn't already exist
-	state, exists, err := wf.loadInternalState(actorID)
+	state, exists, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
 	} else if !exists {
-		state = &workflowState{}
+		state = NewWorkflowState(uuid.New())
 	}
 
 	startEvent, err := backend.UnmarshalHistoryEvent(startEventBytes)
@@ -133,7 +142,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	if exists {
 		runtimeState := getRuntimeState(actorID, state)
 		if runtimeState.IsCompleted() {
-			state = &workflowState{}
+			state.Reset()
 		} else {
 			return fmt.Errorf("an active workflow with ID '%s' already exists", actorID)
 		}
@@ -146,12 +155,12 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		return err
 	}
 
-	state.inbox = []*backend.HistoryEvent{startEvent}
-	return wf.saveInternalState(actorID, state)
+	state.AddToInbox(startEvent)
+	return wf.saveInternalState(ctx, actorID, state)
 }
 
-func (wf *workflowActor) getWorkflowMetadata(actorID string) (*api.OrchestrationMetadata, error) {
-	state, exists, err := wf.loadInternalState(actorID)
+func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string) (*api.OrchestrationMetadata, error) {
+	state, exists, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return nil, err
 	} else if !exists {
@@ -175,14 +184,14 @@ func (wf *workflowActor) getWorkflowMetadata(actorID string) (*api.Orchestration
 		lastUpdated,
 		input,
 		output,
-		state.customStatus,
+		state.CustomStatus,
 		failureDetuils,
 	)
 	return metadata, nil
 }
 
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {
-	state, exists, err := wf.loadInternalState(actorID)
+	state, exists, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
 	} else if !exists {
@@ -193,16 +202,16 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	if err != nil {
 		return err
 	}
-	state.inbox = append(state.inbox, e)
+	state.AddToInbox(e)
 
 	if _, err := wf.createReliableReminder(ctx, actorID, "new-event", nil, 0); err != nil {
 		return err
 	}
-	return wf.saveInternalState(actorID, state)
+	return wf.saveInternalState(ctx, actorID, state)
 }
 
-func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string) error {
-	state, exists, err := wf.loadInternalState(actorID)
+func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData any) error {
+	state, exists, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
 	} else if !exists {
@@ -210,15 +219,22 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	}
 
 	if strings.HasPrefix(reminderName, "timer-") {
-		if t, ok := state.timers[reminderName]; ok {
-			state.inbox = append(state.inbox, t)
-			delete(state.timers, reminderName)
+		timerData, ok := reminderData.(durableTimer)
+		if !ok {
+			return fmt.Errorf("unrecognized reminder payload: %v", reminderData)
+		}
+		if timerData.Generation != state.Generation {
+			wfLogger.Infof("%s: ignoring durable timer from previous generation '%v'", actorID, timerData.Generation)
 		} else {
-			return fmt.Errorf("%s: no durable timer named '%s' found in workflow state", actorID, reminderName)
+			e, err := backend.UnmarshalHistoryEvent(timerData.Bytes)
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal timer data %w", err)
+			}
+			state.Inbox = append(state.Inbox, e)
 		}
 	}
 
-	if len(state.inbox) == 0 {
+	if len(state.Inbox) == 0 {
 		// This can happen after multiple events are processed in batches; there may still be reminders around
 		// for some of those already processed events.
 		wfLogger.Debugf("%s: ignoring run request for reminder '%s' because the workflow inbox is empty", reminderName, actorID)
@@ -228,7 +244,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	runtimeState := getRuntimeState(actorID, state)
 	wi := &backend.OrchestrationWorkItem{
 		InstanceID: runtimeState.InstanceID(),
-		NewEvents:  state.inbox,
+		NewEvents:  state.Inbox,
 		RetryCount: -1, // TODO
 		State:      runtimeState,
 		Properties: make(map[string]interface{}),
@@ -251,23 +267,23 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if !runtimeState.IsCompleted() {
 		// Create reminders for the durable timers. We only do this if the orchestration is still running.
 		for _, t := range runtimeState.PendingTimers() {
-			if state.timers == nil {
-				state.timers = make(map[string]*backend.HistoryEvent, len(runtimeState.PendingTimers()))
-			}
 			tf := t.GetTimerFired()
 			if tf == nil {
 				return errors.New("invalid event in the PendingTimers list")
+			}
+			timerBytes, err := backend.MarshalHistoryEvent(t)
+			if err != nil {
+				return fmt.Errorf("failed to marshal pending timer data: %w", err)
 			}
 			delay := tf.FireAt.AsTime().Sub(time.Now().UTC())
 			if delay < 0 {
 				delay = 0
 			}
 			reminderPrefix := fmt.Sprintf("timer-%d", tf.TimerId)
-			if reminderName, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, nil, delay); err != nil {
+			data := NewDurableTimer(timerBytes, state.Generation)
+			if _, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, data, delay); err != nil {
 				// TODO: This needs to be a retriable error
 				return fmt.Errorf("actor %s failed to create reminder for timer: %w", actorID, err)
-			} else {
-				state.timers[reminderName] = t
 			}
 		}
 	}
@@ -321,25 +337,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
-	// If the workflow continue-as-new'd, we need to reset the history
-	if runtimeState.ContinuedAsNew() {
-		state.history = nil
-	}
+	state.ApplyRuntimeStateChanges(runtimeState)
+	state.ClearInbox()
 
-	// Update the workflow history
-	for _, e := range runtimeState.NewEvents() {
-		state.history = append(state.history, e)
-	}
-
-	// Clear the inbox since we should have processed all events successfully
-	state.inbox = nil
-
-	// Save any updates to the custom status
-	state.customStatus = runtimeState.CustomStatus.GetValue()
-	return wf.saveInternalState(actorID, state)
+	return wf.saveInternalState(ctx, actorID, state)
 }
 
-func (wf *workflowActor) loadInternalState(actorID string) (*workflowState, bool, error) {
+func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (*workflowState, bool, error) {
 	wf.rwLock.RLock()
 	defer wf.rwLock.RUnlock()
 
@@ -351,15 +355,36 @@ func (wf *workflowActor) loadInternalState(actorID string) (*workflowState, bool
 
 	// state is not cached, so try to load it from the state store
 	wfLogger.Debugf("%s: loading workflow state", actorID)
-	return nil, false, nil // TODO: Implement fetching from storage after validating saving to storage
+	state, err := LoadWorkflowState(ctx, wf.actors, actorID)
+	if err != nil {
+		return nil, false, err
+	}
+	if state == nil {
+		return nil, false, nil
+	}
+	return state, true, nil
 }
 
-func (wf *workflowActor) saveInternalState(actorID string, state *workflowState) error {
+func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, state *workflowState) error {
 	wf.rwLock.Lock()
 	defer wf.rwLock.Unlock()
 
-	wf.states[actorID] = state
-	return nil // TODO: Implement persistence this after validating reminders
+	if !wf.cachingDisabled {
+		// update cached state
+		wf.states[actorID] = state
+	}
+
+	// generate and run a state store operation that saves all changes
+	req, err := state.GetSaveRequest(actorID)
+	if err != nil {
+		return err
+	}
+
+	wfLogger.Debugf("%s: saving %d keys to actor state store", actorID, len(req.Operations))
+	if err = wf.actors.TransactionalStateOperation(ctx, req); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID string, namePrefix string, data any, delay time.Duration) (string, error) {
@@ -378,7 +403,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 
 func getRuntimeState(actorID string, state *workflowState) *backend.OrchestrationRuntimeState {
 	// TODO: Add caching when a good invalidation policy can be determined
-	return backend.NewOrchestrationRuntimeState(api.InstanceID(actorID), state.history)
+	return backend.NewOrchestrationRuntimeState(api.InstanceID(actorID), state.History)
 }
 
 func getActivityActorID(workflowActorID string, taskID int32) string {

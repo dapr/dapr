@@ -32,8 +32,8 @@ type activityActor struct {
 	scheduler    workflowScheduler
 }
 
-// NewActivityActor creates an [actors.InternalActor] for executing workflow activity logic.
-func NewActivityActor(scheduler workflowScheduler) actors.InternalActor {
+// NewActivityActor creates an internal activity actor for executing workflow activity logic.
+func NewActivityActor(scheduler workflowScheduler) *activityActor {
 	return &activityActor{
 		scheduler: scheduler,
 	}

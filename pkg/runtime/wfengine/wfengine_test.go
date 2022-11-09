@@ -219,6 +219,22 @@ func TestStartWorkflowEngine(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// GetTestOptions returns an array of functions for configuring the workflow engine. Each
+// string returned by each function can be used as the name of the test configuration.
+func GetTestOptions() []func(wfe *wfengine.WorkflowEngine) string {
+	return []func(wfe *wfengine.WorkflowEngine) string{
+		func(wfe *wfengine.WorkflowEngine) string {
+			// caching enabled, etc.
+			return "default options"
+		},
+		func(wfe *wfengine.WorkflowEngine) string {
+			// disable caching to test recovery from failure
+			wfe.DisableWorkflowCaching(true)
+			return "caching disabled"
+		},
+	}
+}
+
 // TestEmptyWorkflow executes a no-op workflow end-to-end and verifies all workflow metadata is correctly initialized.
 func TestEmptyWorkflow(t *testing.T) {
 	r := task.NewTaskRegistry()
@@ -227,21 +243,25 @@ func TestEmptyWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client := startEngine(ctx, r)
-	preStartTime := time.Now().UTC()
-	id, err := client.ScheduleNewOrchestration(ctx, "EmptyWorkflow")
-	if assert.NoError(t, err) {
-		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-		if assert.NoError(t, err) {
-			assert.Equal(t, id, metadata.InstanceID)
-			assert.True(t, metadata.IsComplete())
-			assert.GreaterOrEqual(t, metadata.CreatedAt, preStartTime)
-			assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
-			assert.Empty(t, metadata.SerializedInput)
-			assert.Empty(t, metadata.SerializedOutput)
-			assert.Empty(t, metadata.SerializedCustomStatus)
-			assert.Nil(t, metadata.FailureDetails)
-		}
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			preStartTime := time.Now().UTC()
+			id, err := client.ScheduleNewOrchestration(ctx, "EmptyWorkflow")
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+				if assert.NoError(t, err) {
+					assert.Equal(t, id, metadata.InstanceID)
+					assert.True(t, metadata.IsComplete())
+					assert.GreaterOrEqual(t, metadata.CreatedAt, preStartTime)
+					assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
+					assert.Empty(t, metadata.SerializedInput)
+					assert.Empty(t, metadata.SerializedOutput)
+					assert.Empty(t, metadata.SerializedCustomStatus)
+					assert.Nil(t, metadata.FailureDetails)
+				}
+			}
+		})
 	}
 }
 
@@ -255,15 +275,18 @@ func TestSingleTimerWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client := startEngine(ctx, r)
-
-	id, err := client.ScheduleNewOrchestration(ctx, "SingleTimer")
-	if assert.NoError(t, err) {
-		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-		if assert.NoError(t, err) {
-			assert.True(t, metadata.IsComplete())
-			assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
-		}
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "SingleTimer")
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
+				}
+			}
+		})
 	}
 }
 
@@ -290,16 +313,19 @@ func TestSingleActivityWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client := startEngine(ctx, r)
-
-	id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"))
-	if assert.NoError(t, err) {
-		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-		if assert.NoError(t, err) {
-			assert.True(t, metadata.IsComplete())
-			assert.Equal(t, `"世界"`, metadata.SerializedInput)
-			assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
-		}
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"))
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `"世界"`, metadata.SerializedInput)
+					assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
+				}
+			}
+		})
 	}
 }
 
@@ -325,15 +351,18 @@ func TestActivityChainingWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client := startEngine(ctx, r)
-
-	id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
-	if assert.NoError(t, err) {
-		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-		if assert.NoError(t, err) {
-			assert.True(t, metadata.IsComplete())
-			assert.Equal(t, `10`, metadata.SerializedOutput)
-		}
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `10`, metadata.SerializedOutput)
+				}
+			}
+		})
 	}
 }
 
@@ -368,22 +397,127 @@ func TestConcurrentActivityExecution(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client := startEngine(ctx, r)
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "ActivityFanOut")
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "ActivityFanOut")
-	if assert.NoError(t, err) {
-		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-		if assert.NoError(t, err) {
-			assert.True(t, metadata.IsComplete())
-			assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
-
-			// Because all the activities run in parallel, they should complete very quickly
-			assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
-		}
+					// Because all the activities run in parallel, they should complete very quickly
+					assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
+				}
+			}
+		})
 	}
 }
 
-func startEngine(ctx context.Context, r *task.TaskRegistry) backend.TaskHubClient {
+// TestContinueAsNewWorkflow verifies that a workflow can "continue-as-new" to restart itself with a new input.
+func TestContinueAsNewWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ContinueAsNewTest", func(ctx *task.OrchestrationContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+
+		if input < 10 {
+			if err := ctx.CreateTimer(0).Await(nil); err != nil {
+				return nil, err
+			}
+			ctx.ContinueAsNew(input + 1)
+		}
+		return input, nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `10`, metadata.SerializedOutput)
+				}
+			}
+		})
+	}
+}
+
+// TestRecreateCompletedWorkflow verifies that completed workflows can be restarted with new inputs externally.
+func TestRecreateCompletedWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("EchoWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		var input any
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input, nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			// First workflow
+			var metadata *api.OrchestrationMetadata
+			id, err := client.ScheduleNewOrchestration(ctx, "EchoWorkflow", api.WithInput("echo!"))
+			if assert.NoError(t, err) {
+				if metadata, err = client.WaitForOrchestrationCompletion(ctx, id); assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `"echo!"`, metadata.SerializedOutput)
+				}
+			}
+
+			// Second workflow, using the same ID as the first but a different input
+			_, err = client.ScheduleNewOrchestration(ctx, "EchoWorkflow", api.WithInstanceID(id), api.WithInput(42))
+			if assert.NoError(t, err) {
+				if metadata, err = client.WaitForOrchestrationCompletion(ctx, id); assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `42`, metadata.SerializedOutput)
+				}
+			}
+		})
+	}
+}
+
+// TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
+func TestRecreateRunningWorkflowFails(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("SleepyWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		err := ctx.CreateTimer(24 * time.Hour).Await(nil)
+		return nil, err
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			// Start the first workflow, which will not complete
+			var metadata *api.OrchestrationMetadata
+			id, err := client.ScheduleNewOrchestration(ctx, "SleepyWorkflow")
+			if assert.NoError(t, err) {
+				if metadata, err = client.WaitForOrchestrationStart(ctx, id); assert.NoError(t, err) {
+					assert.False(t, metadata.IsComplete())
+				}
+			}
+
+			// Attempting to start a second workflow with the same ID should fail
+			_, err = client.ScheduleNewOrchestration(ctx, "SleepyWorkflow", api.WithInstanceID(id))
+			if assert.Error(t, err) {
+				// We expect that the workflow instance ID is included in the error message
+				assert.Contains(t, err.Error(), id)
+			}
+		})
+	}
+}
+
+func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
 	var client backend.TaskHubClient
 	engine := getEngine()
 	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
@@ -393,7 +527,7 @@ func startEngine(ctx context.Context, r *task.TaskRegistry) backend.TaskHubClien
 	if err := engine.Start(ctx); err != nil {
 		panic(err)
 	}
-	return client
+	return client, engine
 }
 
 func getEngine() *wfengine.WorkflowEngine {
