@@ -134,7 +134,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := AddDaprEnvVarsToContainers([]coreV1.Container{tc.mockContainer})
+			patchEnv := AddDaprEnvVarsToContainers(map[int]coreV1.Container{0: tc.mockContainer})
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
 		})
@@ -262,7 +262,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := AddSocketVolumeToContainers([]coreV1.Container{tc.mockContainer}, tc.socketMount)
+			patchEnv := AddSocketVolumeMountToContainers(map[int]coreV1.Container{0: tc.mockContainer}, tc.socketMount)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
 		})

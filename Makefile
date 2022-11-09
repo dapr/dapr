@@ -83,17 +83,7 @@ ifeq ($(TARGET_OS_LOCAL),windows)
 else
 	BUILD_TOOLS_BIN ?= build-tools
 	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; go run .
-endif
-
-ifeq ($(TARGET_OS_LOCAL),windows)
-	BUILD_TOOLS_BIN ?= build-tools.exe
-	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; go.exe run .
-else
-	BUILD_TOOLS_BIN ?= build-tools
-	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; go run .
+	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
 endif
 
 # Default docker container and e2e test targst.
@@ -246,6 +236,14 @@ ADDITIONAL_HELM_SET ?= ""
 ifneq ($(ADDITIONAL_HELM_SET),)
 	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
 endif
+ifeq ($(ONLY_DAPR_IMAGE),true)
+	ADDITIONAL_HELM_SET := $(ADDITIONAL_HELM_SET) \
+		--set dapr_operator.image.name=$(RELEASE_NAME) \
+		--set dapr_placement.image.name=$(RELEASE_NAME) \
+		--set dapr_sentry.image.name=$(RELEASE_NAME) \
+		--set dapr_sidecar_injector.image.name=$(RELEASE_NAME) \
+		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME)
+endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) upgrade --install \
@@ -297,7 +295,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
-./pkg/fswatcher/... \
 ./pkg/grpc/... \
 ./pkg/health/... \
 ./pkg/http/... \
