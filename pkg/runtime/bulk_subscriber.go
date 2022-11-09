@@ -433,9 +433,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 	return errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", msg.topic, statusCode)
 }
 
-func createCloudEventFromEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) {
-	// var cloudEvent cloudevents.Event
-
+func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
 	envelope := &runtimev1pb.TopicEventCERequest{
 		Id:              extractCloudEventProperty(event, pubsub.IDField),
 		Source:          extractCloudEventProperty(event, pubsub.SourceField),
@@ -454,27 +452,25 @@ func createCloudEventFromEvent(event map[string]interface{}) (runtimev1pb.TopicE
 			case []byte:
 				envelope.Data = v
 			default:
-				// diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, ErrUnexpectedEnvelopeData
+				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, ErrUnexpectedEnvelopeData //nolint:nosnakecase
 			}
 		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}
-
-	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil
+	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
 }
 
-func createEvent(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
+func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
 	if rawPayload {
 		return &runtimev1pb.TopicEventBulkRequestEntry{
 			EntryId:     entry.EntryId,
-			Event:       &runtimev1pb.TopicEventBulkRequestEntry_Bytes{Bytes: entry.Event},
+			Event:       &runtimev1pb.TopicEventBulkRequestEntry_Bytes{Bytes: entry.Event}, //nolint:nosnakecase
 			ContentType: entry.ContentType,
 			Metadata:    entry.Metadata,
 		}, nil
 	} else {
-		eventLocal, err := createCloudEventFromEvent(cloudEvent)
+		eventLocal, err := extractCloudEvent(cloudEvent)
 		if err != nil {
 			return nil, err
 		}
@@ -485,7 +481,6 @@ func createEvent(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map
 			Metadata:    entry.Metadata,
 		}, nil
 	}
-	// return nil, ErrUnexpectedEnvelopeData
 }
 
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
@@ -498,7 +493,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 		rawPayload = false
 	}
 	for i, entry := range msg.entries {
-		item, err := createEvent(rawPayload, entry, msg.cloudEvents[i])
+		item, err := fetchEntry(rawPayload, entry, msg.cloudEvents[i])
 		if err != nil {
 			bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
 			setBulkResponseEntry(bulkResponses, i, entry.EntryId, err)
