@@ -353,11 +353,26 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
+	// get the source app id from the metadata
+	var sourceAppID string
+	sourceIDHeader, ok := req.Metadata()[invokev1.SourceIDHeader]
+	if ok {
+		if len(sourceIDHeader.Values) > 0 {
+			sourceAppID = sourceIDHeader.Values[0]
+		}
+	}
+
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(a.id, sourceAppID, req.Message().Method)
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
+
+	diag.DefaultMonitoring.ServiceInvocationResponseSent(a.id, sourceAppID, req.Message().Method)
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
 	}
+
 	return resp.Proto(), err
 }
 

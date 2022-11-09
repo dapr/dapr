@@ -56,6 +56,8 @@ const (
 
 	// DestinationIDHeader is the header carrying the value of the invoked app id.
 	DestinationIDHeader = "destination-app-id"
+	// SourceIDHeader is the header carrying the value of the invoking app id.
+	SourceIDHeader = "source-app-id"
 
 	// ErrorInfo metadata value is limited to 64 chars
 	// https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L126
