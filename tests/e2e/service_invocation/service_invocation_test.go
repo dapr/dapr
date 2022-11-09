@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -492,6 +493,9 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
 
+		assert.Equal(t, "serviceinvocation-caller", requestHeaders[invokev1.CallerIDHeader][0])
+		assert.Equal(t, "grpcapp", requestHeaders[invokev1.CalleeIDHeader][0])
+
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
@@ -546,6 +550,8 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
 		assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
+		assert.Equal(t, "serviceinvocation-caller", requestHeaders["Caller-App-Id"][0])
+		assert.Equal(t, "serviceinvocation-callee-0", requestHeaders["Callee-App-Id"][0])
 
 		assert.NotNil(t, responseHeaders["dapr-content-length"][0])
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
@@ -610,6 +616,9 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, hostIP, requestHeaders["x-forwarded-for"][0])
 		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
+
+		assert.Equal(t, "serviceinvocation-caller", requestHeaders[invokev1.CallerIDHeader][0])
+		assert.Equal(t, "grpcapp", requestHeaders[invokev1.CalleeIDHeader][0])
 
 		assert.NotNil(t, responseHeaders["Content-Length"][0])
 		assert.True(t, strings.HasPrefix(responseHeaders["Content-Type"][0], "application/json"))
@@ -862,6 +871,8 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
 	assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
 	assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
+	assert.Equal(t, "serviceinvocation-caller", requestHeaders["Caller-App-Id"][0])
+	assert.Equal(t, "serviceinvocation-callee-0", requestHeaders["Callee-App-Id"][0])
 
 	assert.NotNil(t, responseHeaders["Content-Length"][0])
 	assert.True(t, strings.HasPrefix(responseHeaders["Content-Type"][0], "application/json"))
