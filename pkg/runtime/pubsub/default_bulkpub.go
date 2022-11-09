@@ -42,13 +42,9 @@ func NewDefaultBulkPublisher(p contribPubsub.PubSub) *defaultBulkPublisher {
 }
 
 // BulkPublish publishes a list of messages to a topic as individual Publish requests.
-func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
-	return p.bulkPublishParallel(req)
-}
-
-// bulkPublishParallel publishes messages in parallel. This is faster, but does not guarantee
+// BulkPublish publishes messages in parallel. This is faster, but does not guarantee
 // that messages are sent to the broker in the same order as specified in the request.
-func (p *defaultBulkPublisher) bulkPublishParallel(req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
+func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	statuses := make([]contribPubsub.BulkPublishResponseEntry, 0, len(req.Entries))
 
 	var eg errgroup.Group
