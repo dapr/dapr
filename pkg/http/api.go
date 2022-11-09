@@ -424,6 +424,7 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Version:       apiVersionV1,
 			Handler:       a.onGetHealthz,
 			AlwaysAllowed: true,
+			IsHealthCheck: true,
 		},
 		{
 			Methods:       []string{fasthttp.MethodGet},
@@ -431,6 +432,7 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Version:       apiVersionV1,
 			Handler:       a.onGetOutboundHealthz,
 			AlwaysAllowed: true,
+			IsHealthCheck: true,
 		},
 	}
 }

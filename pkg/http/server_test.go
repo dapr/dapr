@@ -744,6 +744,70 @@ func TestAPILogging(t *testing.T) {
 	t.Run("with user agent", runTest("daprtest/1"))
 }
 
+func TestAPILoggingOmitHealthChecks(t *testing.T) {
+	// Replace the logger with a custom one for testing
+	prev := infoLog
+	logDest := &bytes.Buffer{}
+	infoLog = logger.NewLogger("test-api-logging")
+	infoLog.EnableJSONOutput(true)
+	infoLog.SetOutput(logDest)
+	defer func() {
+		infoLog = prev
+	}()
+
+	body := []byte("👋")
+
+	mh := func(reqCtx *fasthttp.RequestCtx) {
+		reqCtx.Response.SetBody(body)
+	}
+	endpoints := []Endpoint{
+		{
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "log",
+			Version:       apiVersionV1,
+			Handler:       mh,
+			IsHealthCheck: false,
+		},
+		{
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "nolog",
+			Version:       apiVersionV1,
+			Handler:       mh,
+			IsHealthCheck: true,
+		},
+	}
+	srv := newServer()
+	srv.config.EnableAPILogging = true
+	srv.config.APILogHealthChecks = false
+	router := srv.getRouter(endpoints)
+
+	r := &fasthttp.RequestCtx{
+		Request: fasthttp.Request{},
+	}
+	dec := json.NewDecoder(logDest)
+
+	for _, e := range endpoints {
+		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
+		handler, _ := router.Lookup(fasthttp.MethodGet, path, r)
+		r.Request.Header.SetMethod(fasthttp.MethodGet)
+		handler(r)
+
+		assert.Equal(t, body, r.Response.Body())
+
+		if e.Route == "log" {
+			logData := map[string]string{}
+			err := dec.Decode(&logData)
+			require.NoError(t, err)
+
+			assert.Equal(t, "test-api-logging", logData["scope"])
+			assert.Equal(t, "HTTP API Called", logData["msg"])
+			assert.Equal(t, "GET "+path, logData["method"])
+		} else {
+			require.Empty(t, logDest.Bytes())
+		}
+	}
+}
+
 func TestClose(t *testing.T) {
 	t.Run("test close with api logging enabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
