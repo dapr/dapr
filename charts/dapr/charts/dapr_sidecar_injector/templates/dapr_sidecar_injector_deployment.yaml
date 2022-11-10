@@ -110,15 +110,12 @@ spec:
         - "--healthz-port"
         - "{{ .Values.healthzPort }}"
 {{- with .Values.global.issuerFilenames }}
-{{- if hasKey . "ca" }}
-        - --issuer-ca-secret-key={{ get . "ca" }}
-{{- end }}
-{{- if hasKey . "cert" }}
-        - --issuer-certificate-secret-key={{ get . "cert" }}
-{{- end }}
-{{- if hasKey . "key" }}
-        - --issuer-key-secret-key={{ get . "key" }}
-{{- end }}
+        - --issuer-ca-secret-key
+        - {{ .ca }}
+        - --issuer-certificate-secret-key
+        - {{ .cert }}
+        - --issuer-key-secret-key
+        - {{ .key }}
 {{- end }}
 {{- with .Values.args }}
         - {{ . }}

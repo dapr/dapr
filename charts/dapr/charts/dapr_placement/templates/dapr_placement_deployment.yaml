@@ -138,15 +138,12 @@ spec:
 {{- end }}
         - "--tls-enabled"
 {{- with .Values.global.issuerFilenames }}
-{{- if hasKey . "ca" }}
-        - --issuer-ca-filename={{ get . "ca" }}
-{{- end }}
-{{- if hasKey . "cert" }}
-        - --issuer-certificate-filename={{ get . "cert" }}
-{{- end }}
-{{- if hasKey . "key" }}
-        - --issuer-key-filename={{ get . "key" }}
-{{- end }}
+        - --issuer-ca-filename
+        - {{ .ca }}
+        - --issuer-certificate-filename
+        - {{ .cert }}
+        - --issuer-key-filename
+        - {{ .key }}
 {{- end }}
 {{- with .Values.args }}
         - {{ . }}
