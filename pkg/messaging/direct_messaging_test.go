@@ -39,6 +39,22 @@ func TestDestinationHeaders(t *testing.T) {
 	})
 }
 
+func TestCallerAndCalleeHeaders(t *testing.T) {
+	t.Run("caller and callee header present", func(t *testing.T) {
+		callerAppID := "caller-app"
+		calleeAppID := "callee-app"
+		req := invokev1.NewInvokeMethodRequest("GET")
+		req.WithMetadata(map[string][]string{})
+
+		dm := newDirectMessaging()
+		dm.addCallerAndCalleeAppIDHeaderToMetadata(callerAppID, calleeAppID, req)
+		actualCallerAppID := req.Metadata()[invokev1.CallerIDHeader]
+		actualCalleeAppID := req.Metadata()[invokev1.CalleeIDHeader]
+		assert.Equal(t, callerAppID, actualCallerAppID.Values[0])
+		assert.Equal(t, calleeAppID, actualCalleeAppID.Values[0])
+	})
+}
+
 func TestForwardedHeaders(t *testing.T) {
 	t.Run("forwarded headers present", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("GET")
