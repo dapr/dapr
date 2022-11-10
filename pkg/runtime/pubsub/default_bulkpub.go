@@ -20,13 +20,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/dapr/utils"
 )
 
 const (
-	bulkPublishSeriallyKey       string = "bulkPublishSerially"
-	bulkPublishMaxConcurrencyKey string = "bulkPublishMaxConcurrency"
-
 	defaultBulkPublishMaxConcurrency int = 100
 )
 
@@ -45,43 +41,13 @@ func NewDefaultBulkPublisher(p contribPubsub.PubSub) *defaultBulkPublisher {
 	}
 }
 
-// BulkPublish publishes a list of messages to a topic as individual Publish requests.
-// If 'bulkPublishSerially' metadata is set to true, the messages are sent to the broker serially,
-// in the same order. Otherwise they are sent to the broker as parallel Publish requests.
+// BulkPublish publishes a list of messages as parallel Publish requests to the topic in the incoming request.
+// There is no guarantee that messages sent to the broker are in the same order as specified in the request.
 func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
-	if utils.IsTruthy(req.Metadata[bulkPublishSeriallyKey]) {
-		return p.bulkPublishSerial(req)
-	} else {
-		return p.bulkPublishParallel(req)
-	}
-}
-
-// bulkPublishSerial publishes messages in a serial order. This is slower, but ensures
-// that messages are sent to the broker in the same order as specified in the request.
-func (p *defaultBulkPublisher) bulkPublishSerial(req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	statuses := make([]contribPubsub.BulkPublishResponseEntry, 0, len(req.Entries))
-	var err error
-
-	for _, entry := range req.Entries {
-		status := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
-		if status.Error != nil {
-			err = ErrBulkPublishFailure
-		}
-
-		statuses = append(statuses, status)
-	}
-
-	return contribPubsub.BulkPublishResponse{Statuses: statuses}, err
-}
-
-// bulkPublishParallel publishes messages in parallel. This is faster, but does not guarantee
-// that messages are sent to the broker in the same order as specified in the request.
-func (p *defaultBulkPublisher) bulkPublishParallel(req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
-	statuses := make([]contribPubsub.BulkPublishResponseEntry, 0, len(req.Entries))
-	maxConcurrency := utils.GetIntOrDefault(req.Metadata, bulkPublishMaxConcurrencyKey, defaultBulkPublishMaxConcurrency)
 
 	var eg errgroup.Group
-	eg.SetLimit(maxConcurrency)
+	eg.SetLimit(defaultBulkPublishMaxConcurrency)
 
 	statusChan := make(chan contribPubsub.BulkPublishResponseEntry, len(req.Entries))
 
