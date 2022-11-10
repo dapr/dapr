@@ -14,6 +14,8 @@ limitations under the License.
 package consts
 
 const (
+	// ServiceAccountTokenAudience is the default audience that Sentry looks for in tokens to validate pods.
+	ServiceAccountTokenAudience = "dapr.io/sentry" /* #nosec */
 	// TrustBundleK8sSecretName is the name of the kubernetes secret that holds the trust bundle.
 	TrustBundleK8sSecretName = "dapr-trust-bundle" /* #nosec */
 	// TrustAnchorsEnvVar is the environment variable name for the trust anchors in the sidecar.

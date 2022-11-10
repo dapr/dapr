@@ -326,20 +326,20 @@ func TestSidecarContainerVolumeMounts(t *testing.T) {
 			MountPath: "/token/mount",
 		}
 		volumeMounts := []corev1.VolumeMount{
+			*socketVolumeMount,
+			*tokenVolumeMount,
 			{Name: "foo", MountPath: "/foo"},
 			{Name: "bar", MountPath: "/bar"},
 		}
 
 		c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
-			SocketVolumeMount: socketVolumeMount,
-			TokenVolumeMount:  tokenVolumeMount,
-			VolumeMounts:      volumeMounts,
+			VolumeMounts: volumeMounts,
 		})
 		assert.Equal(t, 4, len(c.VolumeMounts))
 		assert.Equal(t, *socketVolumeMount, c.VolumeMounts[0])
 		assert.Equal(t, *tokenVolumeMount, c.VolumeMounts[1])
-		assert.Equal(t, volumeMounts[0], c.VolumeMounts[2])
-		assert.Equal(t, volumeMounts[1], c.VolumeMounts[3])
+		assert.Equal(t, volumeMounts[2], c.VolumeMounts[2])
+		assert.Equal(t, volumeMounts[3], c.VolumeMounts[3])
 	})
 }
 

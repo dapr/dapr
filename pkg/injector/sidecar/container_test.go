@@ -171,7 +171,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--enable-api-logging=false",
 			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
@@ -246,7 +245,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--enable-api-logging=false",
 			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
@@ -321,7 +319,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--enable-api-logging=false",
 			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
@@ -377,7 +374,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--enable-api-logging=false",
 			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
@@ -421,7 +417,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--enable-api-logging=false",
 			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
@@ -465,7 +460,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "5",
-			"--enable-api-logging=false",
 			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
@@ -505,14 +499,16 @@ func TestGetSidecarContainer(t *testing.T) {
 			annotations.KeyUnixDomainSocketPath: socketPath,
 		}
 
-		socketMount := &corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: socketPath}
-
 		container, _ := GetSidecarContainer(ContainerConfig{
-			Annotations:       an,
-			SocketVolumeMount: socketMount,
+			Annotations: an,
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: UnixDomainSocketVolume, MountPath: socketPath},
+			},
 		})
 
-		assert.Equal(t, []corev1.VolumeMount{*socketMount}, container.VolumeMounts)
+		assert.Len(t, container.VolumeMounts, 1)
+		assert.Equal(t, UnixDomainSocketVolume, container.VolumeMounts[0].Name)
+		assert.Equal(t, socketPath, container.VolumeMounts[0].MountPath)
 	})
 
 	t.Run("disable Builtin K8s Secret Store", func(t *testing.T) {
@@ -551,12 +547,128 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--enable-api-logging=false",
 			"--disable-builtin-k8s-secret-store=true",
 			"--enable-mtls",
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
+	})
+
+	t.Run("test enable-api-logging", func(t *testing.T) {
+		an := map[string]string{}
+		an[annotations.KeyConfig] = defaultTestConfig
+		an[annotations.KeyDisableBuiltinK8sSecretStore] = "true"
+
+		containerConfig := ContainerConfig{
+			AppID:                   "app_id",
+			Annotations:             an,
+			ControlPlaneAddress:     "controlplane:9000",
+			PlacementServiceAddress: "placement:50000",
+			SentryAddress:           "sentry:50000",
+			MTLSEnabled:             true,
+		}
+
+		t.Run("unset", func(t *testing.T) {
+			container, _ := GetSidecarContainer(containerConfig)
+
+			expectedArgs := []string{
+				"/daprd",
+				"--mode", "kubernetes",
+				"--dapr-http-port", "3500",
+				"--dapr-grpc-port", "50001",
+				"--dapr-internal-grpc-port", "50002",
+				"--dapr-listen-addresses", "[::1],127.0.0.1",
+				"--dapr-public-port", "3501",
+				"--app-port", "",
+				"--app-id", "app_id",
+				"--control-plane-address", "controlplane:9000",
+				"--app-protocol", "http",
+				"--placement-host-address", "placement:50000",
+				"--config", defaultTestConfig,
+				"--log-level", "info",
+				"--app-max-concurrency", "-1",
+				"--sentry-address", "sentry:50000",
+				"--enable-metrics=true",
+				"--metrics-port", "9090",
+				"--dapr-http-max-request-size", "-1",
+				"--dapr-http-read-buffer-size", "-1",
+				"--dapr-graceful-shutdown-seconds", "-1",
+				"--disable-builtin-k8s-secret-store=true",
+				"--enable-mtls",
+			}
+
+			assert.EqualValues(t, expectedArgs, container.Args)
+		})
+
+		t.Run("explicit true", func(t *testing.T) {
+			an[annotations.KeyEnableAPILogging] = "true"
+
+			container, _ := GetSidecarContainer(containerConfig)
+
+			expectedArgs := []string{
+				"/daprd",
+				"--mode", "kubernetes",
+				"--dapr-http-port", "3500",
+				"--dapr-grpc-port", "50001",
+				"--dapr-internal-grpc-port", "50002",
+				"--dapr-listen-addresses", "[::1],127.0.0.1",
+				"--dapr-public-port", "3501",
+				"--app-port", "",
+				"--app-id", "app_id",
+				"--control-plane-address", "controlplane:9000",
+				"--app-protocol", "http",
+				"--placement-host-address", "placement:50000",
+				"--config", defaultTestConfig,
+				"--log-level", "info",
+				"--app-max-concurrency", "-1",
+				"--sentry-address", "sentry:50000",
+				"--enable-metrics=true",
+				"--metrics-port", "9090",
+				"--dapr-http-max-request-size", "-1",
+				"--dapr-http-read-buffer-size", "-1",
+				"--dapr-graceful-shutdown-seconds", "-1",
+				"--disable-builtin-k8s-secret-store=true",
+				"--enable-api-logging=true",
+				"--enable-mtls",
+			}
+
+			assert.EqualValues(t, expectedArgs, container.Args)
+		})
+
+		t.Run("explicit false", func(t *testing.T) {
+			an[annotations.KeyEnableAPILogging] = "false"
+
+			container, _ := GetSidecarContainer(containerConfig)
+
+			expectedArgs := []string{
+				"/daprd",
+				"--mode", "kubernetes",
+				"--dapr-http-port", "3500",
+				"--dapr-grpc-port", "50001",
+				"--dapr-internal-grpc-port", "50002",
+				"--dapr-listen-addresses", "[::1],127.0.0.1",
+				"--dapr-public-port", "3501",
+				"--app-port", "",
+				"--app-id", "app_id",
+				"--control-plane-address", "controlplane:9000",
+				"--app-protocol", "http",
+				"--placement-host-address", "placement:50000",
+				"--config", defaultTestConfig,
+				"--log-level", "info",
+				"--app-max-concurrency", "-1",
+				"--sentry-address", "sentry:50000",
+				"--enable-metrics=true",
+				"--metrics-port", "9090",
+				"--dapr-http-max-request-size", "-1",
+				"--dapr-http-read-buffer-size", "-1",
+				"--dapr-graceful-shutdown-seconds", "-1",
+				"--disable-builtin-k8s-secret-store=true",
+				"--enable-api-logging=false",
+				"--enable-mtls",
+			}
+
+			assert.EqualValues(t, expectedArgs, container.Args)
+		})
 	})
 
 	t.Run("sidecar container should have the correct user configured", func(t *testing.T) {
@@ -747,7 +859,7 @@ func TestAppendUnixDomainSocketVolume(t *testing.T) {
 			pod.Annotations = tc.annotations
 			pod.Spec.Volumes = tc.originalVolumes
 
-			socketMount := GetUnixDomainSocketVolume(&pod)
+			socketMount := GetUnixDomainSocketVolumeMount(&pod)
 
 			if tc.exportMount == nil {
 				assert.Equal(t, tc.exportMount, socketMount)

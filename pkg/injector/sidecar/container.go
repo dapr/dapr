@@ -48,12 +48,10 @@ type ContainerConfig struct {
 	Namespace                    string
 	PlacementServiceAddress      string
 	SentryAddress                string
-	SocketVolumeMount            *corev1.VolumeMount
-	TokenVolumeMount             *corev1.VolumeMount
-	ComponentsSocketsVolumeMount *corev1.VolumeMount
 	Tolerations                  []corev1.Toleration
 	TrustAnchors                 string
 	VolumeMounts                 []corev1.VolumeMount
+	ComponentsSocketsVolumeMount *corev1.VolumeMount
 	RunAsNonRoot                 bool
 	ReadOnlyRootFilesystem       bool
 }
@@ -75,7 +73,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 	}
 
 	metricsEnabled := cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableMetrics, annotations.DefaultEnableMetric)
-	apiLoggingEnabled := cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableAPILogging, annotations.DefaultEnableAPILogging)
 	metricsPort := int(cfg.Annotations.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort))
 	sidecarListenAddresses := cfg.Annotations.GetStringOrDefault(annotations.KeySidecarListenAddresses, annotations.DefaultSidecarListenAddresses)
 	disableBuiltinK8sSecretStore := cfg.Annotations.GetBoolOrDefault(annotations.KeyDisableBuiltinK8sSecretStore, annotations.DefaultDisableBuiltinK8sSecretStore)
@@ -146,8 +143,17 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-http-max-request-size", strconv.Itoa(int(requestBodySize)),
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
-		"--enable-api-logging=" + strconv.FormatBool(apiLoggingEnabled),
 		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(disableBuiltinK8sSecretStore),
+	}
+
+	// --enable-api-logging is set only if there's an explicit annotation (true or false) for that
+	// This is because if this CLI flag is missing, the default specified in the Config CRD is used
+	if v, ok := cfg.Annotations[annotations.KeyEnableAPILogging]; ok {
+		if utils.IsTruthy(v) {
+			args = append(args, "--enable-api-logging=true")
+		} else {
+			args = append(args, "--enable-api-logging=false")
+		}
 	}
 
 	if cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableAppHealthCheck, annotations.DefaultEnableAppHealthCheck) {
@@ -214,6 +220,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 				},
 			},
 		},
+		VolumeMounts: []corev1.VolumeMount{},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        probeHTTPHandler,
 			InitialDelaySeconds: cfg.Annotations.GetInt32OrDefault(annotations.KeyReadinessProbeDelaySeconds, annotations.DefaultHealthzProbeDelaySeconds),
@@ -266,8 +273,8 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		}
 	}
 
-	if cfg.SocketVolumeMount != nil {
-		container.VolumeMounts = []corev1.VolumeMount{*cfg.SocketVolumeMount}
+	if len(cfg.VolumeMounts) > 0 {
+		container.VolumeMounts = append(container.VolumeMounts, cfg.VolumeMounts...)
 	}
 
 	if cfg.ComponentsSocketsVolumeMount != nil {
@@ -276,14 +283,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 			Name:  pluggable.SocketFolderEnvVar,
 			Value: cfg.ComponentsSocketsVolumeMount.MountPath,
 		})
-	}
-
-	if cfg.TokenVolumeMount != nil {
-		container.VolumeMounts = append(container.VolumeMounts, *cfg.TokenVolumeMount)
-	}
-
-	if len(cfg.VolumeMounts) > 0 {
-		container.VolumeMounts = append(container.VolumeMounts, cfg.VolumeMounts...)
 	}
 
 	if cfg.Annotations.GetBoolOrDefault(annotations.KeyLogAsJSON, annotations.DefaultLogAsJSON) {

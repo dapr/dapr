@@ -113,7 +113,12 @@ const (
 	componentFormat = "%s (%s/%s)"
 
 	defaultComponentInitTimeout = time.Second * 5
+
+	// Metadata needed to call bulk subscribe
+	BulkSubscribe = "bulkSubscribe"
 )
+
+type ComponentCategory string
 
 var componentCategoriesNeedProcess = []components.Category{
 	components.CategoryBindings,
@@ -179,6 +184,7 @@ type DaprRuntime struct {
 	namespace              string
 	podName                string
 	daprHTTPAPI            http.API
+	daprGRPCAPI            grpc.API
 	operatorClient         operatorv1pb.OperatorClient
 	pubsubCtx              context.Context
 	pubsubCancel           context.CancelFunc
@@ -190,6 +196,8 @@ type DaprRuntime struct {
 	apiClosers             []io.Closer
 	componentAuthorizers   []ComponentAuthorizer
 	appHealth              *apphealth.AppHealth
+	appHealthReady         func() // Invoked the first time the app health becomes ready
+	appHealthLock          *sync.Mutex
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -269,6 +277,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
+		appHealthReady:             nil,
+		appHealthLock:              &sync.Mutex{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -328,14 +338,16 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
 // but we do so here to explicitly call out the dependency on having `hostAddress` computed.
 func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
+	tracingSpec := a.globalConfig.Spec.TracingSpec
+
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
-	if a.globalConfig.Spec.TracingSpec.Stdout {
+	if tracingSpec.Stdout {
 		tpStore.RegisterExporter(diagUtils.NewStdOutExporter())
 	}
 
 	// Register zipkin trace exporter if ZipkinSpec is specified
-	if a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress != "" {
-		zipkinExporter, err := zipkin.New(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
+	if tracingSpec.Zipkin.EndpointAddress != "" {
+		zipkinExporter, err := zipkin.New(tracingSpec.Zipkin.EndpointAddress)
 		if err != nil {
 			return err
 		}
@@ -343,13 +355,13 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	}
 
 	// Register otel trace exporter if OtelSpec is specified
-	if a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress != "" && a.globalConfig.Spec.TracingSpec.Otel.Protocol != "" {
-		endpoint := a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress
-		protocol := a.globalConfig.Spec.TracingSpec.Otel.Protocol
+	if tracingSpec.Otel.EndpointAddress != "" && tracingSpec.Otel.Protocol != "" {
+		endpoint := tracingSpec.Otel.EndpointAddress
+		protocol := tracingSpec.Otel.Protocol
 		if protocol != "http" && protocol != "grpc" {
 			return fmt.Errorf("invalid protocol %v provided for Otel endpoint", protocol)
 		}
-		isSecure := a.globalConfig.Spec.TracingSpec.Otel.IsSecure
+		isSecure := tracingSpec.Otel.IsSecure
 
 		var client otlptrace.Client
 		if protocol == "http" {
@@ -381,7 +393,10 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	tpStore.RegisterResource(r)
 
 	// Register a trace sampler based on Sampling settings
-	tpStore.RegisterSampler(diagUtils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
+	daprTraceSampler := diag.NewDaprTraceSampler(tracingSpec.SamplingRate)
+	log.Infof("Dapr trace sampler initialized: %s", daprTraceSampler.Description())
+
+	tpStore.RegisterSampler(daprTraceSampler)
 
 	tpStore.RegisterTracerProvider()
 
@@ -461,9 +476,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.initProxy()
 
 	// Create and start internal and external gRPC servers
-	grpcAPI := a.getGRPCAPI()
+	a.daprGRPCAPI = a.getGRPCAPI()
 
-	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
+	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
@@ -485,7 +500,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("The request body size parameter is: %v", a.runtimeConfig.MaxRequestBodySize)
 
-	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
+	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
@@ -502,14 +517,41 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
-	grpcAPI.SetAppChannel(a.appChannel)
-
-	a.loadAppConfiguration()
+	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 
 	a.initDirectMessaging(a.nameResolver)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
-	grpcAPI.SetDirectMessaging(a.directMessaging)
+	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
+
+	a.appHealthReady = func() {
+		a.appHealthReadyInit(opts)
+	}
+	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
+		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
+		a.appHealth.OnHealthChange(a.appHealthChanged)
+		a.appHealth.StartProbes(a.ctx)
+
+		// Set the appHealth object in the channel so it's aware of the app's health status
+		a.appChannel.SetAppHealth(a.appHealth)
+
+		// Enqueue a probe right away
+		// This will also start the input components once the app is healthy
+		a.appHealth.Enqueue()
+	} else {
+		// If there's no health check, mark the app as healthy right away so subscriptions can start
+		a.appHealthChanged(apphealth.AppStatusHealthy)
+	}
+
+	return nil
+}
+
+// appHealthReadyInit completes the initialization phase and is invoked after the app is healthy
+func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
+	var err error
+
+	// Load app configuration (for actors) and init actors
+	a.loadAppConfiguration()
 
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
@@ -517,7 +559,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Warnf(err.Error())
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
-			grpcAPI.SetActorRuntime(a.actor)
+			a.daprGRPCAPI.SetActorRuntime(a.actor)
 		}
 	}
 
@@ -538,24 +580,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Fatalf("failed to register components with callback: %s", err)
 		}
 	}
-
-	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
-		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
-		a.appHealth.OnHealthChange(a.appHealthChanged)
-		a.appHealth.StartProbes(a.ctx)
-
-		// Set the appHealth object in the channel so it's aware of the app's health status
-		a.appChannel.SetAppHealth(a.appHealth)
-
-		// Enqueue a probe right away
-		// This will also start the input components once the app is healthy
-		a.appHealth.Enqueue()
-	} else {
-		// If there's no health check, mark the app as healthy right away so subscriptions can start
-		a.appHealthChanged(apphealth.AppStatusHealthy)
-	}
-
-	return nil
 }
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
@@ -572,8 +596,17 @@ func (a *DaprRuntime) initPluggableComponents() {
 // Sets the status of the app to healthy or un-healthy
 // Callback for apphealth when the detected status changed
 func (a *DaprRuntime) appHealthChanged(status uint8) {
+	a.appHealthLock.Lock()
+	defer a.appHealthLock.Unlock()
+
 	switch status {
 	case apphealth.AppStatusHealthy:
+		// First time the app becomes healthy, complete the init process
+		if a.appHealthReady != nil {
+			a.appHealthReady()
+			a.appHealthReady = nil
+		}
+
 		// Start subscribing to topics and reading from input bindings
 		a.startSubscriptions()
 		err := a.startReadingFromBindings()
@@ -678,9 +711,19 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
+	routeMetadata := route.metadata
+	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
+		err := a.bulkSubscribeTopic(ctx, policy, name, topic, route)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
+		}
+		a.topicCtxCancels[subKey] = cancel
+		return nil
+	}
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    topic,
-		Metadata: route.metadata,
+		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
@@ -1114,6 +1157,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	}
+	// span is nil if tracing is disabled (sampling rate is 0)
 	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
@@ -1123,13 +1167,15 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	}
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+		if span != nil {
+			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+		}
 
 		// Add workaround to fallback on checking traceparent header.
 		// As grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus, tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path.
 		// TODO: Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827.
-		if validTraceparent {
+		if validTraceparent && span != nil {
 			spanContextHeaders := make(map[string]string, 2)
 			diag.SpanContextToHTTPHeaders(span.SpanContext(), func(key string, val string) {
 				spanContextHeaders[key] = val
@@ -1307,6 +1353,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
 		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
 		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
+		APILogHealthChecks: !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
 	}
 
 	server := http.NewServer(http.NewServerOpts{
@@ -1780,6 +1827,22 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	})
 }
 
+func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	ps, ok := a.pubSubs[req.PubsubName]
+	if !ok {
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
+	}
+
+	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
+	}
+	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
+		return bulkPublisher.BulkPublish(context.TODO(), req)
+	}
+	log.Debugf("pubsub %s does not implement the bulkPublish API, defaulting to normal publish", req.PubsubName)
+	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
+}
+
 // Subscribe is used by APIs to start a subscription to a topic.
 func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]TopicRouteElem) (err error) {
 	_, ok := a.pubSubs[name]
@@ -2031,7 +2094,10 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 			// no ops if trace is off
 			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			// span is nil if tracing is disabled (sampling rate is 0)
+			if span != nil {
+				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			}
 		} else {
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
@@ -2235,7 +2301,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Com
 
 func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) components.Category {
 	for _, category := range componentCategoriesNeedProcess {
-		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
+		if strings.HasPrefix(component.Spec.Type, string(category)+".") {
 			return category
 		}
 	}
@@ -2366,33 +2432,22 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	var merr error
 
 	// Close components if they implement `io.Closer`
+	for name, component := range a.secretStores {
+		closeComponent(component, "secret store "+name, &merr)
+	}
+	for name, component := range a.stateStores {
+		closeComponent(component, "state store "+name, &merr)
+	}
+	for name, component := range a.lockStores {
+		closeComponent(component, "lock store "+name, &merr)
+	}
+	for name, component := range a.configurationStores {
+		closeComponent(component, "configuration store "+name, &merr)
+	}
+	// Close output bindings
 	// Input bindings are closed when a.ctx is canceled
-	for name, binding := range a.outputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing output binding %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
-	}
-	for name, secretstore := range a.secretStores {
-		if closer, ok := secretstore.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing secret store %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
-	}
-	for name, stateStore := range a.stateStores {
-		if closer, ok := stateStore.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing state store %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
+	for name, component := range a.outputBindings {
+		closeComponent(component, "output binding "+name, &merr)
 	}
 	// Close pubsub publisher
 	// The subscriber part is closed when a.ctx is canceled
@@ -2400,21 +2455,21 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 		if pubSub.component == nil {
 			continue
 		}
-		if err := pubSub.component.Close(); err != nil {
-			err = fmt.Errorf("error closing pub sub %s: %w", name, err)
-			merr = multierror.Append(merr, err)
-			log.Warn(err)
-		}
+		closeComponent(pubSub.component, "pub sub "+name, &merr)
 	}
-	if closer, ok := a.nameResolver.(io.Closer); ok {
-		if err := closer.Close(); err != nil {
-			err = fmt.Errorf("error closing name resolver: %w", err)
-			merr = multierror.Append(merr, err)
-			log.Warn(err)
-		}
-	}
+	closeComponent(a.nameResolver, "name resolver", &merr)
 
 	return merr
+}
+
+func closeComponent(component any, logmsg string, merr *error) {
+	if closer, ok := component.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing %s: %w", logmsg, err)
+			*merr = multierror.Append(*merr, err)
+			log.Warn(err)
+		}
+	}
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
