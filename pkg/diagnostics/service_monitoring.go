@@ -25,6 +25,7 @@ var (
 	destinationAppIDKey = tag.MustNewKey("dst_app_id")
 	sourceAppIDKey      = tag.MustNewKey("src_app_id")
 	methodKey           = tag.MustNewKey("method")
+	statusKey           = tag.MustNewKey("status")
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
@@ -201,9 +202,9 @@ func (s *serviceMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey}, view.Count()),
 	)
 }
 
@@ -405,8 +406,7 @@ func (s *serviceMetrics) ServiceInvocationRequestSent(appID, destinationAppID, m
 			diagUtils.WithTags(
 				appIDKey, appID,
 				destinationAppIDKey, destinationAppID,
-				methodKey, method,
-			),
+				methodKey, method),
 			s.serviceInvocationRequestSentTotal.M(1))
 	}
 }
@@ -425,27 +425,29 @@ func (s *serviceMetrics) ServiceInvocationRequestReceived(appID, sourceAppID, me
 }
 
 // ServiceInvocationResponseSent records the number of service invocation responses sent.
-func (s *serviceMetrics) ServiceInvocationResponseSent(appID, sourceAppID, method string) {
+func (s *serviceMetrics) ServiceInvocationResponseSent(appID, sourceAppID, method, status string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				appIDKey, appID,
 				sourceAppIDKey, sourceAppID,
-				methodKey, method),
+				methodKey, method,
+				statusKey, status),
 			s.serviceInvocationResponseSentTotal.M(1))
 	}
 }
 
 // ServiceInvocationResponseReceived records the number of service invocation responses received.
-func (s *serviceMetrics) ServiceInvocationResponseReceived(appID, destinationAppID, method string) {
+func (s *serviceMetrics) ServiceInvocationResponseReceived(appID, destinationAppID, method, status string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				appIDKey, appID,
 				destinationAppIDKey, destinationAppID,
-				methodKey, method),
+				methodKey, method,
+				statusKey, status),
 			s.serviceInvocationResponseReceivedTotal.M(1))
 	}
 }
