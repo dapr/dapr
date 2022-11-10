@@ -1741,7 +1741,7 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	}
 
 	if in.WorkflowComponent == "" || a.workflows[in.WorkflowComponent] == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist))
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}

@@ -21,8 +21,7 @@ spec:
   metadata:
   - name: hostport
     value: dapr-temporal-frontend.dapr-tests.svc.cluster.local:7233
-    # value: localhost:7233
   - name: identity
     value: "WF Identity"
-  # - name: namespace
-  #   value: "dapr-tests"
+  - name: namespace
+    value: "dapr-tests"
