@@ -455,7 +455,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.initPluggableComponents()
 
 	go a.processComponents()
-
 	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
 		log.Debug("starting to watch component updates")
 		err = a.beginComponentsUpdates()
@@ -471,7 +470,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	a.flushOutstandingComponents()
-
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -482,7 +480,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Start proxy
 	a.initProxy()
-
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = a.getGRPCAPI()
 
@@ -517,9 +514,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.daprHTTPAPI != nil {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
-
 	a.blockUntilAppIsReady()
-
 	err = a.createAppChannel()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
@@ -528,7 +523,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 
 	a.initDirectMessaging(a.nameResolver)
-
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
 
@@ -2382,6 +2376,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 		return nil
 	}
 
+	log.Debugf("RRL Component: %v\n", comp)
 	compCategory := a.extractComponentCategory(comp)
 	if compCategory == "" {
 		// the category entered is incorrect, return error
