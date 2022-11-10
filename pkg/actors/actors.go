@@ -1847,7 +1847,6 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 		return err
 	}
 
-	log.Infof("Deleted reminder with key: %v", reminderKey)
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Delete(&state.DeleteRequest{
