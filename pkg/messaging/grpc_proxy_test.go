@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
@@ -184,6 +185,8 @@ func TestIntercept(t *testing.T) {
 
 		md, _ := metadata.FromOutgoingContext(ctx)
 		assert.Equal(t, "b", md["a"][0])
+		assert.Equal(t, "a", md[invokev1.CallerIDHeader][0])
+		assert.Equal(t, "b", md[invokev1.CalleeIDHeader][0])
 	})
 
 	t.Run("access policies applied", func(t *testing.T) {

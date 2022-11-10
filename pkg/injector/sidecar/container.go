@@ -73,7 +73,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 	}
 
 	metricsEnabled := cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableMetrics, annotations.DefaultEnableMetric)
-	apiLoggingEnabled := cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableAPILogging, annotations.DefaultEnableAPILogging)
 	metricsPort := int(cfg.Annotations.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort))
 	sidecarListenAddresses := cfg.Annotations.GetStringOrDefault(annotations.KeySidecarListenAddresses, annotations.DefaultSidecarListenAddresses)
 	disableBuiltinK8sSecretStore := cfg.Annotations.GetBoolOrDefault(annotations.KeyDisableBuiltinK8sSecretStore, annotations.DefaultDisableBuiltinK8sSecretStore)
@@ -144,8 +143,17 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-http-max-request-size", strconv.Itoa(int(requestBodySize)),
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
-		"--enable-api-logging=" + strconv.FormatBool(apiLoggingEnabled),
 		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(disableBuiltinK8sSecretStore),
+	}
+
+	// --enable-api-logging is set only if there's an explicit annotation (true or false) for that
+	// This is because if this CLI flag is missing, the default specified in the Config CRD is used
+	if v, ok := cfg.Annotations[annotations.KeyEnableAPILogging]; ok {
+		if utils.IsTruthy(v) {
+			args = append(args, "--enable-api-logging=true")
+		} else {
+			args = append(args, "--enable-api-logging=false")
+		}
 	}
 
 	if cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableAppHealthCheck, annotations.DefaultEnableAppHealthCheck) {
