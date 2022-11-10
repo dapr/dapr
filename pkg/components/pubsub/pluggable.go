@@ -185,6 +185,12 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 	return p.pullMessages(ctx, subscription, handler)
 }
 
+// Returns the component metadata options
+func (p *grpcPubSub) GetComponentMetadata() map[string]string {
+	// Component Metadata does not apply to pluggable components as there is no standard metdata
+	return map[string]string{}
+}
+
 // fromConnector creates a new GRPC pubsub using the given underlying connector.
 func fromConnector(l logger.Logger, connector *pluggable.GRPCConnector[proto.PubSubClient]) *grpcPubSub {
 	return &grpcPubSub{

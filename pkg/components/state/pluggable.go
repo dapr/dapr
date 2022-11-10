@@ -79,6 +79,12 @@ func (ss *grpcStateStore) Features() []state.Feature {
 	return ss.features
 }
 
+// Returns the component metadata options
+func (ss *grpcStateStore) GetComponentMetadata() map[string]string {
+	// Component Metadata does not apply to pluggable components as there is no standard metdata
+	return map[string]string{}
+}
+
 // Delete performs a delete operation.
 func (ss *grpcStateStore) Delete(req *state.DeleteRequest) error {
 	_, err := ss.Client.Delete(ss.Context, toDeleteRequest(req))
