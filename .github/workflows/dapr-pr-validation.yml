@@ -1,0 +1,166 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: dapr-pr-validation
+
+on:
+  push:
+    branches:
+      - release-*
+      - master
+
+jobs:
+  pr-validation:
+    name: dapr pr validate
+    runs-on: ubuntu-latest
+    env:
+      GOVER: 1.19
+      KUBECTLVER: v1.19.3
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: https://proxy.golang.org
+      DAPR_REGISTRY: daprtests.azurecr.io
+      DAPR_TEST_REGISTRY: daprtests.azurecr.io
+      HELMVER: v3.7.2
+      MAX_TEST_TIMEOUT: 5400
+      HA_MODE: true
+      DAPR_TAG : dev
+      TEST_OUTPUT_FILE_PREFIX: test_report
+      DAPR_INSTALL_URL: https://raw.githubusercontent.com/dapr/cli/master/install/install.sh
+      DAPR_NAMESPACE: dapr-system
+      DAPR_MONITORING: dapr-monitoring
+      DAPR_COMPONENTS: dapr-components
+      TEST_CLUSTER: daprvalidate
+      TEST_RESOURCE_GROUP: dapr-test
+      DAPR_CHECKOUT_REPO: dapr/dapr
+      DAPR_CHECKOUT_REF_RELEASE: refs/heads/
+      DAPR_CHECKOUT_REF: refs/heads/master
+      APP_NAMESPACE: longhaul-test
+    steps:
+      - name: Set up container log path
+        run: |
+          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
+        shell: bash
+      - name: Set up Go ${{ env.GOVER }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GOVER }}
+      - bash: |
+          echo "##vso[task.setvariable variable=CUR_BRANCH]$(git branch --show-current)"
+      - name: Checkout dapr/dapr
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.DAPR_CHECKOUT_REPO }}
+          ref: ${{ env.DAPR_CHECKOUT_REF_RELEASE }}${{ env.CUR_BRANCH }}
+          path: dapr
+      - uses: azure/setup-kubectl@v1
+        with:
+          version: ${{ env.KUBECTLVER }}
+        id: install
+      - name: Set up Helm ${{ env.HELMVER }}
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELMVER }}
+      - name: Azure login
+        run: |
+          az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }} --output none
+      - name: Find the test cluster
+        run: az aks get-credentials -n ${{ env.TEST_CLUSTER }} -g ${{ env.TEST_RESOURCE_GROUP }}
+        shell: bash 
+      # Setup docker and build image
+      - name: docker login
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ secrets.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_REGISTRY_ID }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Build dapr and its docker image and push them to test registry
+        working-directory: ./dapr
+        run: |
+          make build
+          make docker-build
+          make docker-push
+      - name: Create dapr namespace, if it doesn't exist
+        run: |
+          kubectl get namespace | grep ${{ env.DAPR_NAMESPACE }} || kubectl create namespace ${{ env.DAPR_NAMESPACE }}
+      - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
+        if: env.TEST_CLUSTER != ''
+        working-directory: ./dapr
+        run: |
+          helm list -n ${{ env.DAPR_NAMESPACE }} | grep dapr && helm uninstall -n ${{ env.DAPR_NAMESPACE }} dapr || echo "Dapr not present, no need to uninstall."
+          make docker-deploy-k8s
+      - name: Create component namespace, if it doesn't exist
+        run: |
+          kubectl get namespace | grep ${{ env.DAPR_COMPONENTS }} || kubectl create namespace ${{ env.DAPR_COMPONENTS }}
+      - name: Check for redis
+        if: env.TEST_CLUSTER != ''
+        run: |
+          helm list -n ${{ env.DAPR_COMPONENTS }} | grep dapr-redis && echo "REDIS_PRESENT=true" >> $GITHUB_ENV || echo "Redis not present."
+      - name: Start redis if not present
+        if: env.REDIS_PRESENT != 'true'
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm install dapr-redis bitnami/redis --namespace ${{ env.DAPR_COMPONENTS }} --wait
+          kubectl delete secret dapr-redis -n ${{ env.DAPR_NAMESPACE }} --ignore-not-found
+          kubectl get secret dapr-redis -n ${{ env.DAPR_COMPONENTS }} -o yaml | grep -v 'namespace:' | kubectl apply -f - -n ${{ env.APP_NAMESPACE }}
+      - name: Check for kafka
+        if: env.TEST_CLUSTER != ''
+        run: |
+          helm list -n ${{ env.DAPR_COMPONENTS }} | grep dapr-kafka && echo "KAFKA_PRESENT=true" >> $GITHUB_ENV || echo "Kafka not present."
+      - name: Start kafka if not present
+        if: env.KAFKA_PRESENT != 'true'
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm install dapr-kafka bitnami/kafka --wait --namespace ${{ env.DAPR_COMPONENTS }}
+      - name: Create app namespace, if it doesn't exist
+        run: |
+          kubectl get namespace | grep ${{ env.APP_NAMESPACE }} || kubectl create namespace ${{ env.APP_NAMESPACE }}
+      - name: Deploy components
+        if: env.TEST_CLUSTER != ''
+        working-directory: ./dapr
+        run: |
+          kubectl apply -f pythonapp/python.yaml -n ${{ env.APP_NAMESPACE }}  
+      - name: Get all services
+        run: |
+          kubectl get services -n ${{ env.APP_NAMESPACE }}
+      - name: Port forward
+        run: |
+          kubectl port-forward svc/pythonapp-dapr 9090:9090 -n longhaul-test &
+      - name: Hit the port
+        run: |
+          curl localhost:9090 | grep 'process_cpu_seconds_total\|go_goroutines\|go_memstats_heap_alloc_bytes\|process_virtual_memory_bytes'  
+      - name: Checkout dapr/dapr
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.DAPR_CHECKOUT_REPO }}
+          ref: ${{ env.DAPR_CHECKOUT_REF }}
+          path: dapr
+      - name: Deploy components
+        if: env.TEST_CLUSTER != ''
+        working-directory: ./dapr
+        run: |
+          kubectl apply -f pythonapp/python.yaml -n ${{ env.APP_NAMESPACE }}  
+      - name: Get all services
+        run: |
+          kubectl get services -n ${{ env.APP_NAMESPACE }}
+      - name: Port forward
+        run: |
+          kubectl port-forward svc/pythonapp-dapr 9090:9090 -n longhaul-test &
+      - name: Hit the port
+        run: |
+          curl localhost:9090 | grep 'process_cpu_seconds_total\|go_goroutines\|go_memstats_heap_alloc_bytes\|process_virtual_memory_bytes'  
+
+
+    
