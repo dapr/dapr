@@ -2376,6 +2376,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 		return nil
 	}
 
+	log.Debugf("RRL Component: %v\n", comp)
 	compCategory := a.extractComponentCategory(comp)
 	if compCategory == "" {
 		// the category entered is incorrect, return error
