@@ -129,7 +129,7 @@ func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) e
 
 // Returns the component metadata options
 func (b *grpcInputBinding) GetComponentMetadata() map[string]string {
-	// Component Metadata does not apply to pluggable components as there is no standard metdata
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
 	return map[string]string{}
 }
 

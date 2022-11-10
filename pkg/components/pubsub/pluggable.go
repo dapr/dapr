@@ -187,7 +187,7 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 
 // Returns the component metadata options
 func (p *grpcPubSub) GetComponentMetadata() map[string]string {
-	// Component Metadata does not apply to pluggable components as there is no standard metdata
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
 	return map[string]string{}
 }
 

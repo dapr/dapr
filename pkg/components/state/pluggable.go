@@ -81,7 +81,7 @@ func (ss *grpcStateStore) Features() []state.Feature {
 
 // Returns the component metadata options
 func (ss *grpcStateStore) GetComponentMetadata() map[string]string {
-	// Component Metadata does not apply to pluggable components as there is no standard metdata
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
 	return map[string]string{}
 }
 

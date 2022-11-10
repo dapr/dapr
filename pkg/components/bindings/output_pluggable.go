@@ -92,7 +92,7 @@ func (b *grpcOutputBinding) Invoke(ctx context.Context, req *bindings.InvokeRequ
 
 // Returns the component metadata options
 func (b *grpcOutputBinding) GetComponentMetadata() map[string]string {
-	// Component Metadata does not apply to pluggable components as there is no standard metdata
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
 	return map[string]string{}
 }
 
