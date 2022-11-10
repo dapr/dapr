@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -262,7 +263,11 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 		return nil, teardown, err
 	}
 
-	diag.DefaultMonitoring.ServiceInvocationResponseReceived(d.appID, appID, req.Message().Method)
+	var code string
+	if resp.Status != nil {
+		code = strconv.FormatInt(int64(resp.Status.Code), 10)
+	}
+	diag.DefaultMonitoring.ServiceInvocationResponseReceived(d.appID, appID, req.Message().Method, code)
 
 	return invokev1.InternalInvokeResponse(resp)
 }
