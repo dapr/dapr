@@ -506,6 +506,7 @@ jobs:
           make setup-helm-init
           make setup-test-env-redis
           make setup-test-env-kafka
+          make setup-test-env-temporal
           if [ "${{ env.DAPR_TEST_STATE_STORE }}" == "" ] ; then
             make setup-test-env-mongodb
           fi
