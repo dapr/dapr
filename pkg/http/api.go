@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -79,6 +80,7 @@ type api struct {
 	getComponentsFn            func() []componentsV1alpha1.Component
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
+	workflows                  map[string]wfs.Workflow
 	lockStores                 map[string]lock.Store
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{}
@@ -128,6 +130,9 @@ const (
 	secretStoreNameParam     = "secretStoreName"
 	secretNameParam          = "key"
 	nameParam                = "name"
+	workflowComponent        = "workflowComponent"
+	workflowType             = "workflowType"
+	instanceID               = "instanceID"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
 	pubsubnameparam          = "pubsubname"
@@ -203,6 +208,7 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
@@ -228,6 +234,32 @@ func (a *api) MarkStatusAsReady() {
 // MarkStatusAsOutboundReady marks the ready status of dapr for outbound traffic.
 func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
+}
+
+// Workflow Component: Component specified in yaml (temporal, etc..)
+// Workflow Type: Name of the workflow to run (function name)
+// Instance ID: Identifier of the specific run
+func (a *api) constructWorkflowEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceID}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onGetWorkflow,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceID}/start",
+			Version: apiVersionV1alpha1,
+			Handler: a.onStartWorkflow,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
+			Version: apiVersionV1alpha1,
+			Handler: a.onTerminateWorkflow,
+		},
+	}
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
@@ -712,6 +744,133 @@ func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lo
 		return nil, "", errors.New(msg.Message)
 	}
 	return a.lockStores[storeName], storeName, nil
+}
+
+// Route:   "workflows/{workflowComponent}/{workflowType}/{instanceId}",
+// Workflow Component: Component specified in yaml (temporal, etc..)
+// Workflow Type: Name of the workflow to run (function name)
+// Instance ID: Identifier of the specific run
+func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
+	startReq := wfs.StartRequest{}
+
+	wfType := reqCtx.UserValue(workflowType).(string)
+	if wfType == "" {
+		log.Error("No workflow, or empty workflow was provided.")
+		return
+	}
+
+	component := reqCtx.UserValue(workflowComponent).(string)
+	if component == "" {
+		log.Error("No component, or empty component was provided.")
+		return
+	}
+	if a.workflows[component] == nil {
+		log.Error("The provided component: " + component + " does not exist.")
+		return
+	}
+
+	err := json.Unmarshal(reqCtx.PostBody(), &startReq)
+	if err != nil {
+		log.Errorf("Error while unmarshalling workflow info: %v\n", err)
+	}
+
+	instance := reqCtx.UserValue(instanceID).(string)
+	if instance == "" {
+		log.Error("No instance, or empty instance was provided.")
+		return
+	}
+
+	req := wfs.StartRequest{
+		Options:           startReq.Options,
+		WorkflowReference: startReq.WorkflowReference,
+		WorkflowName:      wfType,
+		Parameters:        startReq.Parameters,
+	}
+	req.WorkflowReference.InstanceID = instance
+
+	resp, err := a.workflows[component].Start(reqCtx, &req)
+	if err != nil {
+		log.Errorf("Error when starting workflow: %v\n", err)
+		return
+	}
+	response, err := json.Marshal(resp)
+	if err != nil {
+		log.Errorf("Error when marshalling output response from workflow start: %v\n", err)
+		return
+	}
+	log.Debug(resp)
+	respond(reqCtx, withJSON(202, response))
+}
+
+func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
+	wfName := reqCtx.UserValue(workflowType).(string)
+
+	if wfName == "" {
+		log.Error("No workflow, or empty workflow was provided.")
+		return
+	}
+
+	instance := reqCtx.UserValue(instanceID).(string)
+	if instance == "" {
+		log.Error("No instance, or empty instance was provided.")
+		return
+	}
+
+	component := reqCtx.UserValue(workflowComponent).(string)
+	if component == "" {
+		log.Error("No component, or empty component was provided.")
+		return
+	}
+
+	if a.workflows[component] == nil {
+		log.Error("The provided component: " + component + " does not exist.")
+		return
+	}
+
+	req := wfs.WorkflowReference{
+		InstanceID: instance,
+	}
+
+	resp, err := a.workflows[component].Get(reqCtx, &req)
+	if err != nil {
+		log.Errorf("Error when getting workflow information: %v\n", err)
+		return
+	}
+	log.Debug(resp)
+	response, err := json.Marshal(resp)
+	if err != nil {
+		log.Errorf("Error when matshalling workflow information: %v\n", err)
+		return
+	}
+	respond(reqCtx, withJSON(200, response))
+}
+
+func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
+	instance := reqCtx.UserValue(instanceID).(string)
+	if instance == "" {
+		log.Error("No instance, or empty instance was provided.")
+		return
+	}
+
+	component := reqCtx.UserValue(workflowComponent).(string)
+	if component == "" {
+		log.Error("No component, or empty component was provided.")
+		return
+	}
+	if a.workflows[component] == nil {
+		log.Error("The provided component does not exist.")
+		return
+	}
+
+	req := wfs.WorkflowReference{
+		InstanceID: instance,
+	}
+
+	err := a.workflows[component].Terminate(reqCtx, &req)
+	if err != nil {
+		log.Errorf("Error when terminating workflow: %v\n", err)
+		return
+	}
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {

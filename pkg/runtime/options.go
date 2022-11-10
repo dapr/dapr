@@ -9,6 +9,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 )
 
 type (
@@ -22,6 +23,7 @@ type (
 		nameResolutionRegistry *nrLoader.Registry
 		bindingRegistry        *bindingsLoader.Registry
 		httpMiddlewareRegistry *httpMiddlewareLoader.Registry
+		workflowRegistry       *workflowsLoader.Registry
 		componentsCallback     ComponentsCallback
 	}
 
@@ -82,6 +84,13 @@ func WithBindings(registry *bindingsLoader.Registry) Option {
 func WithHTTPMiddlewares(registry *httpMiddlewareLoader.Registry) Option {
 	return func(o *runtimeOpts) {
 		o.httpMiddlewareRegistry = registry
+	}
+}
+
+// WithWorkflows adds workflow components to the runtime.
+func WithWorkflows(registry *workflowsLoader.Registry) Option {
+	return func(o *runtimeOpts) {
+		o.workflowRegistry = registry
 	}
 }
 

@@ -31,6 +31,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -59,6 +60,16 @@ func main() {
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
+	secretstoresLoader.DefaultRegistry.Logger = logContrib
+	stateLoader.DefaultRegistry.Logger = logContrib
+	configurationLoader.DefaultRegistry.Logger = logContrib
+	lockLoader.DefaultRegistry.Logger = logContrib
+	pubsubLoader.DefaultRegistry.Logger = logContrib
+	nrLoader.DefaultRegistry.Logger = logContrib
+	bindingsLoader.DefaultRegistry.Logger = logContrib
+	workflowsLoader.DefaultRegistry.Logger = logContrib
+	httpMiddlewareLoader.DefaultRegistry.Logger = log
+
 	err = rt.Run(
 		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),
 		runtime.WithStates(stateLoader.DefaultRegistry),
@@ -68,6 +79,7 @@ func main() {
 		runtime.WithNameResolutions(nrLoader.DefaultRegistry),
 		runtime.WithBindings(bindingsLoader.DefaultRegistry),
 		runtime.WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry),
+		runtime.WithWorkflows(workflowsLoader.DefaultRegistry),
 	)
 	if err != nil {
 		log.Fatalf("fatal error from runtime: %s", err)

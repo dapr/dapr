@@ -21,6 +21,7 @@ healthapp \
 hellodapr \
 stateapp \
 secretapp \
+workflowsapp \
 service_invocation \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
@@ -225,7 +226,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-temporal
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -369,6 +370,8 @@ setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
 	$(HELM) repo add stable https://charts.helm.sh/stable
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
+	$(HELM) repo add armory https://armory.jfrog.io/artifactory/charts/
+	$(HELM) repo add wener https://wenerme.github.io/charts
 	$(HELM) repo update
 
 # setup tailscale
@@ -392,7 +395,21 @@ setup-test-env-kafka:
 
 # delete kafka from cluster
 delete-test-env-kafka:
-	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) 
+	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
+
+# install temporal to the cluster
+setup-test-env-temporal:
+	$(HELM) install --set server.replicaCount=1 \
+					--set cassandra.config.cluster_size=1 \
+					--set prometheus.enabled=false \
+					--set grafana.enabled=false \
+					--set elasticsearch.enabled=false \
+					dapr-temporal wener/temporal -f ./tests/config/temporal_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 15m0s
+
+# delete temporal from cluster
+delete-test-env-temporal:
+	$(HELM) del dapr-temporal --namespace $(DAPR_TEST_NAMESPACE) 
+
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
@@ -403,7 +420,7 @@ delete-test-env-mongodb:
 	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
 
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-temporal
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -421,7 +438,7 @@ setup-disable-mtls:
 setup-app-configurations:
 	$(KUBECTL) apply -f ./tests/config/dapr_observability_test_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
-# Apply component yaml for state, secrets, pubsub, and bindings
+# Apply component yaml for state, secrets, pubsub, workflows, and bindings
 setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -463,6 +480,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_temporal_workflow.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	# TODO: Remove once AppHealthCheck feature is finalized
 	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
