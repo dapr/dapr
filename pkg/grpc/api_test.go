@@ -1977,30 +1977,27 @@ func TestBulkPublish(t *testing.T) {
 			},
 			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				entries := []pubsub.BulkPublishResponseEntry{}
-
 				// Construct sample response from the broker.
-				for i, e := range req.Entries {
-					entry := pubsub.BulkPublishResponseEntry{
-						EntryId: e.EntryId,
-					}
-					if req.Topic == "error-topic" {
-						entry.Error = errors.New("error when publish")
-						entry.Status = pubsub.PublishFailed
-					} else if req.Topic == "even-error-topic" {
-						if i%2 == 0 {
-							entry.Error = errors.New("error when publish")
-							entry.Status = pubsub.PublishFailed
-						} else {
-							entry.Status = pubsub.PublishSucceeded
+				if req.Topic == "error-topic" {
+					for _, e := range req.Entries {
+						entry := pubsub.BulkPublishResponseEntry{
+							EntryId: e.EntryId,
 						}
-					} else {
-						entry.Status = pubsub.PublishSucceeded
+						entry.Error = errors.New("error on publish")
+						entries = append(entries, entry)
 					}
-
-					entries = append(entries, entry)
+				} else if req.Topic == "even-error-topic" {
+					for i, e := range req.Entries {
+						if i%2 == 0 {
+							entry := pubsub.BulkPublishResponseEntry{
+								EntryId: e.EntryId,
+							}
+							entry.Error = errors.New("error on publish")
+							entries = append(entries, entry)
+						}
+					}
 				}
-
-				return pubsub.BulkPublishResponse{Statuses: entries}, nil
+				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
 	}

@@ -23,6 +23,7 @@ const (
 	jsonContentTypeHeader = "application/json"
 	etagHeader            = "ETag"
 	metadataPrefix        = "metadata."
+	publishFailed         = "FAILED"
 )
 
 // BulkGetResponse is the response object for a state bulk get operation.

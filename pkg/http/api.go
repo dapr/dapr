@@ -2426,26 +2426,24 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	// BulkPublishResponse contains all failed entries from the request.
 	// If there are no errors, then an empty response is returned.
 	bulkRes := BulkPublishResponse{}
-	var eventsPublished int64 = 0
-	if len(res.Statuses) != 0 {
-		bulkRes.Statuses = make([]BulkPublishResponseEntry, 0, len(res.Statuses))
-		for _, r := range res.Statuses {
-			if r.Status == pubsub.PublishSucceeded {
-				// Only count the events that have been successfully published to the pub/sub component
-				eventsPublished++
-			} else {
-				resEntry := BulkPublishResponseEntry{}
-				resEntry.EntryId = r.EntryId
-				resEntry.Status = string(pubsub.PublishFailed)
-				if r.Error != nil {
-					resEntry.Error = r.Error.Error()
-				}
-				bulkRes.Statuses = append(bulkRes.Statuses, resEntry)
-			}
-		}
+	var eventsPublished int64 = int64(len(req.Entries))
+	if len(res.FailedEntries) != 0 {
+		eventsPublished -= int64(len(res.FailedEntries))
 	}
+
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
+
 	if err != nil {
+		bulkRes.Statuses = make([]BulkPublishResponseEntry, 0, len(res.FailedEntries))
+		for _, r := range res.FailedEntries {
+			resEntry := BulkPublishResponseEntry{}
+			resEntry.EntryId = r.EntryId
+			resEntry.Status = publishFailed
+			if r.Error != nil {
+				resEntry.Error = r.Error.Error()
+			}
+			bulkRes.Statuses = append(bulkRes.Statuses, resEntry)
+		}
 		status := fasthttp.StatusInternalServerError
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
 

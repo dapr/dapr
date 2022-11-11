@@ -98,12 +98,11 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			// Check if the bulk publish method returns an error.
 			if tc.expectError {
 				assert.Error(t, err)
+				// Response should contain an entry for each message in the bulk request.
+				assert.Len(t, res.FailedEntries, len(req.Entries))
 			} else {
 				assert.NoError(t, err)
 			}
-
-			// Response should contain an entry for each message in the bulk request.
-			assert.Len(t, res.Statuses, len(req.Entries))
 
 			var pubInvocationArgs []*contribPubsub.PublishRequest
 
@@ -125,14 +124,15 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 				assert.Contains(t, pubInvocationArgs, pubReq)
 			}
 
-			var responseEntryIds []string
-			for _, status := range res.Statuses {
-				responseEntryIds = append(responseEntryIds, status.EntryId)
-			}
-
-			// Assert that response contains all entry IDs from the request.
-			for _, entry := range req.Entries {
-				assert.Contains(t, responseEntryIds, entry.EntryId)
+			if tc.expectError {
+				var responseEntryIds []string
+				for _, status := range res.FailedEntries {
+					responseEntryIds = append(responseEntryIds, status.EntryId)
+				}
+				// Assert that response contains all entry IDs from the request.
+				for _, entry := range req.Entries {
+					assert.Contains(t, responseEntryIds, entry.EntryId)
+				}
 			}
 		})
 	}

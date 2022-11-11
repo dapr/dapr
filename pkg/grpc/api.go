@@ -674,33 +674,29 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	start := time.Now()
 	res, err := a.pubsubAdapter.BulkPublish(&req)
 	elapsed := diag.ElapsedSince(start)
-	var eventsPublished int64 = 0
+	var eventsPublished int64 = int64(len(req.Entries))
 
 	// BulkPublishResponse contains all failed entries from the request.
 	// If there are no failed entries, then the statuses array will be empty.
 	bulkRes := runtimev1pb.BulkPublishResponse{}
 
-	if len(res.Statuses) != 0 {
-		bulkRes.Statuses = make([]*runtimev1pb.BulkPublishResponseEntry, 0, len(res.Statuses))
-		for _, r := range res.Statuses {
-			if r.Status == pubsub.PublishSucceeded {
-				// Only count the events that have been successfully published to the pub/sub component
-				eventsPublished++
-			} else {
-				resEntry := runtimev1pb.BulkPublishResponseEntry{}
-				resEntry.EntryId = r.EntryId
-				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
-				if r.Error != nil {
-					resEntry.Error = r.Error.Error()
-				}
-				bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
-			}
-		}
+	if len(res.FailedEntries) != 0 {
+		eventsPublished -= int64(len(res.FailedEntries))
 	}
-
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
 
 	if err != nil {
+		// BulkPublishResponse contains all failed entries from the request.
+		bulkRes.Statuses = make([]*runtimev1pb.BulkPublishResponseEntry, 0, len(res.FailedEntries))
+		for _, r := range res.FailedEntries {
+			resEntry := runtimev1pb.BulkPublishResponseEntry{}
+			resEntry.EntryId = r.EntryId
+			resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
+			if r.Error != nil {
+				resEntry.Error = r.Error.Error()
+			}
+			bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
+		}
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			nerr = status.Errorf(codes.PermissionDenied, err.Error())
@@ -713,7 +709,6 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		closeChildSpans(ctx, nerr)
 		return &bulkRes, nerr
 	}
-
 	closeChildSpans(ctx, nil)
 	return &bulkRes, nil
 }
