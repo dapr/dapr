@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/modes"
@@ -39,6 +40,7 @@ import (
 	"github.com/dapr/dapr/utils"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -253,7 +255,15 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	var opts []grpc.CallOption
 	opts = append(opts, grpc.MaxCallRecvMsgSize(d.maxRequestBodySize*1024*1024), grpc.MaxCallSendMsgSize(d.maxRequestBodySize*1024*1024))
 
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(d.appID, appID, req.Message().Method)
+	var protocol string
+	if v1.IsGRPCProtocol(req.Metadata()) {
+		protocol = config.GRPCProtocol
+	} else {
+		protocol = config.HTTPProtocol
+	}
+
+	start := time.Now()
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(d.appID, appID, req.Message().Method, protocol)
 
 	resp, err := clientV1.CallLocal(ctx, req.Proto(), opts...)
 	if err != nil {
@@ -264,7 +274,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	if resp.Status != nil {
 		code = strconv.FormatInt(int64(resp.Status.Code), 10)
 	}
-	diag.DefaultMonitoring.ServiceInvocationResponseReceived(d.appID, appID, req.Message().Method, code)
+	diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, d.appID, req.Message().Method, protocol, code, start)
 
 	return invokev1.InternalInvokeResponse(resp)
 }

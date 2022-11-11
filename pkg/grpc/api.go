@@ -53,6 +53,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -362,15 +363,22 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
-	diag.DefaultMonitoring.ServiceInvocationRequestReceived(a.id, sourceAppID, req.Message().Method)
+	var protocol string
+	if v1.IsGRPCProtocol(req.Metadata()) {
+		protocol = config.GRPCProtocol
+	} else {
+		protocol = config.HTTPProtocol
+	}
+
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(a.id, sourceAppID, req.Message().Method, protocol)
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
-	var s string
+	var statusStr string
 	if resp.Status() != nil {
-		s = strconv.FormatInt(int64(resp.Status().Code), 10)
+		statusStr = strconv.FormatInt(int64(resp.Status().Code), 10)
 	}
-	diag.DefaultMonitoring.ServiceInvocationResponseSent(a.id, sourceAppID, req.Message().Method, s)
+	diag.DefaultMonitoring.ServiceInvocationResponseSent(a.id, sourceAppID, req.Message().Method, protocol, statusStr)
 
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
