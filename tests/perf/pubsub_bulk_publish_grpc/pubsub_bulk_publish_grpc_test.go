@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package bulk_pubsub_publish
+package pubsub_bulk_publish
 
 import (
 	"encoding/json"
@@ -36,7 +36,7 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
-	utils.SetupLogs("bulk_pubsub_publish_grpc")
+	utils.SetupLogs("pubsub_bulk_publish_grpc")
 
 	testApps := []kube.AppDescription{
 		{
@@ -58,13 +58,13 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("bulk_pubsub_publish_grpc", testApps, nil, nil)
+	tr = runner.NewTestRunner("pubsub_bulk_publish_grpc", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
 func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	p := perf.Params()
-	t.Logf("running bulk pubsub publish grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
+	t.Logf("running pubsub bulk publish grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 	// Get the ingress external url of tester app
 	testerAppURL := tr.Platform.AcquireAppExternalURL("tester")
@@ -75,9 +75,9 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 	require.NoError(t, err)
 
-	// Perform baseline test
+	// Perform baseline test - publish 1000 messages with individual Publish calls
 	p.Grpc = true
-	p.Dapr = "capability=pubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=1000"
+	p.Dapr = "capability=pubsub,target=dapr,method=publish-multi,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=1000"
 	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
@@ -91,8 +91,8 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	// fast fail if daprResp starts with error
 	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
-	// Perform dapr test
-	p.Dapr = "capability=bulkpubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=1000"
+	// Perform dapr test - publish 1000 messages with a single BulkPublish call
+	p.Dapr = "capability=pubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=1000"
 	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 	body, err = json.Marshal(&p)
 	require.NoError(t, err)

@@ -476,14 +476,14 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD_SIZE: 0
         run: make test-perf-pubsub_publish_grpc
-      - name: Run Perf test bulk_pubsub_publish_grpc
+      - name: Run Perf test pubsub_bulk_publish_grpc
         if: env.TEST_PREFIX != ''
         env:
-          DAPR_PERF_QPS: 1000
+          DAPR_PERF_QPS: 100
           DAPR_PERF_CONNECTIONS: 16
           DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD: "vtcv1qwBTlgW6jWU9VvfzAiuI1QTdmbLKjcBTt3IB1kFyidn0Lku2maOPPiILT9LPNBlZ0ZIz9EGRp2rmgc3P1HjJAQR4Z3C8Y1V"
-        run: make test-perf-bulk_pubsub_publish_grpc
+          DAPR_PAYLOAD_SIZE: 1000
+        run: make test-perf-pubsub_bulk_publish_grpc
       - name: Run Perf test actor_timer in Java
         if: env.TEST_PREFIX != ''
         env:
