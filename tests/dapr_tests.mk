@@ -184,6 +184,8 @@ build-perf-app-$(1): check-e2e-env
 		--appdir "../$(E2E_TESTAPP_DIR)" \
 		--dest-registry "$(DAPR_TEST_REGISTRY)" \
 		--dest-tag "$(DAPR_TEST_TAG)" \
+		--target-os "$(TARGET_OS)" \
+		--target-arch "$(TARGET_ARCH)" \
 		--cache-registry "$(DAPR_CACHE_REGISTRY)"
 endef
 
