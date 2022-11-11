@@ -70,6 +70,7 @@ service_invocation_grpc \
 state_get_grpc \
 state_get_http \
 pubsub_publish_grpc \
+bulk_pubsub_publish_grpc \
 
 KUBECTL=kubectl
 

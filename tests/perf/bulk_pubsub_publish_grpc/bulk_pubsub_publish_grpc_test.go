@@ -77,7 +77,7 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 
 	// Perform baseline test
 	p.Grpc = true
-	p.Dapr = "capability=pubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain"
+	p.Dapr = "capability=pubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=1000"
 	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
 	// Perform dapr test
-	p.Dapr = "capability=bulkpubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain"
+	p.Dapr = "capability=bulkpubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=1000"
 	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 	body, err = json.Marshal(&p)
 	require.NoError(t, err)
