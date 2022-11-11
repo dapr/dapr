@@ -7,7 +7,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.9.1-0.20221110191800-1249716130ea
+	github.com/dapr/components-contrib v1.9.1-0.20221111082843-acb51bbbd33d
 	github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f
 	github.com/fasthttp/router v1.4.12
 	github.com/ghodss/yaml v1.0.0
@@ -281,7 +281,7 @@ require (
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
-	github.com/nats-io/nats.go v1.19.0 // indirect
+	github.com/nats-io/nats.go v1.19.1 // indirect
 	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/nats-io/stan.go v0.10.3 // indirect

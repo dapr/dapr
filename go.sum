@@ -409,8 +409,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.9.1-0.20221110191800-1249716130ea h1:i+bMwWTGj+lgHBk1fcX3cb8aBmCKhVXEd0P3aze7ibQ=
-github.com/dapr/components-contrib v1.9.1-0.20221110191800-1249716130ea/go.mod h1:emabvb+DIZUnuta9d105WI2nTiHCzFvMM/G3x5QA4zg=
+github.com/dapr/components-contrib v1.9.1-0.20221111082843-acb51bbbd33d h1:H2AzawO7L/ENN3V3nrWzWmQZPwEZ1F2DlUloepxfGrc=
+github.com/dapr/components-contrib v1.9.1-0.20221111082843-acb51bbbd33d/go.mod h1:hytIOQTnKSWtrQ+ni2KNXiTMqOqbUu9T6UgXgxP3Edc=
 github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f h1:K6XJz+p6bQwqqI+GyQP/jjjqfsdjK0Loe2ZYQ5gXut4=
 github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f/go.mod h1:i9t09QZw346M2RbuK7oJhssOP0HCAQObz61U4SBNJSU=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1134,8 +1134,8 @@ github.com/nats-io/nats-server/v2 v2.9.4 h1:GvRgv1936J/zYUwMg/cqtYaJ6L+bgeIOIvPs
 github.com/nats-io/nats-streaming-server v0.25.2 h1:cWjytvYksYPgnXnSocqnRWVrSgLclusnPGBNHQR4SqI=
 github.com/nats-io/nats.go v1.9.1/go.mod h1:ZjDU1L/7fJ09jvUSRVBR2e7+RnLiiIQyqyzEE/Zbp4w=
 github.com/nats-io/nats.go v1.16.0/go.mod h1:BPko4oXsySz4aSWeFgOHLZs3G4Jq4ZAyE6/zMCxRT6w=
-github.com/nats-io/nats.go v1.19.0 h1:H6j8aBnTQFoVrTGB6Xjd903UMdE7jz6DS4YkmAqgZ9Q=
-github.com/nats-io/nats.go v1.19.0/go.mod h1:tLqubohF7t4z3du1QDPYJIQQyhb4wl6DhjxEajSI7UA=
+github.com/nats-io/nats.go v1.19.1 h1:pDQZthDfxRMSJ0ereExAM9ODf3JyS42Exk7iCMdbpec=
+github.com/nats-io/nats.go v1.19.1/go.mod h1:tLqubohF7t4z3du1QDPYJIQQyhb4wl6DhjxEajSI7UA=
 github.com/nats-io/nkeys v0.1.0/go.mod h1:xpnFELMwJABBLVhffcfd1MZx6VsNRFpEugbxziKVo7w=
 github.com/nats-io/nkeys v0.1.3/go.mod h1:xpnFELMwJABBLVhffcfd1MZx6VsNRFpEugbxziKVo7w=
 github.com/nats-io/nkeys v0.3.0 h1:cgM5tL53EvYRU+2YLXIK0G2mJtK12Ft9oeooSZMA2G8=
