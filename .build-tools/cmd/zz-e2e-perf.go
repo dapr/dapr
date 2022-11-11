@@ -61,7 +61,7 @@ func getCmdE2EPerf(cmdType string) *cobra.Command {
 
 	// Base command
 	cmd := &cobra.Command{
-		Use:   fmt.Sprintf("%s", cmdType),
+		Use:   cmdType,
 		Short: fmt.Sprintf("Build and push %s test apps", cmdType),
 		Long:  fmt.Sprintf(`Tools to build %s test apps, including building and pushing Docker containers.`, cmdType),
 	}
@@ -411,7 +411,7 @@ func (c *cmdE2EPerf) getIncludes() []string {
 func hashFilesInDir(basePath string, ignores *gitignore.GitIgnore) ([]string, error) {
 	files := []string{}
 
-	err := filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(basePath, func(path string, d fs.DirEntry, _ error) error {
 		// Check if the file is ignored
 		relPath, err := filepath.Rel(basePath, path)
 		if err != nil {
