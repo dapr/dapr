@@ -3806,6 +3806,10 @@ type fakeStateStore struct {
 	counter int
 }
 
+func (c fakeStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func (c fakeStateStore) Ping() error {
 	return nil
 }
