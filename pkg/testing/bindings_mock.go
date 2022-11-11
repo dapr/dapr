@@ -69,7 +69,7 @@ func (m *FailingBinding) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (f *FailingBinding) GetComponentMetadata() map[string]string {
+func (m *FailingBinding) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
 
