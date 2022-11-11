@@ -129,23 +129,23 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	var tp90Latency float64
 
 	for k, v := range percentiles {
-		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
+		bulkValue := daprResult.DurationHistogram.Percentiles[k].Value
 		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
 
-		latency := (daprValue - baselineValue) * 1000
+		latency := (baselineValue - bulkValue) * 1000
 		if v == "90th" {
 			tp90Latency = latency
 		}
-		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
+		t.Logf("reduced latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
 	avg := (daprResult.DurationHistogram.Avg - baselineResult.DurationHistogram.Avg) * 1000
 	t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineResult.DurationHistogram.Avg*1000))
 	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprResult.DurationHistogram.Avg*1000))
-	t.Logf("added latency avg: %sms", fmt.Sprintf("%.2f", avg))
+	t.Logf("reduced latency avg: %sms", fmt.Sprintf("%.2f", avg))
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{baselineResult, daprResult},
-		"Bulk Pubsub Publish Grpc",
+		"Pubsub Bulk Publish Grpc",
 		sidecarUsage,
 		appUsage)
 	report.SetTotalRestartCount(restarts)
@@ -160,5 +160,4 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 	require.Greater(t, tp90Latency, 0.0)
-	require.LessOrEqual(t, tp90Latency, 2.0)
 }
