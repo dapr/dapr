@@ -25,7 +25,7 @@ Most of the conversion is straightforward copying, except for converting our cha
 func (s *Subscription) ConvertTo(dstRaw conversion.Hub) error {
 	dst, ok := dstRaw.(*v1alpha1.Subscription)
 	if !ok {
-		return errors.New("expected to to convert to *v1alpha1.Subscription")
+		return errors.New("expected to convert to *v1alpha1.Subscription")
 	}
 
 	// Copy scopes
@@ -53,7 +53,7 @@ Most of the conversion is straightforward copying, except for converting our cha
 func (s *Subscription) ConvertFrom(srcRaw conversion.Hub) error {
 	src, ok := srcRaw.(*v1alpha1.Subscription)
 	if !ok {
-		return errors.New("expected to to convert from *v1alpha1.Subscription")
+		return errors.New("expected to convert from *v1alpha1.Subscription")
 	}
 
 	// Copy scopes

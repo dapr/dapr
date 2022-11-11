@@ -291,7 +291,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
+			assert.Equal(t, "topic 'topic' is not allowed for app id test", resp.ErrorBody["message"])
 		}
 	})
 
@@ -551,7 +551,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
-			assert.Contains(t, resp.ErrorBody["message"], "error when unmarshaling the request for topic topic")
+			assert.Contains(t, resp.ErrorBody["message"], "error when unmarshaling the request for topic 'topic'")
 		}
 	})
 
