@@ -153,15 +153,15 @@ spec:
         - {{ .Values.tokenAudience }}
 {{- end }}
 {{- with .Values.global.issuerFilenames }}
-        - --issuer-ca-filename
-        - {{ .ca }}
-        - --issuer-certificate-filename
-        - {{ .cert }}
-        - --issuer-key-filename
-        - {{ .key }}
+        - "--issuer-ca-filename"
+        - "{{ .ca }}"
+        - "--issuer-certificate-filename"
+        - "{{ .cert }}"
+        - "--issuer-key-filename"
+        - "{{ .key }}"
 {{- end }}
 {{- with .Values.args }}
-        - {{ . }}
+        - "{{ . }}"
 {{- end }}
       serviceAccountName: dapr-operator
       volumes:
