@@ -117,9 +117,6 @@ spec:
         - "--issuer-key-secret-key"
         - "{{ .key }}"
 {{- end }}
-{{- with .Values.args }}
-        - "{{ . }}"
-{{- end }}
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt

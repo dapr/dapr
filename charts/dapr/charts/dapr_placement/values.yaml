@@ -10,8 +10,6 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 
-args: []
-
 ports:
   protocol: TCP
   apiPort: 50005

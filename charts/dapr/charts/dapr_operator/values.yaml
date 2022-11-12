@@ -15,8 +15,6 @@ fullnameOverride: ""
 
 runAsNonRoot: true
 
-args: []
-
 ports:
   protocol: TCP
   port: 80

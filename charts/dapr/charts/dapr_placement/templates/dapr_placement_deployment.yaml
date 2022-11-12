@@ -145,9 +145,6 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
-{{- with .Values.args }}
-        - "{{ . }}"
-{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}

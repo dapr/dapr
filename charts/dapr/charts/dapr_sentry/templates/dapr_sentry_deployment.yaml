@@ -160,9 +160,6 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
-{{- with .Values.args }}
-        - "{{ . }}"
-{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: credentials

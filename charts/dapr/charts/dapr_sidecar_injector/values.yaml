@@ -14,8 +14,6 @@ image:
 injectorImage:
   name: "injector"
 
-args: []
-
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
