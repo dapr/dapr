@@ -154,6 +154,8 @@ const (
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
 
+var ErrReminderCanceled = errors.New("reminder has been canceled")
+
 // ActorsOpts contains options for NewActors.
 type ActorsOpts struct {
 	StateStore       state.Store
@@ -999,8 +1001,13 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				break L
 			}
 			if err = a.executeReminder(reminder); err != nil {
-				log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
-					reminder.Name, reminder.ActorType, reminder.ActorID, err)
+				if err == ErrReminderCanceled {
+					// The handler is explicitly canceling the timer
+					break L
+				} else {
+					log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
+						reminder.Name, reminder.ActorType, reminder.ActorID, err)
+				}
 			}
 			if repetitionsLeft > 0 {
 				repetitionsLeft--

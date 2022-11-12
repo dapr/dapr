@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
@@ -79,12 +80,35 @@ func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) {
 	wfe.backend.SetActorRuntime(actorRuntime)
 }
 
-// DisableWorkflowCaching turns off the default caching done by the workflow actor.
+// DisableActorCaching turns off the default caching done by the workflow and activity actors.
 // This method is primarily intended to be used for testing to ensure correct behavior
 // when actors are newly activated on nodes, but without requiring the actor to actually
 // go through activation.
-func (wfe *WorkflowEngine) DisableWorkflowCaching(disable bool) {
+func (wfe *WorkflowEngine) DisableActorCaching(disable bool) {
 	wfe.workflowActor.cachingDisabled = disable
+	wfe.activityActor.cachingDisabled = disable
+}
+
+// SetWorkflowTimeout allows configuring a default timeout for workflow execution steps.
+// If the timeout is exceeded, the workflow execution step will be abandoned and retried.
+// Note that this timeout is for a non-blocking step in the workflow (which is expected
+// to always complete almost immediately) and not for the end-to-end workflow execution.
+func (wfe *WorkflowEngine) SetWorkflowTimeout(timeout time.Duration) {
+	wfe.workflowActor.defaultTimeout = timeout
+}
+
+// SetActivityTimeout allows configuring a default timeout for activity executions.
+// If the timeout is exceeded, the activity execution will be abandoned and retried.
+func (wfe *WorkflowEngine) SetActivityTimeout(timeout time.Duration) {
+	wfe.activityActor.defaultTimeout = timeout
+}
+
+// SetActorReminderInterval sets the amount of delay between internal retries for
+// workflow and activity actors. This impacts how long it takes for an operation to
+// restart itself after a timeout or a process failure is encountered while running.
+func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
+	wfe.workflowActor.reminderInterval = interval
+	wfe.activityActor.reminderInterval = interval
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) error {

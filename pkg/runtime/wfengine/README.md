@@ -94,6 +94,21 @@ Below is an example of what keys would be used to store the state of a simple wo
 9) "myapp||dapr.internal.wfengine.workflow||797f67f0c10846f592d0ac82dea1f248||inbox-000000"
 ```
 
+**IMPORTANT**: At the time of writing, there is no automatic purging of state for completed workflows. This means that the configured state store will continue to acquire new state indefinitely as more workflows are executed. Until automatic cleanup is implemented, old state will need to be purged manually from the configured state store.
+
 ### Resiliency
 
-TODO
+Workflows are resilient to infrastructure failures. This is achieved by using reminders to drive all execution. If a process faults mid-execution, the reminder that initiated that execution will get scheduled again by Dapr to resume the execution from it's previous checkpoint, which is stored in the state store. 
+
+At all times, there is at least one reminder active for each workflow. However, there is typically a different reminder created for each *step* in the workflow. Here's an example of all the reminders that may get created as part of running a full end-to-end workflow.
+
+| Reminder name | Description | Payload? |
+| - | - | - |
+| `start`        | Triggers the initial execution step of a workflow after it's created. | No |
+| `new-event`    | Triggers subsequent processing of events by a workflow. | No |
+| `timer`        | A special event reminder for a *durable timer* that is scheduled to run sometime in the future. | Yes, the durable task history event associated with the durable timer. |
+| `run-activity` | Triggers the execution of a workflow activity. | Yes, a UUID representing the current workflow generation. |
+
+> Note that all reminder names are suffixed with a series of random characters. For example, the `start` reminder might actually be named `start-149eb437`. This is because multiple reminders with the same name can result in unexpected behavior.
+
+Each reminder is created by default with a 1-minute period. If a workflow or activity execution fails unexpectedly, it will be retried automatically after the 1-minute period expires. If the workflow or activity executions succeeds, then the reminder will be immediately deleted.

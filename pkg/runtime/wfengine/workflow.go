@@ -40,16 +40,22 @@ const (
 )
 
 type workflowActor struct {
-	actors          actors.Actors
-	states          map[string]*workflowState
-	scheduler       workflowScheduler
-	rwLock          sync.RWMutex
-	cachingDisabled bool
+	actors           actors.Actors
+	states           map[string]*workflowState
+	scheduler        workflowScheduler
+	rwLock           sync.RWMutex
+	cachingDisabled  bool
+	defaultTimeout   time.Duration
+	reminderInterval time.Duration
 }
 
 type durableTimer struct {
 	Bytes      []byte
 	Generation uuid.UUID
+}
+
+type recoverableError struct {
+	cause error
 }
 
 func init() {
@@ -61,10 +67,20 @@ func NewDurableTimer(bytes []byte, generation uuid.UUID) durableTimer {
 	return durableTimer{bytes, generation}
 }
 
+func newRecoverableError(err error) recoverableError {
+	return recoverableError{cause: err}
+}
+
+func (err recoverableError) Error() string {
+	return err.cause.Error()
+}
+
 func NewWorkflowActor(scheduler workflowScheduler) *workflowActor {
 	return &workflowActor{
-		states:    make(map[string]*workflowState),
-		scheduler: scheduler,
+		states:           make(map[string]*workflowState),
+		scheduler:        scheduler,
+		defaultTimeout:   30 * time.Second,
+		reminderInterval: 1 * time.Minute,
 	}
 }
 
@@ -98,13 +114,26 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
 
 	// Workflow executions should never take longer than a few seconds at the most
-	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second) // TODO: Configurable
+	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
 	if err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data); err != nil {
-		return err
+		if err == timeoutCtx.Err() {
+			wfLogger.Warnf("%s: execution timed-out and will be retried later")
+
+			// Returning nil signals that we want the execution to be retried in the next period interval
+			return nil
+		} else if _, ok := err.(recoverableError); ok {
+			wfLogger.Errorf("%s: execution failed with a recoverable error and will be retried later: %v", err)
+
+			// Returning nil signals that we want the execution to be retried in the next period interval
+			return nil
+		} else {
+			wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", err)
+		}
 	}
 
-	return nil
+	// We delete the reminder on success and on non-recoverable errors.
+	return actors.ErrReminderCanceled
 }
 
 // InvokeTimer implements actors.InternalActor
@@ -215,19 +244,23 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if err != nil {
 		return err
 	} else if !exists {
-		return fmt.Errorf("no workflow state found for actor '%s'", actorID)
+		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
+		return errors.New("no workflow state found")
 	}
 
 	if strings.HasPrefix(reminderName, "timer-") {
 		timerData, ok := reminderData.(durableTimer)
 		if !ok {
+			// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
 			return fmt.Errorf("unrecognized reminder payload: %v", reminderData)
 		}
 		if timerData.Generation != state.Generation {
 			wfLogger.Infof("%s: ignoring durable timer from previous generation '%v'", actorID, timerData.Generation)
+			return nil
 		} else {
 			e, err := backend.UnmarshalHistoryEvent(timerData.Bytes)
 			if err != nil {
+				// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
 				return fmt.Errorf("failed to unmarshal timer data %w", err)
 			}
 			state.Inbox = append(state.Inbox, e)
@@ -255,7 +288,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
 	if err := wf.scheduler.ScheduleWorkflow(ctx, wi); err != nil {
-		return fmt.Errorf("failed to schedule a workflow execution: %w", err)
+		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 
 	select {
@@ -282,8 +315,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			reminderPrefix := fmt.Sprintf("timer-%d", tf.TimerId)
 			data := NewDurableTimer(timerBytes, state.Generation)
 			if _, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, data, delay); err != nil {
-				// TODO: This needs to be a retriable error
-				return fmt.Errorf("actor %s failed to create reminder for timer: %w", actorID, err)
+				return newRecoverableError(fmt.Errorf("actor %s failed to create reminder for timer: %w", actorID, err))
 			}
 		}
 	}
@@ -307,13 +339,21 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return err
 			}
+			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
+				HistoryEvent: eventData,
+				Generation:   state.Generation,
+			})
+			if err != nil {
+				return err
+			}
 			targetActorID := getActivityActorID(actorID, e.EventId)
 			req := invokev1.
 				NewInvokeMethodRequest("Execute").
 				WithActor(ActivityActorType, targetActorID).
-				WithRawData(eventData, invokev1.OctetStreamContentType)
+				WithRawData(activityRequestBytes, invokev1.OctetStreamContentType)
 			if _, err := wf.actors.Call(ctx, req); err != nil {
-				return fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err)
+				return newRecoverableError(
+					fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
 			}
 		} else {
 			wfLogger.Warn("don't know how to process task %v", e)
@@ -332,7 +372,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				WithActor(WorkflowActorType, msg.TargetInstanceID).
 				WithRawData(eventData, invokev1.OctetStreamContentType)
 			if _, err := wf.actors.Call(ctx, req); err != nil {
-				return err
+				// workflow-related actor methods are never expected to return errors
+				return newRecoverableError(
+					fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
 			}
 		}
 	}
@@ -397,7 +439,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 		Data:      data,
 		DueTime:   delay.String(),
 		Name:      reminderName,
-		Period:    "", // TODO: Add configurable period to enable durability
+		Period:    wf.reminderInterval.String(),
 	})
 }
 
