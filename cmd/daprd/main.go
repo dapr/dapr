@@ -60,16 +60,6 @@ func main() {
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
-	secretstoresLoader.DefaultRegistry.Logger = logContrib
-	stateLoader.DefaultRegistry.Logger = logContrib
-	configurationLoader.DefaultRegistry.Logger = logContrib
-	lockLoader.DefaultRegistry.Logger = logContrib
-	pubsubLoader.DefaultRegistry.Logger = logContrib
-	nrLoader.DefaultRegistry.Logger = logContrib
-	bindingsLoader.DefaultRegistry.Logger = logContrib
-	workflowsLoader.DefaultRegistry.Logger = logContrib
-	httpMiddlewareLoader.DefaultRegistry.Logger = log
-
 	err = rt.Run(
 		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),
 		runtime.WithStates(stateLoader.DefaultRegistry),
