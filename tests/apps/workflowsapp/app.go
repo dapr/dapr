@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/tests/apps/utils"
 
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -152,10 +153,15 @@ func appRouter() *mux.Router {
 func main() {
 	log.Printf("Workflow Test - listening on http://localhost:%d", appPort)
 
+	client2, _ := client.NewNamespaceClient(client.Options{HostPort: "dapr-temporal-frontend.dapr-tests.svc.cluster.local:7233"})
+	_ = client2.Register(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Namespace: "temporal-system",
+	})
+
 	// Create the client for the worker
 	cOptions := client.Options{
 		HostPort:  "dapr-temporal-frontend.dapr-tests.svc.cluster.local:7233",
-		Namespace: "dapr-tests",
+		Namespace: "temporal-system",
 	}
 	c, err := client.Dial(cOptions)
 	if err != nil {

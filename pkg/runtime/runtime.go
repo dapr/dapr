@@ -278,6 +278,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretsConfiguration:       map[string]config.SecretsScope{},
 		configurationStores:        map[string]configuration.Store{},
 		lockStores:                 map[string]lock.Store{},
+		workflows:                  map[string]wfs.Workflow{},
 		pendingComponents:          make(chan componentsV1alpha1.Component),
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
@@ -1329,6 +1330,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		GetComponentsFn:             a.getComponents,
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
+		Workflows:                   a.workflows,
 		LockStores:                  a.lockStores,
 		SecretStores:                a.secretStores,
 		SecretsConfiguration:        a.secretsConfiguration,
@@ -1425,6 +1427,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
 		SecretStores:                a.secretStores,
+		WorkflowEngines:             a.workflows,
 		SecretsConfiguration:        a.secretsConfiguration,
 		ConfigurationStores:         a.configurationStores,
 		LockStores:                  a.lockStores,
@@ -1610,7 +1613,7 @@ func (a *DaprRuntime) initWorkflow(s componentsV1alpha1.Component) error {
 
 	// initialization
 	baseMetadata := a.toBaseMetadata(s)
-	err = workflowComp.Init(wfs.Metadata{Properties: baseMetadata.Properties})
+	err = workflowComp.Init(wfs.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
@@ -2373,7 +2376,6 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 		return nil
 	}
 
-	log.Debugf("RRL Component: %v\n", comp)
 	compCategory := a.extractComponentCategory(comp)
 	if compCategory == "" {
 		// the category entered is incorrect, return error

@@ -316,6 +316,7 @@ func NewAPI(opts APIOpts) API {
 		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               opts.SecretStores,
+		workflows:                  opts.WorkflowEngines,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
@@ -1741,7 +1742,7 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	}
 
 	if in.WorkflowComponent == "" || a.workflows[in.WorkflowComponent] == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}

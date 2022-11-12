@@ -24,4 +24,4 @@ spec:
   - name: identity
     value: "WF Identity"
   - name: namespace
-    value: "dapr-tests"
+    value: "temporal-system"

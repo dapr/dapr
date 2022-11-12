@@ -62,8 +62,11 @@ func (s *Registry) getWorkflow(name, version string) (func() wfs.Workflow, bool)
 	}
 	if components.IsInitialVersion(versionLower) {
 		workflowFn, ok = s.workflows[nameLower]
+		if ok {
+			return s.wrapFn(workflowFn), true
+		}
 	}
-	return s.wrapFn(workflowFn), ok
+	return nil, false
 }
 
 func (s *Registry) wrapFn(componentFactory func(logger.Logger) wfs.Workflow) func() wfs.Workflow {
