@@ -131,7 +131,7 @@ jobs:
         if: env.TEST_CLUSTER != ''
         working-directory: ./dapr
         run: |
-          kubectl apply -f pythonapp/python.yaml -n ${{ env.APP_NAMESPACE }}  
+          kubectl apply -f .github/pythonapp/python.yaml -n ${{ env.APP_NAMESPACE }}  
       - name: Get all services
         run: |
           kubectl get services -n ${{ env.APP_NAMESPACE }}
