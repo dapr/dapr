@@ -150,7 +150,7 @@ type APIOpts struct {
 	GetComponentsFn             func() []componentsV1alpha1.Component
 	Resiliency                  resiliency.Provider
 	StateStores                 map[string]state.Store
-	Workflows                   map[string]wfs.Workflow
+	WorkflowsComponents         map[string]wfs.Workflow
 	LockStores                  map[string]lock.Store
 	SecretStores                map[string]secretstores.SecretStore
 	SecretsConfiguration        map[string]config.SecretsScope
@@ -179,7 +179,7 @@ func NewAPI(opts APIOpts) API {
 		getComponentsFn:            opts.GetComponentsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
-		workflowComponents:         opts.Workflows,
+		workflowComponents:         opts.WorkflowsComponents,
 		lockStores:                 opts.LockStores,
 		secretStores:               opts.SecretStores,
 		secretsConfiguration:       opts.SecretsConfiguration,

@@ -25,8 +25,8 @@ import (
 
 // Registry is an interface for a component that returns registered state store implementations.
 type Registry struct {
-	Logger    logger.Logger
-	workflows map[string]func(logger.Logger) wfs.Workflow
+	Logger             logger.Logger
+	workflowComponents map[string]func(logger.Logger) wfs.Workflow
 }
 
 // DefaultRegistry is the singleton with the registry .
@@ -35,33 +35,33 @@ var DefaultRegistry *Registry = NewRegistry()
 // NewRegistry is used to create workflow registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		workflows: map[string]func(logger.Logger) wfs.Workflow{},
+		workflowComponents: map[string]func(logger.Logger) wfs.Workflow{},
 	}
 }
 
 // RegisterComponent adds a new workflow to the registry.
 func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) wfs.Workflow, names ...string) {
 	for _, name := range names {
-		s.workflows[createFullName(name)] = componentFactory
+		s.workflowComponents[createFullName(name)] = componentFactory
 	}
 }
 
 func (s *Registry) Create(name, version string) (wfs.Workflow, error) {
-	if method, ok := s.getWorkflow(name, version); ok {
+	if method, ok := s.getWorkflowComponent(name, version); ok {
 		return method(), nil
 	}
 	return nil, errors.Errorf("couldn't find wokflow %s/%s", name, version)
 }
 
-func (s *Registry) getWorkflow(name, version string) (func() wfs.Workflow, bool) {
+func (s *Registry) getWorkflowComponent(name, version string) (func() wfs.Workflow, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
-	workflowFn, ok := s.workflows[nameLower+"/"+versionLower]
+	workflowFn, ok := s.workflowComponents[nameLower+"/"+versionLower]
 	if ok {
 		return s.wrapFn(workflowFn), true
 	}
 	if components.IsInitialVersion(versionLower) {
-		workflowFn, ok = s.workflows[nameLower]
+		workflowFn, ok = s.workflowComponents[nameLower]
 		if ok {
 			return s.wrapFn(workflowFn), true
 		}
