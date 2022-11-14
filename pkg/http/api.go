@@ -77,6 +77,7 @@ type api struct {
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
 	getComponentsFn            func() []componentsV1alpha1.Component
+	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
 	lockStores                 map[string]lock.Store
@@ -107,10 +108,11 @@ type registeredComponent struct {
 }
 
 type metadata struct {
-	ID                   string                     `json:"id"`
-	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
-	Extended             map[string]string          `json:"extended"`
-	RegisteredComponents []registeredComponent      `json:"components"`
+	ID                   string                       `json:"id"`
+	ActiveActorsCount    []actors.ActiveActorsCount   `json:"actors"`
+	Extended             map[string]string            `json:"extended"`
+	RegisteredComponents []registeredComponent        `json:"components"`
+	Subscriptions        []runtimePubsub.Subscription `json:"subscriptions"`
 }
 
 const (
@@ -143,6 +145,7 @@ type APIOpts struct {
 	AppChannel                  channel.AppChannel
 	DirectMessaging             messaging.DirectMessaging
 	GetComponentsFn             func() []componentsV1alpha1.Component
+	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
 	Resiliency                  resiliency.Provider
 	StateStores                 map[string]state.Store
 	LockStores                  map[string]lock.Store
@@ -171,6 +174,7 @@ func NewAPI(opts APIOpts) API {
 		appChannel:                 opts.AppChannel,
 		directMessaging:            opts.DirectMessaging,
 		getComponentsFn:            opts.GetComponentsFn,
+		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
 		lockStores:                 opts.LockStores,
@@ -1850,11 +1854,20 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
+	subscriptions, err := a.getSubscriptionsFn()
+	if err != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_GET_SUBSCRIPTIONS", fmt.Sprintf(messages.ErrPubsubGetSubscriptions, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
 	mtd := metadata{
 		ID:                   a.id,
 		ActiveActorsCount:    activeActorsCount,
 		Extended:             temp,
 		RegisteredComponents: registeredComponents,
+		Subscriptions:        subscriptions,
 	}
 
 	mtdBytes, err := json.Marshal(mtd)
