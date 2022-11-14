@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -68,8 +67,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 // testHandler is the handler for end-to-end test entry point
 // test driver code call this endpoint to trigger the test
 func testHandler(w http.ResponseWriter, r *http.Request) {
-	testCommand := mux.Vars(r)["test"]
-
 	// Retrieve request body contents
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
@@ -82,11 +79,8 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Trigger the test
-	res := appResponse{Message: fmt.Sprintf("%s is not supported", testCommand)}
-	statusCode := http.StatusBadRequest
-
 	startTime := epoch()
-	statusCode, res = startTest(commandBody)
+	statusCode, res := startTest(commandBody)
 	res.StartTime = startTime
 	res.EndTime = epoch()
 
@@ -104,7 +98,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 			"task_queue" : "e2e_test_queue"
 		}
 	}`)
-	res, err := httpClient.Post("http://localhost:3500/v1.0-alpha1/workflows/temporal/HelloDaprWF/WorkflowID/start", "application/json", bytes.NewBuffer(jsonData))
+	res, err := httpClient.Post("http://localhost:3500/v1.0-alpha1/workflows/temporal/HelloTemporalWF/WorkflowID/start", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
 	}
@@ -117,7 +111,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	time.Sleep(2 * time.Second)
 
 	// USe the data that was retrieved back from the start workflow call (InstanceID) to get info on the workflow
-	res, err = httpClient.Get("http://localhost:3500/v1.0-alpha1/workflows/temporal/HelloDaprWF/" + string(resultData.InstanceID) + "")
+	res, err = httpClient.Get("http://localhost:3500/v1.0-alpha1/workflows/temporal/HelloTemporalWF/" + resultData.InstanceID + "")
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
 	}
@@ -127,7 +121,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	body, _ = io.ReadAll(res.Body)
 	var stateData workflows.StateResponse
 	json.Unmarshal(body, &stateData)
-	return http.StatusOK, appResponse{Message: string(stateData.Metadata["status"])}
+	return http.StatusOK, appResponse{Message: stateData.Metadata["status"]}
 }
 
 // epoch returns the current unix epoch timestamp
@@ -171,8 +165,8 @@ func main() {
 
 	// Start the worker and register activities
 	w := worker.New(c, "e2e_test_queue", worker.Options{})
-	w.RegisterWorkflow(HelloDaprWF)
-	w.RegisterActivity(HelloDaprAct)
+	w.RegisterWorkflow(HelloTemporalWF)
+	w.RegisterActivity(HelloTemporalAct)
 
 	// Start listening to the Task Queue
 	log.Println("e2e worker created")
@@ -181,8 +175,8 @@ func main() {
 	utils.StartServer(appPort, appRouter, true, false)
 }
 
-func HelloDaprWF(ctx workflow.Context) (string, error) {
-	fmt.Println("Starting WF Activity")
+func HelloTemporalWF(ctx workflow.Context) (string, error) {
+	log.Println("Starting WF Activity")
 
 	options := workflow.ActivityOptions{
 		TaskQueue:              "e2e_test_queue",
@@ -196,15 +190,16 @@ func HelloDaprWF(ctx workflow.Context) (string, error) {
 	ctx = workflow.WithActivityOptions(ctx, options)
 
 	var resp string
-	err := workflow.ExecuteActivity(ctx, HelloDaprAct).Get(ctx, &resp)
+	err := workflow.ExecuteActivity(ctx, HelloTemporalAct).Get(ctx, &resp)
 	if err != nil {
-		fmt.Println("ERROR During activity call: ", err.Error())
+		log.Println("ERROR During activity call: ", err.Error())
+		return "Failed to execute activity", err
 	}
 
-	fmt.Println("WF Activity Finished")
+	log.Println("WF Activity Finished")
 	return resp, nil
 }
 
-func HelloDaprAct(ctx context.Context) (result string, err error) {
-	return "Hello Dapr", nil
+func HelloTemporalAct(ctx context.Context) (result string, err error) {
+	return "Hello Temporal", nil
 }

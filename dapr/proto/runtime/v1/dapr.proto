@@ -673,8 +673,7 @@ message WorkflowReference {
 message GetWorkflowRequest {
   WorkflowReference WorkflowReference  = 1;
   string WorkflowType = 2;
-  string InstanceID = 3;
-  string WorkflowComponent = 4; 
+  string WorkflowComponent = 3; 
 }
 
 message GetWorkflowResponse {
@@ -688,7 +687,7 @@ message StartWorkflowRequest {
   string WorkflowComponent = 2;
   string WorkflowName = 3;
   map<string, string> Options = 4;
-  google.protobuf.Any Parameters = 5;   
+  google.protobuf.Any Input = 5;   
 }
 
 message TerminateWorkflowRequest {

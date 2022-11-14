@@ -125,7 +125,7 @@ type api struct {
 	appChannel                 channel.AppChannel
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	workflows                  map[string]workflows.Workflow
+	workflowComponents         map[string]workflows.Workflow
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
@@ -284,7 +284,7 @@ type APIOpts struct {
 	SecretStores                map[string]secretstores.SecretStore
 	SecretsConfiguration        map[string]config.SecretsScope
 	ConfigurationStores         map[string]configuration.Store
-	WorkflowEngines             map[string]workflows.Workflow
+	WorkflowComponents          map[string]workflows.Workflow
 	LockStores                  map[string]lock.Store
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
@@ -316,7 +316,7 @@ func NewAPI(opts APIOpts) API {
 		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               opts.SecretStores,
-		workflows:                  opts.WorkflowEngines,
+		workflowComponents:         opts.WorkflowComponents,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
@@ -1700,7 +1700,8 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
-	if _, ok := a.workflows[in.WorkflowComponent]; !ok {
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -1708,7 +1709,7 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 	req := workflows.WorkflowReference{
 		InstanceID: in.WorkflowReference.InstanceID,
 	}
-	response, err := a.workflows[in.WorkflowComponent].Get(ctx, &req)
+	response, err := workflowRun.Get(ctx, &req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
 		apiServerLogger.Debug(err)
@@ -1726,11 +1727,11 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
-	pb := timestamppb.New(t)
+	startTime := timestamppb.New(t)
 
 	res := &runtimev1pb.GetWorkflowResponse{
 		WorkflowReference: id,
-		StartTime:         pb,
+		StartTime:         startTime,
 		Metadata:          response.Metadata,
 	}
 	return res, nil
@@ -1743,14 +1744,21 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
-	if in.WorkflowComponent == "" || a.workflows[in.WorkflowComponent] == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist))
+	if in.WorkflowComponent == "" {
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrNoOrMissingComponent))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
 	if in.WorkflowReference.InstanceID == "" {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
@@ -1762,10 +1770,10 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 		WorkflowReference: wf,
 		Options:           in.Options,
 		WorkflowName:      in.WorkflowName,
-		Parameters:        in.Parameters,
+		Input:             in.Input,
 	}
 
-	resp, err := a.workflows[in.WorkflowComponent].Start(ctx, &req)
+	resp, err := workflowRun.Start(ctx, &req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrStartWorkflow, err))
 		apiServerLogger.Debug(err)
@@ -1790,7 +1798,8 @@ func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Termi
 		return &emptypb.Empty{}, err
 	}
 
-	if _, ok := a.workflows[in.WorkflowComponent]; !ok {
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1800,9 +1809,9 @@ func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Termi
 		InstanceID: in.WorkflowReference.InstanceID,
 	}
 
-	err := a.workflows[in.WorkflowComponent].Terminate(ctx, &req)
+	err := workflowRun.Terminate(ctx, &req)
 	if err != nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, nil
 	}

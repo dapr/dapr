@@ -79,7 +79,7 @@ func main() {
 		runtime.WithNameResolutions(nrLoader.DefaultRegistry),
 		runtime.WithBindings(bindingsLoader.DefaultRegistry),
 		runtime.WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry),
-		runtime.WithWorkflows(workflowsLoader.DefaultRegistry),
+		runtime.WithWorkflowComponents(workflowsLoader.DefaultRegistry),
 	)
 	if err != nil {
 		log.Fatalf("fatal error from runtime: %s", err)

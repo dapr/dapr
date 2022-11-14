@@ -80,7 +80,7 @@ type api struct {
 	getComponentsFn            func() []componentsV1alpha1.Component
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	workflows                  map[string]wfs.Workflow
+	workflowComponents         map[string]wfs.Workflow
 	lockStores                 map[string]lock.Store
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{}
@@ -179,7 +179,7 @@ func NewAPI(opts APIOpts) API {
 		getComponentsFn:            opts.GetComponentsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
-		workflows:                  opts.Workflows,
+		workflowComponents:         opts.Workflows,
 		lockStores:                 opts.LockStores,
 		secretStores:               opts.SecretStores,
 		secretsConfiguration:       opts.SecretsConfiguration,
@@ -757,17 +757,24 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	wfType := reqCtx.UserValue(workflowType).(string)
 	if wfType == "" {
-		log.Error("No workflow, or empty workflow was provided.")
+		msg := NewErrorResponse("ERR_NO_WORKFLOW_TYPE_PROVIDED", fmt.Sprintf(messages.ErrWorkflowNameMissing))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 
 	component := reqCtx.UserValue(workflowComponent).(string)
 	if component == "" {
-		log.Error("No component, or empty component was provided.")
+		msg := NewErrorResponse("ERR_NO_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrNoOrMissingComponent))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
-	if a.workflows[component] == nil {
-		log.Error("The provided component: " + component + " does not exist.")
+	workflowRun := a.workflowComponents[component]
+	if workflowRun == nil {
+		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrComponentDoesNotExist, component))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 
@@ -778,7 +785,9 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	instance := reqCtx.UserValue(instanceID).(string)
 	if instance == "" {
-		log.Error("No instance, or empty instance was provided.")
+		msg := NewErrorResponse("ERR_NO_INSTANCE_ID_PROVIDED", fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 
@@ -786,13 +795,15 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 		Options:           startReq.Options,
 		WorkflowReference: startReq.WorkflowReference,
 		WorkflowName:      wfType,
-		Parameters:        startReq.Parameters,
+		Input:             startReq.Input,
 	}
 	req.WorkflowReference.InstanceID = instance
 
-	resp, err := a.workflows[component].Start(reqCtx, &req)
+	resp, err := workflowRun.Start(reqCtx, &req)
 	if err != nil {
-		log.Errorf("Error when starting workflow: %v\n", err)
+		msg := NewErrorResponse("ERR_START_WORKFLOW", fmt.Sprintf(messages.ErrStartWorkflow, err))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 	response, err := json.Marshal(resp)
@@ -805,27 +816,35 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
-	wfName := reqCtx.UserValue(workflowType).(string)
-
-	if wfName == "" {
-		log.Error("No workflow, or empty workflow was provided.")
-		return
-	}
-
-	instance := reqCtx.UserValue(instanceID).(string)
-	if instance == "" {
-		log.Error("No instance, or empty instance was provided.")
+	wfType := reqCtx.UserValue(workflowType).(string)
+	if wfType == "" {
+		msg := NewErrorResponse("ERR_NO_WORKFLOW_TYPE_PROVIDED", fmt.Sprintf(messages.ErrWorkflowNameMissing))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 
 	component := reqCtx.UserValue(workflowComponent).(string)
 	if component == "" {
-		log.Error("No component, or empty component was provided.")
+		msg := NewErrorResponse("ERR_NO_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrNoOrMissingComponent))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 
-	if a.workflows[component] == nil {
-		log.Error("The provided component: " + component + " does not exist.")
+	instance := reqCtx.UserValue(instanceID).(string)
+	if instance == "" {
+		msg := NewErrorResponse("ERR_NO_INSTANCE_ID_PROVIDED", fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	workflowRun := a.workflowComponents[component]
+	if workflowRun == nil {
+		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrComponentDoesNotExist, component))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 
@@ -833,12 +852,13 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 		InstanceID: instance,
 	}
 
-	resp, err := a.workflows[component].Get(reqCtx, &req)
+	resp, err := workflowRun.Get(reqCtx, &req)
 	if err != nil {
-		log.Errorf("Error when getting workflow information: %v\n", err)
+		msg := NewErrorResponse("ERR_GET_WORKFLOW", fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
-	log.Debug(resp)
 	response, err := json.Marshal(resp)
 	if err != nil {
 		log.Errorf("Error when matshalling workflow information: %v\n", err)
@@ -850,16 +870,22 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 	instance := reqCtx.UserValue(instanceID).(string)
 	if instance == "" {
-		log.Error("No instance, or empty instance was provided.")
+		msg := NewErrorResponse("ERR_NO_INSTANCE_ID_PROVIDED", fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 
 	component := reqCtx.UserValue(workflowComponent).(string)
 	if component == "" {
-		log.Error("No component, or empty component was provided.")
+		msg := NewErrorResponse("ERR_NO_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrNoOrMissingComponent))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
-	if a.workflows[component] == nil {
+
+	workflowRun := a.workflowComponents[component]
+	if workflowRun == nil {
 		log.Error("The provided component does not exist.")
 		return
 	}
@@ -868,9 +894,11 @@ func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 		InstanceID: instance,
 	}
 
-	err := a.workflows[component].Terminate(reqCtx, &req)
+	err := workflowRun.Terminate(reqCtx, &req)
 	if err != nil {
-		log.Errorf("Error when terminating workflow: %v\n", err)
+		msg := NewErrorResponse("ERR_TERMINATE_WORKFLOW", fmt.Sprintf(messages.ErrTerminateWorkflow, err))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 }

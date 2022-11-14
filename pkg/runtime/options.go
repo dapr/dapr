@@ -15,16 +15,16 @@ import (
 type (
 	// runtimeOpts encapsulates the components to include in the runtime.
 	runtimeOpts struct {
-		secretStoreRegistry    *secretstoresLoader.Registry
-		stateRegistry          *stateLoader.Registry
-		configurationRegistry  *configurationLoader.Registry
-		lockRegistry           *lockLoader.Registry
-		pubsubRegistry         *pubsubLoader.Registry
-		nameResolutionRegistry *nrLoader.Registry
-		bindingRegistry        *bindingsLoader.Registry
-		httpMiddlewareRegistry *httpMiddlewareLoader.Registry
-		workflowRegistry       *workflowsLoader.Registry
-		componentsCallback     ComponentsCallback
+		secretStoreRegistry       *secretstoresLoader.Registry
+		stateRegistry             *stateLoader.Registry
+		configurationRegistry     *configurationLoader.Registry
+		lockRegistry              *lockLoader.Registry
+		pubsubRegistry            *pubsubLoader.Registry
+		nameResolutionRegistry    *nrLoader.Registry
+		bindingRegistry           *bindingsLoader.Registry
+		httpMiddlewareRegistry    *httpMiddlewareLoader.Registry
+		workflowComponentRegistry *workflowsLoader.Registry
+		componentsCallback        ComponentsCallback
 	}
 
 	// Option is a function that customizes the runtime.
@@ -87,10 +87,10 @@ func WithHTTPMiddlewares(registry *httpMiddlewareLoader.Registry) Option {
 	}
 }
 
-// WithWorkflows adds workflow components to the runtime.
-func WithWorkflows(registry *workflowsLoader.Registry) Option {
+// WithWorkflowComponents adds workflow components to the runtime.
+func WithWorkflowComponents(registry *workflowsLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.workflowRegistry = registry
+		o.workflowComponentRegistry = registry
 	}
 }
 
