@@ -57,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -2239,6 +2240,23 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
+		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+			return []runtimePubsub.Subscription{
+				{
+					PubsubName:      "test",
+					Topic:           "topic",
+					DeadLetterTopic: "dead",
+					Metadata:        map[string]string{},
+					Rules: []*runtimePubsub.Rule{
+						&runtimePubsub.Rule{
+							Match: &expr.Expr{},
+							Path:  "path",
+						},
+					},
+					ProgrammaticSubscription: true,
+				},
+			}, nil
+		},
 	}
 	// PutMetadata only stroes string(request body)
 	testAPI.extendedMetadata.Store("test", "value")
@@ -2264,6 +2282,21 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				"type":         "mock.component2Type",
 				"version":      "v1.0",
 				"capabilities": []string{"mock.feat.MockComponent2Name"},
+			},
+		},
+		"subscriptions": []map[string]interface{}{
+			{
+				"pubsubname":      "test",
+				"topic":           "topic",
+				"deadLetterQueue": "dead",
+				"metadata":        "{}",
+				"rules": []map[string]interface{}{
+					{
+						"match": "",
+						"path":  "path",
+					},
+				},
+				"programmaticSubscription": true,
 			},
 		},
 	}

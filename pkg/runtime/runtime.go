@@ -1441,6 +1441,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		GetSubscriptionsFn:          a.getSubscriptions,
 	})
 }
 
