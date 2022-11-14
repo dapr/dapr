@@ -137,11 +137,12 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 			}
 
 			subscriptions[i] = Subscription{
-				PubsubName:      si.PubsubName,
-				Topic:           si.Topic,
-				Metadata:        si.Metadata,
-				DeadLetterTopic: si.DeadLetterTopic,
-				Rules:           rules[:n],
+				PubsubName:               si.PubsubName,
+				Topic:                    si.Topic,
+				Metadata:                 si.Metadata,
+				DeadLetterTopic:          si.DeadLetterTopic,
+				Rules:                    rules[:n],
+				ProgrammaticSubscription: true,
 			}
 		}
 
