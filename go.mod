@@ -7,7 +7,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.9.1-0.20221111082843-acb51bbbd33d
+	github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc
 	github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f
 	github.com/fasthttp/router v1.4.12
 	github.com/ghodss/yaml v1.0.0
@@ -197,6 +197,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.11.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
+	github.com/go-resty/resty/v2 v2.7.0 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gocql/gocql v1.2.1 // indirect
@@ -257,6 +258,8 @@ require (
 	github.com/k0kubun/pp v3.0.1+incompatible // indirect
 	github.com/klauspost/compress v1.15.11 // indirect
 	github.com/knadh/koanf v1.4.1 // indirect
+	github.com/kubemq-io/kubemq-go v1.7.6 // indirect
+	github.com/kubemq-io/protobuf v1.3.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/labd/commercetools-go-sdk v1.1.0 // indirect
 	github.com/labstack/echo/v4 v4.9.0 // indirect
