@@ -2129,25 +2129,30 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	res, err := a.pubsubAdapter.BulkPublish(&req)
 	elapsed := diag.ElapsedSince(start)
 
+	// BulkPublishResponse contains all failed entries from the request.
+	// If there are no errors, then an empty response is returned.
 	bulkRes := BulkPublishResponse{}
 	var eventsPublished int64 = 0
 	if len(res.Statuses) != 0 {
-		bulkRes.Statuses = make([]BulkPublishResponseEntry, len(res.Statuses))
-		for i, r := range res.Statuses {
-			bulkRes.Statuses[i].EntryId = r.EntryId
-			if r.Error != nil {
-				bulkRes.Statuses[i].Error = r.Error.Error()
-			} else {
+		bulkRes.Statuses = make([]BulkPublishResponseEntry, 0, len(res.Statuses))
+		for _, r := range res.Statuses {
+			if r.Status == pubsub.PublishSucceeded {
 				// Only count the events that have been successfully published to the pub/sub component
 				eventsPublished++
+			} else {
+				resEntry := BulkPublishResponseEntry{}
+				resEntry.EntryId = r.EntryId
+				resEntry.Status = string(pubsub.PublishFailed)
+				if r.Error != nil {
+					resEntry.Error = r.Error.Error()
+				}
+				bulkRes.Statuses = append(bulkRes.Statuses, resEntry)
 			}
-			bulkRes.Statuses[i].Status = string(r.Status)
 		}
 	}
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
-	status := fasthttp.StatusOK
 	if err != nil {
-		status = fasthttp.StatusInternalServerError
+		status := fasthttp.StatusInternalServerError
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
 
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
@@ -2167,9 +2172,15 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 			return
 		}
+
+		// Return the error along with the list of failed entries.
+		resData, _ := json.Marshal(bulkRes)
+		respond(reqCtx, withJSON(status, resData), closeChildSpans)
+		return
 	}
-	resData, _ := json.Marshal(bulkRes)
-	respond(reqCtx, withJSON(status, resData), closeChildSpans)
+
+	// If there are no errors, then an empty response is returned.
+	respond(reqCtx, withEmpty(), closeChildSpans)
 }
 
 // validateAndGetPubsubAndTopic takes input as request context and returns the pubsub interface, pubsub name, topic name,
