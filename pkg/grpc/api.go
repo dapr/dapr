@@ -635,23 +635,25 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	elapsed := diag.ElapsedSince(start)
 	var eventsPublished int64 = 0
 
+	// BulkPublishResponse contains all failed entries from the request.
+	// If there are no failed entries, then the statuses array will be empty.
 	bulkRes := runtimev1pb.BulkPublishResponse{}
 
 	if len(res.Statuses) != 0 {
 		bulkRes.Statuses = make([]*runtimev1pb.BulkPublishResponseEntry, 0, len(res.Statuses))
 		for _, r := range res.Statuses {
-			resEntry := runtimev1pb.BulkPublishResponseEntry{}
-			resEntry.EntryId = r.EntryId
-			if r.Error != nil {
-				resEntry.Error = r.Error.Error()
-			}
 			if r.Status == pubsub.PublishSucceeded {
-				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_SUCCESS //nolint:nosnakecase
+				// Only count the events that have been successfully published to the pub/sub component
 				eventsPublished++
 			} else {
+				resEntry := runtimev1pb.BulkPublishResponseEntry{}
+				resEntry.EntryId = r.EntryId
 				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
+				if r.Error != nil {
+					resEntry.Error = r.Error.Error()
+				}
+				bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
 			}
-			bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
 		}
 	}
 
