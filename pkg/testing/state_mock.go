@@ -114,6 +114,10 @@ func (_m *MockStateStore) Ping() error {
 	return nil
 }
 
+func (f *MockStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 // Set provides a mock function with given fields: req
 func (_m *MockStateStore) Set(req *state.SetRequest) error {
 	ret := _m.Called(req)
@@ -139,6 +143,10 @@ func (_m *MockStateStore) Close() error {
 
 type FailingStatestore struct {
 	Failure Failure
+}
+
+func (f *FailingStatestore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (f *FailingStatestore) BulkDelete(req []state.DeleteRequest) error {
