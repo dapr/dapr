@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
@@ -118,6 +119,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	// proxy to a remote daprd
 	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
+	outCtx = metadata.AppendToOutgoingContext(outCtx, invokev1.CallerIDHeader, p.appID, invokev1.CalleeIDHeader, target.id)
 
 	return outCtx, conn, &grpcProxy.ProxyTarget{ID: target.id, Namespace: target.namespace, Address: target.address}, teardown, cErr
 }

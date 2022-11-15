@@ -33,6 +33,8 @@ type runnable interface {
 }
 
 // PlatformInterface defines the testing platform for test runner.
+//
+//nolint:interfacebloat
 type PlatformInterface interface {
 	setup() error
 	tearDown() error

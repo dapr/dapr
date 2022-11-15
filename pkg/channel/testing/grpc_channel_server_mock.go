@@ -16,6 +16,8 @@ package testing
 import (
 	context "context"
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"sync"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -41,6 +43,7 @@ type MockServer struct {
 	BulkResponsePerPath            map[string]*runtimev1pb.TopicEventBulkResponse
 	initialized                    bool
 	mutex                          sync.Mutex
+	ValidateCloudEventExtension    *map[string]interface{}
 }
 
 func (m *MockServer) Init() {
@@ -85,6 +88,24 @@ func (m *MockServer) OnBindingEvent(ctx context.Context, in *runtimev1pb.Binding
 }
 
 func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
+	jsonBytes, marshalErr := in.Extensions.MarshalJSON()
+	if marshalErr != nil {
+		return nil, marshalErr
+	}
+	extensionsMap := map[string]interface{}{}
+	unmarshalErr := json.Unmarshal(jsonBytes, &extensionsMap)
+	if unmarshalErr != nil {
+		return nil, unmarshalErr
+	}
+
+	if m.ValidateCloudEventExtension != nil {
+		for k, v := range *m.ValidateCloudEventExtension {
+			if val, ok := extensionsMap[k]; !ok || !reflect.DeepEqual(val, v) {
+				return nil, fmt.Errorf("cloud event extension %s with value %s is not valid", k, val)
+			}
+		}
+	}
+
 	return &runtimev1pb.TopicEventResponse{
 		Status: m.TopicEventResponseStatus,
 	}, m.Error
@@ -93,7 +114,7 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 func (m *MockServer) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	if m.initialized != true {
+	if !m.initialized {
 		m.Init()
 	}
 	m.RequestsReceived[in.Path] = in

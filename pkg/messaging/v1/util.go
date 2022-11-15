@@ -65,6 +65,9 @@ const (
 	errorInfoDomain            = "dapr.io"
 	errorInfoHTTPCodeMetadata  = "http.code"
 	errorInfoHTTPErrorMetadata = "http.error_message"
+
+	CallerIDHeader = DaprHeaderPrefix + "caller-app-id"
+	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
 )
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
