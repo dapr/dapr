@@ -2263,40 +2263,49 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
-	expectedBody := map[string]interface{}{
-		"id":     "xyz",
-		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"extended": map[string]string{
+	expectedBody := metadata{
+		ID: "xyz",
+		ActiveActorsCount: []actors.ActiveActorsCount{
+			actors.ActiveActorsCount{
+				Type:  "abcd",
+				Count: 10,
+			},
+			actors.ActiveActorsCount{
+				Type:  "xyz",
+				Count: 5,
+			},
+		},
+		Extended: map[string]string{
 			"test":               "value",
 			"daprRuntimeVersion": "edge",
 		},
-		"components": []map[string]interface{}{
-			{
-				"name":         "MockComponent1Name",
-				"type":         "mock.component1Type",
-				"version":      "v1.0",
-				"capabilities": []string{"mock.feat.MockComponent1Name"},
+		RegisteredComponents: []registeredComponent{
+			registeredComponent{
+				Name:         "MockComponent1Name",
+				Type:         "mock.component1Type",
+				Version:      "v1.0",
+				Capabilities: []string{"mock.feat.MockComponent1Name"},
 			},
-			{
-				"name":         "MockComponent2Name",
-				"type":         "mock.component2Type",
-				"version":      "v1.0",
-				"capabilities": []string{"mock.feat.MockComponent2Name"},
+			registeredComponent{
+				Name:         "MockComponent2Name",
+				Type:         "mock.component2Type",
+				Version:      "v1.0",
+				Capabilities: []string{"mock.feat.MockComponent2Name"},
 			},
 		},
-		"subscriptions": []map[string]interface{}{
+		Subscriptions: []pubsubSubscription{
 			{
-				"pubsubname":      "test",
-				"topic":           "topic",
-				"deadLetterQueue": "dead",
-				"metadata":        "{}",
-				"rules": []map[string]interface{}{
-					{
-						"match": "",
-						"path":  "path",
+				PubsubName:      "test",
+				Topic:           "topic",
+				DeadLetterTopic: "dead",
+				Metadata:        map[string]string{},
+				Rules: []*pubsubSubscriptionRule{
+					&pubsubSubscriptionRule{
+						Match: "",
+						Path:  "path",
 					},
 				},
-				"programmaticSubscription": true,
+				ProgrammaticSubscription: true,
 			},
 		},
 	}
