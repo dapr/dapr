@@ -1699,7 +1699,7 @@ func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 
 func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
 	out := &runtimev1pb.PubsubSubscriptionRules{
-		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, len(rules)),
+		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
 	}
 	for _, r := range rules {
 		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{

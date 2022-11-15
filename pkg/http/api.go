@@ -1913,7 +1913,7 @@ func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
 }
 
 func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) []*pubsubSubscriptionRule {
-	out := make([]*pubsubSubscriptionRule, len(rules))
+	out := make([]*pubsubSubscriptionRule, 0)
 	for _, r := range rules {
 		out = append(out, &pubsubSubscriptionRule{
 			Match: fmt.Sprintf("%s", r.Match),

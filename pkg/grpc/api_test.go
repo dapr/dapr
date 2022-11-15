@@ -2281,7 +2281,7 @@ func TestGetMetadata(t *testing.T) {
 					DeadLetterTopic: "dead",
 					Metadata:        map[string]string{},
 					Rules: []*runtimePubsub.Rule{
-						&runtimePubsub.Rule{
+						{
 							Match: &expr.Expr{},
 							Path:  "path",
 						},
