@@ -403,5 +403,3 @@ replace (
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-replace github.com/dapr/components-contrib => github.com/shubham1172/components-contrib v1.6.0-rc.2.0.20221114104342-1aec4bbb76d1
