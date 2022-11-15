@@ -802,13 +802,15 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 	resp, err := workflowRun.Start(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_START_WORKFLOW", fmt.Sprintf(messages.ErrStartWorkflow, err))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
 	response, err := json.Marshal(resp)
 	if err != nil {
-		log.Errorf("Error when marshalling output response from workflow start: %v\n", err)
+		msg := NewErrorResponse("ERR_METADATA_GET", fmt.Sprintf(messages.ErrMetadataGet, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
 		return
 	}
 	log.Debug(resp)
@@ -855,13 +857,15 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 	resp, err := workflowRun.Get(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_GET_WORKFLOW", fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
 	response, err := json.Marshal(resp)
 	if err != nil {
-		log.Errorf("Error when matshalling workflow information: %v\n", err)
+		msg := NewErrorResponse("ERR_METADATA_GET", fmt.Sprintf(messages.ErrMetadataGet, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
 		return
 	}
 	respond(reqCtx, withJSON(200, response))
@@ -886,7 +890,9 @@ func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	workflowRun := a.workflowComponents[component]
 	if workflowRun == nil {
-		log.Error("The provided component does not exist.")
+		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrComponentDoesNotExist, component))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
 		return
 	}
 
@@ -897,7 +903,7 @@ func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 	err := workflowRun.Terminate(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_TERMINATE_WORKFLOW", fmt.Sprintf(messages.ErrTerminateWorkflow, err))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
