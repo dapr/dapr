@@ -108,12 +108,11 @@ type registeredComponent struct {
 }
 
 type pubsubSubscription struct {
-	PubsubName               string                    `json:"pubsubname"`
-	Topic                    string                    `json:"topic"`
-	DeadLetterTopic          string                    `json:"deadLetterTopic"`
-	Metadata                 map[string]string         `json:"metadata"`
-	Rules                    []*pubsubSubscriptionRule `json:"rules,omitempty"`
-	ProgrammaticSubscription bool                      `json:"programmaticSubscription"`
+	PubsubName      string                    `json:"pubsubname"`
+	Topic           string                    `json:"topic"`
+	DeadLetterTopic string                    `json:"deadLetterTopic"`
+	Metadata        map[string]string         `json:"metadata"`
+	Rules           []*pubsubSubscriptionRule `json:"rules,omitempty"`
 }
 
 type pubsubSubscriptionRule struct {
@@ -1878,12 +1877,11 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	ps := []pubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, pubsubSubscription{
-			PubsubName:               s.PubsubName,
-			Topic:                    s.Topic,
-			Metadata:                 s.Metadata,
-			DeadLetterTopic:          s.DeadLetterTopic,
-			ProgrammaticSubscription: s.ProgrammaticSubscription,
-			Rules:                    convertPubsubSubscriptionRules(s.Rules),
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
 		})
 	}
 

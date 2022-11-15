@@ -2253,7 +2253,6 @@ func TestV1MetadataEndpoint(t *testing.T) {
 							Path:  "path",
 						},
 					},
-					ProgrammaticSubscription: true,
 				},
 			}, nil
 		},
@@ -2305,7 +2304,6 @@ func TestV1MetadataEndpoint(t *testing.T) {
 						Path:  "path",
 					},
 				},
-				ProgrammaticSubscription: true,
 			},
 		},
 	}

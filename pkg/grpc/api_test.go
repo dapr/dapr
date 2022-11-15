@@ -2286,7 +2286,6 @@ func TestGetMetadata(t *testing.T) {
 							Path:  "path",
 						},
 					},
-					ProgrammaticSubscription: true,
 				},
 			}, nil
 		},
@@ -2314,7 +2313,6 @@ func TestGetMetadata(t *testing.T) {
 	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
 	assert.Equal(t, response.Subscriptions[0].Topic, "topic")
 	assert.Equal(t, response.Subscriptions[0].DeadLetterTopic, "dead")
-	assert.Equal(t, response.Subscriptions[0].ProgrammaticSubscription, true)
 	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
 	assert.Len(t, response.Subscriptions[0].Rules.Rules, 1)
 	assert.Equal(t, fmt.Sprintf("%s", response.Subscriptions[0].Rules.Rules[0].Match), "")

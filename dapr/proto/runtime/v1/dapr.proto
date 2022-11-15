@@ -548,7 +548,6 @@ message PubsubSubscription {
   map<string,string> metadata = 3;
   PubsubSubscriptionRules rules = 4;
   string dead_letter_topic = 5;
-  bool programmatic_subscription = 6;
 }
 
 message PubsubSubscriptionRules {

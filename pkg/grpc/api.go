@@ -1670,12 +1670,11 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 	ps := []*runtimev1pb.PubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, &runtimev1pb.PubsubSubscription{
-			PubsubName:               s.PubsubName,
-			Topic:                    s.Topic,
-			Metadata:                 s.Metadata,
-			DeadLetterTopic:          s.DeadLetterTopic,
-			ProgrammaticSubscription: s.ProgrammaticSubscription,
-			Rules:                    convertPubsubSubscriptionRules(s.Rules),
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
 		})
 	}
 

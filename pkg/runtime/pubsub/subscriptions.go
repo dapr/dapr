@@ -141,12 +141,11 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 			}
 
 			subscriptions[i] = Subscription{
-				PubsubName:               si.PubsubName,
-				Topic:                    si.Topic,
-				Metadata:                 si.Metadata,
-				DeadLetterTopic:          si.DeadLetterTopic,
-				Rules:                    rules[:n],
-				ProgrammaticSubscription: true,
+				PubsubName:      si.PubsubName,
+				Topic:           si.Topic,
+				Metadata:        si.Metadata,
+				DeadLetterTopic: si.DeadLetterTopic,
+				Rules:           rules[:n],
 			}
 		}
 
@@ -238,12 +237,11 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 				return nil, err
 			}
 			subscriptions = append(subscriptions, Subscription{
-				PubsubName:               s.PubsubName,
-				Topic:                    s.GetTopic(),
-				Metadata:                 s.GetMetadata(),
-				DeadLetterTopic:          s.DeadLetterTopic,
-				Rules:                    rules,
-				ProgrammaticSubscription: true,
+				PubsubName:      s.PubsubName,
+				Topic:           s.GetTopic(),
+				Metadata:        s.GetMetadata(),
+				DeadLetterTopic: s.DeadLetterTopic,
+				Rules:           rules,
 			})
 		}
 	}
