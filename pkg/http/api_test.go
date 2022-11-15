@@ -291,7 +291,449 @@ func TestPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
+			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"]) //nolint:dupword
+		}
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestBulkPubSubEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+				switch req.PubsubName {
+				case "errorpubsub":
+					err := fmt.Errorf("Error from pubsub %s", req.PubsubName)
+					res := pubsub.BulkPublishResponse{}
+					for _, entry := range req.Entries {
+						_, shouldErr := entry.Metadata["shouldErr"]
+						if shouldErr {
+							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+								EntryId: entry.EntryId,
+								Status:  pubsub.PublishFailed,
+								Error:   err,
+							})
+						} else {
+							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+								EntryId: entry.EntryId,
+								Status:  pubsub.PublishSucceeded,
+							})
+						}
+					}
+					return res, err
+				case "errnotfound":
+					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
+				case "errnotallowed":
+					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				default:
+					res := pubsub.BulkPublishResponse{}
+					for _, entry := range req.Entries {
+						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+							EntryId: entry.EntryId,
+							Status:  pubsub.PublishSucceeded,
+						})
+					}
+					return res, nil
+				}
+			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
+			},
+		},
+	}
+	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
+
+	bulkRequest := []bulkPublishMessageEntry{
+		{
+			EntryId: "1",
+			Event: map[string]string{
+				"key":   "first",
+				"value": "first value",
+			},
+			ContentType: "application/json",
+		},
+		{
+			EntryId: "2",
+			Event: map[string]string{
+				"key":   "second",
+				"value": "second value",
+			},
+			ContentType: "application/json",
+			Metadata: map[string]string{
+				"md1": "mdVal1",
+				"md2": "mdVal2",
+			},
+		},
+		{
+			EntryId: "3",
+			Event: map[string]string{
+				"key":   "third",
+				"value": "third value",
+			},
+			ContentType: "application/json",
+		},
+	}
+
+	// setup
+	reqBytes, _ := json.Marshal(bulkRequest)
+	resBytes := []byte{}
+	t.Run("Bulk Publish successfully - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish multi path successfully - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/A/B/C", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish complete failure - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+
+		errBulkRequest := []bulkPublishMessageEntry{}
+		for _, entry := range bulkRequest {
+			if entry.Metadata == nil {
+				entry.Metadata = map[string]string{}
+			}
+			entry.Metadata["shouldErr"] = "true"
+			errBulkRequest = append(errBulkRequest, entry)
+		}
+
+		errBulkResponse := pubsub.BulkPublishResponse{
+			Statuses: []pubsub.BulkPublishResponseEntry{
+				{
+					EntryId: "1",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "2",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "3",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+			},
+		}
+
+		errReqBytes, _ := json.Marshal(errBulkRequest)
+
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+
+			bulkResp := BulkPublishResponse{}
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
+			for i, entry := range bulkResp.Statuses {
+				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
+				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
+				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			}
+		}
+	})
+
+	t.Run("Bulk Publish partial failure - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+
+		errBulkRequest := []bulkPublishMessageEntry{}
+		for _, entry := range bulkRequest {
+			// Fail entries 2 and 3
+			if entry.EntryId == "2" || entry.EntryId == "3" {
+				if entry.Metadata == nil {
+					entry.Metadata = map[string]string{}
+				}
+				entry.Metadata["shouldErr"] = "true"
+			}
+			errBulkRequest = append(errBulkRequest, entry)
+		}
+
+		errBulkResponse := pubsub.BulkPublishResponse{
+			Statuses: []pubsub.BulkPublishResponseEntry{
+				{
+					EntryId: "2",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "3",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+			},
+		}
+
+		errReqBytes, _ := json.Marshal(errBulkRequest)
+
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+
+			bulkResp := BulkPublishResponse{}
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
+			for i, entry := range bulkResp.Statuses {
+				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
+				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
+				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			}
+		}
+	})
+
+	t.Run("Bulk Publish without topic name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Bulk Publish without entryId - 400", func(t *testing.T) {
+		reqWithoutEntryId := []bulkPublishMessageEntry{ //nolint:stylecheck
+			{
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				Event: map[string]string{
+					"key":   "second",
+					"value": "second value",
+				},
+				ContentType: "application/json",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		reqBytesWithoutEntryId, _ := json.Marshal(reqWithoutEntryId) //nolint:stylecheck
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryId, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error: entryId is duplicated or not present for entry")
+		}
+	})
+
+	t.Run("Bulk Publish with duplicate entryId - 400", func(t *testing.T) {
+		reqWithoutEntryId := []bulkPublishMessageEntry{ //nolint:stylecheck
+			{
+				EntryId: "1",
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				EntryId: "1",
+				Event: map[string]string{
+					"key":   "second",
+					"value": "second value",
+				},
+				ContentType: "application/json",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		reqBytesWithoutEntryId, _ := json.Marshal(reqWithoutEntryId) //nolint:stylecheck
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryId, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error: entryId is duplicated or not present for entry")
+		}
+	})
+
+	t.Run("Bulk Publish metadata error - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic?metadata.rawPayload=100", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_REQUEST_METADATA", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "failed deserializing metadata")
+		}
+	})
+
+	t.Run("Bulk Publish dataContentType mismatch - 400", func(t *testing.T) {
+		dCTMismatch := []bulkPublishMessageEntry{
+			{
+				EntryId: "1",
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				EntryId: "2",
+				Event: map[string]string{
+					"key":   "second",
+					"value": "second value",
+				},
+				ContentType: "text/xml",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		rBytes, _ := json.Marshal(dCTMismatch)
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, rBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error: mismatch between contentType and event")
+		}
+	})
+
+	t.Run("Bulk Publish bad request - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\":\"value\"}"), nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error when unmarshaling the request for topic topic") //nolint:dupword
+		}
+	})
+
+	t.Run("Bulk Publish without topic name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Bulk Publish with topic name '/' - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname//", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "success publishing with %s", method)
+			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish without topic or pubsub name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+		}
+	})
+
+	t.Run("Bulk Publish without topic or pubsub name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+		}
+	})
+
+	t.Run("Bulk Publish Pubsub not configured - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		// setup
+		savePubSubAdapter := testAPI.pubsubAdapter
+		testAPI.pubsubAdapter = nil
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+		}
+		testAPI.pubsubAdapter = savePubSubAdapter
+	})
+
+	t.Run("Bulk publish Pubsub not found - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errnotfound/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("Bulk publish Pubsub not allowed - 403", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errnotallowed/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 403, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -2259,7 +2701,7 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode, "Accessing configuration store with bad key should return 500")
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_GET", resp.ErrorBody["errorCode"])
-		assert.Equal(t, "fail to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
+		assert.Equal(t, "failed to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
 	})
 
 	t.Run("Get with none exist configurations store", func(t *testing.T) {
@@ -2269,7 +2711,7 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode, "Accessing configuration store with none exist configurations store should return 400")
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, "error configuration stores nonExistStore not found", resp.ErrorBody["message"])
+		assert.Equal(t, "configuration store nonExistStore not found", resp.ErrorBody["message"])
 	})
 }
 
@@ -3459,6 +3901,10 @@ const (
 
 type fakeStateStore struct {
 	counter int
+}
+
+func (c fakeStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (c fakeStateStore) Ping() error {

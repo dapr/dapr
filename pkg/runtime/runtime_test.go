@@ -78,6 +78,7 @@ import (
 	inmemoryStateStore "github.com/dapr/components-contrib/state/in-memory"
 
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -1708,6 +1709,117 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
+	t.Run("test bulk publish, topic allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic0",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(res.Statuses))
+		assert.Equal(t, "1", res.Statuses[0].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+
+		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					ContentType: "text/plain",
+				},
+				{
+					EntryId:     "2",
+					Event:       []byte("test 2"),
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(res.Statuses))
+		expectedIds := []string{"1", "2"}
+		assert.Contains(t, expectedIds, res.Statuses[0].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+		assert.Contains(t, expectedIds, res.Statuses[1].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[1].Status)
+	})
+
+	t.Run("test bulk publish, topic not allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			require.Nil(t, err)
+		}
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
+
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+	})
+
 	t.Run("test publish, topic allowed", func(t *testing.T) {
 		initMockPubSubForRuntime(rt)
 
@@ -2968,6 +3080,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "", []byte("Test Message"), "", "")
+	// add custom attributes
+	envelope["customInt"] = 123
+	envelope["customString"] = "abc"
+	envelope["customBool"] = true
+	envelope["customFloat"] = 1.23
+	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
+	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2981,6 +3100,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
+	// add custom attributes
+	envelope["customInt"] = 123
+	envelope["customString"] = "abc"
+	envelope["customBool"] = true
+	envelope["customFloat"] = 1.23
+	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
+	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	base64, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2993,12 +3119,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name             string
-		message          *pubsubSubscribedMessage
-		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
-		errorExpected    bool
-		noResponseStatus bool
-		responseError    error
+		name                        string
+		message                     *pubsubSubscribedMessage
+		responseStatus              runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+		errorExpected               bool
+		noResponseStatus            bool
+		responseError               error
+		validateCloudEventExtension *map[string]interface{}
 	}{
 		{
 			name:             "failed to publish message to user app with unimplemented error",
@@ -3046,6 +3173,32 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
 			errorExpected:  true,
 		},
+		{
+			name:           "succeeded to publish message to user app and validated cloud event extension attributes",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+				"customInt":    float64(123),
+				"customString": "abc",
+				"customBool":   true,
+				"customFloat":  float64(1.23),
+				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+			}),
+		},
+		{
+			name:           "succeeded to publish message to user app and validated cloud event extension attributes with base64 encoded data",
+			message:        testPubSubMessageBase64,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+				"customInt":    float64(123),
+				"customString": "abc",
+				"customBool":   true,
+				"customFloat":  float64(1.23),
+				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+			}),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -3065,12 +3218,14 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create mock application server first
 			if !tc.noResponseStatus {
 				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-					TopicEventResponseStatus: tc.responseStatus,
-					Error:                    tc.responseError,
+					TopicEventResponseStatus:    tc.responseStatus,
+					Error:                       tc.responseError,
+					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})
 			} else {
 				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-					Error: tc.responseError,
+					Error:                       tc.responseError,
+					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})
 			}
 			if grpcServer != nil {
@@ -3536,14 +3691,22 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 // mockSubscribePubSub is an in-memory pubsub component.
 type mockSubscribePubSub struct {
-	handlers map[string]pubsub.Handler
-	pubCount map[string]int
+	bulkHandlers    map[string]pubsub.BulkHandler
+	handlers        map[string]pubsub.Handler
+	pubCount        map[string]int
+	bulkPubCount    map[string]int
+	isBulkSubscribe bool
+	bulkReponse     pubsub.BulkSubscribeResponse
 }
+
+// type BulkSubscribeResponse struct {
 
 // Init is a mock initialization method.
 func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
+	m.bulkHandlers = make(map[string]pubsub.BulkHandler)
 	m.handlers = make(map[string]pubsub.Handler)
 	m.pubCount = make(map[string]int)
+	m.bulkPubCount = make(map[string]int)
 	return nil
 }
 
@@ -3556,9 +3719,51 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 			Topic: req.Topic,
 		}
 		handler(context.Background(), pubsubMsg)
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		m.bulkPubCount[req.Topic]++
+		nbei := pubsub.BulkMessageEntry{
+			EntryId: "0",
+			Event:   req.Data,
+		}
+		msgArr := []pubsub.BulkMessageEntry{nbei}
+		nbm := &pubsub.BulkMessage{
+			Entries: msgArr,
+			Topic:   req.Topic,
+		}
+		bulkHandler(context.Background(), nbm)
+	}
+	return nil
+}
+
+// BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
+func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	m.bulkPubCount[req.Topic]++
+	res := pubsub.BulkPublishResponse{}
+	if handler, ok := m.handlers[req.Topic]; ok {
+		for _, entry := range req.Entries {
+			m.pubCount[req.Topic]++
+			// TODO this needs to be modified as part of BulkSubscribe deadletter test
+			pubsubMsg := &pubsub.NewMessage{
+				Data:  entry.Event,
+				Topic: req.Topic,
+			}
+			handler(context.Background(), pubsubMsg)
+			res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+				EntryId: entry.EntryId,
+				Status:  pubsub.PublishSucceeded,
+			})
+		}
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		nbm := &pubsub.BulkMessage{
+			Entries: req.Entries,
+			Topic:   req.Topic,
+		}
+		bulkResponses, err := bulkHandler(context.Background(), nbm)
+		m.bulkReponse.Statuses = bulkResponses
+		m.bulkReponse.Error = err
 	}
 
-	return nil
+	return res, nil
 }
 
 // Subscribe is a mock subscribe method.
@@ -3572,6 +3777,12 @@ func (m *mockSubscribePubSub) Close() error {
 }
 
 func (m *mockSubscribePubSub) Features() []pubsub.Feature {
+	return nil
+}
+
+func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
+	m.isBulkSubscribe = true
+	m.bulkHandlers[req.Topic] = handler
 	return nil
 }
 
@@ -4303,6 +4514,25 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 // Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 	return nil
+}
+
+// BulkPublish is a mock bulk publish method returning a success all the time.
+func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	res := pubsub.BulkPublishResponse{}
+
+	for _, entry := range req.Entries {
+		e := pubsub.BulkPublishResponseEntry{
+			EntryId: entry.EntryId,
+			Status:  pubsub.PublishSucceeded,
+			Error:   nil,
+		}
+		res.Statuses = append(res.Statuses, e)
+	}
+	return res, nil
+}
+
+func (m *mockPublishPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
+	return pubsub.BulkSubscribeResponse{}, nil
 }
 
 // Subscribe is a mock subscribe method.

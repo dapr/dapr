@@ -28,7 +28,6 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 
-	"github.com/agrea/ptr"
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -68,6 +67,7 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -158,6 +158,10 @@ func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalIn
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
+}
+
+func (m *mockGRPCAPI) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+	return &runtimev1pb.BulkPublishResponse{}, nil
 }
 
 func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
@@ -1049,7 +1053,7 @@ func TestGetState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.String("test-etag"),
+			ETag: ptr.Of("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
@@ -1656,7 +1660,7 @@ func TestGetBulkState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.String("test-etag"),
+			ETag: ptr.Of("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
@@ -1863,6 +1867,19 @@ func TestPublishTopic(t *testing.T) {
 				mock.On("Features").Return([]pubsub.Feature{})
 				return &mock
 			},
+			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+				switch req.Topic {
+				case "error-topic":
+					return pubsub.BulkPublishResponse{}, errors.New("error when publish")
+
+				case "err-not-found":
+					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
+
+				case "err-not-allowed":
+					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				}
+				return pubsub.BulkPublishResponse{}, nil
+			},
 		},
 	}
 	server := startTestServerAPI(port, srv)
@@ -1904,6 +1921,124 @@ func TestPublishTopic(t *testing.T) {
 		Topic:      "err-not-allowed",
 	})
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+	})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "topic",
+	})
+	assert.Nil(t, err)
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "error-topic",
+	})
+	assert.Equal(t, codes.Internal, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "err-not-found",
+	})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "err-not-allowed",
+	})
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestBulkPublish(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	srv := &api{
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
+			},
+			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+				entries := []pubsub.BulkPublishResponseEntry{}
+
+				// Construct sample response from the broker.
+				for i, e := range req.Entries {
+					entry := pubsub.BulkPublishResponseEntry{
+						EntryId: e.EntryId,
+					}
+					if req.Topic == "error-topic" {
+						entry.Error = errors.New("error when publish")
+						entry.Status = pubsub.PublishFailed
+					} else if req.Topic == "even-error-topic" {
+						if i%2 == 0 {
+							entry.Error = errors.New("error when publish")
+							entry.Status = pubsub.PublishFailed
+						} else {
+							entry.Status = pubsub.PublishSucceeded
+						}
+					} else {
+						entry.Status = pubsub.PublishSucceeded
+					}
+
+					entries = append(entries, entry)
+				}
+
+				return pubsub.BulkPublishResponse{Statuses: entries}, nil
+			},
+		},
+	}
+
+	server := startTestServerAPI(port, srv)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	sampleEntries := []*runtimev1pb.BulkPublishRequestEntry{
+		{EntryId: "1", Event: []byte("data1")},
+		{EntryId: "2", Event: []byte("data2")},
+		{EntryId: "3", Event: []byte("data3")},
+		{EntryId: "4", Event: []byte("data4")},
+	}
+
+	res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Empty(t, res.Statuses)
+
+	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "error-topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 4, len(res.Statuses))
+	for _, s := range res.Statuses {
+		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
+	}
+
+	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "even-error-topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(res.Statuses))
+	for _, s := range res.Statuses {
+		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
+	}
 }
 
 func TestShutdownEndpoints(t *testing.T) {

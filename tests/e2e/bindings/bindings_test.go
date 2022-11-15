@@ -204,7 +204,8 @@ func testBindingsForApp(app struct {
 	inputApp     string
 	inputGRPCApp string
 	outputApp    string
-}) func(t *testing.T) {
+},
+) func(t *testing.T) {
 	return func(t *testing.T) {
 		// setup
 		outputExternalURL := tr.Platform.AcquireAppExternalURL(app.outputApp)
@@ -268,6 +269,7 @@ func testBindingsForApp(app struct {
 		require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
 	}
 }
+
 func TestBindings(t *testing.T) {
 	for idx := range bindingsApps {
 		app := bindingsApps[idx]
