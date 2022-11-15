@@ -159,7 +159,7 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 				}
 				t.Logf("reduced latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 			}
-			avg := (daprResult.DurationHistogram.Avg - baselineResult.DurationHistogram.Avg) * 1000
+			avg := (baselineResult.DurationHistogram.Avg - daprResult.DurationHistogram.Avg) * 1000
 			t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineResult.DurationHistogram.Avg*1000))
 			t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprResult.DurationHistogram.Avg*1000))
 			t.Logf("reduced latency avg: %sms", fmt.Sprintf("%.2f", avg))
