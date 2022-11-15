@@ -2266,11 +2266,11 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	expectedBody := metadata{
 		ID: "xyz",
 		ActiveActorsCount: []actors.ActiveActorsCount{
-			actors.ActiveActorsCount{
+			{
 				Type:  "abcd",
 				Count: 10,
 			},
-			actors.ActiveActorsCount{
+			{
 				Type:  "xyz",
 				Count: 5,
 			},
@@ -2280,13 +2280,13 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			"daprRuntimeVersion": "edge",
 		},
 		RegisteredComponents: []registeredComponent{
-			registeredComponent{
+			{
 				Name:         "MockComponent1Name",
 				Type:         "mock.component1Type",
 				Version:      "v1.0",
 				Capabilities: []string{"mock.feat.MockComponent1Name"},
 			},
-			registeredComponent{
+			{
 				Name:         "MockComponent2Name",
 				Type:         "mock.component2Type",
 				Version:      "v1.0",
@@ -2300,7 +2300,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				DeadLetterTopic: "dead",
 				Metadata:        map[string]string{},
 				Rules: []*pubsubSubscriptionRule{
-					&pubsubSubscriptionRule{
+					{
 						Match: "",
 						Path:  "path",
 					},
