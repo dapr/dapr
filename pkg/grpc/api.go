@@ -377,7 +377,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
 	} else {
-		statusCode = int32(resp.Status().Code)
+		statusCode = resp.Status().Code
 	}
 
 	return resp.Proto(), err
