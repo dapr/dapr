@@ -92,7 +92,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	log.Printf("StartTest - message: %s", commandRequest.Message)
 
 	// Create json payload to send over HTTP to start workflow by providing task_queue
-	var jsonData = []byte(`{
+	jsonData := []byte(`{
 		"workflow_options" :
 		{
 			"task_queue" : "e2e_test_queue"

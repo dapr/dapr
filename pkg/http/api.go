@@ -78,6 +78,7 @@ type api struct {
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
 	getComponentsFn            func() []componentsV1alpha1.Component
+	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
 	workflowComponents         map[string]wfs.Workflow
@@ -108,11 +109,25 @@ type registeredComponent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
+type pubsubSubscription struct {
+	PubsubName      string                    `json:"pubsubname"`
+	Topic           string                    `json:"topic"`
+	DeadLetterTopic string                    `json:"deadLetterTopic"`
+	Metadata        map[string]string         `json:"metadata"`
+	Rules           []*pubsubSubscriptionRule `json:"rules,omitempty"`
+}
+
+type pubsubSubscriptionRule struct {
+	Match string `json:"match"`
+	Path  string `json:"path"`
+}
+
 type metadata struct {
 	ID                   string                     `json:"id"`
 	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
 	Extended             map[string]string          `json:"extended"`
 	RegisteredComponents []registeredComponent      `json:"components"`
+	Subscriptions        []pubsubSubscription       `json:"subscriptions"`
 }
 
 const (
@@ -148,6 +163,7 @@ type APIOpts struct {
 	AppChannel                  channel.AppChannel
 	DirectMessaging             messaging.DirectMessaging
 	GetComponentsFn             func() []componentsV1alpha1.Component
+	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
 	Resiliency                  resiliency.Provider
 	StateStores                 map[string]state.Store
 	WorkflowsComponents         map[string]wfs.Workflow
@@ -177,6 +193,7 @@ func NewAPI(opts APIOpts) API {
 		appChannel:                 opts.AppChannel,
 		directMessaging:            opts.DirectMessaging,
 		getComponentsFn:            opts.GetComponentsFn,
+		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
 		workflowComponents:         opts.WorkflowsComponents,
@@ -2045,11 +2062,30 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
+	subscriptions, err := a.getSubscriptionsFn()
+	if err != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_GET_SUBSCRIPTIONS", fmt.Sprintf(messages.ErrPubsubGetSubscriptions, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	ps := []pubsubSubscription{}
+	for _, s := range subscriptions {
+		ps = append(ps, pubsubSubscription{
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
+		})
+	}
+
 	mtd := metadata{
 		ID:                   a.id,
 		ActiveActorsCount:    activeActorsCount,
 		Extended:             temp,
 		RegisteredComponents: registeredComponents,
+		Subscriptions:        ps,
 	}
 
 	mtdBytes, err := json.Marshal(mtd)
@@ -2067,6 +2103,17 @@ func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
 		return val
 	}
 	return make([]string, 0)
+}
+
+func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) []*pubsubSubscriptionRule {
+	out := make([]*pubsubSubscriptionRule, 0)
+	for _, r := range rules {
+		out = append(out, &pubsubSubscriptionRule{
+			Match: fmt.Sprintf("%s", r.Match),
+			Path:  r.Path,
+		})
+	}
+	return out
 }
 
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
