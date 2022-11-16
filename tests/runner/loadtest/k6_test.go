@@ -370,7 +370,7 @@ func TestK6(t *testing.T) {
 
 	t.Run("k8sRun should return an error if createconfig returns an error", func(t *testing.T) {
 		deleteErr := errors.New("fake-delete")
-		const file = "/tmp/file_exists.js"
+		const file = "./file_exists.js"
 		_, err := os.Create(file)
 		require.NoError(t, err)
 		defer os.RemoveAll(file)
@@ -408,7 +408,7 @@ func TestK6(t *testing.T) {
 		}
 
 		jobs.On("List", mock.Anything, mock.Anything).Return(nil)
-		const file = "/tmp/file_exists.js"
+		const file = "./file_exists.js"
 		_, err := os.Create(file)
 		require.NoError(t, err)
 		defer os.RemoveAll(file)
