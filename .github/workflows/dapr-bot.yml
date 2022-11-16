@@ -9,7 +9,14 @@ jobs:
     name: bot-processor
     runs-on: ubuntu-latest
     steps:
+      - uses: xt0rted/pull-request-comment-branch@v1
+        id: comment_branch
+      - uses: actions/checkout@v2
+        if: success()
+        with:
+          ref: ${{ steps.comment_branch.outputs.head_ref }}
       - name: Checkout code
+        if: ${{ steps.comment_branch.conclusion == 'failure' }}
         uses: actions/checkout@v2 # required to make the script available for next step
       - name: Comment analyzer
         uses: actions/github-script@v4
