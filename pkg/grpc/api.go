@@ -72,7 +72,7 @@ const (
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 //
-//nolint:nosnakecase
+//nolint:interfacebloat
 type API interface {
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)

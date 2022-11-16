@@ -44,9 +44,12 @@ import (
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -2141,6 +2144,30 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
 	}
+
+	// Assemble Cloud Event Extensions:
+	// Create copy of the cloud event with duplicated data removed
+
+	checkDuplicateKeys := []string{pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field}
+	extensions := map[string]interface{}{}
+	for key, value := range cloudEvent {
+		if !slices.Contains(checkDuplicateKeys, key) {
+			extensions[key] = value
+		}
+	}
+	extensionsStruct := &structpb.Struct{}
+	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
+	if jsonMarshalErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
+		return fmt.Errorf("Error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
+	}
+
+	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, extensionsStruct)
+	if protoUnmarshalErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
+		return fmt.Errorf("Error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", jsonMarshalErr)
+	}
+	envelope.Extensions = extensionsStruct
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
