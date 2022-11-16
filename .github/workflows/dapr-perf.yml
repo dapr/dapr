@@ -479,10 +479,10 @@ jobs:
       - name: Run Perf test pubsub_bulk_publish_grpc
         if: env.TEST_PREFIX != ''
         env:
-          DAPR_PERF_QPS: 40
+          DAPR_PERF_QPS: 400
           DAPR_PERF_CONNECTIONS: 16
           DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD_SIZE: 1024
+          DAPR_PAYLOAD_SIZE: 1
         run: make test-perf-pubsub_bulk_publish_grpc
       - name: Run Perf test actor_timer in Java
         if: env.TEST_PREFIX != ''
