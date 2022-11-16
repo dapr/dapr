@@ -73,7 +73,7 @@ func (f *Fortio) setup(platform runner.PlatformInterface) error {
 	}
 
 	f.testerAppURL = platform.AcquireAppExternalURL(f.testApp)
-	if err := f.validate(); err != nil {
+	if err = f.validate(); err != nil {
 		return err
 	}
 

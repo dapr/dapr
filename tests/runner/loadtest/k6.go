@@ -202,7 +202,7 @@ func (k6 *K6) createConfig(ctx context.Context) error {
 	}
 	configClient := k6.kubeClient.CoreV1().ConfigMaps(k6.namespace)
 	// ignore not found
-	if err = configClient.Delete(ctx, k6.configName, *&v1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+	if err = configClient.Delete(ctx, k6.configName, v1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	cm := corev1.ConfigMap{
@@ -227,11 +227,11 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 		return err
 	}
 
-	if err := k6.createConfig(k6.ctx); err != nil {
+	if err = k6.createConfig(k6.ctx); err != nil {
 		return err
 	}
 
-	if err := k6.Dispose(); err != nil {
+	if err = k6.Dispose(); err != nil {
 		return err
 	}
 
@@ -327,11 +327,11 @@ func K6ResultDefault(k6 *K6) (*K6TestSummary[K6RunnerMetricsSummary], error) {
 
 // K6Result extract the test summary results from pod logs.
 func K6Result[T any](k6 *K6) (*K6TestSummary[T], error) {
-	pods, err := k6.kubeClient.CoreV1().Pods(k6.namespace).List(k6.ctx, v1.ListOptions{
+	pods, podErr := k6.kubeClient.CoreV1().Pods(k6.namespace).List(k6.ctx, v1.ListOptions{
 		LabelSelector: k6.selector(),
 	})
-	if err != nil {
-		return nil, err
+	if podErr != nil {
+		return nil, podErr
 	}
 	runnersResults := make([]*T, 0)
 	for _, pod := range pods.Items {
