@@ -137,6 +137,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
+	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	daprRunTimeVersion         string
 }
 
@@ -289,6 +290,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
+	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
 }
 
 // NewAPI returns a new gRPC API.
@@ -320,6 +322,7 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsFn:            opts.GetComponentsFn,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		daprRunTimeVersion:         version.Version(),
 	}
 }
@@ -1658,11 +1661,29 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
+	subscriptions, err := a.getSubscriptionsFn()
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetMetadataResponse{}, err
+	}
+	ps := []*runtimev1pb.PubsubSubscription{}
+	for _, s := range subscriptions {
+		ps = append(ps, &runtimev1pb.PubsubSubscription{
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
+		})
+	}
+
 	response := &runtimev1pb.GetMetadataResponse{
 		Id:                   a.id,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
+		Subscriptions:        ps,
 	}
 
 	return response, nil
@@ -1673,6 +1694,19 @@ func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 		return val
 	}
 	return make([]string, 0)
+}
+
+func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
+	out := &runtimev1pb.PubsubSubscriptionRules{
+		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
+	}
+	for _, r := range rules {
+		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
+			Match: fmt.Sprintf("%s", r.Match),
+			Path:  r.Path,
+		})
+	}
+	return out
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.
