@@ -16,12 +16,16 @@ package components
 import (
 	"strings"
 
+	v1alphaclient "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components/pluggable"
+	"github.com/pkg/errors"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
 )
 
 const (
@@ -110,4 +114,32 @@ func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]
 	}
 
 	return patches, &sharedSocketVolumeMount
+}
+
+// Inject takes a pod as an argument and inject all component containers to that pod,
+// also it returns the socket volume mount for the sidecar.
+func Inject(pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount, error) {
+	injectionEnabled := sidecar.Annotations(pod.Annotations).GetBoolOrDefault(annotations.KeyPluggableComponentsInjection, false)
+	if !injectionEnabled {
+		return []sidecar.PatchOperation{}, nil, nil
+	}
+	// creates the in-cluster config
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// creates the clientset
+	clientset, err := v1alphaclient.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	_, err = clientset.Components(pod.Namespace).List(metav1.ListOptions{})
+
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "error reading components")
+	}
+
+	return nil, nil, nil
 }
