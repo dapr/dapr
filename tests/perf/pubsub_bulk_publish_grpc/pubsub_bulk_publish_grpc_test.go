@@ -33,6 +33,7 @@ import (
 )
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
+const numMessagesToPublish = 100
 
 var tr *runner.TestRunner
 
@@ -104,9 +105,9 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 			_, err := utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 			require.NoError(t, err)
 
-			// Perform baseline test - publish 1000 messages with individual Publish calls
+			// Perform baseline test - publish messages with individual Publish calls
 			p.Grpc = true
-			p.Dapr = fmt.Sprintf("capability=pubsub,target=dapr,method=publish-multi,store=%s,topic=topic123,contenttype=text/plain,numevents=1000,rawpayload=%s", tc.pubsub, strconv.FormatBool(tc.isRawPayload))
+			p.Dapr = fmt.Sprintf("capability=pubsub,target=dapr,method=publish-multi,store=%s,topic=topic123,contenttype=text/plain,numevents=%d,rawpayload=%s", tc.pubsub, numMessagesToPublish, strconv.FormatBool(tc.isRawPayload))
 			p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 			body, err := json.Marshal(&p)
 			require.NoError(t, err)
@@ -120,8 +121,8 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 			// fast fail if daprResp starts with error
 			require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
-			// Perform bulk test - publish 1000 messages with a single BulkPublish call
-			p.Dapr = fmt.Sprintf("capability=pubsub,target=dapr,method=publish-multi,store=%s,topic=topic123,contenttype=text/plain,numevents=1000,rawpayload=%s", tc.pubsub, strconv.FormatBool(tc.isRawPayload))
+			// Perform bulk test - publish messages with a single BulkPublish call
+			p.Dapr = fmt.Sprintf("capability=pubsub,target=dapr,method=bulkpublish,store=%s,topic=topic123,contenttype=text/plain,numevents=%d,rawpayload=%s", tc.pubsub, numMessagesToPublish, strconv.FormatBool(tc.isRawPayload))
 			p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 			body, err = json.Marshal(&p)
 			require.NoError(t, err)
