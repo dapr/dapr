@@ -55,46 +55,24 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 
 	tcs := []struct {
 		name                      string
-		bulkPublishSerially       string
 		bulkPublishMaxConcurrency int
 		publishErrors             []error
 		expectError               bool
 	}{
 		{
-			name:                "bulkPublishSeriallyKey is set to true, without publish errors",
-			bulkPublishSerially: "true",
-			publishErrors:       []error{nil, nil, nil},
-			expectError:         false,
+			name:          "default bulk publish without publish errors",
+			publishErrors: []error{nil, nil, nil},
+			expectError:   false,
 		},
 		{
-			name:                "bulkPublishSeriallyKey is set to true, with a publish error",
-			bulkPublishSerially: "true",
-			publishErrors:       []error{errors.New("publish error"), nil, nil},
-			expectError:         true,
-		},
-		{
-			name:                "bulkPublishSeriallyKey is not true, without publish errors",
-			bulkPublishSerially: "false",
-			publishErrors:       []error{nil, nil, nil},
-			expectError:         false,
-		},
-		{
-			name:                "bulkPublishSeriallyKey is not true, with a publish errors",
-			bulkPublishSerially: "false",
-			publishErrors:       []error{nil, errors.New("publish error"), nil},
-			expectError:         true,
-		},
-		{
-			name:                      "bulkPublishMaxConcurrency is less than number of entries, without publish errors",
-			bulkPublishSerially:       "false",
-			bulkPublishMaxConcurrency: 1,
-			publishErrors:             []error{nil, nil, nil},
-			expectError:               false,
+			name:          "default bulk publish with publish errors",
+			publishErrors: []error{nil, errors.New("publish error"), nil},
+			expectError:   true,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(fmt.Sprintf("publishes all messages in a request, %s", tc.name), func(t *testing.T) {
+		t.Run(fmt.Sprintf(tc.name), func(t *testing.T) {
 			// Create publish requests for each message in the bulk request.
 			var pubReqs []*contribPubsub.PublishRequest
 			for _, entry := range req.Entries {
@@ -114,12 +92,6 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 				mockPubSub.Mock.On("Publish", pubReqs[i]).Return(e)
 			}
 			bulkPublisher := NewDefaultBulkPublisher(mockPubSub)
-
-			// Set up metadata and invoke the bulk publish method.
-			req.Metadata[bulkPublishSeriallyKey] = tc.bulkPublishSerially
-			if tc.bulkPublishMaxConcurrency > 0 {
-				req.Metadata[bulkPublishMaxConcurrencyKey] = fmt.Sprintf("%d", tc.bulkPublishMaxConcurrency)
-			}
 
 			res, err := bulkPublisher.BulkPublish(context.Background(), req)
 

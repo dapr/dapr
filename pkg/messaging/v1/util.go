@@ -29,7 +29,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -57,11 +56,6 @@ const (
 
 	// DestinationIDHeader is the header carrying the value of the invoked app id.
 	DestinationIDHeader = "destination-app-id"
-	// SourceIDHeader is the header carrying the value of the invoking app id.
-	SourceIDHeader = "source-app-id"
-
-	// StatusCodeClass is the header determining the status codes classification (e.g. success, failure).
-	StatusCodeClass = "status-code-class"
 
 	// ErrorInfo metadata value is limited to 64 chars
 	// https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L126
@@ -71,6 +65,9 @@ const (
 	errorInfoDomain            = "dapr.io"
 	errorInfoHTTPCodeMetadata  = "http.code"
 	errorInfoHTTPErrorMetadata = "http.error_message"
+
+	CallerIDHeader = DaprHeaderPrefix + "caller-app-id"
+	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
 )
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
@@ -460,20 +457,4 @@ func WithCustomGRPCMetadata(ctx context.Context, md map[string]string) context.C
 	}
 
 	return ctx
-}
-
-func IsSuccessCode(protocol string, status int32) bool {
-	if protocol == config.GRPCProtocol {
-		if status == 0 {
-			return true
-		} else {
-			return false
-		}
-	} else {
-		if status >= 200 && status < 300 {
-			return true
-		} else {
-			return false
-		}
-	}
 }
