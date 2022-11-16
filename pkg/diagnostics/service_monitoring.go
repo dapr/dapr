@@ -12,6 +12,12 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
+const (
+	SuccessClass = "success"
+	FailureClass = "failure"
+	UnknownClass = "unknown"
+)
+
 // Tag keys.
 var (
 	componentKey        = tag.MustNewKey("component")
@@ -459,6 +465,7 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 				methodKey, method,
 				statusKey, statusCode),
 			s.serviceInvocationResponseReceivedTotal.M(1))
+		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
