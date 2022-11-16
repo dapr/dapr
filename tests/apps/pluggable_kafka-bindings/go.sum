@@ -5,8 +5,8 @@ github.com/cenkalti/backoff/v4 v4.1.3 h1:cFAlzYUlVYDysBEH2T5hyJZMh3+5+WCBvSnK6Q8
 github.com/cenkalti/backoff/v4 v4.1.3/go.mod h1:scbssz8iZGpm3xbr14ovlUdkxfGXNInqkPWOWmG2CLw=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8 h1:YbYOmbbmti6SpitqozFzfD0HwN3yFH3uOXxLZIZNe5w=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8/go.mod h1:7CpOwUfY7KlADHWTCmOtf0nRjvLt/62lHJKrgueVE1I=
-github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc h1:gPqTVKT6fvwZvkw5aPaKTZZixHWmlTih5lPwsaEapLI=
-github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc/go.mod h1:hytIOQTnKSWtrQ+ni2KNXiTMqOqbUu9T6UgXgxP3Edc=
+github.com/dapr/components-contrib v1.9.1-0.20221115192719-e8d070a44d4d h1:JEjZhXlz1nbd44jaNia1mmPc83we/rxgTqMMubkQSwA=
+github.com/dapr/components-contrib v1.9.1-0.20221115192719-e8d070a44d4d/go.mod h1:hytIOQTnKSWtrQ+ni2KNXiTMqOqbUu9T6UgXgxP3Edc=
 github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f h1:K6XJz+p6bQwqqI+GyQP/jjjqfsdjK0Loe2ZYQ5gXut4=
 github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f/go.mod h1:i9t09QZw346M2RbuK7oJhssOP0HCAQObz61U4SBNJSU=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
