@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -65,14 +66,27 @@ func TestMain(m *testing.M) {
 func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	tcs := []struct {
 		name         string
+		pubsub       string
 		isRawPayload bool
 	}{
 		{
-			name:         "with cloud event",
+			name:         "In-memory with with cloud event",
+			pubsub:       "inmemorypubsub",
 			isRawPayload: false,
 		},
 		{
-			name:         "without cloud event (raw payload)",
+			name:         "In-memory without cloud event (raw payload)",
+			pubsub:       "inmemorypubsub",
+			isRawPayload: true,
+		},
+		{
+			name:         "Kafka with cloud event",
+			pubsub:       "kafka-messagebus",
+			isRawPayload: false,
+		},
+		{
+			name:         "Kafka without cloud event (raw payload)",
+			pubsub:       "kafka-messagebus",
 			isRawPayload: true,
 		},
 	}
@@ -92,15 +106,12 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 
 			// Perform baseline test - publish 1000 messages with individual Publish calls
 			p.Grpc = true
-			p.Dapr = "capability=pubsub,target=dapr,method=publish-multi,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=1000"
-			if tc.isRawPayload {
-				p.Dapr += ",rawpayload=true"
-			}
+			p.Dapr = fmt.Sprintf("capability=pubsub,target=dapr,method=publish-multi,store=%s,topic=topic123,contenttype=text/plain,numevents=1000,rawpayload=%s", tc.pubsub, strconv.FormatBool(tc.isRawPayload))
 			p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 			body, err := json.Marshal(&p)
 			require.NoError(t, err)
 
-			t.Log("running baseline test...")
+			t.Log("running baseline test, publishing messages individually...")
 			baselineResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
 			t.Logf("baseline test results: %s", string(baselineResp))
 			t.Log("checking err...")
@@ -109,23 +120,20 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 			// fast fail if daprResp starts with error
 			require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
-			// Perform dapr test - publish 1000 messages with a single BulkPublish call
-			p.Dapr = "capability=pubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=1000"
-			if tc.isRawPayload {
-				p.Dapr += ",rawpayload=true"
-			}
+			// Perform bulk test - publish 1000 messages with a single BulkPublish call
+			p.Dapr = fmt.Sprintf("capability=pubsub,target=dapr,method=publish-multi,store=%s,topic=topic123,contenttype=text/plain,numevents=1000,rawpayload=%s", tc.pubsub, strconv.FormatBool(tc.isRawPayload))
 			p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 			body, err = json.Marshal(&p)
 			require.NoError(t, err)
 
-			t.Log("running dapr test...")
-			daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
-			t.Logf("dapr test results: %s", string(daprResp))
+			t.Log("running bulk test, publishing messages with bulk publish...")
+			bulkResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+			t.Logf("bulk test results: %s", string(bulkResp))
 			t.Log("checking err...")
 			require.NoError(t, err)
-			require.NotEmpty(t, daprResp)
-			// fast fail if daprResp starts with error
-			require.False(t, strings.HasPrefix(string(daprResp), "error"))
+			require.NotEmpty(t, bulkResp)
+			// fast fail if bulkResp starts with error
+			require.False(t, strings.HasPrefix(string(bulkResp), "error"))
 
 			sidecarUsage, err := tr.Platform.GetSidecarUsage("tester")
 			require.NoError(t, err)
@@ -138,8 +146,8 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 
 			t.Logf("dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 
-			var daprResult perf.TestResult
-			err = json.Unmarshal(daprResp, &daprResult)
+			var bulkResult perf.TestResult
+			err = json.Unmarshal(bulkResp, &bulkResult)
 			require.NoError(t, err)
 
 			var baselineResult perf.TestResult
@@ -150,7 +158,7 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 			var tp90Latency float64
 
 			for k, v := range percentiles {
-				bulkValue := daprResult.DurationHistogram.Percentiles[k].Value
+				bulkValue := bulkResult.DurationHistogram.Percentiles[k].Value
 				baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
 
 				latency := (baselineValue - bulkValue) * 1000
@@ -159,13 +167,17 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 				}
 				t.Logf("reduced latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 			}
-			avg := (baselineResult.DurationHistogram.Avg - daprResult.DurationHistogram.Avg) * 1000
+			avg := (baselineResult.DurationHistogram.Avg - bulkResult.DurationHistogram.Avg) * 1000
 			t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineResult.DurationHistogram.Avg*1000))
-			t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprResult.DurationHistogram.Avg*1000))
+			t.Logf("bulk latency avg: %sms", fmt.Sprintf("%.2f", bulkResult.DurationHistogram.Avg*1000))
 			t.Logf("reduced latency avg: %sms", fmt.Sprintf("%.2f", avg))
 
+			t.Logf("baseline QPS: %v", baselineResult.ActualQPS)
+			t.Logf("bulk QPS: %v", bulkResult.ActualQPS)
+			t.Logf("increase in QPS: %v", (bulkResult.ActualQPS-baselineResult.ActualQPS)/baselineResult.ActualQPS*100)
+
 			report := perf.NewTestReport(
-				[]perf.TestResult{baselineResult, daprResult},
+				[]perf.TestResult{baselineResult, bulkResult},
 				"Pubsub Bulk Publish Grpc",
 				sidecarUsage,
 				appUsage)
@@ -176,10 +188,10 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 				t.Error(err)
 			}
 
-			require.Equal(t, 0, daprResult.RetCodes.Num400)
-			require.Equal(t, 0, daprResult.RetCodes.Num500)
+			require.Equal(t, 0, bulkResult.RetCodes.Num400)
+			require.Equal(t, 0, bulkResult.RetCodes.Num500)
 			require.Equal(t, 0, restarts)
-			require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
+			require.True(t, bulkResult.ActualQPS > float64(p.QPS)*0.99)
 			require.Greater(t, tp90Latency, 0.0)
 		})
 	}
