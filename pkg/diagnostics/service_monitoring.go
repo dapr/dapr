@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -9,6 +10,12 @@ import (
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+)
+
+const (
+	SuccessClass = "success"
+	FailureClass = "failure"
+	UnknownClass = "unknown"
 )
 
 // Tag keys.
@@ -27,7 +34,7 @@ var (
 	sourceAppIDKey      = tag.MustNewKey("src_app_id")
 	methodKey           = tag.MustNewKey("method")
 	statusKey           = tag.MustNewKey("status")
-	sourceProtocolKey   = tag.MustNewKey("src_protocol")
+	classKey            = tag.MustNewKey("class")
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
@@ -208,11 +215,11 @@ func (s *serviceMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 
-		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, sourceProtocolKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, sourceProtocolKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, sourceProtocolKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, sourceProtocolKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, methodKey, sourceProtocolKey, statusKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, statusKey, classKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey, classKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey, classKey}, defaultLatencyDistribution),
 	)
 }
 
@@ -407,51 +414,60 @@ func (s *serviceMetrics) RequestBlockedByGlobalAction(appID, trustDomain, namesp
 }
 
 // ServiceInvocationRequestSent records the number of service invocation requests sent.
-func (s *serviceMetrics) ServiceInvocationRequestSent(appID, destinationAppID, method, protocol string) {
+func (s *serviceMetrics) ServiceInvocationRequestSent(appID, destinationAppID, method string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				appIDKey, appID,
 				destinationAppIDKey, destinationAppID,
-				methodKey, method,
-				sourceProtocolKey, protocol),
+				methodKey, method),
 			s.serviceInvocationRequestSentTotal.M(1))
 	}
 }
 
 // ServiceInvocationRequestReceived records the number of service invocation requests received.
-func (s *serviceMetrics) ServiceInvocationRequestReceived(appID, sourceAppID, method, protocol string) {
+func (s *serviceMetrics) ServiceInvocationRequestReceived(appID, sourceAppID, method string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				appIDKey, appID,
 				sourceAppIDKey, sourceAppID,
-				methodKey, method,
-				sourceProtocolKey, protocol),
+				methodKey, method),
 			s.serviceInvocationRequestReceivedTotal.M(1))
 	}
 }
 
 // ServiceInvocationResponseSent records the number of service invocation responses sent.
-func (s *serviceMetrics) ServiceInvocationResponseSent(appID, destinationAppID, method, protocol, status string) {
+func (s *serviceMetrics) ServiceInvocationResponseSent(appID, destinationAppID, method, class string, status int32) {
 	if s.enabled {
+		statusCode := strconv.Itoa(int(status))
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				appIDKey, appID,
 				destinationAppIDKey, destinationAppID,
 				methodKey, method,
-				sourceProtocolKey, protocol,
-				statusKey, status),
+				statusKey, statusCode,
+				classKey, class),
 			s.serviceInvocationResponseSentTotal.M(1))
 	}
 }
 
 // ServiceInvocationResponseReceived records the number of service invocation responses received.
-func (s *serviceMetrics) ServiceInvocationResponseReceived(appID, sourceAppID, method, protocol, status string, start time.Time) {
+func (s *serviceMetrics) ServiceInvocationResponseReceived(appID, sourceAppID, method, class string, status int32, start time.Time) {
 	if s.enabled {
+		statusCode := strconv.Itoa(int(status))
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(
+				appIDKey, appID,
+				sourceAppIDKey, sourceAppID,
+				methodKey, method,
+				statusKey, statusCode,
+				classKey, class),
+			s.serviceInvocationResponseReceivedTotal.M(1))
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			s.ctx,
@@ -459,17 +475,8 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(appID, sourceAppID, m
 				appIDKey, appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method,
-				sourceProtocolKey, protocol,
-				statusKey, status),
-			s.serviceInvocationResponseReceivedTotal.M(1))
-		stats.RecordWithTags(
-			s.ctx,
-			diagUtils.WithTags(
-				appIDKey, appID,
-				sourceAppIDKey, sourceAppID,
-				methodKey, method,
-				sourceProtocolKey, protocol,
-				statusKey, status),
+				statusKey, statusCode,
+				classKey, class),
 			s.serviceInvocationResponseReceivedLatency.M(elapsed))
 	}
 }

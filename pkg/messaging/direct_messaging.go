@@ -16,7 +16,6 @@ package messaging
 import (
 	"context"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +30,6 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/modes"
@@ -40,7 +38,6 @@ import (
 	"github.com/dapr/dapr/utils"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -255,26 +252,27 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	var opts []grpc.CallOption
 	opts = append(opts, grpc.MaxCallRecvMsgSize(d.maxRequestBodySize*1024*1024), grpc.MaxCallSendMsgSize(d.maxRequestBodySize*1024*1024))
 
-	var protocol string
-	if v1.IsGRPCProtocol(req.Metadata()) {
-		protocol = config.GRPCProtocol
-	} else {
-		protocol = config.HTTPProtocol
-	}
-
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(d.appID, appID, req.Message().Method, protocol)
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(d.appID, appID, req.Message().Method)
 
-	resp, err := clientV1.CallLocal(ctx, req.Proto(), opts...)
+	var resp *internalv1pb.InternalInvokeResponse
+	defer func() {
+		if resp != nil {
+			var class string
+			classHeader, ok := resp.Headers[invokev1.StatusCodeClass]
+			if ok && len(classHeader.Values) > 0 {
+				class = classHeader.Values[0]
+			} else {
+				class = diag.UnknownClass
+			}
+			diag.DefaultMonitoring.ServiceInvocationResponseReceived(d.appID, appID, req.Message().Method, class, resp.Status.Code, start)
+		}
+	}()
+
+	resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
 	if err != nil {
 		return nil, err
 	}
-
-	var code string
-	if resp.Status != nil {
-		code = strconv.FormatInt(int64(resp.Status.Code), 10)
-	}
-	diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, d.appID, req.Message().Method, protocol, code, start)
 
 	return invokev1.InternalInvokeResponse(resp)
 }

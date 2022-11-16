@@ -33,9 +33,14 @@ func TestDestinationHeaders(t *testing.T) {
 		req.WithMetadata(map[string][]string{})
 
 		dm := newDirectMessaging()
+
 		dm.addAppIDHeadersToMetadata(appID, req)
+
 		md := req.Metadata()[invokev1.DestinationIDHeader]
 		assert.Equal(t, appID, md.Values[0])
+
+		md = req.Metadata()[invokev1.SourceIDHeader]
+		assert.Equal(t, dm.appID, md.Values[0])
 	})
 }
 

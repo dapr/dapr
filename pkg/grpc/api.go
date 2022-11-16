@@ -53,7 +53,6 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -354,32 +353,37 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
-	// get the source app id from the metadata
 	var sourceAppID string
 	sourceIDHeader, ok := req.Metadata()[invokev1.SourceIDHeader]
-	if ok {
-		if len(sourceIDHeader.Values) > 0 {
-			sourceAppID = sourceIDHeader.Values[0]
-		}
-	}
-
-	var protocol string
-	if v1.IsGRPCProtocol(req.Metadata()) {
-		protocol = config.GRPCProtocol
+	if ok && len(sourceIDHeader.Values) > 0 {
+		sourceAppID = sourceIDHeader.Values[0]
 	} else {
-		protocol = config.HTTPProtocol
+		sourceAppID = "unknown"
 	}
 
-	diag.DefaultMonitoring.ServiceInvocationRequestReceived(a.id, sourceAppID, req.Message().Method, protocol)
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(a.id, sourceAppID, req.Message().Method)
 
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	var resp *invokev1.InvokeMethodResponse
+	defer func() {
+		var code int32
+		if err != nil {
+			code = int32(codes.Internal)
+		} else {
+			code = int32(resp.Status().Code)
+		}
+		var class string
+		if invokev1.IsSuccessCode(a.appProtocol, code) {
+			class = diag.SuccessClass
+		} else {
+			class = diag.FailureClass
+		}
+		resp.WithHeaders(metadata.New(map[string]string{
+			invokev1.StatusCodeClass: class,
+		}))
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(a.id, sourceAppID, req.Message().Method, class, code)
+	}()
 
-	var statusStr string
-	if resp.Status() != nil {
-		statusStr = strconv.FormatInt(int64(resp.Status().Code), 10)
-	}
-	diag.DefaultMonitoring.ServiceInvocationResponseSent(a.id, sourceAppID, req.Message().Method, protocol, statusStr)
-
+	resp, err = a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
