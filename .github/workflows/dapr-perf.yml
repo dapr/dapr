@@ -28,9 +28,26 @@ on:
     - cron: '0 */2 * * *'
   # Manual trigger
   workflow_dispatch:
-  # Dispatch on external events
-  repository_dispatch:
-    types: [perf-test]
+    inputs:
+      command:
+        description: 'The perf command'
+        required: false
+        default: 'ok-to-perf'
+        type: choice
+        options:
+        - ok-to-perf
+      pull_head_repo:
+        description: 'The pull request repo'
+        required: false
+        type: string
+      pull_head_ref:
+        description: 'The pull request ref'
+        type: string
+        required: false
+      issue_number:
+        description: 'The issue number'
+        type: string
+        required: false
 
 env:
   # Version of Go
@@ -56,25 +73,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Set up for scheduled test
-        if: github.event_name != 'repository_dispatch'
+        if: github.event_name != 'workflow_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
-        if: github.event_name == 'repository_dispatch'
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
-            const testPayload = context.payload.client_payload;
+            const testPayload = context.payload.inputs;
             if (testPayload && testPayload.command == "ok-to-perf") {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
-                `PR_NUMBER=${testPayload.issue.number}`
+                `PR_NUMBER=${testPayload.issue_number}`
               );
             }
       - name: Create PR comment
@@ -196,25 +213,25 @@ jobs:
       TARGET_ARCH: amd64
     steps:
       - name: Set up for scheduled test
-        if: github.event_name != 'repository_dispatch'
+        if: github.event_name != 'workflow_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
-        if: github.event_name == 'repository_dispatch'
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
-            const testPayload = context.payload.client_payload;
+            const testPayload = context.payload.inputs;
             if (testPayload && testPayload.command == "ok-to-perf") {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
-                `PR_NUMBER=${testPayload.issue.number}`
+                `PR_NUMBER=${testPayload.issue_number}`
               );
             }
       - name: Set up Go ${{ env.GOVER }}
@@ -345,25 +362,25 @@ jobs:
           echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/perf_tests" >> $GITHUB_ENV
         shell: bash
       - name: Set up for scheduled test
-        if: github.event_name != 'repository_dispatch'
+        if: github.event_name != 'workflow_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
-        if: github.event_name == 'repository_dispatch'
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
-            const testPayload = context.payload.client_payload;
+            const testPayload = context.payload.inputs;
             if (testPayload && testPayload.command == "ok-to-perf") {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
-                `PR_NUMBER=${testPayload.issue.number}`
+                `PR_NUMBER=${testPayload.issue_number}`
               );
             }
       - name: Set up Go ${{ env.GOVER }}

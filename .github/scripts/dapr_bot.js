@@ -170,15 +170,16 @@ async function cmdOkToPerf(github, issue, isFromPulls) {
             pull_head_ref: pull.data.head.sha,
             pull_head_repo: pull.data.head.repo.full_name,
             command: "ok-to-perf",
-            issue: issue,
+            issue_number: issue.number,
         };
 
         // Fire repository_dispatch event to trigger e2e test
-        await github.repos.createDispatchEvent({
+        await github.actions.createWorkflowDispatch({
             owner: issue.owner,
             repo: issue.repo,
-            event_type: "perf-test",
-            client_payload: perfPayload,
+            ref: pull.data.head.sha,
+            workflow_id: "dapr-perf",
+            inputs: perfPayload,
         });
 
         console.log(`[cmdOkToPerf] triggered perf test for ${JSON.stringify(perfPayload)}`);
