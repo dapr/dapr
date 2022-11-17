@@ -41,9 +41,8 @@ const (
 
 type workflowActor struct {
 	actors           actors.Actors
-	states           map[string]*workflowState
+	states           sync.Map
 	scheduler        workflowScheduler
-	rwLock           sync.RWMutex
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
@@ -77,7 +76,6 @@ func (err recoverableError) Error() string {
 
 func NewWorkflowActor(scheduler workflowScheduler) *workflowActor {
 	return &workflowActor{
-		states:           make(map[string]*workflowState),
 		scheduler:        scheduler,
 		defaultTimeout:   30 * time.Second,
 		reminderInterval: 1 * time.Minute,
@@ -143,11 +141,8 @@ func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerN
 
 // DeactivateActor implements actors.InternalActor
 func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) error {
-	wf.rwLock.Lock()
-	defer wf.rwLock.Unlock()
-
 	wfLogger.Debugf("deactivating workflow actor '%s'", actorID)
-	delete(wf.states, actorID)
+	wf.states.Delete(actorID)
 	return nil
 }
 
@@ -385,35 +380,29 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
-func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (*workflowState, bool, error) {
-	wf.rwLock.RLock()
-	defer wf.rwLock.RUnlock()
-
+func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (workflowState, bool, error) {
 	// see if the state for this actor is already cached in memory
-	state, ok := wf.states[actorID]
+	cachedState, ok := wf.states.Load(actorID)
 	if ok {
-		return state, true, nil
+		return cachedState.(workflowState), true, nil
 	}
 
 	// state is not cached, so try to load it from the state store
 	wfLogger.Debugf("%s: loading workflow state", actorID)
 	state, err := LoadWorkflowState(ctx, wf.actors, actorID)
 	if err != nil {
-		return nil, false, err
+		return workflowState{}, false, err
 	}
-	if state == nil {
-		return nil, false, nil
+	if state.Generation == uuid.Nil {
+		return workflowState{}, false, nil
 	}
 	return state, true, nil
 }
 
-func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, state *workflowState) error {
-	wf.rwLock.Lock()
-	defer wf.rwLock.Unlock()
-
+func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, state workflowState) error {
 	if !wf.cachingDisabled {
 		// update cached state
-		wf.states[actorID] = state
+		wf.states.Store(actorID, state)
 	}
 
 	// generate and run a state store operation that saves all changes
@@ -443,7 +432,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 	})
 }
 
-func getRuntimeState(actorID string, state *workflowState) *backend.OrchestrationRuntimeState {
+func getRuntimeState(actorID string, state workflowState) *backend.OrchestrationRuntimeState {
 	// TODO: Add caching when a good invalidation policy can be determined
 	return backend.NewOrchestrationRuntimeState(api.InstanceID(actorID), state.History)
 }

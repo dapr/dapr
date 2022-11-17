@@ -34,7 +34,7 @@ func TestNoWorkflowState(t *testing.T) {
 	actors := getActorRuntime()
 	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1")
 	assert.NoError(t, err)
-	assert.Nil(t, state)
+	assert.Empty(t, state)
 }
 
 func TestAddingToInbox(t *testing.T) {

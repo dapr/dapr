@@ -87,12 +87,12 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
 	if state, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
 		return nil, err
-	} else if state != nil {
+	} else if state.Generation != uuid.Nil {
 		return nil, ErrDuplicateInvocation
 	}
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
-	state := &activityState{
+	state := activityState{
 		Generation:   ar.Generation,
 		EventPayload: ar.HistoryEvent,
 	}
@@ -206,15 +206,17 @@ func (*activityActor) InvokeTimer(ctx context.Context, actorID string, timerName
 }
 
 // DeactivateActor implements actors.InternalActor
-func (*activityActor) DeactivateActor(ctx context.Context, actorID string) error {
-	return nil // nothing to do - this actor maintains no state
+func (a *activityActor) DeactivateActor(ctx context.Context, actorID string) error {
+	wfLogger.Debugf("deactivating activity actor '%s'", actorID)
+	a.statesCache.Delete(actorID)
+	return nil
 }
 
-func (a *activityActor) loadActivityState(ctx context.Context, actorID string, generation uuid.UUID) (*activityState, error) {
+func (a *activityActor) loadActivityState(ctx context.Context, actorID string, generation uuid.UUID) (activityState, error) {
 	// See if the state for this actor is already cached in memory.
 	result, ok := a.statesCache.Load(actorID)
 	if ok {
-		cachedState := result.(*activityState)
+		cachedState := result.(activityState)
 
 		// Make sure the cached state is for the same generation of the workflow.
 		if cachedState.Generation == generation {
@@ -231,22 +233,22 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 	}
 	res, err := a.actorRuntime.GetState(ctx, &req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load activity state: %w", err)
+		return activityState{}, fmt.Errorf("failed to load activity state: %w", err)
 	}
 
 	if len(res.Data) == 0 {
 		// no data was found - this is expected on the initial invocation of the activity actor.
-		return nil, nil
+		return activityState{}, nil
 	}
 
 	var state activityState
 	if err = json.Unmarshal(res.Data, &state); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal activity state: %w", err)
+		return activityState{}, fmt.Errorf("failed to unmarshal activity state: %w", err)
 	}
-	return &state, nil
+	return state, nil
 }
 
-func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state *activityState) error {
+func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state activityState) error {
 	req := actors.TransactionalRequest{
 		ActorType: ActivityActorType,
 		ActorID:   actorID,
