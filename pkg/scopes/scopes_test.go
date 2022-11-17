@@ -40,7 +40,7 @@ func TestGetAllowedTopics(t *testing.T) {
 		},
 		{
 			Metadata: map[string]string{
-				"allowedTopics": "topic1, topic1, topic1",
+				"allowedTopics": "topic1, topic1, topic1", //nolint:dupword
 			},
 			Target: []string{"topic1"},
 			Msg:    "pass, include whitespace and repeated topic",

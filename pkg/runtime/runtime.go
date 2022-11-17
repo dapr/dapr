@@ -44,9 +44,12 @@ import (
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -191,6 +194,7 @@ type DaprRuntime struct {
 	topicsLock             *sync.RWMutex
 	topicRoutes            map[string]TopicRoutes        // Key is "componentName"
 	topicCtxCancels        map[string]context.CancelFunc // Key is "componentName||topicName"
+	subscriptions          []runtimePubsub.Subscription
 	inputBindingRoutes     map[string]string
 	shutdownC              chan error
 	apiClosers             []io.Closer
@@ -1325,6 +1329,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		AppChannel:                  a.appChannel,
 		DirectMessaging:             a.directMessaging,
 		GetComponentsFn:             a.getComponents,
+		GetSubscriptionsFn:          a.getSubscriptions,
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
 		LockStores:                  a.lockStores,
@@ -1436,6 +1441,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		GetSubscriptionsFn:          a.getSubscriptions,
 	})
 }
 
@@ -1691,22 +1697,20 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription
 	return subs[:i]
 }
 
-func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
-	if a.topicRoutes != nil {
-		return a.topicRoutes, nil
-	}
-
-	topicRoutes := make(map[string]TopicRoutes)
-
-	if a.appChannel == nil {
-		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
-		return topicRoutes, nil
+func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
+	if a.subscriptions != nil {
+		return a.subscriptions, nil
 	}
 
 	var (
 		subscriptions []runtimePubsub.Subscription
 		err           error
 	)
+
+	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
+		return subscriptions, nil
+	}
 
 	// handle app subscriptions
 	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
@@ -1738,6 +1742,27 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 		if !skip {
 			subscriptions = append(subscriptions, s)
 		}
+	}
+
+	a.subscriptions = subscriptions
+	return subscriptions, nil
+}
+
+func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
+	if a.topicRoutes != nil {
+		return a.topicRoutes, nil
+	}
+
+	topicRoutes := make(map[string]TopicRoutes)
+
+	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
+		return topicRoutes, nil
+	}
+
+	subscriptions, err := a.getSubscriptions()
+	if err != nil {
+		return nil, err
 	}
 
 	for _, s := range subscriptions {
@@ -2102,6 +2127,30 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
 	}
+
+	// Assemble Cloud Event Extensions:
+	// Create copy of the cloud event with duplicated data removed
+
+	checkDuplicateKeys := []string{pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field}
+	extensions := map[string]interface{}{}
+	for key, value := range cloudEvent {
+		if !slices.Contains(checkDuplicateKeys, key) {
+			extensions[key] = value
+		}
+	}
+	extensionsStruct := &structpb.Struct{}
+	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
+	if jsonMarshalErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
+		return fmt.Errorf("Error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
+	}
+
+	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, extensionsStruct)
+	if protoUnmarshalErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
+		return fmt.Errorf("Error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", jsonMarshalErr)
+	}
+	envelope.Extensions = extensionsStruct
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
