@@ -54,6 +54,9 @@ const (
 
 	// Environmental variable to disable API logging
 	DisableAPILoggingEnvVar = "NO_API_LOGGING"
+
+	// Environmental variable to enable debug logging
+	DebugLoggingEnvVar = "DEBUG_LOGGING"
 )
 
 var (
@@ -68,6 +71,9 @@ var (
 
 	// Controls whether API logging is enabled
 	EnableAPILogging = true
+
+	// Controls whether debug logging is enabled
+	EnableDebugLogging = false
 )
 
 // buildDaprAnnotations creates the Kubernetes Annotations object for dapr test app.
@@ -87,6 +93,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
 			"dapr.io/enable-api-logging":                strconv.FormatBool(EnableAPILogging),
 			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
+		}
+		if EnableDebugLogging {
+			annotationObject["dapr.io/log-level"] = "debug"
 		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = strconv.Itoa(appDesc.AppPort)
@@ -354,4 +363,5 @@ func init() {
 		v, _ := os.LookupEnv(DisableAPILoggingEnvVar)
 		EnableAPILogging = !utils.IsTruthy(v)
 	}
+	EnableDebugLogging = utils.IsTruthy(os.Getenv(DebugLoggingEnvVar))
 }
