@@ -1540,7 +1540,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 				}
 			}
 		} else if statusCode != fasthttp.StatusOK {
-			return fmt.Errorf("Received non-successful status code: %d", statusCode)
+			return fmt.Errorf("Received non-successful status code: %d", statusCode) //nolint:stylecheck
 		}
 		return nil
 	})
