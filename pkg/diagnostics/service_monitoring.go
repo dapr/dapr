@@ -407,12 +407,12 @@ func (s *serviceMetrics) RequestBlockedByGlobalAction(appID, trustDomain, namesp
 }
 
 // ServiceInvocationRequestSent records the number of service invocation requests sent.
-func (s *serviceMetrics) ServiceInvocationRequestSent(appID, destinationAppID, method string) {
+func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID, method string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
-				appIDKey, appID,
+				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
 				methodKey, method),
 			s.serviceInvocationRequestSentTotal.M(1))
@@ -420,12 +420,12 @@ func (s *serviceMetrics) ServiceInvocationRequestSent(appID, destinationAppID, m
 }
 
 // ServiceInvocationRequestReceived records the number of service invocation requests received.
-func (s *serviceMetrics) ServiceInvocationRequestReceived(appID, sourceAppID, method string) {
+func (s *serviceMetrics) ServiceInvocationRequestReceived(sourceAppID, method string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
-				appIDKey, appID,
+				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method),
 			s.serviceInvocationRequestReceivedTotal.M(1))
@@ -433,13 +433,13 @@ func (s *serviceMetrics) ServiceInvocationRequestReceived(appID, sourceAppID, me
 }
 
 // ServiceInvocationResponseSent records the number of service invocation responses sent.
-func (s *serviceMetrics) ServiceInvocationResponseSent(appID, destinationAppID, method string, status int32) {
+func (s *serviceMetrics) ServiceInvocationResponseSent(destinationAppID, method string, status int32) {
 	if s.enabled {
 		statusCode := strconv.Itoa(int(status))
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
-				appIDKey, appID,
+				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
 				methodKey, method,
 				statusKey, statusCode),
@@ -448,25 +448,24 @@ func (s *serviceMetrics) ServiceInvocationResponseSent(appID, destinationAppID, 
 }
 
 // ServiceInvocationResponseReceived records the number of service invocation responses received.
-func (s *serviceMetrics) ServiceInvocationResponseReceived(appID, sourceAppID, method string, status int32, start time.Time) {
+func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method string, status int32, start time.Time) {
 	if s.enabled {
 		statusCode := strconv.Itoa(int(status))
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
-				appIDKey, appID,
+				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method,
 				statusKey, statusCode),
 			s.serviceInvocationResponseReceivedTotal.M(1))
-		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
-				appIDKey, appID,
+				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method,
 				statusKey, statusCode),
-			s.serviceInvocationResponseReceivedLatency.M(elapsed))
+			s.serviceInvocationResponseReceivedLatency.M(ElapsedSince(start)))
 	}
 }

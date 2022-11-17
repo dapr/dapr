@@ -364,11 +364,11 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		callerAppID = "unknown"
 	}
 
-	diag.DefaultMonitoring.ServiceInvocationRequestReceived(a.id, callerAppID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message().Method)
 
 	var statusCode int32
 	defer func() {
-		diag.DefaultMonitoring.ServiceInvocationResponseSent(a.id, callerAppID, req.Message().Method, statusCode)
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
 	}()
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
