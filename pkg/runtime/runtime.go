@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -815,15 +816,15 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			return nil
 		}
 
+		psm := &pubsubSubscribedMessage{
+			cloudEvent: cloudEvent,
+			data:       data,
+			topic:      msg.Topic,
+			metadata:   msg.Metadata,
+			path:       routePath,
+			pubsub:     name,
+		}
 		err = policy(func(ctx context.Context) error {
-			psm := &pubsubSubscribedMessage{
-				cloudEvent: cloudEvent,
-				data:       data,
-				topic:      msg.Topic,
-				metadata:   msg.Metadata,
-				path:       routePath,
-				pubsub:     name,
-			}
 			switch a.runtimeConfig.ApplicationProtocol {
 			case HTTPProtocol:
 				return a.publishMessageHTTP(ctx, psm)
@@ -1090,13 +1091,16 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		ops := binding.Operations()
 		for _, o := range ops {
 			if o == req.Operation {
-				var resp *bindings.InvokeResponse
 				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name, resiliency.Binding)
-				err := policy(func(ctx context.Context) (err error) {
-					resp, err = binding.Invoke(ctx, req)
-					return err
+				respPtr := atomic.Pointer[bindings.InvokeResponse]{}
+				err := policy(func(ctx context.Context) error {
+					rResp, rErr := binding.Invoke(ctx, req)
+					if rResp != nil {
+						respPtr.Store(rResp)
+					}
+					return rErr
 				})
-				return resp, err
+				return respPtr.Load(), err
 			}
 		}
 		supported := make([]string, 0, len(ops))
@@ -1197,13 +1201,17 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		start := time.Now()
 
-		var resp *runtimev1pb.BindingEventResponse
+		respPtr := atomic.Pointer[runtimev1pb.BindingEventResponse]{}
 		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		err := policy(func(ctx context.Context) (err error) {
-			resp, err = client.OnBindingEvent(ctx, req)
-			return err
+		err := policy(func(ctx context.Context) error {
+			rResp, rErr := client.OnBindingEvent(ctx, req)
+			if rResp != nil {
+				respPtr.Store(rResp)
+			}
+			return rErr
 		})
 
+		resp := respPtr.Load()
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
 				bindingName,
@@ -1256,23 +1264,28 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		req.WithMetadata(reqMetadata)
 
-		var resp *invokev1.InvokeMethodResponse
+		respPtr := atomic.Pointer[invokev1.InvokeMethodResponse]{}
 		respErr := errors.New("error sending binding event to application")
 		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		err := policy(func(ctx context.Context) (err error) {
-			resp, err = a.appChannel.InvokeMethod(ctx, req)
-			if err != nil {
-				return err
+		err := policy(func(ctx context.Context) error {
+			rResp, rErr := a.appChannel.InvokeMethod(ctx, req)
+			if rResp != nil {
+				respPtr.Store(rResp)
+			}
+			if rErr != nil {
+				return rErr
 			}
 
-			if resp != nil && resp.Status().Code != nethttp.StatusOK {
-				return fmt.Errorf("%w, status %d", respErr, resp.Status().Code)
+			if rResp != nil && rResp.Status().Code != nethttp.StatusOK {
+				return fmt.Errorf("%w, status %d", respErr, rResp.Status().Code)
 			}
 			return nil
 		})
 		if err != nil && !errors.Is(err, respErr) {
 			return nil, errors.Wrap(err, "error invoking app")
 		}
+
+		resp := respPtr.Load()
 
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(

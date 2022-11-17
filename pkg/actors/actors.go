@@ -380,15 +380,15 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		pd := a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{})
 		if pd == nil {
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
-			resp := atomic.Pointer[invokev1.InvokeMethodResponse]{}
+			respPtr := atomic.Pointer[invokev1.InvokeMethodResponse]{}
 			err := policy(func(ctx context.Context) error {
 				rResp, rErr := fn(ctx, targetAddress, targetID, req)
-				if resp.Load() != nil {
+				if respPtr.Load() != nil {
 					// Already stored
 					return rErr
 				}
 				if rErr == nil {
-					resp.CompareAndSwap(nil, rResp)
+					respPtr.CompareAndSwap(nil, rResp)
 					return nil
 				}
 
@@ -397,7 +397,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 					_, teardown, connerr := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
 					teardown()
 					if connerr != nil {
-						resp.Store(nil)
+						respPtr.Store(nil)
 						return backoff.Permanent(connerr)
 					}
 					return rErr
@@ -420,7 +420,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				return nil, errors.Unwrap(err)
 			}
 
-			return resp.Load(), nil
+			return respPtr.Load(), nil
 		}
 		return fn(ctx, targetAddress, targetID, req)
 	}
@@ -579,18 +579,18 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
-	resp := atomic.Pointer[state.GetResponse]{}
+	respPtr := atomic.Pointer[state.GetResponse]{}
 	err := policy(func(ctx context.Context) error {
 		rResp, rErr := a.store.Get(&state.GetRequest{
 			Key:      key,
 			Metadata: metadata,
 		})
-		if resp.Load() != nil {
+		if respPtr.Load() != nil {
 			// Already stored
 			return rErr
 		}
 		if rErr == nil {
-			resp.CompareAndSwap(nil, rResp)
+			respPtr.CompareAndSwap(nil, rResp)
 			return nil
 		}
 		return rErr
@@ -600,7 +600,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}
 
 	return &StateResponse{
-		Data: resp.Load().Data,
+		Data: respPtr.Load().Data,
 	}, nil
 }
 
