@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
 )
 
 const (
@@ -19,29 +18,6 @@ func componentsMetrics() *componentMetrics {
 	c.Init("test", "default")
 
 	return c
-}
-
-func allTagsPresent(t *testing.T, v *view.View, tags []tag.Tag) {
-	for _, k := range v.TagKeys {
-		found := false
-
-		if k.Name() == "" {
-			continue
-		}
-
-		for _, tag := range tags {
-			if tag.Key.Name() == "" {
-				continue
-			}
-
-			if k.Name() == tag.Key.Name() {
-				found = true
-				break
-			}
-		}
-
-		assert.True(t, found)
-	}
 }
 
 func TestPubSub(t *testing.T) {
@@ -210,7 +186,7 @@ func TestSecrets(t *testing.T) {
 	})
 }
 
-func TestInit(t *testing.T) {
+func TestComponentMetricsInit(t *testing.T) {
 	c := componentsMetrics()
 	assert.True(t, c.enabled)
 	assert.Equal(t, c.appID, "test")
