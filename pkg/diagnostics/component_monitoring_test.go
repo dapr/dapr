@@ -194,7 +194,7 @@ func TestComponentMetricsInit(t *testing.T) {
 	assert.Equal(t, c.namespace, "default")
 }
 
-func TestComponentMetricsElapsedSince(t *testing.T) {
+func TestElapsedSince(t *testing.T) {
 	start := time.Now()
 	time.Sleep(time.Second)
 
