@@ -253,7 +253,17 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	var opts []grpc.CallOption
 	opts = append(opts, grpc.MaxCallRecvMsgSize(d.maxRequestBodySize*1024*1024), grpc.MaxCallSendMsgSize(d.maxRequestBodySize*1024*1024))
 
-	resp, err := clientV1.CallLocal(ctx, req.Proto(), opts...)
+	start := time.Now()
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+
+	var resp *internalv1pb.InternalInvokeResponse
+	defer func() {
+		if resp != nil {
+			diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, resp.Status.Code, start)
+		}
+	}()
+
+	resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
 	if err != nil {
 		return nil, err
 	}
