@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/diagnostics/utils"
+
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
 )
