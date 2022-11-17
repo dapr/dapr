@@ -1384,6 +1384,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
+		rt.subscriptions = nil
 		rt.pubSubs = make(map[string]pubsubItem)
 
 		return mockPubSub, mockPubSub2

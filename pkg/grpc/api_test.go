@@ -57,6 +57,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -2281,6 +2282,22 @@ func TestGetMetadata(t *testing.T) {
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
+		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+			return []runtimePubsub.Subscription{
+				{
+					PubsubName:      "test",
+					Topic:           "topic",
+					DeadLetterTopic: "dead",
+					Metadata:        map[string]string{},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Match: &expr.Expr{},
+							Path:  "path",
+						},
+					},
+				},
+			}, nil
+		},
 	}
 	fakeAPI.extendedMetadata.Store("testKey", "testValue")
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -2301,6 +2318,14 @@ func TestGetMetadata(t *testing.T) {
 	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
 	assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
 	assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
+	assert.Len(t, response.Subscriptions, 1)
+	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
+	assert.Equal(t, response.Subscriptions[0].Topic, "topic")
+	assert.Equal(t, response.Subscriptions[0].DeadLetterTopic, "dead")
+	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
+	assert.Len(t, response.Subscriptions[0].Rules.Rules, 1)
+	assert.Equal(t, fmt.Sprintf("%s", response.Subscriptions[0].Rules.Rules[0].Match), "")
+	assert.Equal(t, response.Subscriptions[0].Rules.Rules[0].Path, "path")
 }
 
 func TestSetMetadata(t *testing.T) {
