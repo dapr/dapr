@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/diagnostics/testutils"
-
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
 )
@@ -31,7 +29,7 @@ func TestPubSub(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/count")
 		v := view.Find("component/pubsub_ingress/count")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record ingress latency", func(t *testing.T) {
@@ -42,7 +40,7 @@ func TestPubSub(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/latencies")
 		v := view.Find("component/pubsub_ingress/latencies")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 
 		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
@@ -55,7 +53,7 @@ func TestPubSub(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/pubsub_egress/latencies")
 		v := view.Find("component/pubsub_egress/latencies")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 
 		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
@@ -70,7 +68,7 @@ func TestBindings(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/input_binding/count")
 		v := view.Find("component/input_binding/count")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record input binding latency", func(t *testing.T) {
@@ -81,7 +79,7 @@ func TestBindings(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/input_binding/latencies")
 		v := view.Find("component/input_binding/count")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 
 		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
@@ -94,7 +92,7 @@ func TestBindings(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/output_binding/count")
 		v := view.Find("component/input_binding/count")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record output binding latency", func(t *testing.T) {
@@ -105,7 +103,7 @@ func TestBindings(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/output_binding/latencies")
 		v := view.Find("component/output_binding/latencies")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 
 		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
@@ -120,7 +118,7 @@ func TestState(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/state/count")
 		v := view.Find("component/state/count")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record state latency", func(t *testing.T) {
@@ -131,7 +129,7 @@ func TestState(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/state/latencies")
 		v := view.Find("component/state/latencies")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
 }
@@ -145,7 +143,7 @@ func TestConfiguration(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/configuration/count")
 		v := view.Find("component/configuration/count")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record configuration latency", func(t *testing.T) {
@@ -156,7 +154,7 @@ func TestConfiguration(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/configuration/latencies")
 		v := view.Find("component/configuration/latencies")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 
 		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
@@ -171,7 +169,7 @@ func TestSecrets(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/secret/count")
 		v := view.Find("component/secret/count")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record secret latency", func(t *testing.T) {
@@ -182,7 +180,7 @@ func TestSecrets(t *testing.T) {
 		viewData, _ := view.RetrieveData("component/secret/latencies")
 		v := view.Find("component/secret/latencies")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 
 		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})

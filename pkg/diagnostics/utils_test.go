@@ -1,4 +1,4 @@
-package testutils
+package diagnostics
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"go.opencensus.io/tag"
 )
 
-func AllTagsPresent(t *testing.T, v *view.View, tags []tag.Tag) {
+func allTagsPresent(t *testing.T, v *view.View, tags []tag.Tag) {
 	for _, k := range v.TagKeys {
 		found := false
 

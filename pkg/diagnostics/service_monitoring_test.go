@@ -4,8 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/diagnostics/testutils"
-
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
 )
@@ -26,7 +24,7 @@ func TestServiceInvocation(t *testing.T) {
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 		v := view.Find("runtime/service_invocation/req_sent_total")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record service invoation request received", func(t *testing.T) {
@@ -37,7 +35,7 @@ func TestServiceInvocation(t *testing.T) {
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_recv_total")
 		v := view.Find("runtime/service_invocation/req_recv_total")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record service invocation response sent", func(t *testing.T) {
@@ -48,7 +46,7 @@ func TestServiceInvocation(t *testing.T) {
 		viewData, _ := view.RetrieveData("runtime/service_invocation/res_sent_total")
 		v := view.Find("runtime/service_invocation/res_sent_total")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record service invocation response received", func(t *testing.T) {
@@ -59,12 +57,12 @@ func TestServiceInvocation(t *testing.T) {
 		viewData, _ := view.RetrieveData("runtime/service_invocation/res_recv_total")
 		v := view.Find("runtime/service_invocation/res_recv_total")
 
-		testutils.AllTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, v, viewData[0].Tags)
 
 		viewData2, _ := view.RetrieveData("runtime/service_invocation/res_recv_latency_ms")
 		v2 := view.Find("runtime/service_invocation/res_recv_latency_ms")
 
-		testutils.AllTagsPresent(t, v2, viewData2[0].Tags)
+		allTagsPresent(t, v2, viewData2[0].Tags)
 	})
 }
 
