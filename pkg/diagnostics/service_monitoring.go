@@ -156,19 +156,19 @@ func newServiceMetrics() *serviceMetrics {
 		// Service Invocation
 		serviceInvocationRequestSentTotal: stats.Int64(
 			"runtime/service_invocation/req_sent_total",
-			"The number of requests sent by service invocation.",
+			"The number of requests sent via service invocation.",
 			stats.UnitDimensionless),
 		serviceInvocationRequestReceivedTotal: stats.Int64(
 			"runtime/service_invocation/req_recv_total",
-			"The number of requests received by service invocation.",
+			"The number of requests received via service invocation.",
 			stats.UnitDimensionless),
 		serviceInvocationResponseSentTotal: stats.Int64(
 			"runtime/service_invocation/res_sent_total",
-			"The number of responses sent by service invocation.",
+			"The number of responses sent via service invocation.",
 			stats.UnitDimensionless),
 		serviceInvocationResponseReceivedTotal: stats.Int64(
 			"runtime/service_invocation/res_recv_total",
-			"The number of responses received by service invocation.",
+			"The number of responses received via service invocation.",
 			stats.UnitDimensionless),
 		serviceInvocationResponseReceivedLatency: stats.Float64(
 			"runtime/service_invocation/res_recv_latency_ms",
