@@ -16,16 +16,13 @@ package components
 import (
 	"strings"
 
-	v1alphaclient "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components/pluggable"
-	"github.com/pkg/errors"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/rest"
 )
 
 const (
@@ -74,10 +71,14 @@ func SplitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, co
 }
 
 // PatchOps returns the patch operations required to properly bootstrap the pluggable component and the respective volume mount for the sidecar.
-func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount) {
+func PatchOps(componentContainers map[int]corev1.Container, daprClient scheme.Interface, pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount, error) {
 	patches := make([]sidecar.PatchOperation, 0)
-	if len(componentContainers) == 0 {
-		return patches, nil
+	injectedContainers, err := injected(*pod, daprClient)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(componentContainers) == 0 && len(injectedContainers) == 0 {
+		return patches, nil, nil
 	}
 	podAnnotations := sidecar.Annotations(pod.Annotations)
 	mountPath := podAnnotations.GetString(annotations.KeyPluggableComponentsSocketsFolder)
@@ -85,24 +86,8 @@ func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]
 		mountPath = pluggable.GetSocketFolderPath()
 	}
 
-	sharedSocketVolume := sharedComponentsSocketVolume()
-	sharedSocketVolumeMount := sharedComponentsUnixSocketVolumeMount(mountPath)
-
-	if len(pod.Spec.Volumes) == 0 {
-		patches = append(patches, sidecar.PatchOperation{
-			Op:    "add",
-			Path:  sidecar.PatchPathVolumes,
-			Value: []corev1.Volume{sharedSocketVolume},
-		})
-	} else {
-		patches = append(patches, sidecar.PatchOperation{
-			Op:    "add",
-			Path:  sidecar.PatchPathVolumes + "/-",
-			Value: sharedSocketVolume,
-		})
-	}
-
-	pod.Spec.Volumes = append(pod.Spec.Volumes, sharedSocketVolume)
+	volumePatch, sharedSocketVolumeMount := addSharedSocketVolume(mountPath, pod)
+	patches = append(patches, volumePatch)
 	componentsEnvVars := []corev1.EnvVar{{
 		Name:  componentsUnixDomainSocketMountPathEnvVar,
 		Value: sharedSocketVolumeMount.MountPath,
@@ -113,33 +98,72 @@ func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]
 		patches = append(patches, sidecar.GetVolumeMountPatchOperations(container.VolumeMounts, []corev1.VolumeMount{sharedSocketVolumeMount}, idx)...)
 	}
 
-	return patches, &sharedSocketVolumeMount
+	podVolumes := make(map[string]bool)
+
+	for _, volume := range pod.Spec.Volumes {
+		podVolumes[volume.Name] = true
+	}
+
+	for _, container := range injectedContainers {
+		container.Env = append(container.Env, componentsEnvVars...)
+		// mount volume as empty dir by default.
+		patches = append(patches, emptyVolumePatches(container, podVolumes, pod)...)
+		container.VolumeMounts = append(container.VolumeMounts, sharedSocketVolumeMount)
+
+		patches = append(patches, sidecar.PatchOperation{
+			Op:    "add",
+			Path:  sidecar.PatchPathContainers + "/-",
+			Value: container,
+		})
+	}
+
+	return patches, &sharedSocketVolumeMount, nil
 }
 
-// Inject takes a pod as an argument and inject all component containers to that pod,
-// also it returns the socket volume mount for the sidecar.
-func Inject(pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount, error) {
-	injectionEnabled := sidecar.Annotations(pod.Annotations).GetBoolOrDefault(annotations.KeyPluggableComponentsInjection, false)
-	if !injectionEnabled {
-		return []sidecar.PatchOperation{}, nil, nil
+// emptyVolumePatches return all patches for pod emptyvolumes (the default value for injected pluggable components)
+func emptyVolumePatches(container corev1.Container, podVolumes map[string]bool, pod *corev1.Pod) []sidecar.PatchOperation {
+	volumePatches := make([]sidecar.PatchOperation, 0)
+	for _, volumeMount := range container.VolumeMounts {
+		if !podVolumes[volumeMount.Name] {
+
+			emptyDirVolume := corev1.Volume{
+				Name: volumeMount.Name,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			}
+			pod.Spec.Volumes = append(pod.Spec.Volumes, emptyDirVolume)
+			volumePatches = append(volumePatches, sidecar.PatchOperation{
+				Op:    "add",
+				Path:  sidecar.PatchPathVolumes + "/-",
+				Value: emptyDirVolume,
+			})
+		}
 	}
-	// creates the in-cluster config
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		panic(err.Error())
+	return volumePatches
+}
+
+// addSharedSocketVolume adds the new volume to the pod and return the patch operation and the mounted volume.
+func addSharedSocketVolume(mountPath string, pod *corev1.Pod) (sidecar.PatchOperation, corev1.VolumeMount) {
+	sharedSocketVolume := sharedComponentsSocketVolume()
+	sharedSocketVolumeMount := sharedComponentsUnixSocketVolumeMount(mountPath)
+
+	var volumePatch sidecar.PatchOperation
+
+	if len(pod.Spec.Volumes) == 0 {
+		volumePatch = sidecar.PatchOperation{
+			Op:    "add",
+			Path:  sidecar.PatchPathVolumes,
+			Value: []corev1.Volume{sharedSocketVolume},
+		}
+	} else {
+		volumePatch = sidecar.PatchOperation{
+			Op:    "add",
+			Path:  sidecar.PatchPathVolumes + "/-",
+			Value: sharedSocketVolume,
+		}
 	}
 
-	// creates the clientset
-	clientset, err := v1alphaclient.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	_, err = clientset.Components(pod.Namespace).List(metav1.ListOptions{})
-
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "error reading components")
-	}
-
-	return nil, nil, nil
+	pod.Spec.Volumes = append(pod.Spec.Volumes, sharedSocketVolume)
+	return volumePatch, sharedSocketVolumeMount
 }

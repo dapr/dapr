@@ -89,7 +89,11 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	// Pluggable components
 	appContainers, componentContainers := components.SplitContainers(pod)
-	componentPatchOps, componentsSocketVolumeMount := components.PatchOps(componentContainers, &pod)
+	componentPatchOps, componentsSocketVolumeMount, err := components.PatchOps(componentContainers, i.daprClient, &pod)
+
+	if err != nil {
+		return nil, err
+	}
 
 	// Projected volume with the token
 	tokenVolume := sidecar.GetTokenVolume()
@@ -122,23 +126,23 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	// Create the list of patch operations
 	patchOps = []sidecar.PatchOperation{}
-	if len(pod.Spec.Containers) == 0 {
+	if len(pod.Spec.Containers) == 0 { // set to empty to support add operations separately
 		patchOps = append(patchOps, sidecar.PatchOperation{
 			Op:    "add",
 			Path:  sidecar.PatchPathContainers,
-			Value: []corev1.Container{*sidecarContainer},
+			Value: []corev1.Container{},
 		})
-	} else {
-		patchOps = append(patchOps, sidecar.PatchOperation{
-			Op:    "add",
-			Path:  sidecar.PatchPathContainers + "/-",
-			Value: sidecarContainer,
-		})
-		patchOps = append(patchOps,
-			sidecar.AddDaprEnvVarsToContainers(appContainers)...)
-		patchOps = append(patchOps,
-			sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
 	}
+
+	patchOps = append(patchOps, sidecar.PatchOperation{
+		Op:    "add",
+		Path:  sidecar.PatchPathContainers + "/-",
+		Value: sidecarContainer,
+	})
+	patchOps = append(patchOps,
+		sidecar.AddDaprEnvVarsToContainers(appContainers)...)
+	patchOps = append(patchOps,
+		sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
 	volumePatchOps := sidecar.GetVolumesPatchOperations(
 		pod.Spec.Volumes,
 		[]corev1.Volume{tokenVolume},

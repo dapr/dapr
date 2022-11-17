@@ -20,6 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -127,7 +128,8 @@ func TestComponentsPatch(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			_, componentContainers := SplitContainers(*test.pod)
-			patch, volumeMount := PatchOps(componentContainers, test.pod)
+			patch, volumeMount, err := PatchOps(componentContainers, nil, test.pod)
+			require.NoError(t, err)
 			assert.Equal(t, patch, test.expPatch)
 			assert.Equal(t, volumeMount, test.expMount)
 		})
