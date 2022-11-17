@@ -25,6 +25,7 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -294,6 +295,29 @@ func TestParseActorCircuitBreakerScope(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseMaxRetries(t *testing.T) {
+	configs := LoadStandaloneResiliency(log, "app1", "./testdata")
+	require.NotNil(t, configs)
+	require.Len(t, configs, 2)
+	require.NotNil(t, configs[0])
+
+	r := FromConfigurations(log, configs[0])
+	require.True(t, len(r.retries) > 0)
+	require.NotNil(t, r.retries["noRetry"])
+	require.NotNil(t, r.retries["retryForever"])
+	require.NotNil(t, r.retries["missingMaxRetries"])
+	require.NotNil(t, r.retries["important"])
+
+	// important has "maxRetries: 30"
+	assert.Equal(t, int64(30), r.retries["important"].MaxRetries)
+	// noRetry has "maxRetries: 0" (no retries)
+	assert.Equal(t, int64(0), r.retries["noRetry"].MaxRetries)
+	// retryForever has "maxRetries: -1" (retry forever)
+	assert.Equal(t, int64(-1), r.retries["retryForever"].MaxRetries)
+	// missingMaxRetries has no "maxRetries" so should default to -1
+	assert.Equal(t, int64(-1), r.retries["missingMaxRetries"].MaxRetries)
 }
 
 func TestResiliencyScopeIsRespected(t *testing.T) {

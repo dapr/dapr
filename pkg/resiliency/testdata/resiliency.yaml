@@ -38,6 +38,9 @@ spec:
         maxInterval: 15s
         maxRetries: 0 # Retry indefinitely
 
+      missingMaxRetries:
+        policy: constant
+
       important:
         policy: constant
         duration: 5s
