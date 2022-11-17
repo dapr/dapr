@@ -142,9 +142,9 @@ func TestStartRunner(t *testing.T) {
 		{
 			Name:     "statestore",
 			TypeName: "state.fake",
-			MetaData: map[string]string{
-				"address":  "localhost",
-				"password": "fakepassword",
+			MetaData: map[string]kube.MetadataValue{
+				"address":  {Raw: "localhost"},
+				"password": {Raw: "fakepassword"},
 			},
 		},
 	}
