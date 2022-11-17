@@ -25,8 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// injected takes a pod as an argument and returns all injectable components containers to that pod,
-func injected(pod corev1.Pod, daprClient scheme.Interface) ([]corev1.Container, error) {
+// Injectable takes a pod as an argument and returns all injectable components containers to that pod,
+func Injectable(pod corev1.Pod, daprClient scheme.Interface) ([]corev1.Container, error) {
 	an := sidecar.Annotations(pod.Annotations)
 	injectionEnabled := an.GetBoolOrDefault(annotations.KeyPluggableComponentsInjection, false)
 	if !injectionEnabled {
@@ -46,11 +46,11 @@ func injected(pod corev1.Pod, daprClient scheme.Interface) ([]corev1.Container, 
 		return nil, errors.Wrap(err, "error reading components")
 	}
 
-	return buildContainers(an.GetString(annotations.KeyAppID), componentsList.Items)
+	return buildComponentContainers(an.GetString(annotations.KeyAppID), componentsList.Items), nil
 }
 
-// buildContainers returns the component containters for the given app ID.
-func buildContainers(appID string, components []componentsapi.Component) ([]corev1.Container, error) {
+// buildComponentContainers returns the component containters for the given app ID.
+func buildComponentContainers(appID string, components []componentsapi.Component) []corev1.Container {
 	componentContainers := make([]corev1.Container, 0)
 	componentImages := make(map[string]bool, 0)
 	containersImagesStr := make([]string, 0)
@@ -89,5 +89,5 @@ func buildContainers(appID string, components []componentsapi.Component) ([]core
 		}
 	}
 
-	return componentContainers, nil
+	return componentContainers
 }

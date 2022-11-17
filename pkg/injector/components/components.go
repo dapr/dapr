@@ -21,7 +21,6 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
-	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -71,15 +70,13 @@ func SplitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, co
 }
 
 // PatchOps returns the patch operations required to properly bootstrap the pluggable component and the respective volume mount for the sidecar.
-func PatchOps(componentContainers map[int]corev1.Container, daprClient scheme.Interface, pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount, error) {
+func PatchOps(componentContainers map[int]corev1.Container, injectedContainers []corev1.Container, pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount) {
 	patches := make([]sidecar.PatchOperation, 0)
-	injectedContainers, err := injected(*pod, daprClient)
-	if err != nil {
-		return nil, nil, err
-	}
+
 	if len(componentContainers) == 0 && len(injectedContainers) == 0 {
-		return patches, nil, nil
+		return patches, nil
 	}
+
 	podAnnotations := sidecar.Annotations(pod.Annotations)
 	mountPath := podAnnotations.GetString(annotations.KeyPluggableComponentsSocketsFolder)
 	if mountPath == "" {
@@ -117,7 +114,7 @@ func PatchOps(componentContainers map[int]corev1.Container, daprClient scheme.In
 		})
 	}
 
-	return patches, &sharedSocketVolumeMount, nil
+	return patches, &sharedSocketVolumeMount
 }
 
 // emptyVolumePatches return all patches for pod emptyvolumes (the default value for injected pluggable components)

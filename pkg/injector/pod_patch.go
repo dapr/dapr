@@ -88,12 +88,12 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	})
 
 	// Pluggable components
-	appContainers, componentContainers := components.SplitContainers(pod)
-	componentPatchOps, componentsSocketVolumeMount, err := components.PatchOps(componentContainers, i.daprClient, &pod)
-
+	appContainers, componentContainers, injectedComponentContainers, err := i.splitContainers(pod)
 	if err != nil {
 		return nil, err
 	}
+
+	componentPatchOps, componentsSocketVolumeMount := components.PatchOps(componentContainers, injectedComponentContainers, &pod)
 
 	// Projected volume with the token
 	tokenVolume := sidecar.GetTokenVolume()
