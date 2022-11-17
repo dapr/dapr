@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -160,14 +161,16 @@ func (d *directMessaging) invokeWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			retriesExhaustedPath := false // Used to track final error state.
-			nullifyResponsePath := false  // Used to track final response state.
 			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
-			var resp *invokev1.InvokeMethodResponse
-			err := policy(func(ctx context.Context) (rErr error) {
-				retriesExhaustedPath = false
-				resp, rErr = fn(ctx, app.id, app.namespace, app.address, req)
+			respPtr := atomic.Pointer[invokev1.InvokeMethodResponse]{}
+			err := policy(func(ctx context.Context) error {
+				rResp, rErr := fn(ctx, app.id, app.namespace, app.address, req)
+				if respPtr.Load() != nil {
+					// Already stored
+					return rErr
+				}
 				if rErr == nil {
+					respPtr.CompareAndSwap(nil, rResp)
 					return nil
 				}
 
@@ -176,24 +179,27 @@ func (d *directMessaging) invokeWithRetry(
 					_, teardown, connerr := d.connectionCreatorFn(ctx, app.address, app.id, app.namespace, false, true, false)
 					defer teardown()
 					if connerr != nil {
-						nullifyResponsePath = true
+						respPtr.Store(nil)
 						return backoff.Permanent(connerr)
 					}
-					retriesExhaustedPath = true
 					return rErr
 				}
 				return backoff.Permanent(rErr)
 			})
+
 			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
-			if retriesExhaustedPath {
-				return nil, errors.Errorf("failed to invoke target %s after %v retries. Error: %s", app.id, numRetries, err.Error())
+			if err != nil {
+				var permanent *backoff.PermanentError
+				if !errors.As(err, &permanent) {
+					// The nunber of retries is hardcoded in the `DaprBuiltInServiceRetries` policy
+					return nil, errors.Errorf("failed to invoke target %s after 3 retries. Error: %s", app.id, err.Error())
+				}
+
+				// If we're here, the error is a permanent one, so unwrap it
+				return nil, errors.Unwrap(err)
 			}
 
-			if nullifyResponsePath {
-				resp = nil
-			}
-
-			return resp, err
+			return respPtr.Load(), nil
 		}
 		return fn(ctx, app.id, app.namespace, app.address, req)
 	}

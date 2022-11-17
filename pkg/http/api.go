@@ -1522,6 +1522,9 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			return invokeErr
 		}
 
+		// TODO: Although the code below is synchronous, there may still be a (small) possibility of a race condition, if the handler times out while doing the sync code below
+		// May need some refactoring to avoid race conditions with "body" and "statusCode"
+
 		invokev1.InternalMetadataToHTTPHeader(reqCtx, rResp.Headers(), reqCtx.Response.Header.Set)
 		var contentType string
 		contentType, body = rResp.RawData()

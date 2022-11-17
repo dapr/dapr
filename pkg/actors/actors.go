@@ -327,30 +327,36 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	a.placement.WaitUntilPlacementTableIsReady()
 
 	actor := req.Actor()
-	targetActorAddress, appID := "", ""
 	// Retry here to allow placement table dissemination/rebalancing to happen.
-	var policy resiliency.Runner
+	var (
+		targetActorAddress string
+		appID              string
+		policy             resiliency.Runner
+	)
+	once := sync.Once{}
 	if a.isResiliencyEnabled {
 		policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
 	} else {
 		noOp := resiliency.NoOp{}
 		policy = noOp.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
 	}
-	rErr := policy(func(ctx context.Context) error {
-		targetActorAddress, appID = a.placement.LookupActor(actor.GetActorType(), actor.GetActorId())
-		if targetActorAddress == "" {
+	err := policy(func(ctx context.Context) error {
+		rAddr, rAppID := a.placement.LookupActor(actor.GetActorType(), actor.GetActorId())
+		if rAddr == "" {
 			return fmt.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
 		}
+		once.Do(func() {
+			targetActorAddress = rAddr
+			appID = rAppID
+		})
 		return nil
 	})
 
-	if rErr != nil {
-		return nil, rErr
+	if err != nil {
+		return nil, err
 	}
 
 	var resp *invokev1.InvokeMethodResponse
-	var err error
-
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(ctx, req)
 	} else {
@@ -377,8 +383,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if a.isResiliencyEnabled {
-		pd := a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{})
-		if pd == nil {
+		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
 			respPtr := atomic.Pointer[invokev1.InvokeMethodResponse]{}
 			err := policy(func(ctx context.Context) error {
@@ -395,7 +400,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					_, teardown, connerr := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
-					teardown()
+					defer teardown()
 					if connerr != nil {
 						respPtr.Store(nil)
 						return backoff.Permanent(connerr)
@@ -404,16 +409,14 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				}
 				return backoff.Permanent(rErr)
 			})
+
 			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
 			if err != nil {
 				var permanent *backoff.PermanentError
 				if !errors.As(err, &permanent) {
 					// If the error wasn't a permanent one, it means we just exhausted the retries
-					var retries int64
-					if pd.RetryPolicy != nil {
-						retries = pd.RetryPolicy.MaxRetries
-					}
-					return nil, fmt.Errorf("failed to invoke target %s after %d retries", targetAddress, retries)
+					// The nunber of retries is hardcoded in the `DaprBuiltInActorRetries` policy
+					return nil, fmt.Errorf("failed to invoke target %s after 3 retries", targetAddress)
 				}
 
 				// If we're here, the error is a permanent one, so unwrap it
@@ -434,7 +437,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
 			_, teardown, cerr := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
-			teardown()
+			defer teardown()
 			if cerr != nil {
 				return nil, cerr
 			}
