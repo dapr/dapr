@@ -44,9 +44,12 @@ import (
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -187,17 +190,21 @@ type DaprRuntime struct {
 	namespace              string
 	podName                string
 	daprHTTPAPI            http.API
+	daprGRPCAPI            grpc.API
 	operatorClient         operatorv1pb.OperatorClient
 	pubsubCtx              context.Context
 	pubsubCancel           context.CancelFunc
 	topicsLock             *sync.RWMutex
 	topicRoutes            map[string]TopicRoutes        // Key is "componentName"
 	topicCtxCancels        map[string]context.CancelFunc // Key is "componentName||topicName"
+	subscriptions          []runtimePubsub.Subscription
 	inputBindingRoutes     map[string]string
 	shutdownC              chan error
 	apiClosers             []io.Closer
 	componentAuthorizers   []ComponentAuthorizer
 	appHealth              *apphealth.AppHealth
+	appHealthReady         func() // Invoked the first time the app health becomes ready
+	appHealthLock          *sync.Mutex
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -282,6 +289,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
+		appHealthReady:             nil,
+		appHealthLock:              &sync.Mutex{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -480,9 +489,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.initProxy()
 
 	// Create and start internal and external gRPC servers
-	grpcAPI := a.getGRPCAPI()
+	a.daprGRPCAPI = a.getGRPCAPI()
 
-	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
+	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
@@ -504,7 +513,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("The request body size parameter is: %v", a.runtimeConfig.MaxRequestBodySize)
 
-	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
+	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
@@ -521,14 +530,41 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
-	grpcAPI.SetAppChannel(a.appChannel)
-
-	a.loadAppConfiguration()
+	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 
 	a.initDirectMessaging(a.nameResolver)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
-	grpcAPI.SetDirectMessaging(a.directMessaging)
+	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
+
+	a.appHealthReady = func() {
+		a.appHealthReadyInit(opts)
+	}
+	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
+		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
+		a.appHealth.OnHealthChange(a.appHealthChanged)
+		a.appHealth.StartProbes(a.ctx)
+
+		// Set the appHealth object in the channel so it's aware of the app's health status
+		a.appChannel.SetAppHealth(a.appHealth)
+
+		// Enqueue a probe right away
+		// This will also start the input components once the app is healthy
+		a.appHealth.Enqueue()
+	} else {
+		// If there's no health check, mark the app as healthy right away so subscriptions can start
+		a.appHealthChanged(apphealth.AppStatusHealthy)
+	}
+
+	return nil
+}
+
+// appHealthReadyInit completes the initialization phase and is invoked after the app is healthy
+func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
+	var err error
+
+	// Load app configuration (for actors) and init actors
+	a.loadAppConfiguration()
 
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
@@ -536,7 +572,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Warnf(err.Error())
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
-			grpcAPI.SetActorRuntime(a.actor)
+			a.daprGRPCAPI.SetActorRuntime(a.actor)
 		}
 	}
 
@@ -557,24 +593,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Fatalf("failed to register components with callback: %s", err)
 		}
 	}
-
-	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
-		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
-		a.appHealth.OnHealthChange(a.appHealthChanged)
-		a.appHealth.StartProbes(a.ctx)
-
-		// Set the appHealth object in the channel so it's aware of the app's health status
-		a.appChannel.SetAppHealth(a.appHealth)
-
-		// Enqueue a probe right away
-		// This will also start the input components once the app is healthy
-		a.appHealth.Enqueue()
-	} else {
-		// If there's no health check, mark the app as healthy right away so subscriptions can start
-		a.appHealthChanged(apphealth.AppStatusHealthy)
-	}
-
-	return nil
 }
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
@@ -591,8 +609,17 @@ func (a *DaprRuntime) initPluggableComponents() {
 // Sets the status of the app to healthy or un-healthy
 // Callback for apphealth when the detected status changed
 func (a *DaprRuntime) appHealthChanged(status uint8) {
+	a.appHealthLock.Lock()
+	defer a.appHealthLock.Unlock()
+
 	switch status {
 	case apphealth.AppStatusHealthy:
+		// First time the app becomes healthy, complete the init process
+		if a.appHealthReady != nil {
+			a.appHealthReady()
+			a.appHealthReady = nil
+		}
+
 		// Start subscribing to topics and reading from input bindings
 		a.startSubscriptions()
 		err := a.startReadingFromBindings()
@@ -1311,6 +1338,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		AppChannel:                  a.appChannel,
 		DirectMessaging:             a.directMessaging,
 		GetComponentsFn:             a.getComponents,
+		GetSubscriptionsFn:          a.getSubscriptions,
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
 		LockStores:                  a.lockStores,
@@ -1423,6 +1451,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		GetSubscriptionsFn:          a.getSubscriptions,
 	})
 }
 
@@ -1678,22 +1707,20 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription
 	return subs[:i]
 }
 
-func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
-	if a.topicRoutes != nil {
-		return a.topicRoutes, nil
-	}
-
-	topicRoutes := make(map[string]TopicRoutes)
-
-	if a.appChannel == nil {
-		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
-		return topicRoutes, nil
+func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
+	if a.subscriptions != nil {
+		return a.subscriptions, nil
 	}
 
 	var (
 		subscriptions []runtimePubsub.Subscription
 		err           error
 	)
+
+	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
+		return subscriptions, nil
+	}
 
 	// handle app subscriptions
 	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
@@ -1725,6 +1752,27 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 		if !skip {
 			subscriptions = append(subscriptions, s)
 		}
+	}
+
+	a.subscriptions = subscriptions
+	return subscriptions, nil
+}
+
+func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
+	if a.topicRoutes != nil {
+		return a.topicRoutes, nil
+	}
+
+	topicRoutes := make(map[string]TopicRoutes)
+
+	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
+		return topicRoutes, nil
+	}
+
+	subscriptions, err := a.getSubscriptions()
+	if err != nil {
+		return nil, err
 	}
 
 	for _, s := range subscriptions {
@@ -2089,6 +2137,30 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
 	}
+
+	// Assemble Cloud Event Extensions:
+	// Create copy of the cloud event with duplicated data removed
+
+	checkDuplicateKeys := []string{pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field}
+	extensions := map[string]interface{}{}
+	for key, value := range cloudEvent {
+		if !slices.Contains(checkDuplicateKeys, key) {
+			extensions[key] = value
+		}
+	}
+	extensionsStruct := &structpb.Struct{}
+	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
+	if jsonMarshalErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
+		return fmt.Errorf("Error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
+	}
+
+	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, extensionsStruct)
+	if protoUnmarshalErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
+		return fmt.Errorf("Error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", jsonMarshalErr)
+	}
+	envelope.Extensions = extensionsStruct
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
