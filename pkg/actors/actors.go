@@ -674,7 +674,8 @@ func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedReque
 	err := policy(func(ctx context.Context) error {
 		_, exists := a.actorsTable.Load(key)
 		if !exists {
-			return errors.New("Actor")
+			// Error message isn't used - we just need to have an error
+			return errors.New("🤷")
 		}
 		return nil
 	})
