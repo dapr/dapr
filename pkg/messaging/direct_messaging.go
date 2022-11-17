@@ -186,7 +186,6 @@ func (d *directMessaging) invokeWithRetry(
 				}
 				return backoff.Permanent(rErr)
 			})
-
 			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
 			if err != nil {
 				var permanent *backoff.PermanentError

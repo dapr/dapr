@@ -351,7 +351,6 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 		})
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +408,6 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				}
 				return backoff.Permanent(rErr)
 			})
-
 			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
 			if err != nil {
 				var permanent *backoff.PermanentError
