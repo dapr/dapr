@@ -33,6 +33,7 @@ import (
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 type mockOperator struct {
@@ -58,7 +59,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					"pubsubRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
@@ -112,7 +113,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					"pubsubRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
@@ -381,7 +382,7 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 					"myRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 3,
+						MaxRetries: ptr.Of(3),
 					},
 				},
 			},
@@ -462,7 +463,7 @@ func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
 					string(BuiltInServiceRetries): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 1,
+						MaxRetries: ptr.Of(1),
 					},
 				},
 			},
@@ -481,7 +482,7 @@ func TestResiliencyProtectedPolicyCannotBeChanged(t *testing.T) {
 					string(BuiltInActorNotFoundRetries): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 				},
 			},
@@ -543,13 +544,13 @@ func TestGetDefaultPolicy(t *testing.T) {
 					fmt.Sprintf(string(DefaultRetryTemplate), "App"): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 
 					fmt.Sprintf(string(DefaultRetryTemplate), ""): {
 						Policy:     "constant",
 						Duration:   "1s",
-						MaxRetries: 5,
+						MaxRetries: ptr.Of(5),
 					},
 				},
 				Timeouts: map[string]string{
@@ -612,18 +613,18 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 					"testRetry": {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: 5,
+						MaxRetries: ptr.Of(5),
 					},
 					fmt.Sprintf(string(DefaultRetryTemplate), "App"): {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 
 					fmt.Sprintf(string(DefaultRetryTemplate), ""): {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: 3,
+						MaxRetries: ptr.Of(3),
 					},
 				},
 				Timeouts: map[string]string{
