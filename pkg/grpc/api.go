@@ -356,11 +356,30 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
+	var callerAppID string
+	callerIDHeader, ok := req.Metadata()[invokev1.CallerIDHeader]
+	if ok && len(callerIDHeader.Values) > 0 {
+		callerAppID = callerIDHeader.Values[0]
+	} else {
+		callerAppID = "unknown"
+	}
+
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message().Method)
+
+	var statusCode int32
+	defer func() {
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+	}()
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
+		statusCode = int32(codes.Internal)
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
+	} else {
+		statusCode = resp.Status().Code
 	}
+
 	return resp.Proto(), err
 }
 
