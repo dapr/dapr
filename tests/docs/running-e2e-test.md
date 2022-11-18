@@ -183,7 +183,7 @@ To completely remove Dapr, test dependencies, and any lingering e2e test apps:
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 
 ```bash
-# Uninstall dapr, dapr-kafka, dapr-redis services
+# Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb, dapr-temporal services
 helm uninstall dapr dapr-kafka dapr-redis dapr-mongodb dapr-temporal -n $DAPR_NAMESPACE
 
 # Remove the test namespace

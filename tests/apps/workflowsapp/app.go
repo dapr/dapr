@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -35,12 +36,47 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-var appPort = 3000
+const (
+	workflowURLTemplate = "http://localhost:%d/v1.0-alpha1/workflows/%s"
+)
+
+var (
+	appPort = 3000
+	// daprGRPCPort          = 50001
+	daprHTTPPort          = 3500
+	daprTemporalNamespace = "temporal-system"
+	serviceName           = "dapr-temporal-frontend.dapr-tests.svc.cluster.local"
+	temporalPort          = 7233
+
+	httpClient = utils.NewHTTPClient()
+	// grpcClient runtimev1pb.DaprClient
+
+)
 
 func init() {
-	p := os.Getenv("PORT")
+	p := os.Getenv("DAPR_HTTP_PORT")
+	if p != "" && p != "0" {
+		daprHTTPPort, _ = strconv.Atoi(p)
+	}
+	// p = os.Getenv("DAPR_GRPC_PORT")
+	// if p != "" && p != "0" {
+	// 	daprGRPCPort, _ = strconv.Atoi(p)
+	// }
+	p = os.Getenv("PORT")
 	if p != "" && p != "0" {
 		appPort, _ = strconv.Atoi(p)
+	}
+	p = os.Getenv("NAMESPACE")
+	if p != "" && p != "0" {
+		daprTemporalNamespace = p
+	}
+	p = os.Getenv("SERVICE_NAME")
+	if p != "" && p != "0" {
+		serviceName = p
+	}
+	p = os.Getenv("HOST_PORT")
+	if p != "" && p != "0" {
+		temporalPort, _ = strconv.Atoi(p)
 	}
 }
 
@@ -50,11 +86,9 @@ type testCommandRequest struct {
 
 type appResponse struct {
 	Message   string `json:"message,omitempty"`
-	StartTime int    `json:"start_time,omitempty"`
-	EndTime   int    `json:"end_time,omitempty"`
+	StartTime int64  `json:"start_time,omitempty"`
+	EndTime   int64  `json:"end_time,omitempty"`
 }
-
-var httpClient = utils.NewHTTPClient()
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +125,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	log.Printf("StartTest - message: %s", commandRequest.Message)
 
+	// START TEST //
 	// Create json payload to send over HTTP to start workflow by providing task_queue
 	jsonData := []byte(`{
 		"workflow_options" :
@@ -98,7 +133,8 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 			"task_queue" : "e2e_test_queue"
 		}
 	}`)
-	res, err := httpClient.Post("http://localhost:3500/v1.0-alpha1/workflows/temporal/HelloTemporalWF/WorkflowID/start", "application/json", bytes.NewBuffer(jsonData))
+	workflowURL := fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/WorkflowID/start")
+	res, err := httpClient.Post(workflowURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
 	}
@@ -108,10 +144,23 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	body, _ := io.ReadAll(res.Body)
 	var resultData workflows.WorkflowReference
 	json.Unmarshal(body, &resultData)
-	time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second) // Sleep before the terminate call
 
-	// USe the data that was retrieved back from the start workflow call (InstanceID) to get info on the workflow
-	res, err = httpClient.Get("http://localhost:3500/v1.0-alpha1/workflows/temporal/HelloTemporalWF/" + resultData.InstanceID + "")
+	// TERMINATE TEST //
+	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/"+resultData.InstanceID+"/terminate")
+	res, err = httpClient.Post(workflowURL, "", nil)
+	if err != nil {
+		return http.StatusInternalServerError, appResponse{Message: err.Error()}
+	}
+	defer res.Body.Close()
+
+	// Get the data response from the terminate workflow call
+	body, _ = io.ReadAll(res.Body)
+	json.Unmarshal(body, &resultData)
+
+	// Use the data that was retrieved back from the start workflow call (InstanceID) to get info on the workflow
+	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/"+resultData.InstanceID+"")
+	res, err = httpClient.Get(workflowURL)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
 	}
@@ -125,8 +174,8 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 }
 
 // epoch returns the current unix epoch timestamp
-func epoch() int {
-	return int(time.Now().UnixMilli())
+func epoch() int64 {
+	return time.Now().UnixMilli()
 }
 
 // appRouter initializes restful api router
@@ -147,15 +196,17 @@ func appRouter() *mux.Router {
 func main() {
 	log.Printf("Workflow Test - listening on http://localhost:%d", appPort)
 
-	client2, _ := client.NewNamespaceClient(client.Options{HostPort: "dapr-temporal-frontend.dapr-tests.svc.cluster.local:7233"})
+	temporalHostPort := serviceName + fmt.Sprint(temporalPort)
+
+	client2, _ := client.NewNamespaceClient(client.Options{HostPort: temporalHostPort})
 	_ = client2.Register(context.Background(), &workflowservice.RegisterNamespaceRequest{
-		Namespace: "temporal-system",
+		Namespace: daprTemporalNamespace,
 	})
 
 	// Create the client for the worker
 	cOptions := client.Options{
-		HostPort:  "dapr-temporal-frontend.dapr-tests.svc.cluster.local:7233",
-		Namespace: "temporal-system",
+		HostPort:  temporalHostPort,
+		Namespace: daprTemporalNamespace,
 	}
 	c, err := client.Dial(cOptions)
 	if err != nil {
@@ -201,5 +252,6 @@ func HelloTemporalWF(ctx workflow.Context) (string, error) {
 }
 
 func HelloTemporalAct(ctx context.Context) (result string, err error) {
+	time.Sleep(5 * time.Second) // This 5s sleep is to allow for terminate to be called
 	return "Hello Temporal", nil
 }

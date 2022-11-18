@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -114,7 +113,7 @@ type API interface {
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
 	GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error)
 	StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error)
-	TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error)
+	TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -1743,24 +1742,24 @@ func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataReques
 }
 
 func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if in.WorkflowReference.InstanceID == "" {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
+	if in.WorkflowReference.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrNoOrMissingComponent))
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 	workflowRun := a.workflowComponents[in.WorkflowComponent]
 	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 	req := workflows.WorkflowReference{
-		InstanceID: in.WorkflowReference.InstanceID,
+		InstanceID: in.WorkflowReference.InstanceId,
 	}
 	response, err := workflowRun.Get(ctx, &req)
 	if err != nil {
@@ -1770,7 +1769,7 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 	}
 
 	id := &runtimev1pb.WorkflowReference{
-		InstanceID: response.WFInfo.InstanceID,
+		InstanceId: response.WFInfo.InstanceID,
 	}
 
 	t, err := time.Parse(time.RFC3339, response.StartTime)
@@ -1780,11 +1779,9 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
-	startTime := timestamppb.New(t)
-
 	res := &runtimev1pb.GetWorkflowResponse{
 		WorkflowReference: id,
-		StartTime:         startTime,
+		StartTime:         t.Unix(),
 		Metadata:          response.Metadata,
 	}
 	return res, nil
@@ -1792,32 +1789,32 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 
 func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error) {
 	if in.WorkflowName == "" {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrWorkflowNameMissing))
+		err := status.Errorf(codes.InvalidArgument, messages.ErrWorkflowNameMissing)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
 	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrNoOrMissingComponent))
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
-	if in.WorkflowReference.InstanceID == "" {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
+	if in.WorkflowReference.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
 	workflowRun := a.workflowComponents[in.WorkflowComponent]
 	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
 	wf := workflows.WorkflowReference{
-		InstanceID: in.WorkflowReference.InstanceID,
+		InstanceID: in.WorkflowReference.InstanceId,
 	}
 	req := workflows.StartRequest{
 		WorkflowReference: wf,
@@ -1833,42 +1830,42 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 	ret := &runtimev1pb.WorkflowReference{
-		InstanceID: resp.InstanceID,
+		InstanceId: resp.InstanceID,
 	}
 	return ret, nil
 }
 
-func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
-	if in.WorkflowReference.InstanceID == "" {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
+func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
+	if in.WorkflowReference.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
 	}
 
 	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrNoOrMissingComponent))
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
 	}
 
 	workflowRun := a.workflowComponents[in.WorkflowComponent]
 	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
 	}
 
 	req := workflows.WorkflowReference{
-		InstanceID: in.WorkflowReference.InstanceID,
+		InstanceID: in.WorkflowReference.InstanceId,
 	}
 
 	err := workflowRun.Terminate(ctx, &req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, nil
+		return &runtimev1pb.TerminateWorkflowResponse{}, nil
 	}
-	return &emptypb.Empty{}, nil
+	return &runtimev1pb.TerminateWorkflowResponse{}, nil
 }
 
 // Shutdown the sidecar.

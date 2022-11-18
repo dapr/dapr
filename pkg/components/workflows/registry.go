@@ -14,9 +14,8 @@ limitations under the License.
 package workflows
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/components"
@@ -50,7 +49,7 @@ func (s *Registry) Create(name, version string) (wfs.Workflow, error) {
 	if method, ok := s.getWorkflowComponent(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find wokflow %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find wokflow %s/%s", name, version)
 }
 
 func (s *Registry) getWorkflowComponent(name, version string) (func() wfs.Workflow, bool) {

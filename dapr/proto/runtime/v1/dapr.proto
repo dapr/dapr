@@ -118,7 +118,7 @@ service Dapr {
   rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
 
   // Terminate Workflow
-  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (google.protobuf.Empty) {}
+  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
 
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
@@ -685,30 +685,33 @@ message UnlockResponse {
 }
 
 message WorkflowReference {
-  string InstanceID = 1;
+  string instance_id = 1;
 }
 
 message GetWorkflowRequest {
-  WorkflowReference WorkflowReference  = 1;
-  string WorkflowType = 2;
-  string WorkflowComponent = 3; 
+  WorkflowReference workflow_reference  = 1;
+  string workflow_type = 2;
+  string workflow_component = 3; 
 }
 
 message GetWorkflowResponse {
-  WorkflowReference WorkflowReference  = 1;
-  google.protobuf.Timestamp StartTime = 2;
-  map<string, string> Metadata = 3;
+  WorkflowReference workflow_reference = 1;
+  int64 start_time = 2;
+  map<string, string> metadata = 3;
 }
 
 message StartWorkflowRequest {
-  WorkflowReference WorkflowReference = 1;
-  string WorkflowComponent = 2;
-  string WorkflowName = 3;
-  map<string, string> Options = 4;
-  google.protobuf.Any Input = 5;   
+  WorkflowReference workflow_reference = 1;
+  string workflow_component = 2;
+  string workflow_name = 3;
+  map<string, string> options = 4;
+  google.protobuf.Any input = 5;   
 }
 
 message TerminateWorkflowRequest {
-  WorkflowReference WorkflowReference = 1;
-  string WorkflowComponent = 2;
+  WorkflowReference workflow_reference = 1;
+  string workflow_component = 2;
+}
+
+message TerminateWorkflowResponse {
 }

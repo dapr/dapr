@@ -371,7 +371,6 @@ setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
 	$(HELM) repo add stable https://charts.helm.sh/stable
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
-	$(HELM) repo add armory https://armory.jfrog.io/artifactory/charts/
 	$(HELM) repo add wener https://wenerme.github.io/charts
 	$(HELM) repo update
 

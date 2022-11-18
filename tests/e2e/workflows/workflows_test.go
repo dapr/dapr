@@ -80,7 +80,7 @@ var workflowAppTests = []struct {
 		"workflow dapr",
 		"workflowsapp",
 		"start",
-		"Completed",
+		"Terminated",
 	},
 }
 
