@@ -2275,8 +2275,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			},
 		},
 		Extended: map[string]string{
-			"test":               "value",
-			"daprRuntimeVersion": "edge",
+			"test": "value",
 		},
 		RegisteredComponents: []registeredComponent{
 			{
