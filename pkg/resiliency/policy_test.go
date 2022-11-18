@@ -116,7 +116,7 @@ func TestPolicyRetry(t *testing.T) {
 			name:       "Retries succeed",
 			maxCalls:   5,
 			maxRetries: 6,
-			expected:   5,
+			expected:   6,
 		},
 		{
 			name:       "Retries fail",

@@ -1275,7 +1275,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		resp, _ := respAny.(*invokev1.InvokeMethodResponse)
-		if resp != nil {
+		if resp == nil {
 			return nil, errors.New("response object is nil")
 		}
 

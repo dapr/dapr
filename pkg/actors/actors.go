@@ -581,7 +581,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}
 
 	resp, _ := respAny.(*state.GetResponse)
-	if resp != nil {
+	if resp == nil {
 		return &StateResponse{}, nil
 	}
 
@@ -826,7 +826,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	}
 
 	resp, _ := respAny.(*state.GetResponse)
-	if resp != nil {
+	if resp == nil {
 		resp = &state.GetResponse{}
 	}
 	track := &ReminderTrack{
@@ -1631,11 +1631,6 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 					})
 					if ferr != nil {
 						r.Error = ferr.Error()
-						return
-					}
-
-					if respAny == nil {
-						r.Error = "response not found for partition"
 						return
 					}
 

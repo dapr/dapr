@@ -674,15 +674,11 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 					r.Error = err.Error()
 				}
-				if respAny != nil {
-					resp, ok := respAny.(*state.GetResponse)
-					if ok {
-						r.Data = json.RawMessage(resp.Data)
-						r.ETag = resp.ETag
-						r.Metadata = resp.Metadata
-					} else {
-						r.Error = "failed to cast response"
-					}
+				resp, _ := respAny.(*state.GetResponse)
+				if resp != nil {
+					r.Data = json.RawMessage(resp.Data)
+					r.ETag = resp.ETag
+					r.Metadata = resp.Metadata
 				}
 			}
 
@@ -1491,8 +1487,8 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	dmpr, ok := dmprAny.(*directMessagingPolicyRes)
-	if !ok || dmpr == nil {
+	dmpr, _ := dmprAny.(*directMessagingPolicyRes)
+	if dmpr == nil {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", "failed to cast response object")))
 		return
 	}
@@ -1812,8 +1808,8 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp, ok := respAny.(*invokev1.InvokeMethodResponse)
-	if !ok || resp == nil {
+	resp, _ := respAny.(*invokev1.InvokeMethodResponse)
+	if resp == nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, "failed to cast response"))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)

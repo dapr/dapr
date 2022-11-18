@@ -263,7 +263,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Sub
 
 	files, err := os.ReadDir(componentsPath)
 	if err != nil {
-		log.Errorf("failed to read subscriptions from path %s: %s", err)
+		log.Errorf("failed to read subscriptions from path %s: %s", componentsPath, err)
 		return subs
 	}
 
