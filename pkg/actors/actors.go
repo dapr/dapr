@@ -66,6 +66,8 @@ var log = logger.NewLogger("dapr.runtime.actor")
 var pattern = regexp.MustCompile(`^(R(?P<repetition>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
 
 // Actors allow calling into virtual actors as well as actor state management.
+//
+//nolint:interfacebloat
 type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error

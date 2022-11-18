@@ -57,6 +57,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -1955,6 +1956,92 @@ func TestPublishTopic(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+func TestBulkPublish(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	srv := &api{
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
+			},
+			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+				entries := []pubsub.BulkPublishResponseEntry{}
+
+				// Construct sample response from the broker.
+				for i, e := range req.Entries {
+					entry := pubsub.BulkPublishResponseEntry{
+						EntryId: e.EntryId,
+					}
+					if req.Topic == "error-topic" {
+						entry.Error = errors.New("error when publish")
+						entry.Status = pubsub.PublishFailed
+					} else if req.Topic == "even-error-topic" {
+						if i%2 == 0 {
+							entry.Error = errors.New("error when publish")
+							entry.Status = pubsub.PublishFailed
+						} else {
+							entry.Status = pubsub.PublishSucceeded
+						}
+					} else {
+						entry.Status = pubsub.PublishSucceeded
+					}
+
+					entries = append(entries, entry)
+				}
+
+				return pubsub.BulkPublishResponse{Statuses: entries}, nil
+			},
+		},
+	}
+
+	server := startTestServerAPI(port, srv)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	sampleEntries := []*runtimev1pb.BulkPublishRequestEntry{
+		{EntryId: "1", Event: []byte("data1")},
+		{EntryId: "2", Event: []byte("data2")},
+		{EntryId: "3", Event: []byte("data3")},
+		{EntryId: "4", Event: []byte("data4")},
+	}
+
+	res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Empty(t, res.Statuses)
+
+	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "error-topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 4, len(res.Statuses))
+	for _, s := range res.Statuses {
+		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
+	}
+
+	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "even-error-topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(res.Statuses))
+	for _, s := range res.Statuses {
+		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
+	}
+}
+
 func TestShutdownEndpoints(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
@@ -2186,6 +2273,22 @@ func TestGetMetadata(t *testing.T) {
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
+		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+			return []runtimePubsub.Subscription{
+				{
+					PubsubName:      "test",
+					Topic:           "topic",
+					DeadLetterTopic: "dead",
+					Metadata:        map[string]string{},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Match: &expr.Expr{},
+							Path:  "path",
+						},
+					},
+				},
+			}, nil
+		},
 	}
 	fakeAPI.extendedMetadata.Store("testKey", "testValue")
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -2206,6 +2309,14 @@ func TestGetMetadata(t *testing.T) {
 	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
 	assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
 	assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
+	assert.Len(t, response.Subscriptions, 1)
+	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
+	assert.Equal(t, response.Subscriptions[0].Topic, "topic")
+	assert.Equal(t, response.Subscriptions[0].DeadLetterTopic, "dead")
+	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
+	assert.Len(t, response.Subscriptions[0].Rules.Rules, 1)
+	assert.Equal(t, fmt.Sprintf("%s", response.Subscriptions[0].Rules.Rules[0].Match), "")
+	assert.Equal(t, response.Subscriptions[0].Rules.Rules[0].Path, "path")
 }
 
 func TestSetMetadata(t *testing.T) {

@@ -127,6 +127,12 @@ func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) e
 	return nil
 }
 
+// Returns the component metadata options
+func (b *grpcInputBinding) GetComponentMetadata() map[string]string {
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
+	return map[string]string{}
+}
+
 // inputFromConnector creates a new GRPC inputbinding using the given underlying connector.
 func inputFromConnector(l logger.Logger, connector *pluggable.GRPCConnector[proto.InputBindingClient]) *grpcInputBinding {
 	return &grpcInputBinding{
