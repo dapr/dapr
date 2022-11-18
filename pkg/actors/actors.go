@@ -1003,6 +1003,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			if err = a.executeReminder(reminder); err != nil {
 				if err == ErrReminderCanceled {
 					// The handler is explicitly canceling the timer
+					log.Infof("reminder %q was canceled by the actor", reminder.Name)
 					break L
 				} else {
 					log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",

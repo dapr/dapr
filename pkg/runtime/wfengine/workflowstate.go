@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -37,7 +36,7 @@ type workflowState struct {
 	Inbox        []*backend.HistoryEvent
 	History      []*backend.HistoryEvent
 	CustomStatus string
-	Generation   uuid.UUID
+	Generation   uint64
 
 	// change tracking
 	inboxAddedCount     int
@@ -49,12 +48,12 @@ type workflowState struct {
 type workflowStateMetadata struct {
 	InboxLength   int
 	HistoryLength int
-	Generation    uuid.UUID
+	Generation    uint64
 }
 
-func NewWorkflowState(generation uuid.UUID) workflowState {
+func NewWorkflowState() workflowState {
 	return workflowState{
-		Generation: generation,
+		Generation: 1,
 	}
 }
 
@@ -66,7 +65,7 @@ func (s *workflowState) Reset() {
 	s.historyRemovedCount += len(s.History)
 	s.History = nil
 	s.CustomStatus = ""
-	s.Generation = uuid.New()
+	s.Generation++
 }
 
 func (s *workflowState) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
@@ -173,7 +172,8 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
 		return workflowState{}, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
-	state := NewWorkflowState(metadata.Generation)
+	state := NewWorkflowState()
+	state.Generation = metadata.Generation
 	// CONSIDER: Do some of these loads in parallel
 	for i := 0; i < metadata.InboxLength; i++ {
 		req.Key = getMultiEntryKeyName(inboxKeyPrefix, i)

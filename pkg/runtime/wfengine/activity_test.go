@@ -18,7 +18,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 
@@ -36,12 +35,16 @@ func TestDedupeActivityInvocation(t *testing.T) {
 	// Get a reference to the activity actor so we can invoke it directly, without going through a workflow.
 	activityActor := engine.InternalActors()[wfengine.ActivityActorType]
 
+	generation := uint64(0)
+
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
+			generation++
+
 			// Generate the same invocation payload that a workflow would generate for a real activity call.
 			data, err := actors.EncodeInternalActorData(wfengine.ActivityRequest{
 				HistoryEvent: nil,
-				Generation:   uuid.New(),
+				Generation:   generation,
 			})
 			assert.NoError(t, err)
 
@@ -52,6 +55,16 @@ func TestDedupeActivityInvocation(t *testing.T) {
 			// The second call should fail with a duplicate invocation error
 			_, err = activityActor.InvokeMethod(ctx, "test123", "Execute", data)
 			assert.ErrorIs(t, err, wfengine.ErrDuplicateInvocation)
+
+			// The third call, with an updated generation ID, should succeed
+			generation++
+			data, err = actors.EncodeInternalActorData(wfengine.ActivityRequest{
+				HistoryEvent: nil,
+				Generation:   generation,
+			})
+			assert.NoError(t, err)
+			_, err = activityActor.InvokeMethod(ctx, "test123", "Execute", data)
+			assert.NoError(t, err)
 		})
 	}
 }

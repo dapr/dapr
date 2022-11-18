@@ -50,7 +50,7 @@ type workflowActor struct {
 
 type durableTimer struct {
 	Bytes      []byte
-	Generation uuid.UUID
+	Generation uint64
 }
 
 type recoverableError struct {
@@ -62,7 +62,7 @@ func init() {
 	gob.Register(durableTimer{})
 }
 
-func NewDurableTimer(bytes []byte, generation uuid.UUID) durableTimer {
+func NewDurableTimer(bytes []byte, generation uint64) durableTimer {
 	return durableTimer{bytes, generation}
 }
 
@@ -152,7 +152,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	if err != nil {
 		return err
 	} else if !exists {
-		state = NewWorkflowState(uuid.New())
+		state = NewWorkflowState()
 	}
 
 	startEvent, err := backend.UnmarshalHistoryEvent(startEventBytes)
@@ -249,7 +249,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
 			return fmt.Errorf("unrecognized reminder payload: %v", reminderData)
 		}
-		if timerData.Generation != state.Generation {
+		if timerData.Generation < state.Generation {
 			wfLogger.Infof("%s: ignoring durable timer from previous generation '%v'", actorID, timerData.Generation)
 			return nil
 		} else {
@@ -393,7 +393,8 @@ func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) 
 	if err != nil {
 		return workflowState{}, false, err
 	}
-	if state.Generation == uuid.Nil {
+	if state.Generation == 0 {
+		// No such state exists in the state store
 		return workflowState{}, false, nil
 	}
 	return state, true, nil

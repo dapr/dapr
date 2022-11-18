@@ -16,7 +16,6 @@ package wfengine
 
 import (
 	"context"
-	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 
@@ -46,17 +44,12 @@ type activityActor struct {
 // ActivityRequest represents a request by a worklow to invoke an activity.
 type ActivityRequest struct {
 	HistoryEvent []byte
-	Generation   uuid.UUID
+	Generation   uint64
 }
 
 type activityState struct {
-	Generation   uuid.UUID
 	EventPayload []byte
-}
-
-func init() {
-	// gob is used to serialize internal actor reminder data
-	gob.Register(uuid.UUID{})
+	Generation   uint64
 }
 
 // NewActivityActor creates an internal activity actor for executing workflow activity logic.
@@ -87,7 +80,7 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
 	if state, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
 		return nil, err
-	} else if state.Generation != uuid.Nil {
+	} else if state.Generation > 0 {
 		return nil, ErrDuplicateInvocation
 	}
 
@@ -109,7 +102,7 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data any, dueTime string, period string) error {
 	wfLogger.Debugf("invoking reminder '%s' on activity actor '%s'", reminderName, actorID)
 
-	generation := data.(uuid.UUID)
+	generation := data.(uint64)
 	state, _ := a.loadActivityState(ctx, actorID, generation)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
@@ -212,7 +205,7 @@ func (a *activityActor) DeactivateActor(ctx context.Context, actorID string) err
 	return nil
 }
 
-func (a *activityActor) loadActivityState(ctx context.Context, actorID string, generation uuid.UUID) (activityState, error) {
+func (a *activityActor) loadActivityState(ctx context.Context, actorID string, generation uint64) (activityState, error) {
 	// See if the state for this actor is already cached in memory.
 	result, ok := a.statesCache.Load(actorID)
 	if ok {
@@ -229,7 +222,7 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 	req := actors.GetStateRequest{
 		ActorType: ActivityActorType,
 		ActorID:   actorID,
-		Key:       getActivityStateKey(generation),
+		Key:       getActivityInvocationKey(generation),
 	}
 	res, err := a.actorRuntime.GetState(ctx, &req)
 	if err != nil {
@@ -255,7 +248,7 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 		Operations: []actors.TransactionalOperation{{
 			Operation: actors.Upsert,
 			Request: actors.TransactionalUpsert{
-				Key:   getActivityStateKey(state.Generation),
+				Key:   getActivityInvocationKey(state.Generation),
 				Value: state,
 			},
 		}},
@@ -270,8 +263,8 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 	return nil
 }
 
-func getActivityStateKey(generation uuid.UUID) string {
-	return fmt.Sprintf("activityreq-%s", generation)
+func getActivityInvocationKey(generation uint64) string {
+	return fmt.Sprintf("activityreq-%d", generation)
 }
 
 func (a *activityActor) createReliableReminder(ctx context.Context, actorID string, name string, data any) error {

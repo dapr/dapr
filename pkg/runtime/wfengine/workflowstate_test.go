@@ -18,7 +18,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/stretchr/testify/assert"
@@ -37,8 +36,13 @@ func TestNoWorkflowState(t *testing.T) {
 	assert.Empty(t, state)
 }
 
+func TestDefaultWorkflowState(t *testing.T) {
+	state := wfengine.NewWorkflowState()
+	assert.Equal(t, 1, state.Generation)
+}
+
 func TestAddingToInbox(t *testing.T) {
-	state := wfengine.NewWorkflowState(uuid.New())
+	state := wfengine.NewWorkflowState()
 	for i := 0; i < 10; i++ {
 		state.AddToInbox(&backend.HistoryEvent{})
 	}
@@ -55,7 +59,7 @@ func TestAddingToInbox(t *testing.T) {
 }
 
 func TestClearingInbox(t *testing.T) {
-	state := wfengine.NewWorkflowState(uuid.New())
+	state := wfengine.NewWorkflowState()
 	for i := 0; i < 10; i++ {
 		// Simulate the loadng of inbox events from storage
 		state.Inbox = append(state.Inbox, &backend.HistoryEvent{})
@@ -74,7 +78,7 @@ func TestClearingInbox(t *testing.T) {
 }
 
 func TestAddingToHistory(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState(uuid.New())
+	wfstate := wfengine.NewWorkflowState()
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
 		if err := runtimeState.AddEvent(&backend.HistoryEvent{}); !assert.NoError(t, err) {
@@ -95,8 +99,7 @@ func TestAddingToHistory(t *testing.T) {
 }
 
 func TestLoadSavedState(t *testing.T) {
-	generation := uuid.New()
-	wfstate := wfengine.NewWorkflowState(generation)
+	wfstate := wfengine.NewWorkflowState()
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
@@ -128,14 +131,14 @@ func TestLoadSavedState(t *testing.T) {
 	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1")
 	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
 		assert.Equal(t, "my custom status", wfstate.CustomStatus)
-		assert.Equal(t, generation, wfstate.Generation)
+		assert.Equal(t, 1, wfstate.Generation)
 		assert.Equal(t, 10, len(wfstate.History))
 		assert.Equal(t, 5, len(wfstate.Inbox))
 	}
 }
 
 func TestResetLoadedState(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState(uuid.New())
+	wfstate := wfengine.NewWorkflowState()
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
@@ -161,7 +164,9 @@ func TestResetLoadedState(t *testing.T) {
 
 	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actorRuntime, "wf1")
 	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
+		assert.Equal(t, 1, wfstate.Generation)
 		wfstate.Reset()
+		assert.Equal(t, 2, wfstate.Generation)
 		req, err := wfstate.GetSaveRequest("wf1")
 		if assert.NoError(t, err) {
 			assert.Equal(t, 17, len(req.Operations)) // history x10 + inbox x5 + metadata + customStatus
