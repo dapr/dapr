@@ -65,13 +65,13 @@ type AppDescription struct {
 	Volumes                   []apiv1.Volume                  `json:",omitempty"`
 	InitContainers            []apiv1.Container               `json:",omitempty"`
 	PluggableComponents       []apiv1.Container               `json:",omitempty"`
-	InjectPluggableComponents bool
-	PlacementAddresses        []string `json:",omitempty"`
-	EnableAppHealthCheck      bool     `json:",omitempty"`
-	AppHealthCheckPath        string   `json:",omitempty"`
-	AppHealthProbeInterval    int      `json:",omitempty"` // In seconds
-	AppHealthProbeTimeout     int      `json:",omitempty"` // In milliseconds
-	AppHealthThreshold        int      `json:",omitempty"`
+	InjectPluggableComponents bool                            `json:",omitempty"`
+	PlacementAddresses        []string                        `json:",omitempty"`
+	EnableAppHealthCheck      bool                            `json:",omitempty"`
+	AppHealthCheckPath        string                          `json:",omitempty"`
+	AppHealthProbeInterval    int                             `json:",omitempty"` // In seconds
+	AppHealthProbeTimeout     int                             `json:",omitempty"` // In milliseconds
+	AppHealthThreshold        int                             `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {

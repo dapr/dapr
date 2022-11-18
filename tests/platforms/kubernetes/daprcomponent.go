@@ -37,10 +37,7 @@ func NewDaprComponent(client *KubeClient, ns string, comp ComponentDescription) 
 		component:  comp,
 	}
 }
-
-func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
-	client := do.kubeClient.DaprComponents(DaprTestNamespace)
-
+func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 	metadata := []v1alpha1.MetadataItem{}
 
 	for k, v := range do.component.MetaData {
@@ -72,8 +69,10 @@ func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
 		annotations["dapr.io/component-container-image"] = do.component.ContainerImage
 	}
 
-	obj := buildDaprComponentObject(do.component.Name, do.component.TypeName, do.component.Scopes, annotations, metadata)
-	return client.Create(obj)
+	return buildDaprComponentObject(do.component.Name, do.component.TypeName, do.component.Scopes, annotations, metadata)
+}
+func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
+	return do.kubeClient.DaprComponents(DaprTestNamespace).Create(do.toComponentSpec())
 }
 
 func (do *DaprComponent) deleteComponent() error {

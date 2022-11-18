@@ -16,11 +16,17 @@ package injector
 import (
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/components"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 )
 
 func (i *injector) splitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, componentContainers map[int]corev1.Container, injectedComponentContainers []corev1.Container, err error) {
-	injectedComponentContainers, err = components.Injectable(pod, i.daprClient)
+	an := sidecar.Annotations(pod.Annotations)
+	injectionEnabled := an.GetBoolOrDefault(annotations.KeyPluggableComponentsInjection, false)
+	if injectionEnabled {
+		injectedComponentContainers, err = components.Injectable(an.GetString(annotations.KeyAppID), i.daprClient.ComponentsV1alpha1().Components(pod.Namespace))
+	}
 	appContainers, componentContainers = components.SplitContainers(pod)
 	return
 }

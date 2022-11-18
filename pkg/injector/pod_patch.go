@@ -126,7 +126,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	// Create the list of patch operations
 	patchOps = []sidecar.PatchOperation{}
-	if len(pod.Spec.Containers) == 0 { // set to empty to support add operations separately
+	if len(pod.Spec.Containers) == 0 { // set to empty to support add operations individually
 		patchOps = append(patchOps, sidecar.PatchOperation{
 			Op:    "add",
 			Path:  sidecar.PatchPathContainers,
