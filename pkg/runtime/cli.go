@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/pkg/errors"
 
 	"github.com/dapr/kit/logger"
@@ -33,7 +34,6 @@ import (
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
-	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -164,7 +164,7 @@ func FromFlags() (*DaprRuntime, error) {
 			return nil, errors.Wrap(err, "error parsing dapr-internal-grpc-port")
 		}
 	} else {
-		daprInternalGRPC, err = grpc.GetFreePort()
+		daprInternalGRPC, err = freeport.GetFreePort()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get free port for internal grpc server")
 		}
