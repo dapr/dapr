@@ -190,10 +190,7 @@ func (d *directMessaging) invokeWithRetry(
 				return nil, errors.Unwrap(err)
 			}
 
-			resp, ok := respAny.(*invokev1.InvokeMethodResponse)
-			if !ok && respAny != nil {
-				return nil, errors.New("failed to cast response")
-			}
+			resp, _ := respAny.(*invokev1.InvokeMethodResponse)
 			return resp, nil
 		}
 		return fn(ctx, app.id, app.namespace, app.address, req)

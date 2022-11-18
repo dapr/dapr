@@ -61,9 +61,10 @@ const (
 	metadataZeroID       = "00000000-0000-0000-0000-000000000000"
 )
 
-var log = logger.NewLogger("dapr.runtime.actor")
-
-var pattern = regexp.MustCompile(`^(R(?P<repetition>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
+var (
+	log     = logger.NewLogger("dapr.runtime.actor")
+	pattern = regexp.MustCompile(`^(R(?P<repetition>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
+)
 
 // Actors allow calling into virtual actors as well as actor state management.
 //
@@ -353,9 +354,9 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	if err != nil {
 		return nil, err
 	}
-	lar, ok := (larAny).(*lookupActorRes)
-	if !ok && larAny != nil {
-		return nil, errors.New("failed to cast response")
+	lar, _ := larAny.(*lookupActorRes)
+	if lar == nil {
+		lar = &lookupActorRes{}
 	}
 
 	var resp *invokev1.InvokeMethodResponse
@@ -416,10 +417,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				// If we're here, the error is a permanent one, so unwrap it
 				return nil, errors.Unwrap(err)
 			}
-			resp, ok := respAny.(*invokev1.InvokeMethodResponse)
-			if !ok && respAny != nil {
-				return nil, errors.New("failed to cast response")
-			}
+			resp, _ := respAny.(*invokev1.InvokeMethodResponse)
 			return resp, nil
 		}
 		return fn(ctx, targetAddress, targetID, req)
@@ -506,9 +504,9 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		return nil, err
 	}
 
-	resp, ok := respAny.(*invokev1.InvokeMethodResponse)
-	if !ok && respAny != nil {
-		return nil, errors.New("failed to cast response")
+	resp, _ := respAny.(*invokev1.InvokeMethodResponse)
+	if resp == nil {
+		return nil, errors.New("response object is nil")
 	}
 	_, respData := resp.RawData()
 	if resp.Status().Code != nethttp.StatusOK {
@@ -557,7 +555,7 @@ func (a *actorsRuntime) callRemoteActor(
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
 	return strings.Contains(targetActorAddress, "localhost") || strings.Contains(targetActorAddress, "127.0.0.1") ||
-		targetActorAddress == fmt.Sprintf("%s:%v", hostAddress, grpcPort)
+		targetActorAddress == hostAddress+":"+strconv.Itoa(grpcPort)
 }
 
 func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
@@ -582,9 +580,9 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 		return nil, err
 	}
 
-	resp, ok := respAny.(*state.GetResponse)
-	if !ok && respAny != nil {
-		return nil, errors.New("failed to cast response")
+	resp, _ := respAny.(*state.GetResponse)
+	if resp != nil {
+		return &StateResponse{}, nil
 	}
 
 	return &StateResponse{
@@ -827,9 +825,9 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		return nil, err
 	}
 
-	resp, ok := respAny.(*state.GetResponse)
-	if !ok && respAny != nil {
-		return nil, errors.New("failed to cast response")
+	resp, _ := respAny.(*state.GetResponse)
+	if resp != nil {
+		resp = &state.GetResponse{}
 	}
 	track := &ReminderTrack{
 		RepetitionLeft: -1,
@@ -1459,13 +1457,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (re
 
 			return actorMetadata, nil
 		})
-		if resultAny != nil {
-			var ok bool
-			result, ok = resultAny.(*ActorMetadata)
-			if !ok {
-				return nil, errors.New("failed to cast response")
-			}
-		}
+		result, _ = resultAny.(*ActorMetadata)
 		return result, err
 	}
 
@@ -1615,10 +1607,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 				bulkResponse: rBulkResponse,
 			}, nil
 		})
-		bgr, ok := bgrAny.(*bulkGetRes)
-		if !ok && bgrAny != nil {
-			return nil, nil, errors.New("failed to cast response")
-		}
+		bgr, _ := bgrAny.(*bulkGetRes)
 		if bgr == nil {
 			bgr = &bulkGetRes{}
 		}
@@ -1650,13 +1639,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 						return
 					}
 
-					resp, ok := respAny.(*state.GetResponse)
-					if !ok && respAny != nil {
-						r.Error = "failed to cast response"
-						return
-					}
-
-					if len(resp.Data) == 0 {
+					resp, _ := respAny.(*state.GetResponse)
+					if resp == nil || len(resp.Data) == 0 {
 						r.Error = "data not found for reminder partition"
 						return
 					}
@@ -1713,9 +1697,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		return nil, nil, err
 	}
 
-	resp, ok := respAny.(*state.GetResponse)
-	if !ok && respAny != nil {
-		return nil, nil, errors.New("failed to cast response")
+	resp, _ := respAny.(*state.GetResponse)
+	if resp == nil {
+		resp = &state.GetResponse{}
 	}
 	log.Debugf("read reminders from %s without partition: %s", key, string(resp.Data))
 

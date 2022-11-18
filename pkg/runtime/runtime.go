@@ -1098,10 +1098,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 				respAny, err := policy(func(ctx context.Context) (any, error) {
 					return binding.Invoke(ctx, req)
 				})
-				resp, ok := respAny.(*bindings.InvokeResponse)
-				if !ok && respAny != nil {
-					return nil, errors.New("failed to cast response")
-				}
+				resp, _ := respAny.(*bindings.InvokeResponse)
 				return resp, err
 			}
 		}
@@ -1208,10 +1205,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return client.OnBindingEvent(ctx, req)
 		})
 
-		resp, ok := respAny.(*runtimev1pb.BindingEventResponse)
-		if !ok && respAny != nil {
-			return nil, errors.New("failed to cast response")
-		}
+		resp, _ := respAny.(*runtimev1pb.BindingEventResponse)
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
 				bindingName,
@@ -1280,9 +1274,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return nil, fmt.Errorf("error invoking app: %w", err)
 		}
 
-		resp, ok := respAny.(*invokev1.InvokeMethodResponse)
-		if !ok && respAny != nil {
-			return nil, errors.New("failed to cast response")
+		resp, _ := respAny.(*invokev1.InvokeMethodResponse)
+		if resp != nil {
+			return nil, errors.New("response object is nil")
 		}
 
 		if span != nil {

@@ -67,8 +67,6 @@ const (
 	daprRuntimeVersionKey = "daprRuntimeVersion"
 )
 
-var errResponseCast = errors.New("failed to cast response")
-
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 //
 //nolint:interfacebloat
@@ -559,10 +557,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return rResp, rErr
 	})
 
-	resp, ok := respAny.(*invokeServiceResp)
-	if !ok {
-		return nil, errResponseCast
-	}
+	resp, _ := respAny.(*invokeServiceResp)
 	var message *commonv1pb.InvokeResponse
 	if resp != nil {
 		if resp.headers != nil {
@@ -797,10 +792,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
-	bgr, ok := bgrAny.(*bulkGetRes)
-	if !ok {
-		return bulkResp, errResponseCast
-	}
+	bgr, _ := bgrAny.(*bulkGetRes)
 	if bgr == nil {
 		bgr = &bulkGetRes{}
 	}
@@ -842,12 +834,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				item.Error = policyErr.Error()
 			} else if resAny != nil {
 				res, ok := resAny.(*state.GetResponse)
-				if ok {
+				if ok && res != nil {
 					item.Data = res.Data
 					item.Etag = stringValueOrEmpty(res.ETag)
 					item.Metadata = res.Metadata
 				} else {
-					item.Error = "failed to cast response"
+					item.Error = "res is empty"
 				}
 			}
 			resultCh <- item
@@ -921,9 +913,9 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 
-	getResponse, ok := getResponseAny.(*state.GetResponse)
-	if !ok && getResponseAny != nil {
-		return &runtimev1pb.GetStateResponse{}, errResponseCast
+	getResponse, _ := getResponseAny.(*state.GetResponse)
+	if getResponse == nil {
+		getResponse = &state.GetResponse{}
 	}
 	if encryption.EncryptedStateStore(in.StoreName) {
 		val, err := encryption.TryDecryptValue(in.StoreName, getResponse.Data)
@@ -1057,10 +1049,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		return ret, err
 	}
 
-	resp, ok := respAny.(*state.QueryResponse)
-	if !ok && respAny != nil {
-		return ret, errResponseCast
-	}
+	resp, _ := respAny.(*state.QueryResponse)
 	if resp == nil || len(resp.Results) == 0 {
 		return ret, nil
 	}
@@ -1230,10 +1219,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		return response, err
 	}
 
-	getResponse, ok := getResponseAny.(*secretstores.GetSecretResponse)
-	if !ok && getResponseAny != nil {
-		return response, errResponseCast
-	}
+	getResponse, _ := getResponseAny.(*secretstores.GetSecretResponse)
 	if getResponse != nil {
 		response.Data = getResponse.Data
 	}
@@ -1277,10 +1263,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		return response, err
 	}
 
-	getResponse, ok := getResponseAny.(*secretstores.BulkGetSecretResponse)
-	if !ok && getResponseAny != nil {
-		return response, errResponseCast
-	}
+	getResponse, _ := getResponseAny.(*secretstores.BulkGetSecretResponse)
 	if getResponse == nil {
 		return response, nil
 	}
@@ -1682,10 +1665,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	resp, ok := respAny.(*invokev1.InvokeMethodResponse)
-	if !ok && respAny != nil {
-		return response, errResponseCast
-	}
+	resp, _ := respAny.(*invokev1.InvokeMethodResponse)
 	if resp == nil {
 		resp = invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
 	}
@@ -1856,11 +1836,7 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 		return response, err
 	}
 
-	getResponse, ok := getResponseAny.(*configuration.GetResponse)
-	if !ok && getResponseAny != nil {
-		return response, errResponseCast
-	}
-
+	getResponse, _ := getResponseAny.(*configuration.GetResponse)
 	if getResponse != nil {
 		cachedItems := make(map[string]*commonv1pb.ConfigurationItem, len(getResponse.Items))
 		for k, v := range getResponse.Items {
