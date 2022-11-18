@@ -37,10 +37,22 @@ func TestDaprComponentSpec(t *testing.T) {
 	})
 
 	t.Run("should add metadata when specified", func(t *testing.T) {
-		const testKey, testValue, testSecretKey, fromSecretName, fromSecretKey = "key", `"value"`, "secretKey", "secretName", "secretKey"
+		const testKey, testValue = "key", `"value"`
 		daprComponent := DaprComponent{component: ComponentDescription{
 			MetaData: map[string]MetadataValue{
 				testKey: {Raw: testValue},
+			},
+		}}
+		metadata := daprComponent.toComponentSpec().Spec.Metadata
+		assert.Len(t, metadata, 1)
+		assert.Equal(t, metadata[0].Name, testKey)
+		assert.Equal(t, metadata[0].Value.Raw, []byte(testValue))
+	})
+
+	t.Run("should add secretkeyref as metadata value when specified", func(t *testing.T) {
+		const testSecretKey, fromSecretName, fromSecretKey = "secretKey", "secretName", "secretKey"
+		daprComponent := DaprComponent{component: ComponentDescription{
+			MetaData: map[string]MetadataValue{
 				testSecretKey: {FromSecretRef: &SecretRef{
 					Name: fromSecretName,
 					Key:  fromSecretKey,
@@ -48,12 +60,10 @@ func TestDaprComponentSpec(t *testing.T) {
 			},
 		}}
 		metadata := daprComponent.toComponentSpec().Spec.Metadata
-		assert.Len(t, metadata, 2)
-		assert.Equal(t, metadata[0].Name, testKey)
-		assert.Equal(t, metadata[0].Value.Raw, []byte(testValue))
-		assert.Equal(t, metadata[1].Name, testSecretKey)
-		assert.Equal(t, metadata[1].SecretKeyRef.Name, fromSecretName)
-		assert.Equal(t, metadata[1].SecretKeyRef.Key, fromSecretKey)
+		assert.Len(t, metadata, 1)
+		assert.Equal(t, metadata[0].Name, testSecretKey)
+		assert.Equal(t, metadata[0].SecretKeyRef.Name, fromSecretName)
+		assert.Equal(t, metadata[0].SecretKeyRef.Key, fromSecretKey)
 	})
 
 	t.Run("should add component annotations when container image is specified", func(t *testing.T) {

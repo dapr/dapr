@@ -16,14 +16,14 @@ package components
 import (
 	"testing"
 
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -231,7 +231,6 @@ func TestComponentsPatch(t *testing.T) {
 					Op:   "add",
 					Path: "/spec/containers/-",
 					Value: corev1.Container{
-
 						Name:  componentName,
 						Image: componentImage,
 						Env: []corev1.EnvVar{
@@ -249,11 +248,14 @@ func TestComponentsPatch(t *testing.T) {
 								Name:      "readonly",
 								ReadOnly:  true,
 								MountPath: "/read-only",
-							}, {
+							},
+							{
 								Name:      "readwrite",
 								ReadOnly:  false,
 								MountPath: "/read-write",
-							}, socketSharedVolumeMount},
+							},
+							socketSharedVolumeMount,
+						},
 					},
 				},
 			},

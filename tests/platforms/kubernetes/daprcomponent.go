@@ -37,6 +37,8 @@ func NewDaprComponent(client *KubeClient, ns string, comp ComponentDescription) 
 		component:  comp,
 	}
 }
+
+// toComponentSpec builds the componentSpec for the given ComponentDescription
 func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 	metadata := []v1alpha1.MetadataItem{}
 
@@ -71,6 +73,7 @@ func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 
 	return buildDaprComponentObject(do.component.Name, do.component.TypeName, do.component.Scopes, annotations, metadata)
 }
+
 func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
 	return do.kubeClient.DaprComponents(DaprTestNamespace).Create(do.toComponentSpec())
 }
