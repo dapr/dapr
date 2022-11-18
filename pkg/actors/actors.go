@@ -323,43 +323,46 @@ func (a *actorsRuntime) startDeactivationTicker(configuration Config) {
 	}()
 }
 
+type lookupActorRes struct {
+	targetActorAddress string
+	appID              string
+}
+
 func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	a.placement.WaitUntilPlacementTableIsReady()
 
 	actor := req.Actor()
 	// Retry here to allow placement table dissemination/rebalancing to happen.
-	var (
-		targetActorAddress string
-		appID              string
-		policy             resiliency.Runner
-	)
-	once := sync.Once{}
+	var policy resiliency.Runner
 	if a.isResiliencyEnabled {
 		policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
 	} else {
 		noOp := resiliency.NoOp{}
 		policy = noOp.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
 	}
-	err := policy(func(ctx context.Context) error {
+	larAny, err := policy(func(ctx context.Context) (any, error) {
 		rAddr, rAppID := a.placement.LookupActor(actor.GetActorType(), actor.GetActorId())
 		if rAddr == "" {
-			return fmt.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
+			return nil, fmt.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
 		}
-		once.Do(func() {
-			targetActorAddress = rAddr
-			appID = rAppID
-		})
-		return nil
+		return &lookupActorRes{
+			targetActorAddress: rAddr,
+			appID:              rAppID,
+		}, nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	lar, ok := (larAny).(*lookupActorRes)
+	if !ok && larAny != nil {
+		return nil, errors.New("failed to cast response")
+	}
 
 	var resp *invokev1.InvokeMethodResponse
-	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
+	if a.isActorLocal(lar.targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(ctx, req)
 	} else {
-		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, targetActorAddress, appID, req)
+		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, lar.targetActorAddress, lar.appID, req)
 	}
 
 	if err != nil {
@@ -384,16 +387,10 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	if a.isResiliencyEnabled {
 		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
-			respPtr := atomic.Pointer[invokev1.InvokeMethodResponse]{}
-			err := policy(func(ctx context.Context) error {
+			respAny, err := policy(func(ctx context.Context) (any, error) {
 				rResp, rErr := fn(ctx, targetAddress, targetID, req)
-				if respPtr.Load() != nil {
-					// Already stored
-					return rErr
-				}
 				if rErr == nil {
-					respPtr.CompareAndSwap(nil, rResp)
-					return nil
+					return rResp, nil
 				}
 
 				code := status.Code(rErr)
@@ -401,12 +398,11 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 					_, teardown, connerr := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
 					defer teardown()
 					if connerr != nil {
-						respPtr.Store(nil)
-						return backoff.Permanent(connerr)
+						return rResp, backoff.Permanent(connerr)
 					}
-					return rErr
+					return rResp, rErr
 				}
-				return backoff.Permanent(rErr)
+				return rResp, backoff.Permanent(rErr)
 			})
 			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
 			if err != nil {
@@ -420,8 +416,11 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				// If we're here, the error is a permanent one, so unwrap it
 				return nil, errors.Unwrap(err)
 			}
-
-			return respPtr.Load(), nil
+			resp, ok := respAny.(*invokev1.InvokeMethodResponse)
+			if !ok && respAny != nil {
+				return nil, errors.New("failed to cast response")
+			}
+			return resp, nil
 		}
 		return fn(ctx, targetAddress, targetID, req)
 	}
@@ -500,25 +499,17 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	}
 
 	policy := a.resiliency.ActorPostLockPolicy(ctx, act.actorType, act.actorID)
-	respPtr := atomic.Pointer[invokev1.InvokeMethodResponse]{}
-	err = policy(func(ctx context.Context) error {
-		rResp, rErr := a.appChannel.InvokeMethod(ctx, req)
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return a.appChannel.InvokeMethod(ctx, req)
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
-	resp := respPtr.Load()
+	resp, ok := respAny.(*invokev1.InvokeMethodResponse)
+	if !ok && respAny != nil {
+		return nil, errors.New("failed to cast response")
+	}
 	_, respData := resp.RawData()
 	if resp.Status().Code != nethttp.StatusOK {
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
@@ -580,28 +571,24 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
-	respPtr := atomic.Pointer[state.GetResponse]{}
-	err := policy(func(ctx context.Context) error {
-		rResp, rErr := a.store.Get(&state.GetRequest{
-			Key:      key,
-			Metadata: metadata,
-		})
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
+	storeReq := &state.GetRequest{
+		Key:      key,
+		Metadata: metadata,
+	}
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return a.store.Get(storeReq)
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	resp, ok := respAny.(*state.GetResponse)
+	if !ok && respAny != nil {
+		return nil, errors.New("failed to cast response")
+	}
+
 	return &StateResponse{
-		Data: respPtr.Load().Data,
+		Data: resp.Data,
 	}, nil
 }
 
@@ -655,9 +642,10 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		Operations: operations,
 		Metadata:   metadata,
 	}
-	return policy(func(ctx context.Context) error {
-		return a.transactionalStore.Multi(stateReq)
+	_, err := policy(func(ctx context.Context) (any, error) {
+		return nil, a.transactionalStore.Multi(stateReq)
 	})
+	return err
 }
 
 func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
@@ -669,13 +657,13 @@ func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedReque
 		noOp := resiliency.NoOp{}
 		policy = noOp.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
 	}
-	err := policy(func(ctx context.Context) error {
+	_, err := policy(func(ctx context.Context) (any, error) {
 		_, exists := a.actorsTable.Load(key)
 		if !exists {
 			// Error message isn't used - we just need to have an error
-			return errors.New("🤷")
+			return nil, errors.New("")
 		}
-		return nil
+		return nil, nil
 	})
 	return err == nil
 }
@@ -829,32 +817,26 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	}
 
 	policy := a.resiliency.ComponentOutboundPolicy(context.TODO(), a.storeName, resiliency.Statestore)
-	respPtr := atomic.Pointer[state.GetResponse]{}
-	err := policy(func(ctx context.Context) error {
-		rResp, rErr := a.store.Get(&state.GetRequest{
-			Key: constructCompositeKey(actorKey, name),
-		})
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
+	storeReq := &state.GetRequest{
+		Key: constructCompositeKey(actorKey, name),
+	}
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return a.store.Get(storeReq)
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	track := ReminderTrack{
+	resp, ok := respAny.(*state.GetResponse)
+	if !ok && respAny != nil {
+		return nil, errors.New("failed to cast response")
+	}
+	track := &ReminderTrack{
 		RepetitionLeft: -1,
 	}
-	resp := respPtr.Load()
-	json.Unmarshal(resp.Data, &track)
+	_ = json.Unmarshal(resp.Data, track)
 	track.Etag = resp.ETag
-	return &track, nil
+	return track, nil
 }
 
 func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int, lastInvokeTime time.Time, etag *string) error {
@@ -876,9 +858,10 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 			Concurrency: state.FirstWrite,
 		},
 	}
-	return policy(func(ctx context.Context) error {
-		return a.store.Set(setReq)
+	_, err := policy(func(ctx context.Context) (any, error) {
+		return nil, a.store.Set(setReq)
 	})
+	return err
 }
 
 func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool) error {
@@ -1037,10 +1020,10 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	req.WithRawData(b, invokev1.JSONContentType)
 
 	policy := a.resiliency.ActorPreLockPolicy(context.TODO(), reminder.ActorType, reminder.ActorID)
-	return policy(func(ctx context.Context) error {
-		_, rErr := a.callLocalActor(ctx, req)
-		return rErr
+	_, err = policy(func(ctx context.Context) (any, error) {
+		return a.callLocalActor(ctx, req)
 	})
+	return err
 }
 
 func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest, reminder *Reminder) bool {
@@ -1401,9 +1384,8 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req.WithRawData(b, invokev1.JSONContentType)
 
 	policy := a.resiliency.ActorPreLockPolicy(context.TODO(), actorType, actorID)
-	err = policy(func(ctx context.Context) error {
-		_, rErr := a.callLocalActor(ctx, req)
-		return rErr
+	_, err = policy(func(ctx context.Context) (any, error) {
+		return a.callLocalActor(ctx, req)
 	})
 	if err != nil {
 		log.Errorf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
@@ -1421,9 +1403,10 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 		},
 	}
 	policy := a.resiliency.ComponentOutboundPolicy(context.TODO(), a.storeName, resiliency.Statestore)
-	return policy(func(ctx context.Context) error {
-		return a.store.Set(setReq)
+	_, err := policy(func(ctx context.Context) (any, error) {
+		return nil, a.store.Set(setReq)
 	})
+	return err
 }
 
 func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*ActorMetadata, error) {
@@ -1593,6 +1576,11 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	return nil
 }
 
+type bulkGetRes struct {
+	bulkGet      bool
+	bulkResponse []state.BulkGetResponse
+}
+
 func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool) ([]actorReminderReference, *ActorMetadata, error) {
 	if a.store == nil {
 		return nil, nil, errors.New("actors: state store does not exist or incorrectly configured")
@@ -1625,23 +1613,21 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			})
 		}
 
-		once := sync.Once{}
-		var (
-			bulkGet      bool
-			bulkResponse []state.BulkGetResponse
-		)
-		err := policy(func(ctx context.Context) error {
+		bgrAny, err := policy(func(ctx context.Context) (any, error) {
 			rBulkGet, rBulkResponse, rErr := a.store.BulkGet(getRequests)
 			if rErr != nil {
-				return rErr
+				return &bulkGetRes{}, rErr
 			}
-			once.Do(func() {
-				bulkGet = rBulkGet
-				bulkResponse = rBulkResponse
-			})
-			return nil
+			return &bulkGetRes{
+				bulkGet:      rBulkGet,
+				bulkResponse: rBulkResponse,
+			}, nil
 		})
-		if bulkGet {
+		bgr, ok := bgrAny.(*bulkGetRes)
+		if !ok && bgrAny != nil {
+			return nil, nil, errors.New("failed to cast response")
+		}
+		if bgr.bulkGet {
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1649,25 +1635,29 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			// TODO(artursouza): refactor this fallback into default implementation in contrib.
 			// if store doesn't support bulk get, fallback to call get() method one by one
 			limiter := concurrency.NewLimiter(actorMetadata.RemindersMetadata.PartitionCount)
-			bulkResponse = make([]state.BulkGetResponse, len(getRequests))
+			bgr.bulkResponse = make([]state.BulkGetResponse, len(getRequests))
 			for i := range getRequests {
 				getRequest := getRequests[i]
-				bulkResponse[i].Key = getRequest.Key
+				bgr.bulkResponse[i].Key = getRequest.Key
 
 				fn := func(param interface{}) {
 					r := param.(*state.BulkGetResponse)
-					var resp *state.GetResponse
-					ferr := policy(func(ctx context.Context) (rErr error) {
-						resp, rErr = a.store.Get(&getRequest)
-						return rErr
+					respAny, ferr := policy(func(ctx context.Context) (any, error) {
+						return a.store.Get(&getRequest)
 					})
 					if ferr != nil {
 						r.Error = ferr.Error()
 						return
 					}
 
-					if resp == nil {
+					if respAny == nil {
 						r.Error = "response not found for partition"
+						return
+					}
+
+					resp, ok := respAny.(*state.GetResponse)
+					if !ok && respAny != nil {
+						r.Error = "failed to cast response"
 						return
 					}
 
@@ -1681,12 +1671,12 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 					r.Metadata = resp.Metadata
 				}
 
-				limiter.Execute(fn, &bulkResponse[i])
+				limiter.Execute(fn, &bgr.bulkResponse[i])
 			}
 			limiter.Wait()
 		}
 
-		for _, resp := range bulkResponse {
+		for _, resp := range bgr.bulkResponse {
 			partition := keyPartitionMap[resp.Key]
 			actorMetadata.RemindersMetadata.partitionsEtag[partition] = resp.ETag
 			if resp.Error != "" {
@@ -1719,26 +1709,19 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	}
 
 	key := constructCompositeKey("actors", actorType)
-	respPtr := atomic.Pointer[state.GetResponse]{}
-	err := policy(func(ctx context.Context) error {
-		rResp, rErr := a.store.Get(&state.GetRequest{
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return a.store.Get(&state.GetRequest{
 			Key: key,
 		})
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
 	})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	resp := respPtr.Load()
+	resp, ok := respAny.(*state.GetResponse)
+	if !ok && respAny != nil {
+		return nil, nil, errors.New("failed to cast response")
+	}
 	log.Debugf("read reminders from %s without partition: %s", key, string(resp.Data))
 
 	var reminders []Reminder
@@ -1782,9 +1765,10 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 			Concurrency: state.FirstWrite,
 		},
 	}
-	return policy(func(ctx context.Context) error {
-		return a.store.Set(req)
+	_, err := policy(func(ctx context.Context) (any, error) {
+		return nil, a.store.Set(req)
 	})
+	return err
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {

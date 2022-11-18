@@ -536,7 +536,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("endpoint[%s, %s]", app, endpoint)
+	operationName := "endpoint[" + app + ", " + endpoint + "]"
 	if r == nil {
 		return Policy(ctx, r.log, operationName, t, rc, cb)
 	}
@@ -618,7 +618,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("actor[%s, %s]", actorType, id)
+	operationName := "actor[" + actorType + ", " + id + "]"
 	if r == nil {
 		return Policy(ctx, r.log, operationName, t, rc, cb)
 	}
@@ -707,7 +707,7 @@ func (r *Resiliency) ActorPostLockPolicy(ctx context.Context, actorType string, 
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("actor[%s, %s]", actorType, id)
+	operationName := "actor[" + actorType + ", " + id + "]"
 	if r == nil {
 		return Policy(ctx, r.log, operationName, t, rc, cb)
 	}
@@ -735,7 +735,7 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string, c
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("component[%s] output", name)
+	operationName := "component[" + name + "] output"
 	if r == nil {
 		return Policy(ctx, r.log, operationName, t, rc, cb)
 	}
@@ -779,7 +779,7 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string, co
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("component[%s] input", name)
+	operationName := "component[" + name + "] input"
 	if r == nil {
 		return Policy(ctx, r.log, operationName, t, rc, cb)
 	}

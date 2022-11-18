@@ -26,50 +26,55 @@ import (
 
 type (
 	// Operation represents a function to invoke with resiliency policies applied.
-	Operation func(ctx context.Context) error
+	Operation func(ctx context.Context) (any, error)
 
 	// Runner represents a function to invoke `oper` with resiliency policies applied.
-	Runner func(oper Operation) error
+	Runner func(oper Operation) (any, error)
 )
 
-// Policy returns a policy runner that encapsulates the configured
-// resiliency policies in a simple execution wrapper.
+type doneCh struct {
+	res any
+	err error
+}
+
+// Policy returns a policy runner that encapsulates the configured resiliency policies in a simple execution wrapper.
 func Policy(ctx context.Context, log logger.Logger, operationName string, t time.Duration, r *retry.Config, cb *breaker.CircuitBreaker) Runner {
-	return func(oper Operation) error {
+	return func(oper Operation) (any, error) {
 		operation := oper
 		if t > 0 {
-			// Handle timeout.
-			// TODO: This should ideally be handled by the underlying service/component. Revisit once those understand contexts.
+			// Handle timeout
+			// TODO: This should ideally be handled by the underlying service/component. Revisit once those understand contexts
 			operCopy := operation
-			operation = func(ctx context.Context) error {
+			operation = func(ctx context.Context) (any, error) {
 				ctx, cancel := context.WithTimeout(ctx, t)
 				defer cancel()
 
-				done := make(chan error)
+				done := make(chan doneCh)
 				go func() {
-					done <- operCopy(ctx)
+					rRes, rErr := operCopy(ctx)
+					done <- doneCh{rRes, rErr}
 				}()
 
 				select {
-				case err := <-done:
-					return err
+				case v := <-done:
+					return v.res, v.err
 				case <-ctx.Done():
-					return ctx.Err()
+					return nil, ctx.Err()
 				}
 			}
 		}
 
 		if cb != nil {
 			operCopy := operation
-			operation = func(ctx context.Context) error {
-				err := cb.Execute(func() error {
+			operation = func(ctx context.Context) (any, error) {
+				res, err := cb.Execute(func() (any, error) {
 					return operCopy(ctx)
 				})
 				if r != nil && breaker.IsErrorPermanent(err) {
-					// Break out of retry.
+					// Break out of retry
 					err = backoff.Permanent(err)
 				}
-				return err
+				return res, err
 			}
 		}
 
@@ -77,12 +82,12 @@ func Policy(ctx context.Context, log logger.Logger, operationName string, t time
 			return operation(ctx)
 		}
 
-		// Use retry/back off.
+		// Use retry/back off
 		b := r.NewBackOffWithContext(ctx)
-		return retry.NotifyRecover(func() error {
+		return retry.NotifyRecoverWithData[any](func() (any, error) {
 			return operation(ctx)
 		}, b, func(_ error, _ time.Duration) {
-			log.Infof("Error processing operation %s. Retrying...", operationName)
+			log.Infof("Error processing operation %s. Retrying…", operationName)
 		}, func() {
 			log.Infof("Recovered processing operation %s.", operationName)
 		})
