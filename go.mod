@@ -9,7 +9,7 @@ require (
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc
-	github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f
+	github.com/dapr/kit v0.0.3-0.20221118224224-c4648551c95c
 	github.com/fasthttp/router v1.4.12
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3
@@ -398,12 +398,8 @@ replace (
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 )
 
-replace (
-	// Temporary until https://github.com/cenkalti/backoff/pull/126 is merged
-	github.com/cenkalti/backoff/v4 => github.com/ItalyPaleAle/backoff/v4 v4.2.0
-	// Temporary until https://github.com/dapr/kit/pull/29 is merged
-	github.com/dapr/kit => github.com/italypaleale/dapr-kit v0.0.2-0.20221118222229-351775a7e164
-)
+// Temporary until https://github.com/cenkalti/backoff/pull/126 is merged
+replace github.com/cenkalti/backoff/v4 => github.com/ItalyPaleAle/backoff/v4 v4.2.0
 
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
