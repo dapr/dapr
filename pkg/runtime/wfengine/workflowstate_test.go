@@ -38,7 +38,7 @@ func TestNoWorkflowState(t *testing.T) {
 
 func TestDefaultWorkflowState(t *testing.T) {
 	state := wfengine.NewWorkflowState()
-	assert.Equal(t, 1, state.Generation)
+	assert.Equal(t, uint64(1), state.Generation)
 }
 
 func TestAddingToInbox(t *testing.T) {
@@ -131,7 +131,7 @@ func TestLoadSavedState(t *testing.T) {
 	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1")
 	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
 		assert.Equal(t, "my custom status", wfstate.CustomStatus)
-		assert.Equal(t, 1, wfstate.Generation)
+		assert.Equal(t, uint64(1), wfstate.Generation)
 		assert.Equal(t, 10, len(wfstate.History))
 		assert.Equal(t, 5, len(wfstate.Inbox))
 	}
@@ -164,9 +164,9 @@ func TestResetLoadedState(t *testing.T) {
 
 	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actorRuntime, "wf1")
 	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
-		assert.Equal(t, 1, wfstate.Generation)
+		assert.Equal(t, uint64(1), wfstate.Generation)
 		wfstate.Reset()
-		assert.Equal(t, 2, wfstate.Generation)
+		assert.Equal(t, uint64(2), wfstate.Generation)
 		req, err := wfstate.GetSaveRequest("wf1")
 		if assert.NoError(t, err) {
 			assert.Equal(t, 17, len(req.Operations)) // history x10 + inbox x5 + metadata + customStatus
