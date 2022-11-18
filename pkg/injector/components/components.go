@@ -122,7 +122,6 @@ func emptyVolumePatches(container corev1.Container, podVolumes map[string]bool, 
 	volumePatches := make([]sidecar.PatchOperation, 0)
 	for _, volumeMount := range container.VolumeMounts {
 		if !podVolumes[volumeMount.Name] {
-
 			emptyDirVolume := corev1.Volume{
 				Name: volumeMount.Name,
 				VolumeSource: corev1.VolumeSource{
