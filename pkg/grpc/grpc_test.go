@@ -14,13 +14,10 @@ limitations under the License.
 package grpc
 
 import (
-	"context"
 	"crypto/x509"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/connectivity"
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
@@ -42,81 +39,21 @@ func (a *authenticatorMock) CreateSignedWorkloadCert(id, namespace, trustDomain 
 
 func TestNewGRPCManager(t *testing.T) {
 	t.Run("with self hosted", func(t *testing.T) {
-		m := NewGRPCManager(modes.StandaloneMode)
+		m := NewGRPCManager(modes.StandaloneMode, &AppChannelConfig{})
 		assert.NotNil(t, m)
 		assert.Equal(t, modes.StandaloneMode, m.mode)
 	})
 
 	t.Run("with kubernetes", func(t *testing.T) {
-		m := NewGRPCManager(modes.KubernetesMode)
+		m := NewGRPCManager(modes.KubernetesMode, &AppChannelConfig{})
 		assert.NotNil(t, m)
 		assert.Equal(t, modes.KubernetesMode, m.mode)
 	})
 }
 
-func TestGetGRPCConnection(t *testing.T) {
-	t.Run("Connection is closed", func(t *testing.T) {
-		m := NewGRPCManager(modes.StandaloneMode)
-		assert.NotNil(t, m)
-		port := 55555
-		recreateIfExists := true
-		sslEnabled := false
-
-		conn, teardown, err := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
-		assert.NoError(t, err)
-
-		_, teardown2, err2 := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
-		assert.NoError(t, err2)
-		defer teardown2()
-
-		assert.NotEqual(t, connectivity.Shutdown, conn.GetState(), "old connection should not be closed by recreation")
-		teardown()
-		assert.Equal(t, connectivity.Shutdown, conn.GetState(), "old connection should be closed by teardown")
-	})
-
-	t.Run("Shared pool connection is not closed until all callers finish using it", func(t *testing.T) {
-		m := NewGRPCManager(modes.StandaloneMode)
-		assert.NotNil(t, m)
-		port := 55555
-		recreateIfExists := false
-		sslEnabled := false
-
-		conn, teardown, err := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
-		assert.NoError(t, err)
-
-		conn2, teardown2, err2 := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
-		assert.NoError(t, err2)
-		// conn2 is same as conn because it is stored in connection pool
-		assert.Equal(t, conn, conn2)
-
-		recreateIfExists = true
-		_, teardown3, err3 := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
-		assert.NoError(t, err3)
-		defer teardown3()
-
-		teardown()
-		// connection is still used by conn2
-		assert.NotEqual(t, connectivity.Shutdown, conn.GetState(), "connection must not be closed")
-		teardown2()
-		// connection is not used anymore
-		assert.Equal(t, connectivity.Shutdown, conn.GetState(), "connection must be closed")
-	})
-
-	t.Run("Connection with SSL is created successfully", func(t *testing.T) {
-		m := NewGRPCManager(modes.StandaloneMode)
-		assert.NotNil(t, m)
-		port := 55555
-		sslEnabled := true
-		ctx := context.TODO()
-		_, teardown, err := m.GetGRPCConnection(ctx, fmt.Sprintf("127.0.0.1:%v", port), "", "", true, true, sslEnabled)
-		assert.NoError(t, err)
-		teardown()
-	})
-}
-
 func TestSetAuthenticator(t *testing.T) {
 	a := &authenticatorMock{}
-	m := NewGRPCManager(modes.StandaloneMode)
+	m := NewGRPCManager(modes.StandaloneMode, &AppChannelConfig{})
 	m.SetAuthenticator(a)
 
 	assert.Equal(t, a, m.auth)

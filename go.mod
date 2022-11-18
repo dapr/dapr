@@ -6,6 +6,7 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.2.0
+	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc
 	github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f
@@ -397,6 +398,13 @@ replace (
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 )
 
+replace (
+	// Temporary until https://github.com/cenkalti/backoff/pull/126 is merged
+	github.com/cenkalti/backoff/v4 => github.com/ItalyPaleAle/backoff/v4 v4.2.0
+	// Temporary until https://github.com/dapr/kit/pull/29 is merged
+	github.com/dapr/kit => github.com/italypaleale/dapr-kit v0.0.2-0.20221118222229-351775a7e164
+)
+
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
@@ -404,8 +412,3 @@ replace (
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-replace (
-	github.com/cenkalti/backoff/v4 => github.com/ItalyPaleAle/backoff/v4 v4.2.0
-	github.com/dapr/kit => ../kit
-)
