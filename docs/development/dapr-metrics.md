@@ -65,6 +65,14 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_component_init_total: The number of initialized components
 * dapr_runtime_component_init_fail_total: The number of component initialization failures
 
+#### Service Invocation
+
+* dapr_runtime_service_invocation_req_sent_total: The number of remote service invocation requests sent
+* dapr_runtime_service_invocation_req_recv_total: The number of remote service invocation requests received
+* dapr_runtime_service_invocation_res_sent_total: The number of remote service invocation responses sent
+* dapr_runtime_service_invocation_res_recv_total: The number of remote service invocation responses received
+* dapr_runtime_service_invocation_res_recv_latency_ms: The remote service invocation round trip latency
+
 #### Security
 
 * dapr_runtime_mtls_init_total: The number of successful mTLS authenticator initialization.

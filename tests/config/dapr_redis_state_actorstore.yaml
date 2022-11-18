@@ -31,7 +31,7 @@ spec:
 scopes:
 # actortestclient is deliberately omitted to ensure that `actor_features_test` works without a state store
 - actor1
-- actor2 
+- actor2
 - actorapp
 - actorfeatures
 - reentrantactor
@@ -50,3 +50,4 @@ scopes:
 - perf-actor-reminder-client
 - perf-actor-timer-service
 - perf-actor-timer-client
+- perf-actor-double-activation
