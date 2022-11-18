@@ -15,11 +15,11 @@ package resiliency_test
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -54,15 +54,14 @@ func TestPolicy(t *testing.T) {
 	ctx := context.Background()
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			called := false
-			fn := func(ctx context.Context) error {
-				called = true
-
-				return nil
+			called := atomic.Bool{}
+			fn := func(ctx context.Context) (any, error) {
+				called.Store(true)
+				return nil, nil
 			}
 			policy := resiliency.Policy(ctx, log, name, tt.t, tt.r, tt.cb)
 			policy(fn)
-			assert.True(t, called)
+			assert.True(t, called.Load())
 		})
 	}
 }
@@ -92,10 +91,10 @@ func TestPolicyTimeout(t *testing.T) {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			called := atomic.Bool{}
-			fn := func(ctx context.Context) error {
+			fn := func(ctx context.Context) (any, error) {
 				time.Sleep(test.sleepTime)
 				called.Store(true)
-				return nil
+				return nil, nil
 			}
 
 			policy := resiliency.Policy(context.Background(), log, "timeout", test.timeout, nil, nil)
@@ -109,9 +108,9 @@ func TestPolicyTimeout(t *testing.T) {
 func TestPolicyRetry(t *testing.T) {
 	tests := []struct {
 		name       string
-		maxCalls   int
-		maxRetries int
-		expected   int
+		maxCalls   int32
+		maxRetries int64
+		expected   int32
 	}{
 		{
 			name:       "Retries succeed",
@@ -129,19 +128,19 @@ func TestPolicyRetry(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			called := 0
+			called := atomic.Int32{}
 			maxCalls := test.maxCalls
-			fn := func(ctx context.Context) error {
-				if called < maxCalls {
-					called++
-					return errors.Errorf("Called (%d) vs Max (%d)", called, maxCalls)
+			fn := func(ctx context.Context) (any, error) {
+				v := called.Add(1)
+				if v <= maxCalls {
+					return nil, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls)
 				}
-				return nil
+				return nil, nil
 			}
 
-			policy := resiliency.Policy(context.Background(), log, "retry", 10*time.Millisecond, &retry.Config{MaxRetries: int64(test.maxRetries)}, nil)
+			policy := resiliency.Policy(context.Background(), log, "retry", 10*time.Millisecond, &retry.Config{MaxRetries: test.maxRetries}, nil)
 			policy(fn)
-			assert.Equal(t, test.expected, called)
+			assert.Equal(t, test.expected, called.Load())
 		})
 	}
 }

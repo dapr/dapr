@@ -17,7 +17,6 @@ import (
 	"context"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -162,16 +161,10 @@ func (d *directMessaging) invokeWithRetry(
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
 			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
-			respPtr := atomic.Pointer[invokev1.InvokeMethodResponse]{}
-			err := policy(func(ctx context.Context) error {
+			respAny, err := policy(func(ctx context.Context) (any, error) {
 				rResp, rErr := fn(ctx, app.id, app.namespace, app.address, req)
-				if respPtr.Load() != nil {
-					// Already stored
-					return rErr
-				}
 				if rErr == nil {
-					respPtr.CompareAndSwap(nil, rResp)
-					return nil
+					return rResp, nil
 				}
 
 				code := status.Code(rErr)
@@ -179,12 +172,11 @@ func (d *directMessaging) invokeWithRetry(
 					_, teardown, connerr := d.connectionCreatorFn(ctx, app.address, app.id, app.namespace, false, true, false)
 					defer teardown()
 					if connerr != nil {
-						respPtr.Store(nil)
-						return backoff.Permanent(connerr)
+						rErr = backoff.Permanent(connerr)
 					}
-					return rErr
+					return rResp, rErr
 				}
-				return backoff.Permanent(rErr)
+				return rResp, backoff.Permanent(rErr)
 			})
 			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
 			if err != nil {
@@ -198,7 +190,11 @@ func (d *directMessaging) invokeWithRetry(
 				return nil, errors.Unwrap(err)
 			}
 
-			return respPtr.Load(), nil
+			resp, ok := respAny.(*invokev1.InvokeMethodResponse)
+			if !ok && respAny != nil {
+				return nil, errors.New("failed to cast response")
+			}
+			return resp, nil
 		}
 		return fn(ctx, app.id, app.namespace, app.address, req)
 	}

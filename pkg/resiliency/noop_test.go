@@ -16,6 +16,7 @@ package resiliency
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -113,14 +114,14 @@ func TestNoOp(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runner := tt.fn(ctx)
-			called := false
-			err := runner(func(passedCtx context.Context) error {
+			called := atomic.Bool{}
+			_, err := runner(func(passedCtx context.Context) (any, error) {
 				assert.Equal(t, ctx, passedCtx)
-				called = true
-				return tt.err
+				called.Store(true)
+				return nil, tt.err
 			})
 			assert.Equal(t, tt.err, err)
-			assert.True(t, called)
+			assert.True(t, called.Load())
 		})
 	}
 }

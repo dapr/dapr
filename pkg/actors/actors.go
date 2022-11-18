@@ -1409,21 +1409,11 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 	return err
 }
 
-func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*ActorMetadata, error) {
+func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (result *ActorMetadata, err error) {
 	if a.store == nil {
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
-	result := ActorMetadata{
-		ID: metadataZeroID,
-		RemindersMetadata: ActorRemindersMetadata{
-			partitionsEtag: nil,
-			PartitionCount: 0,
-		},
-		Etag: nil,
-	}
-
-	var retryErr error
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
@@ -1438,12 +1428,13 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 		getReq := &state.GetRequest{
 			Key: constructCompositeKey("actors", actorType, "metadata"),
 		}
-		retryErr = policy(func(ctx context.Context) error {
+		var resultAny any
+		resultAny, err = policy(func(ctx context.Context) (any, error) {
 			rResp, rErr := a.store.Get(getReq)
 			if rErr != nil {
-				return rErr
+				return nil, rErr
 			}
-			actorMetadata := ActorMetadata{
+			actorMetadata := &ActorMetadata{
 				ID: metadataZeroID,
 				RemindersMetadata: ActorRemindersMetadata{
 					partitionsEtag: nil,
@@ -1452,64 +1443,65 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 				Etag: nil,
 			}
 			if len(rResp.Data) > 0 {
-				rErr = json.Unmarshal(rResp.Data, &actorMetadata)
+				rErr = json.Unmarshal(rResp.Data, actorMetadata)
 				if rErr != nil {
-					return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(rResp.Data), rErr)
+					return nil, fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(rResp.Data), rErr)
 				}
 				actorMetadata.Etag = rResp.ETag
 			}
 
 			if migrate {
-				rErr = a.migrateRemindersForActorType(actorType, &actorMetadata)
+				rErr = a.migrateRemindersForActorType(actorType, actorMetadata)
 				if rErr != nil {
-					return rErr
+					return nil, rErr
 				}
 			}
 
-			result = actorMetadata
-			return nil
+			return actorMetadata, nil
 		})
-	} else {
-		retryErr = backoff.Retry(func() error {
-			metadataKey := constructCompositeKey("actors", actorType, "metadata")
-			rResp, rErr := a.store.Get(&state.GetRequest{
-				Key: metadataKey,
-			})
+		if resultAny != nil {
+			var ok bool
+			result, ok = resultAny.(*ActorMetadata)
+			if !ok {
+				return nil, errors.New("failed to cast response")
+			}
+		}
+		return result, err
+	}
+
+	return backoff.RetryWithData(func() (*ActorMetadata, error) {
+		metadataKey := constructCompositeKey("actors", actorType, "metadata")
+		rResp, rErr := a.store.Get(&state.GetRequest{
+			Key: metadataKey,
+		})
+		if rErr != nil {
+			return nil, rErr
+		}
+		actorMetadata := ActorMetadata{
+			ID: metadataZeroID,
+			RemindersMetadata: ActorRemindersMetadata{
+				partitionsEtag: nil,
+				PartitionCount: 0,
+			},
+			Etag: nil,
+		}
+		if len(rResp.Data) > 0 {
+			rErr = json.Unmarshal(rResp.Data, &actorMetadata)
 			if rErr != nil {
-				return rErr
+				return nil, fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(rResp.Data), rErr)
 			}
-			actorMetadata := ActorMetadata{
-				ID: metadataZeroID,
-				RemindersMetadata: ActorRemindersMetadata{
-					partitionsEtag: nil,
-					PartitionCount: 0,
-				},
-				Etag: nil,
-			}
-			if len(rResp.Data) > 0 {
-				rErr = json.Unmarshal(rResp.Data, &actorMetadata)
-				if rErr != nil {
-					return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(rResp.Data), rErr)
-				}
-				actorMetadata.Etag = rResp.ETag
-			}
+			actorMetadata.Etag = rResp.ETag
+		}
 
-			if migrate {
-				rErr = a.migrateRemindersForActorType(actorType, &actorMetadata)
-				if rErr != nil {
-					return rErr
-				}
+		if migrate {
+			rErr = a.migrateRemindersForActorType(actorType, &actorMetadata)
+			if rErr != nil {
+				return nil, rErr
 			}
+		}
 
-			result = actorMetadata
-			return nil
-		}, backoff.NewExponentialBackOff())
-	}
-
-	if retryErr != nil {
-		return nil, retryErr
-	}
-	return &result, nil
+		return &actorMetadata, nil
+	}, backoff.NewExponentialBackOff())
 }
 
 func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMetadata *ActorMetadata) error {
@@ -1626,6 +1618,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		bgr, ok := bgrAny.(*bulkGetRes)
 		if !ok && bgrAny != nil {
 			return nil, nil, errors.New("failed to cast response")
+		}
+		if bgr == nil {
+			bgr = &bulkGetRes{}
 		}
 		if bgr.bulkGet {
 			if err != nil {
@@ -1808,10 +1803,10 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 			noOp := resiliency.NoOp{}
 			policy = noOp.EndpointPolicy(ctx, "", "")
 		}
-		err = policy(func(ctx context.Context) error {
+		_, err = policy(func(ctx context.Context) (any, error) {
 			reminders, actorMetadata, rErr := a.getRemindersForActorType(req.ActorType, false)
 			if rErr != nil {
-				return rErr
+				return nil, rErr
 			}
 
 			// remove from partition first.
@@ -1830,20 +1825,20 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 			// Then, save the partition to the database.
 			rErr = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
 			if rErr != nil {
-				return rErr
+				return nil, rErr
 			}
 
 			// Finally, we must save metadata to get a new eTag.
 			// This avoids a race condition between an update and a repartitioning.
 			rErr = a.saveActorTypeMetadata(req.ActorType, actorMetadata)
 			if rErr != nil {
-				return rErr
+				return nil, rErr
 			}
 
 			a.remindersLock.Lock()
 			a.reminders[req.ActorType] = reminders
 			a.remindersLock.Unlock()
-			return nil
+			return nil, nil
 		})
 	} else {
 		err = backoff.Retry(func() error {
@@ -1893,9 +1888,10 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 	deleteReq := &state.DeleteRequest{
 		Key: reminderKey,
 	}
-	return policy(func(ctx context.Context) error {
-		return a.store.Delete(deleteReq)
+	_, err = policy(func(ctx context.Context) (any, error) {
+		return nil, a.store.Delete(deleteReq)
 	})
+	return err
 }
 
 // Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
@@ -1969,10 +1965,10 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 			noOp := resiliency.NoOp{}
 			policy = noOp.EndpointPolicy(ctx, "", "")
 		}
-		err = policy(func(ctx context.Context) (rErr error) {
+		_, err = policy(func(ctx context.Context) (any, error) {
 			reminders, actorMetadata, rErr := a.getRemindersForActorType(reminder.ActorType, false)
 			if rErr != nil {
-				return rErr
+				return nil, rErr
 			}
 
 			// First we add it to the partition list.
@@ -1987,20 +1983,20 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 			// Then, save the partition to the database.
 			rErr = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
 			if rErr != nil {
-				return rErr
+				return nil, rErr
 			}
 
 			// Finally, we must save metadata to get a new eTag.
 			// This avoids a race condition between an update and a repartitioning.
 			errForSaveMetadata := a.saveActorTypeMetadata(reminder.ActorType, actorMetadata)
 			if errForSaveMetadata != nil {
-				return errForSaveMetadata
+				return nil, errForSaveMetadata
 			}
 
 			a.remindersLock.Lock()
 			a.reminders[reminder.ActorType] = reminders
 			a.remindersLock.Unlock()
-			return nil
+			return nil, nil
 		})
 	} else {
 		err = backoff.Retry(func() error {

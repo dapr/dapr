@@ -295,16 +295,19 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 	}
 	psm.data = da
 	psm.path = path
-	return policy(func(ctx context.Context) error {
+	_, err = policy(func(ctx context.Context) (any, error) {
+		var pErr error
 		switch a.runtimeConfig.ApplicationProtocol {
 		case HTTPProtocol:
-			return a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
+			pErr = a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
 		case GRPCProtocol:
-			return a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
+			pErr = a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
 		default:
-			return backoff.Permanent(errors.New("invalid application protocol"))
+			pErr = backoff.Permanent(errors.New("invalid application protocol"))
 		}
+		return nil, pErr
 	})
+	return err
 }
 
 // publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding responses.

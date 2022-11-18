@@ -405,4 +405,7 @@ replace (
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
 
-replace github.com/dapr/kit => ../kit
+replace (
+	github.com/cenkalti/backoff/v4 => github.com/ItalyPaleAle/backoff/v4 v4.2.0
+	github.com/dapr/kit => ../kit
+)

@@ -84,7 +84,7 @@ func Policy(ctx context.Context, log logger.Logger, operationName string, t time
 
 		// Use retry/back off
 		b := r.NewBackOffWithContext(ctx)
-		return retry.NotifyRecoverWithData[any](func() (any, error) {
+		return retry.NotifyRecoverWithData(func() (any, error) {
 			return operation(ctx)
 		}, b, func(_ error, _ time.Duration) {
 			log.Infof("Error processing operation %s. Retrying…", operationName)

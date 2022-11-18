@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -555,6 +554,11 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
+type bulkGetRes struct {
+	bulkGet   bool
+	responses []state.BulkGetResponse
+}
+
 func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
@@ -606,28 +610,24 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	once := sync.Once{}
-	var (
-		bulkGet   bool
-		responses []state.BulkGetResponse
-	)
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	rErr := policy(func(ctx context.Context) error {
+	bgrAny, rErr := policy(func(ctx context.Context) (any, error) {
 		rBulkGet, rBulkResponse, rErr := store.BulkGet(reqs)
-		if rErr != nil {
-			return rErr
-		}
-		once.Do(func() {
-			bulkGet = rBulkGet
-			responses = rBulkResponse
-		})
-		return nil
+		return &bulkGetRes{
+			bulkGet:   rBulkGet,
+			responses: rBulkResponse,
+		}, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
-	if bulkGet {
+	bgr := bgrAny.(*bulkGetRes)
+	if bgr == nil {
+		bgr = &bulkGetRes{}
+	}
+
+	if bgr.bulkGet {
 		// if store supports bulk get
 		if rErr != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
@@ -636,15 +636,15 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 			return
 		}
 
-		for i := 0; i < len(responses) && i < len(req.Keys); i++ {
-			bulkResp[i].Key = stateLoader.GetOriginalStateKey(responses[i].Key)
-			if responses[i].Error != "" {
-				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
-				bulkResp[i].Error = responses[i].Error
+		for i := 0; i < len(bgr.responses) && i < len(req.Keys); i++ {
+			bulkResp[i].Key = stateLoader.GetOriginalStateKey(bgr.responses[i].Key)
+			if bgr.responses[i].Error != "" {
+				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, bgr.responses[i].Error)
+				bulkResp[i].Error = bgr.responses[i].Error
 			} else {
-				bulkResp[i].Data = json.RawMessage(responses[i].Data)
-				bulkResp[i].ETag = responses[i].ETag
-				bulkResp[i].Metadata = responses[i].Metadata
+				bulkResp[i].Data = json.RawMessage(bgr.responses[i].Data)
+				bulkResp[i].ETag = bgr.responses[i].ETag
+				bulkResp[i].Metadata = bgr.responses[i].Metadata
 			}
 		}
 	} else {
@@ -667,28 +667,22 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 					Metadata: metadata,
 				}
 
-				respPtr := atomic.Pointer[state.GetResponse]{}
-				err = policy(func(ctx context.Context) error {
-					rResp, rErr := store.Get(gr)
-					if respPtr.Load() != nil {
-						// Already stored
-						return rErr
-					}
-					if rErr == nil {
-						respPtr.CompareAndSwap(nil, rResp)
-						return nil
-					}
-					return rErr
+				respAny, err := policy(func(ctx context.Context) (any, error) {
+					return store.Get(gr)
 				})
 				if err != nil {
 					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 					r.Error = err.Error()
 				}
-				resp := respPtr.Load()
-				if resp != nil {
-					r.Data = json.RawMessage(resp.Data)
-					r.ETag = resp.ETag
-					r.Metadata = resp.Metadata
+				if respAny != nil {
+					resp, ok := respAny.(*state.GetResponse)
+					if ok {
+						r.Data = json.RawMessage(resp.Data)
+						r.ETag = resp.ETag
+						r.Metadata = resp.Metadata
+					} else {
+						r.Error = "failed to cast response"
+					}
 				}
 			}
 
@@ -770,7 +764,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	req := state.GetRequest{
+	req := &state.GetRequest{
 		Key: k,
 		Options: state.GetStateOption{
 			Consistency: consistency,
@@ -780,18 +774,8 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	respPtr := atomic.Pointer[state.GetResponse]{}
-	err = policy(func(ctx context.Context) error {
-		rResp, rErr := store.Get(&req)
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return store.Get(req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -804,7 +788,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp := respPtr.Load()
+	resp := respAny.(*state.GetResponse)
 	if resp == nil || resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
@@ -873,16 +857,16 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		req.WithRawData(eventBody, invokev1.JSONContentType)
 
 		policy := h.res.ComponentInboundPolicy(ctx, h.storeName, resiliency.Configuration)
-		err := policy(func(ctx context.Context) error {
-			resp, err := h.appChannel.InvokeMethod(ctx, req)
-			if err != nil {
-				return err
+		_, err := policy(func(ctx context.Context) (any, error) {
+			rResp, rErr := h.appChannel.InvokeMethod(ctx, req)
+			if rErr != nil {
+				return nil, rErr
 			}
 
-			if resp != nil && resp.Status().Code != nethttp.StatusOK {
-				return fmt.Errorf("error sending configuration item to application, status %d", resp.Status().Code)
+			if rResp != nil && rResp.Status().Code != nethttp.StatusOK {
+				return nil, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().Code)
 			}
-			return nil
+			return nil, nil
 		})
 		if err != nil {
 			log.Errorf("error sending configuration item to the app: %v", err)
@@ -917,18 +901,8 @@ func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	respPtr := atomic.Pointer[lock.TryLockResponse]{}
-	err = policy(func(ctx context.Context) error {
-		rResp, rErr := store.TryLock(&req)
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return store.TryLock(&req)
 	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
@@ -937,7 +911,8 @@ func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	b, _ := json.Marshal(respPtr.Load())
+	resp, _ := respAny.(*lock.TryLockResponse)
+	b, _ := json.Marshal(resp)
 	respond(reqCtx, withJSON(200, b))
 }
 
@@ -948,8 +923,8 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	req := lock.UnlockRequest{}
-	err = json.Unmarshal(reqCtx.PostBody(), &req)
+	req := &lock.UnlockRequest{}
+	err = json.Unmarshal(reqCtx.PostBody(), req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -967,18 +942,8 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	respPtr := atomic.Pointer[lock.UnlockResponse]{}
-	err = policy(func(ctx context.Context) error {
-		rResp, rErr := store.Unlock(&req)
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return store.Unlock(req)
 	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_UNLOCK", err.Error())
@@ -987,7 +952,8 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	b, _ := json.Marshal(respPtr.Load())
+	resp, _ := respAny.(*lock.UnlockResponse)
+	b, _ := json.Marshal(resp)
 	respond(reqCtx, withJSON(200, b))
 }
 
@@ -1016,7 +982,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		subscribeKeys = append(subscribeKeys, keys...)
 	}
 
-	req := configuration.SubscribeRequest{
+	req := &configuration.SubscribeRequest{
 		Keys:     subscribeKeys,
 		Metadata: metadata,
 	}
@@ -1031,17 +997,8 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
-	once := sync.Once{}
-	var subscribeID string
-	err = policy(func(ctx context.Context) error {
-		rSubscribeID, rErr := store.Subscribe(ctx, &req, handler.updateEventHandler)
-		if rErr != nil {
-			return rErr
-		}
-		once.Do(func() {
-			subscribeID = rSubscribeID
-		})
-		return nil
+	subscribeIDAny, err := policy(func(ctx context.Context) (any, error) {
+		return store.Subscribe(ctx, req, handler.updateEventHandler)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1053,6 +1010,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
+	subscribeID, _ := subscribeIDAny.(string)
 	respBytes, _ := json.Marshal(&subscribeConfigurationResponse{
 		ID: subscribeID,
 	})
@@ -1072,8 +1030,8 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	}
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
-	err = policy(func(ctx context.Context) (rErr error) {
-		return store.Unsubscribe(ctx, &req)
+	_, err = policy(func(ctx context.Context) (any, error) {
+		return nil, store.Unsubscribe(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
@@ -1108,25 +1066,15 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 	for _, queryKeyByte := range queryKeys {
 		keys = append(keys, string(queryKeyByte))
 	}
-	req := configuration.GetRequest{
+	req := &configuration.GetRequest{
 		Keys:     keys,
 		Metadata: metadata,
 	}
 
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
-	getResponsePtr := atomic.Pointer[configuration.GetResponse]{}
-	err = policy(func(ctx context.Context) error {
-		rGetResponse, rErr := store.Get(ctx, &req)
-		if getResponsePtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			getResponsePtr.CompareAndSwap(nil, rGetResponse)
-			return nil
-		}
-		return rErr
+	getResponseAny, err := policy(func(ctx context.Context) (any, error) {
+		return store.Get(ctx, req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1139,7 +1087,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	getResponse := getResponsePtr.Load()
+	getResponse, _ := getResponseAny.(*configuration.GetResponse)
 	if getResponse == nil || getResponse.Items == nil || len(getResponse.Items) == 0 {
 		respond(reqCtx, withEmpty())
 		return
@@ -1200,8 +1148,8 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	err = policy(func(ctx context.Context) error {
-		return store.Delete(&req)
+	_, err = policy(func(ctx context.Context) (any, error) {
+		return nil, store.Delete(&req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1242,18 +1190,9 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
-	respPtr := atomic.Pointer[secretstores.GetSecretResponse]{}
-	err = policy(func(ctx context.Context) error {
+	respAny, err := policy(func(ctx context.Context) (any, error) {
 		rResp, rErr := store.GetSecret(ctx, req)
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, &rResp)
-			return nil
-		}
-		return rErr
+		return &rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1267,7 +1206,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp := respPtr.Load()
+	resp, _ := respAny.(*secretstores.GetSecretResponse)
 	if resp == nil || resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
@@ -1292,18 +1231,9 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
-	respPtr := atomic.Pointer[secretstores.BulkGetSecretResponse]{}
-	err = policy(func(ctx context.Context) error {
+	respAny, err := policy(func(ctx context.Context) (any, error) {
 		rResp, rErr := store.BulkGetSecret(ctx, req)
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, &rResp)
-			return nil
-		}
-		return rErr
+		return &rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1317,7 +1247,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp := respPtr.Load()
+	resp := respAny.(*secretstores.BulkGetSecretResponse)
 	if resp == nil || resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
@@ -1411,8 +1341,8 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	err = policy(func(ctx context.Context) error {
-		return store.BulkSet(reqs)
+	_, err = policy(func(ctx context.Context) (any, error) {
+		return nil, store.BulkSet(reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1480,6 +1410,12 @@ func (ie invokeError) Error() string {
 	return fmt.Sprintf("invokeError (statusCode='%d') msg.errorCode='%s' msg.message='%s'", ie.statusCode, ie.msg.ErrorCode, ie.msg.Message)
 }
 
+type directMessagingPolicyRes struct {
+	body        []byte
+	statusCode  int
+	contentType string
+}
+
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	targetID := a.findTargetID(reqCtx)
 	if targetID == "" {
@@ -1503,11 +1439,9 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Save headers to internal metadata
 	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
 
-	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, fmt.Sprintf("%s:%s", targetID, invokeMethodName))
+	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, targetID+":"+invokeMethodName)
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
-	var body []byte
-	var statusCode int
-	err := policy(func(ctx context.Context) error {
+	dmprAny, err := policy(func(ctx context.Context) (any, error) {
 		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
 		if rErr != nil {
 			// Allowlists policies that are applied on the callee side can return a Permission Denied error.
@@ -1519,38 +1453,35 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			if status.Code(rErr) == codes.PermissionDenied {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
-			return invokeErr
+			return nil, invokeErr
 		}
 
-		// TODO: Although the code below is synchronous, there may still be a (small) possibility of a race condition, if the handler times out while doing the sync code below
-		// May need some refactoring to avoid race conditions with "body" and "statusCode"
+		dmpr := &directMessagingPolicyRes{}
 
 		invokev1.InternalMetadataToHTTPHeader(reqCtx, rResp.Headers(), reqCtx.Response.Header.Set)
-		var contentType string
-		contentType, body = rResp.RawData()
-		reqCtx.Response.Header.SetContentType(contentType)
+		dmpr.contentType, dmpr.body = rResp.RawData()
 
 		// Construct response
-		statusCode = int(rResp.Status().Code)
+		dmpr.statusCode = int(rResp.Status().Code)
 		if !rResp.IsHTTPResponse() {
-			statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
-			if statusCode != fasthttp.StatusOK {
-				if body, rErr = invokev1.ProtobufToJSON(rResp.Status()); rErr != nil {
-					return invokeError{
+			dmpr.statusCode = invokev1.HTTPStatusFromCode(codes.Code(dmpr.statusCode))
+			if dmpr.statusCode != fasthttp.StatusOK {
+				if dmpr.body, rErr = invokev1.ProtobufToJSON(rResp.Status()); rErr != nil {
+					return dmpr, invokeError{
 						statusCode: fasthttp.StatusInternalServerError,
 						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()),
 					}
 				}
 			}
-		} else if statusCode != fasthttp.StatusOK {
-			return fmt.Errorf("Received non-successful status code: %d", statusCode) //nolint:stylecheck
+		} else if dmpr.statusCode != fasthttp.StatusOK {
+			return dmpr, fmt.Errorf("Received non-successful status code: %d", dmpr.statusCode) //nolint:stylecheck
 		}
-		return nil
+		return dmpr, nil
 	})
 
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
-		respond(reqCtx, withError(500, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
 		return
 	}
 
@@ -1560,7 +1491,14 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	respond(reqCtx, with(statusCode, body))
+	dmpr, ok := dmprAny.(*directMessagingPolicyRes)
+	if !ok || dmpr == nil {
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", "failed to cast response object")))
+		return
+	}
+
+	reqCtx.Response.Header.SetContentType(dmpr.contentType)
+	respond(reqCtx, with(dmpr.statusCode, dmpr.body))
 }
 
 // findTargetID tries to find ID of the target service from the following three places:
@@ -1864,18 +1802,8 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
 	policy := a.resiliency.ActorPreLockPolicy(reqCtx, actorType, actorID)
-	respPtr := atomic.Pointer[invokev1.InvokeMethodResponse]{}
-	err := policy(func(ctx context.Context) error {
-		rResp, rErr := a.actor.Call(ctx, req)
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return a.actor.Call(ctx, req)
 	})
 	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
@@ -1884,7 +1812,13 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp := respPtr.Load()
+	resp, ok := respAny.(*invokev1.InvokeMethodResponse)
+	if !ok || resp == nil {
+		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, "failed to cast response"))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
 	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
 	contentType, body := resp.RawData()
 	reqCtx.Response.Header.SetContentType(contentType)
@@ -2539,8 +2473,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		Operations: operations,
 		Metadata:   req.Metadata,
 	}
-	err := policy(func(ctx context.Context) error {
-		return transactionalStore.Multi(storeReq)
+	_, err := policy(func(ctx context.Context) (any, error) {
+		return nil, transactionalStore.Multi(storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -2588,18 +2522,8 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	respPtr := atomic.Pointer[state.QueryResponse]{}
-	err = policy(func(ctx context.Context) error {
-		rResp, rErr := querier.Query(&req)
-		if respPtr.Load() != nil {
-			// Already stored
-			return rErr
-		}
-		if rErr == nil {
-			respPtr.CompareAndSwap(nil, rResp)
-			return nil
-		}
-		return rErr
+	respAny, err := policy(func(ctx context.Context) (any, error) {
+		return querier.Query(&req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -2611,7 +2535,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	resp := respPtr.Load()
+	resp, _ := respAny.(*state.QueryResponse)
 	if resp == nil || len(resp.Results) == 0 {
 		respond(reqCtx, withEmpty())
 		return

@@ -111,12 +111,12 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		}
 	}
 
-	cErr := policy(func(ctx context.Context) (rErr error) {
+	_, cErr := policy(func(ctx context.Context) (any, error) {
 		// We require that the director's returned context inherits from the serverStream.Context().
 		outgoingCtx, backendConn, target, teardown, err := s.director(serverStream.Context(), fullMethodName)
 		defer teardown()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
@@ -129,12 +129,12 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				backendConn, teardown, err = s.connFactory(outgoingCtx, target.Address, target.ID, target.Namespace, false, true, false)
 				defer teardown()
 				if err != nil {
-					return err
+					return nil, err
 				}
 
 				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
 				if err != nil {
-					return err
+					return nil, err
 				}
 			}
 		}
@@ -158,7 +158,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 					// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 					// exit with an error to the stack
 					clientCancel()
-					return status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
+					return nil, status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 				}
 			case c2sErr := <-c2sErrChan:
 				// This happens when the clientStream has nothing else to offer (io.EOF), returned a gRPC error. In those two
@@ -167,12 +167,12 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				serverStream.SetTrailer(clientStream.Trailer())
 				// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
 				if c2sErr != io.EOF {
-					return c2sErr
+					return nil, c2sErr
 				}
-				return nil
+				return nil, nil
 			}
 		}
-		return status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
+		return nil, status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 	})
 	// Clear the request's buffered calls.
 	s.bufferedCalls.Delete(requestID)

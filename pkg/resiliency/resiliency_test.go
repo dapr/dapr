@@ -208,13 +208,13 @@ func TestPoliciesForTargets(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := tt.create(r)
-			called := false
-			err := p(func(ctx context.Context) error {
-				called = true
-				return nil
+			called := atomic.Bool{}
+			_, err := p(func(ctx context.Context) (any, error) {
+				called.Store(true)
+				return nil, nil
 			})
 			assert.NoError(t, err)
-			assert.True(t, called)
+			assert.True(t, called.Load())
 		})
 	}
 }
@@ -628,27 +628,27 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	// Targeted App
 	policy := r.EndpointPolicy(context.Background(), "testApp", "localhost")
 	count := atomic.Int64{}
-	policy(func(ctx context.Context) error {
+	policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
-		return errors.New("Forced failure")
+		return nil, errors.New("Forced failure")
 	})
 	assert.Equal(t, int64(6), count.Load())
 
 	// Generic App
 	policy = r.EndpointPolicy(context.Background(), "noMatchingTarget", "localhost")
 	count.Store(0)
-	policy(func(ctx context.Context) error {
+	policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
-		return errors.New("Forced failure")
+		return nil, errors.New("Forced failure")
 	})
 	assert.Equal(t, int64(11), count.Load())
 
 	// Not defined
 	policy = r.ActorPreLockPolicy(context.Background(), "actorType", "actorID")
 	count.Store(0)
-	policy(func(ctx context.Context) error {
+	policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
-		return errors.New("Forced failure")
+		return nil, errors.New("Forced failure")
 	})
 	assert.Equal(t, int64(4), count.Load())
 
@@ -656,10 +656,10 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	policy = r.ActorPostLockPolicy(context.Background(), "actorType", "actorID")
 	count.Store(0)
 	start := time.Now()
-	err := policy(func(ctx context.Context) error {
+	_, err := policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
 		time.Sleep(time.Second * 5)
-		return errors.New("Forced failure")
+		return nil, errors.New("Forced failure")
 	})
 	assert.Less(t, time.Since(start), time.Second*5)
 	assert.Equal(t, int64(1), count.Load())           // Post lock policies don't have a retry, only pre lock do.
