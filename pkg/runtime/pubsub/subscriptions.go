@@ -88,9 +88,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 		respAny, err = policy(func(ctx context.Context) (any, error) {
 			return channel.InvokeMethod(ctx, req)
 		})
-		if respAny != nil {
-			resp = respAny.(*invokev1.InvokeMethodResponse)
-		}
+		resp, _ = respAny.(*invokev1.InvokeMethodResponse)
 	} else {
 		backoff := getSubscriptionsBackoff()
 		resp, err = retry.NotifyRecoverWithData(func() (*invokev1.InvokeMethodResponse, error) {
@@ -200,30 +198,30 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			rResp, rErr := channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
 
 			if rErr != nil {
-				if s, ok := status.FromError(rErr); ok && s != nil {
+				s, ok := status.FromError(rErr)
+				if ok && s != nil {
 					if s.Code() == codes.Unimplemented {
-						return rResp, nil
+						return rResp, backoff.Permanent(rErr)
 					}
 				}
 			}
 			return rResp, rErr
 		})
-		if respAny != nil {
-			resp = respAny.(*runtimev1pb.ListTopicSubscriptionsResponse)
-		}
+		resp, _ = respAny.(*runtimev1pb.ListTopicSubscriptionsResponse)
 	} else {
-		backoff := getSubscriptionsBackoff()
+		bo := getSubscriptionsBackoff()
 
 		resp, err = retry.NotifyRecoverWithData(func() (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 			rResp, rErr := channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
 
 			if rErr != nil {
-				if s, ok := status.FromError(rErr); ok && s != nil && s.Code() == codes.Unimplemented {
-					return rResp, nil
+				s, ok := status.FromError(rErr)
+				if ok && s != nil && s.Code() == codes.Unimplemented {
+					return rResp, backoff.Permanent(rErr)
 				}
 			}
 			return rResp, rErr
-		}, backoff, func(err error, d time.Duration) {
+		}, bo, func(err error, d time.Duration) {
 			log.Debug("failed getting gRPC subscriptions, starting retry")
 		}, func() {})
 	}
