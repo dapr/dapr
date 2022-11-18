@@ -50,7 +50,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/strings/slices"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -139,6 +139,8 @@ var log = logger.NewLogger("dapr.runtime")
 // ErrUnexpectedEnvelopeData denotes that an unexpected data type
 // was encountered when processing a cloud event's data property.
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
+
+var cloudEventDuplicateKeys = sets.NewString(pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field)
 
 type TopicRoutes map[string]TopicRouteElem
 
@@ -2144,10 +2146,9 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	// Assemble Cloud Event Extensions:
 	// Create copy of the cloud event with duplicated data removed
 
-	checkDuplicateKeys := []string{pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field}
 	extensions := map[string]interface{}{}
 	for key, value := range cloudEvent {
-		if !slices.Contains(checkDuplicateKeys, key) {
+		if !cloudEventDuplicateKeys.Has(key) {
 			extensions[key] = value
 		}
 	}
