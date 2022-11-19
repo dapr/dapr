@@ -7,12 +7,12 @@ replace github.com/dapr/dapr => ../../../
 require (
 	github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8
 	github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc
-	github.com/dapr/kit v0.0.3-0.20221118224224-c4648551c95c
+	github.com/dapr/kit v0.0.3-0.20221119212753-76dbc2afea63
 )
 
 require (
 	github.com/Shopify/sarama v1.37.2 // indirect
-	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
+	github.com/cenkalti/backoff/v4 v4.2.0 // indirect
 	github.com/dapr/dapr v1.9.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/eapache/go-resiliency v1.3.0 // indirect

@@ -7,9 +7,9 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
-	github.com/cenkalti/backoff/v4 v4.1.3
+	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc
-	github.com/dapr/kit v0.0.3-0.20221118224224-c4648551c95c
+	github.com/dapr/kit v0.0.3-0.20221119212753-76dbc2afea63
 	github.com/fasthttp/router v1.4.12
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3
