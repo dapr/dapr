@@ -25,6 +25,7 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +33,7 @@ import (
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 type mockOperator struct {
@@ -57,7 +59,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					"pubsubRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
@@ -111,7 +113,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					"pubsubRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
@@ -296,6 +298,29 @@ func TestParseActorCircuitBreakerScope(t *testing.T) {
 	}
 }
 
+func TestParseMaxRetries(t *testing.T) {
+	configs := LoadStandaloneResiliency(log, "app1", "./testdata")
+	require.NotNil(t, configs)
+	require.Len(t, configs, 2)
+	require.NotNil(t, configs[0])
+
+	r := FromConfigurations(log, configs[0])
+	require.True(t, len(r.retries) > 0)
+	require.NotNil(t, r.retries["noRetry"])
+	require.NotNil(t, r.retries["retryForever"])
+	require.NotNil(t, r.retries["missingMaxRetries"])
+	require.NotNil(t, r.retries["important"])
+
+	// important has "maxRetries: 30"
+	assert.Equal(t, int64(30), r.retries["important"].MaxRetries)
+	// noRetry has "maxRetries: 0" (no retries)
+	assert.Equal(t, int64(0), r.retries["noRetry"].MaxRetries)
+	// retryForever has "maxRetries: -1" (retry forever)
+	assert.Equal(t, int64(-1), r.retries["retryForever"].MaxRetries)
+	// missingMaxRetries has no "maxRetries" so should default to -1
+	assert.Equal(t, int64(-1), r.retries["missingMaxRetries"].MaxRetries)
+}
+
 func TestResiliencyScopeIsRespected(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -357,7 +382,7 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 					"myRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 3,
+						MaxRetries: ptr.Of(3),
 					},
 				},
 			},
@@ -438,7 +463,7 @@ func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
 					string(BuiltInServiceRetries): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 1,
+						MaxRetries: ptr.Of(1),
 					},
 				},
 			},
@@ -457,7 +482,7 @@ func TestResiliencyProtectedPolicyCannotBeChanged(t *testing.T) {
 					string(BuiltInActorNotFoundRetries): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 				},
 			},
@@ -519,13 +544,13 @@ func TestGetDefaultPolicy(t *testing.T) {
 					fmt.Sprintf(string(DefaultRetryTemplate), "App"): {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 
 					fmt.Sprintf(string(DefaultRetryTemplate), ""): {
 						Policy:     "constant",
 						Duration:   "1s",
-						MaxRetries: 5,
+						MaxRetries: ptr.Of(5),
 					},
 				},
 				Timeouts: map[string]string{
@@ -588,18 +613,18 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 					"testRetry": {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: 5,
+						MaxRetries: ptr.Of(5),
 					},
 					fmt.Sprintf(string(DefaultRetryTemplate), "App"): {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 
 					fmt.Sprintf(string(DefaultRetryTemplate), ""): {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: 3,
+						MaxRetries: ptr.Of(3),
 					},
 				},
 				Timeouts: map[string]string{
