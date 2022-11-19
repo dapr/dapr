@@ -26,7 +26,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	"github.com/agrea/ptr"
 	"github.com/dapr/components-contrib/lock"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
