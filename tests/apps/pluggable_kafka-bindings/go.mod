@@ -48,6 +48,3 @@ require (
 	google.golang.org/grpc v1.50.1 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
-
-// Temporary until https://github.com/cenkalti/backoff/pull/126 is merged
-replace github.com/cenkalti/backoff/v4 => github.com/ItalyPaleAle/backoff/v4 v4.2.0

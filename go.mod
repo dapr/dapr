@@ -398,9 +398,6 @@ replace (
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 )
 
-// Temporary until https://github.com/cenkalti/backoff/pull/126 is merged
-replace github.com/cenkalti/backoff/v4 => github.com/ItalyPaleAle/backoff/v4 v4.2.0
-
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
