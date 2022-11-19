@@ -23,11 +23,12 @@ import (
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -87,7 +88,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		// Add grpc-trace-bin header for all non-invocation api's
 		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
 			traceContextBinary := diagUtils.BinaryFromSpanContext(span.SpanContext())
-			grpc.SetHeader(ctx, metadata.Pairs(GRPCTraceContextKey, string(traceContextBinary)))
+			grpc.SetHeader(ctx, grpcMetadata.Pairs(GRPCTraceContextKey, string(traceContextBinary)))
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
@@ -110,7 +111,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		ctx := ss.Context()
 		md, _ := metadata.FromIncomingContext(ctx)
 
-		vals := md.Get(GRPCProxyAppIDKey)
+		vals := md[GRPCProxyAppIDKey]
 		if len(vals) == 0 {
 			return errors.Errorf("cannot proxy request: missing %s metadata", GRPCProxyAppIDKey)
 		}
@@ -171,14 +172,13 @@ func addSpanMetadataAndUpdateStatus(ctx context.Context, span trace.Span, fullMe
 // userDefinedMetadata returns dapr- prefixed header from incoming metadata.
 // Users can add dapr- prefixed headers that they want to see in span attributes.
 func userDefinedMetadata(ctx context.Context) map[string]string {
-	daprMetadata := map[string]string{}
 	md, ok := metadata.FromIncomingContext(ctx)
+	daprMetadata := make(map[string]string, len(md))
 	if !ok {
 		return daprMetadata
 	}
 
 	for k, v := range md {
-		k = strings.ToLower(k)
 		if strings.HasPrefix(k, daprHeaderPrefix) && !strings.HasSuffix(k, daprHeaderBinSuffix) {
 			daprMetadata[k] = v[0]
 		}
@@ -246,7 +246,7 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 		return ctx
 	}
 
-	return metadata.AppendToOutgoingContext(ctx, GRPCTraceContextKey, string(traceContextBinary))
+	return grpcMetadata.AppendToOutgoingContext(ctx, GRPCTraceContextKey, string(traceContextBinary))
 }
 
 func isInternalCalls(method string) bool {
