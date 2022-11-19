@@ -187,15 +187,23 @@ func userDefinedMetadata(ctx context.Context) map[string]string {
 	return daprMetadata
 }
 
+func StartGRPCProducerSpanChildFromParent(ct context.Context, parentSpan trace.Span, spanName string) (context.Context, trace.Span) {
+	netCtx := trace.ContextWithRemoteSpanContext(ct, parentSpan.SpanContext())
+	spanKind := trace.WithSpanKind(trace.SpanKindProducer)
+
+	ctx, span := tracer.Start(netCtx, spanName, spanKind)
+
+	return ctx, span
+}
+
 // UpdateSpanStatusFromGRPCError updates tracer span status based on error object.
 func UpdateSpanStatusFromGRPCError(span trace.Span, err error) {
 	if span == nil || err == nil {
 		return
 	}
 
-	_, ok := status.FromError(err)
-	if ok {
-		span.SetStatus(otelcodes.Ok, "")
+	if e, ok := status.FromError(err); ok {
+		span.SetStatus(otelcodes.Error, e.Message())
 	} else {
 		span.SetStatus(otelcodes.Error, err.Error())
 	}
@@ -272,6 +280,12 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 		m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", s.GetId(), s.Message.GetMethod())
 
 	case *runtimev1pb.PublishEventRequest:
+		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService
+		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
+		m[messagingDestinationSpanAttributeKey] = s.GetTopic()
+		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationTopicKind
+
+	case *runtimev1pb.BulkPublishRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService
 		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
 		m[messagingDestinationSpanAttributeKey] = s.GetTopic()

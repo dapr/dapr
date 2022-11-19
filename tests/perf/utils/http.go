@@ -1,6 +1,3 @@
-//go:build perf
-// +build perf
-
 /*
 Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,15 +23,20 @@ import (
 	"time"
 )
 
+const (
+	// DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
+	// HTTPGetRawNTimes() to avoid cases where early requests hang and
+	// block all subsequent requests.
+	DefaultProbeTimeout = 30 * time.Second
+)
+
 var httpClient *http.Client
 
 func init() {
 	httpClient = &http.Client{
 		Transport: &http.Transport{
-			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
 			Dial: (&net.Dialer{
-				// This number cannot be large. Callers should retry failed calls (see HTTPGetNTimes())
-				Timeout: 3 * time.Minute,
+				Timeout: DefaultProbeTimeout,
 			}).Dial,
 		},
 	}
@@ -84,7 +86,7 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 
 // HTTPDelete calls a given URL with the HTTP DELETE method.
 func HTTPDelete(url string) ([]byte, error) {
-	req, err := http.NewRequest("DELETE", sanitizeHTTPURL(url), nil)
+	req, err := http.NewRequest(http.MethodDelete, sanitizeHTTPURL(url), nil)
 	if err != nil {
 		return nil, err
 	}

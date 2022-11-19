@@ -65,6 +65,14 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_component_init_total: The number of initialized components
 * dapr_runtime_component_init_fail_total: The number of component initialization failures
 
+#### Service Invocation
+
+* dapr_runtime_service_invocation_req_sent_total: The number of remote service invocation requests sent
+* dapr_runtime_service_invocation_req_recv_total: The number of remote service invocation requests received
+* dapr_runtime_service_invocation_res_sent_total: The number of remote service invocation responses sent
+* dapr_runtime_service_invocation_res_recv_total: The number of remote service invocation responses received
+* dapr_runtime_service_invocation_res_recv_latency_ms: The remote service invocation round trip latency
+
 #### Security
 
 * dapr_runtime_mtls_init_total: The number of successful mTLS authenticator initialization.
@@ -82,6 +90,11 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_actor_activated_failed_total: The number of the actor activation failures.
 * dapr_runtime_actor_deactivated_total: The number of the successful actor deactivation.
 * dapr_runtime_actor_deactivated_failed_total: The number of the failed actor deactivation.
+
+#### Resiliency
+
+* dapr_runtime_resiliency_loaded: The number of resiliency policies loaded.
+* dapr_runtime_resiliency_count: The number of times a resiliency policy has been executed.
 
 ### gRPC monitoring metrics
 

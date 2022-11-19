@@ -14,6 +14,7 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 )
 
 const (
@@ -32,17 +33,17 @@ func CertPool(certPem []byte) (*x509.CertPool, error) {
 }
 
 func GetCertChain() (*credentials.CertChain, error) {
-	trustAnchors := os.Getenv(certs.TrustAnchorsEnvVar)
+	trustAnchors := os.Getenv(sentryConsts.TrustAnchorsEnvVar)
 	if trustAnchors == "" {
-		return nil, errors.Errorf("couldn't find trust anchors in environment variable %s", certs.TrustAnchorsEnvVar)
+		return nil, errors.Errorf("couldn't find trust anchors in environment variable %s", sentryConsts.TrustAnchorsEnvVar)
 	}
-	cert := os.Getenv(certs.CertChainEnvVar)
+	cert := os.Getenv(sentryConsts.CertChainEnvVar)
 	if cert == "" {
-		return nil, errors.Errorf("couldn't find cert chain in environment variable %s", certs.CertChainEnvVar)
+		return nil, errors.Errorf("couldn't find cert chain in environment variable %s", sentryConsts.CertChainEnvVar)
 	}
-	key := os.Getenv(certs.CertKeyEnvVar)
+	key := os.Getenv(sentryConsts.CertKeyEnvVar)
 	if cert == "" {
-		return nil, errors.Errorf("couldn't find cert key in environment variable %s", certs.CertKeyEnvVar)
+		return nil, errors.Errorf("couldn't find cert key in environment variable %s", sentryConsts.CertKeyEnvVar)
 	}
 	return &credentials.CertChain{
 		RootCA: []byte(trustAnchors),

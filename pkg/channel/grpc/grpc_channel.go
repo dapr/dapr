@@ -31,6 +31,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
@@ -103,7 +104,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
 
 	if g.appMetadataToken != "" {
-		grpcMetadata.Set(auth.APITokenHeader, g.appMetadataToken)
+		grpcMetadata.Set(authConsts.APITokenHeader, g.appMetadataToken)
 	}
 
 	// Prepare gRPC Metadata

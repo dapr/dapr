@@ -22,7 +22,7 @@ import (
 	"os"
 	"time"
 
-	cl "actorload/pkg/actor/client"
+	cl "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client"
 )
 
 const (

@@ -24,11 +24,14 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 
 	"go.opentelemetry.io/otel"
+	otelcodes "go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -54,6 +57,7 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 		{"/dapr.proto.runtime.v1.Dapr/GetSecret", "GetSecretRequest", "Dapr", "mysecretstore"},
 		{"/dapr.proto.runtime.v1.Dapr/InvokeBinding", "InvokeBindingRequest", "Dapr", "mybindings"},
 		{"/dapr.proto.runtime.v1.Dapr/PublishEvent", "PublishEventRequest", "Dapr", "mytopic"},
+		{"/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1", "BulkPublishEventRequest", "Dapr", "mytopic"},
 	}
 	var req interface{}
 	for _, tt := range tests {
@@ -73,6 +77,8 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 				req = &runtimev1pb.InvokeBindingRequest{Name: "mybindings"}
 			case "PublishEventRequest":
 				req = &runtimev1pb.PublishEventRequest{Topic: "mytopic"}
+			case "BulkPublishEventRequest":
+				req = &runtimev1pb.BulkPublishRequest{Topic: "mytopic"}
 			case "TopicEventRequest":
 				req = &runtimev1pb.TopicEventRequest{Topic: "mytopic"}
 			case "BindingEventRequest":
@@ -192,6 +198,50 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			span = diagUtils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
+		}
+
+		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+
+		sc := span.SpanContext()
+		spanString := fmt.Sprintf("%v", span)
+		assert.True(t, strings.Contains(spanString, "CallLocal/targetID/method1"))
+		traceID := sc.TraceID()
+		spanID := sc.SpanID()
+		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
+		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+	})
+
+	t.Run("InvokeService call with grpc status error", func(t *testing.T) {
+		// set a new tracer provider with a callback on span completion to check that the span errors out
+		checkErrorStatusOnSpan := func(s sdktrace.ReadOnlySpan) {
+			assert.Equal(t, otelcodes.Error, s.Status().Code, "expected span status to be an error")
+		}
+
+		tp := sdktrace.NewTracerProvider(
+			sdktrace.WithBatcher(exp),
+			sdktrace.WithSpanProcessor(newOtelFakeSpanProcessor(checkErrorStatusOnSpan)),
+		)
+		oldTracerProvider := otel.GetTracerProvider()
+		defer func() {
+			_ = tp.Shutdown(context.Background())
+			// reset tracer provider to older one once the test completes
+			otel.SetTracerProvider(oldTracerProvider)
+		}()
+		otel.SetTracerProvider(tp)
+
+		fakeInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/InvokeService",
+		}
+		fakeReq := &runtimev1pb.InvokeServiceRequest{
+			Id:      "targetID",
+			Message: &commonv1pb.InvokeRequest{Method: "method1"},
+		}
+
+		var span trace.Span
+		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			span = diagUtils.SpanFromContext(ctx)
+			// mocking an error that is returned from the gRPC API -- see pkg/grpc/api.go file
+			return nil, status.Error(codes.Internal, errors.New("fake status error").Error())
 		}
 
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)

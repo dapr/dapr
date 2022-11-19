@@ -15,6 +15,8 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
@@ -31,13 +33,17 @@ import (
 	"github.com/dapr/dapr/pkg/cors"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/logger"
 )
 
 type mockHost struct {
 	hasCORS bool
 }
 
-const healthzEndpoint = "healthz"
+const (
+	healthzEndpoint         = "healthz"
+	healthzOutboundEndpoint = "healthz/outbound"
+)
 
 func (m *mockHost) mockHandler() fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
@@ -91,9 +97,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -106,6 +113,11 @@ func TestAllowedAPISpec(t *testing.T) {
 					{
 						Name:     "publish",
 						Version:  "v1.0",
+						Protocol: "http",
+					},
+					{
+						Name:     "publish",
+						Version:  "v1.0-alpha1",
 						Protocol: "http",
 					},
 				},
@@ -132,9 +144,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -173,9 +186,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -214,9 +228,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -255,9 +270,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -296,9 +312,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -337,9 +354,10 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == healthzEndpoint {
+			switch e.Route {
+			case healthzEndpoint, healthzOutboundEndpoint:
 				assert.True(t, valid)
-			} else {
+			default:
 				assert.False(t, valid)
 			}
 		}
@@ -655,6 +673,139 @@ func TestAliasRoute(t *testing.T) {
 		routes := s.getRouter(eps).List()
 		assert.Equal(t, 1, len(routes[router.MethodWild]))
 	})
+}
+
+func TestAPILogging(t *testing.T) {
+	// Replace the logger with a custom one for testing
+	prev := infoLog
+	logDest := &bytes.Buffer{}
+	infoLog = logger.NewLogger("test-api-logging")
+	infoLog.EnableJSONOutput(true)
+	infoLog.SetOutput(logDest)
+	defer func() {
+		infoLog = prev
+	}()
+
+	body := []byte("👋")
+
+	mh := func(reqCtx *fasthttp.RequestCtx) {
+		reqCtx.Response.SetBody(body)
+	}
+	endpoints := []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Route:   "state/{storeName}/{key}",
+			Version: apiVersionV1,
+			Handler: mh,
+		},
+	}
+	srv := newServer()
+	srv.config.EnableAPILogging = true
+	router := srv.getRouter(endpoints)
+
+	r := &fasthttp.RequestCtx{
+		Request: fasthttp.Request{},
+	}
+	dec := json.NewDecoder(logDest)
+
+	runTest := func(userAgent string) func(t *testing.T) {
+		return func(t *testing.T) {
+			r.Request.Header.Set("User-Agent", userAgent)
+
+			for _, e := range endpoints {
+				routePath := fmt.Sprintf("/%s/%s", e.Version, e.Route)
+				path := fmt.Sprintf("/%s/%s", e.Version, "state/mystate/mykey")
+				for _, m := range e.Methods {
+					handler, _ := router.Lookup(m, path, r)
+					r.Request.Header.SetMethod(m)
+					handler(r)
+
+					assert.Equal(t, body, r.Response.Body())
+
+					logData := map[string]string{}
+					err := dec.Decode(&logData)
+					require.NoError(t, err)
+
+					assert.Equal(t, "test-api-logging", logData["scope"])
+					assert.Equal(t, "HTTP API Called", logData["msg"])
+					assert.Equal(t, m+" "+routePath, logData["method"])
+					if userAgent != "" {
+						assert.Equal(t, userAgent, logData["useragent"])
+					} else {
+						_, found := logData["useragent"]
+						assert.False(t, found)
+					}
+				}
+			}
+		}
+	}
+
+	t.Run("without user agent", runTest(""))
+	t.Run("with user agent", runTest("daprtest/1"))
+}
+
+func TestAPILoggingOmitHealthChecks(t *testing.T) {
+	// Replace the logger with a custom one for testing
+	prev := infoLog
+	logDest := &bytes.Buffer{}
+	infoLog = logger.NewLogger("test-api-logging")
+	infoLog.EnableJSONOutput(true)
+	infoLog.SetOutput(logDest)
+	defer func() {
+		infoLog = prev
+	}()
+
+	body := []byte("👋")
+
+	mh := func(reqCtx *fasthttp.RequestCtx) {
+		reqCtx.Response.SetBody(body)
+	}
+	endpoints := []Endpoint{
+		{
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "log",
+			Version:       apiVersionV1,
+			Handler:       mh,
+			IsHealthCheck: false,
+		},
+		{
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "nolog",
+			Version:       apiVersionV1,
+			Handler:       mh,
+			IsHealthCheck: true,
+		},
+	}
+	srv := newServer()
+	srv.config.EnableAPILogging = true
+	srv.config.APILogHealthChecks = false
+	router := srv.getRouter(endpoints)
+
+	r := &fasthttp.RequestCtx{
+		Request: fasthttp.Request{},
+	}
+	dec := json.NewDecoder(logDest)
+
+	for _, e := range endpoints {
+		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
+		handler, _ := router.Lookup(fasthttp.MethodGet, path, r)
+		r.Request.Header.SetMethod(fasthttp.MethodGet)
+		handler(r)
+
+		assert.Equal(t, body, r.Response.Body())
+
+		if e.Route == "log" {
+			logData := map[string]string{}
+			err := dec.Decode(&logData)
+			require.NoError(t, err)
+
+			assert.Equal(t, "test-api-logging", logData["scope"])
+			assert.Equal(t, "HTTP API Called", logData["msg"])
+			assert.Equal(t, "GET "+path, logData["method"])
+		} else {
+			require.Empty(t, logDest.Bytes())
+		}
+	}
 }
 
 func TestClose(t *testing.T) {

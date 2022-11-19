@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -626,41 +627,41 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 
 	// Targeted App
 	policy := r.EndpointPolicy(context.Background(), "testApp", "localhost")
-	count := 0
+	count := atomic.Int64{}
 	policy(func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		return errors.New("Forced failure")
 	})
-	assert.Equal(t, 6, count)
+	assert.Equal(t, int64(6), count.Load())
 
 	// Generic App
 	policy = r.EndpointPolicy(context.Background(), "noMatchingTarget", "localhost")
-	count = 0
+	count.Store(0)
 	policy(func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		return errors.New("Forced failure")
 	})
-	assert.Equal(t, 11, count)
+	assert.Equal(t, int64(11), count.Load())
 
 	// Not defined
 	policy = r.ActorPreLockPolicy(context.Background(), "actorType", "actorID")
-	count = 0
+	count.Store(0)
 	policy(func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		return errors.New("Forced failure")
 	})
-	assert.Equal(t, 4, count)
+	assert.Equal(t, int64(4), count.Load())
 
 	// One last one for ActorPostLock which just includes timeouts.
 	policy = r.ActorPostLockPolicy(context.Background(), "actorType", "actorID")
-	count = 0
+	count.Store(0)
 	start := time.Now()
 	err := policy(func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		time.Sleep(time.Second * 5)
 		return errors.New("Forced failure")
 	})
 	assert.Less(t, time.Since(start), time.Second*5)
-	assert.Equal(t, 1, count)                         // Post lock policies don't have a retry, only pre lock do.
+	assert.Equal(t, int64(1), count.Load())           // Post lock policies don't have a retry, only pre lock do.
 	assert.NotEqual(t, "Forced failure", err.Error()) // We should've timed out instead.
 }

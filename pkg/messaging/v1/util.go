@@ -65,6 +65,9 @@ const (
 	errorInfoDomain            = "dapr.io"
 	errorInfoHTTPCodeMetadata  = "http.code"
 	errorInfoHTTPErrorMetadata = "http.error_message"
+
+	CallerIDHeader = DaprHeaderPrefix + "caller-app-id"
+	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
 )
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
@@ -78,18 +81,22 @@ func IsJSONContentType(contentType string) bool {
 
 // MetadataToInternalMetadata converts metadata to dapr internal metadata map.
 func MetadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
-	internalMD := DaprInternalMetadata{}
+	internalMD := make(DaprInternalMetadata, len(md))
 	for k, values := range md {
-		listValue := internalv1pb.ListStringValue{}
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
+			vals := make([]string, len(values))
 			// binary key requires base64 encoded.
-			for _, val := range values {
-				listValue.Values = append(listValue.Values, base64.StdEncoding.EncodeToString([]byte(val)))
+			for i, val := range values {
+				vals[i] = base64.StdEncoding.EncodeToString([]byte(val))
+			}
+			internalMD[k] = &internalv1pb.ListStringValue{
+				Values: vals,
 			}
 		} else {
-			listValue.Values = append(listValue.Values, values...)
+			internalMD[k] = &internalv1pb.ListStringValue{
+				Values: values,
+			}
 		}
-		internalMD[k] = &listValue
 	}
 
 	return internalMD
@@ -195,7 +202,7 @@ func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
 	return strings.HasPrefix(originContentType, GRPCContentType)
 }
 
-func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
+func ReservedGRPCMetadataToDaprPrefixHeader(key string) string {
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 	if key == ":method" || key == ":scheme" || key == ":path" || key == ":authority" {
 		return DaprHeaderPrefix + key[1:]
@@ -230,7 +237,7 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		if len(listVal.Values) == 0 || strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader {
 			continue
 		}
-		setHeader(reservedGRPCMetadataToDaprPrefixHeader(keyName), listVal.Values[0])
+		setHeader(ReservedGRPCMetadataToDaprPrefixHeader(keyName), listVal.Values[0])
 	}
 	if IsGRPCProtocol(internalMD) {
 		// if grpcProtocol, then get grpc-trace-bin value, and attach it in HTTP traceparent and HTTP tracestate header
@@ -430,15 +437,6 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 			md.Set(tracebinMetadata, string(decoded))
 		}
 	}
-}
-
-func cloneBytes(data []byte) []byte {
-	if data == nil {
-		return nil
-	}
-	cloneData := make([]byte, len(data))
-	copy(cloneData, data)
-	return cloneData
 }
 
 // ProtobufToJSON serializes Protobuf message to json format.

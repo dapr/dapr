@@ -12,9 +12,9 @@ spec:
   selector:
     testapp: stateapp
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 3000
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
   type: LoadBalancer
 
 ---
@@ -39,8 +39,8 @@ spec:
         dapr.io/app-port: "3000"
     spec:
       containers:
-      - name: stateapp
-        image: docker.io/YOUR_DOCKER_ALIAS/e2e-stateapp:dev
-        ports:
-        - containerPort: 3000
-        imagePullPolicy: Always
+        - name: stateapp
+          image: docker.io/YOUR_DOCKER_ALIAS/e2e-stateapp:dev
+          ports:
+            - containerPort: 3000
+          imagePullPolicy: Always

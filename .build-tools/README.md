@@ -8,7 +8,7 @@ The CLI is written in Go and based on the [cobra](https://github.com/spf13/cobra
 
 You have two ways to run the CLI:
 
-1. Within the `build-tools` directly, you can run the CLI with `go run .` directly. For example `go run . help` shows the help page.
+1. Within the `build-tools` directly, you can run the CLI with `go run .` directly. For example `go run . help` shows the help page. Make sure that `GOOS` and `GOARCH` are set to the correct values for your system.
 2. You can build a pre-compiled binary by running `make compile-build-tools` in the root folder of this repository. This will build an executable called `build-tools` (or `build-tools.exe` on Windows) in the `build-tools` folder. You can then run the command directly, for example `./build-tools help`
 
 ## Available commands

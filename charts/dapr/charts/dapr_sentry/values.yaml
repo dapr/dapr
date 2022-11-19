@@ -1,13 +1,17 @@
 replicaCount: 1
 logLevel: info
+component: sentry
 
-# Specify full docker image name including registry url to use a custom sentry service image
-# Otherwise, helm chart will use {{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}
+# Override this to use a custom sentry service image.
+# If the image name contains a "/", it is assumed to be a full docker image name, including the registry url and tag.
+# Otherwise, the helm chart will use {{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.global.tag }}
 image:
-  name: ""
+  name: "sentry"
 
 nameOverride: ""
 fullnameOverride: ""
+
+tokenAudience: ""
 
 ports:
   protocol: TCP

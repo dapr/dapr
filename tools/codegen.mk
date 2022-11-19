@@ -1,4 +1,4 @@
-PROTOS = operator placement sentry common runtime internals
+PROTOS = operator placement sentry common runtime internals components
 
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin

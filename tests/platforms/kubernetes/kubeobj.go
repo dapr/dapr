@@ -54,6 +54,9 @@ const (
 
 	// Environmental variable to disable API logging
 	DisableAPILoggingEnvVar = "NO_API_LOGGING"
+
+	// Environmental variable to enable debug logging
+	DebugLoggingEnvVar = "DEBUG_LOGGING"
 )
 
 var (
@@ -68,6 +71,9 @@ var (
 
 	// Controls whether API logging is enabled
 	EnableAPILogging = true
+
+	// Controls whether debug logging is enabled
+	EnableDebugLogging = false
 )
 
 // buildDaprAnnotations creates the Kubernetes Annotations object for dapr test app.
@@ -88,6 +94,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/enable-api-logging":                strconv.FormatBool(EnableAPILogging),
 			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
 		}
+		if EnableDebugLogging {
+			annotationObject["dapr.io/log-level"] = "debug"
+		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = strconv.Itoa(appDesc.AppPort)
 		}
@@ -107,6 +116,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.DaprEnv != "" {
 		annotationObject["dapr.io/env"] = appDesc.DaprEnv
 	}
+	if appDesc.UnixDomainSocketPath != "" {
+		annotationObject["dapr.io/unix-domain-socket-path"] = appDesc.UnixDomainSocketPath
+	}
 	if appDesc.EnableAppHealthCheck {
 		annotationObject["dapr.io/enable-app-health-check"] = "true"
 	}
@@ -121,6 +133,13 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	}
 	if appDesc.AppHealthThreshold != 0 {
 		annotationObject["dapr.io/app-health-threshold"] = strconv.Itoa(appDesc.AppHealthThreshold)
+	}
+	if len(appDesc.PluggableComponents) != 0 {
+		componentNames := make([]string, len(appDesc.PluggableComponents))
+		for idx, component := range appDesc.PluggableComponents {
+			componentNames[idx] = component.Name
+		}
+		annotationObject["dapr.io/pluggable-components"] = strings.Join(componentNames, ",")
 	}
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
@@ -160,6 +179,40 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		}
 	}
 
+	containers := []apiv1.Container{{
+		Name:            appDesc.AppName,
+		Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
+		ImagePullPolicy: apiv1.PullAlways,
+		Ports: []apiv1.ContainerPort{
+			{
+				Name:          "http",
+				Protocol:      apiv1.ProtocolTCP,
+				ContainerPort: DefaultContainerPort,
+			},
+		},
+		Env:          appEnv,
+		VolumeMounts: appDesc.AppVolumeMounts,
+	}}
+
+	containers = append(containers, appDesc.PluggableComponents...)
+
+	nodeSelectorRequirements := appDesc.NodeSelectors
+	if nodeSelectorRequirements == nil {
+		nodeSelectorRequirements = []apiv1.NodeSelectorRequirement{}
+	}
+	nodeSelectorRequirements = append(nodeSelectorRequirements,
+		apiv1.NodeSelectorRequirement{
+			Key:      "kubernetes.io/os",
+			Operator: "In",
+			Values:   []string{TargetOs},
+		},
+		apiv1.NodeSelectorRequirement{
+			Key:      "kubernetes.io/arch",
+			Operator: "In",
+			Values:   []string{TargetArch},
+		},
+	)
+
 	return apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      labels,
@@ -167,39 +220,13 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		},
 		Spec: apiv1.PodSpec{
 			InitContainers: appDesc.InitContainers,
-			Containers: []apiv1.Container{
-				{
-					Name:            appDesc.AppName,
-					Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
-					ImagePullPolicy: apiv1.PullAlways,
-					Ports: []apiv1.ContainerPort{
-						{
-							Name:          "http",
-							Protocol:      apiv1.ProtocolTCP,
-							ContainerPort: DefaultContainerPort,
-						},
-					},
-					Env:          appEnv,
-					VolumeMounts: appDesc.AppVolumeMounts,
-				},
-			},
+			Containers:     containers,
 			Affinity: &apiv1.Affinity{
 				NodeAffinity: &apiv1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
 						NodeSelectorTerms: []apiv1.NodeSelectorTerm{
 							{
-								MatchExpressions: []apiv1.NodeSelectorRequirement{
-									{
-										Key:      "kubernetes.io/os",
-										Operator: "In",
-										Values:   []string{TargetOs},
-									},
-									{
-										Key:      "kubernetes.io/arch",
-										Operator: "In",
-										Values:   []string{TargetArch},
-									},
-								},
+								MatchExpressions: nodeSelectorRequirements,
 							},
 						},
 					},
@@ -211,7 +238,8 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 					Name: appDesc.ImageSecret,
 				},
 			},
-			Volumes: appDesc.Volumes,
+			Volumes:     appDesc.Volumes,
+			Tolerations: appDesc.Tolerations,
 		},
 	}
 }
@@ -335,4 +363,5 @@ func init() {
 		v, _ := os.LookupEnv(DisableAPILoggingEnvVar)
 		EnableAPILogging = !utils.IsTruthy(v)
 	}
+	EnableDebugLogging = utils.IsTruthy(os.Getenv(DebugLoggingEnvVar))
 }

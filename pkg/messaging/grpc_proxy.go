@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
@@ -66,27 +67,27 @@ func NewProxy(connectionFactory messageClientConnection, appID string, localAppA
 
 // Handler returns a Stream Handler for handling requests that arrive for services that are not recognized by the server.
 func (p *proxy) Handler() grpc.StreamHandler {
-	return grpcProxy.TransparentHandler(p.intercept, p.resiliency, p.IsLocal)
+	return grpcProxy.TransparentHandler(p.intercept, p.resiliency, p.IsLocal, grpcProxy.DirectorConnectionFactory(p.connectionFactory))
 }
 
-func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, func(), error) {
+func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(), error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	v := md.Get(diagnostics.GRPCProxyAppIDKey)
 	if len(v) == 0 {
-		return ctx, nil, func() {}, errors.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
+		return ctx, nil, nil, func() {}, errors.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
 	}
 
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 	appID := v[0]
 
 	if p.remoteAppFn == nil {
-		return ctx, nil, func() {}, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
+		return ctx, nil, nil, func() {}, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
 	}
 
 	target, isLocal, err := p.isLocalInternal(appID)
 	if err != nil {
-		return ctx, nil, func() {}, err
+		return ctx, nil, nil, func() {}, err
 	}
 
 	if isLocal {
@@ -94,20 +95,20 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl) //nolint:nosnakecase
 			if !ok {
-				return ctx, nil, func() {}, status.Errorf(codes.PermissionDenied, authError)
+				return ctx, nil, nil, func() {}, status.Errorf(codes.PermissionDenied, authError)
 			}
 		}
 
 		conn, teardown, cErr := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, p.sslEnabled, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
-		return outCtx, conn, teardown, cErr
+		return outCtx, conn, nil, teardown, cErr
 	}
 
 	// proxy to a remote daprd
-	// connection is recreated because its certification may have already been expired
-	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, true, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
+	outCtx = metadata.AppendToOutgoingContext(outCtx, invokev1.CallerIDHeader, p.appID, invokev1.CalleeIDHeader, target.id)
 
-	return outCtx, conn, teardown, cErr
+	return outCtx, conn, &grpcProxy.ProxyTarget{ID: target.id, Namespace: target.namespace, Address: target.address}, teardown, cErr
 }
 
 // SetRemoteAppFn sets a function that helps the proxy resolve an app ID to an actual address.

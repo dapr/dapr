@@ -17,6 +17,9 @@ param namePrefix string
 @description('The location of the resources')
 param location string = resourceGroup().location
 
+@description('If enabled, add a ARM64 pool')
+param enableArm bool = false
+
 @description('If enabled, add a Windows pool')
 param enableWindows bool = false
 
@@ -25,6 +28,9 @@ param linuxVMSize string = 'Standard_DS2_v2'
 
 @description('VM size to use for Windows nodes, if enabled')
 param windowsVMSize string = 'Standard_DS3_v2'
+
+@description('VM size to use for ARM64 nodes if enabled')
+param armVMSize string = 'Standard_D2ps_v5'
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
 param diagLogAnalyticsWorkspaceResourceId string = ''
@@ -37,7 +43,7 @@ param diagStorageResourceId string = ''
 var osDiskSizeGB = 0
 
 // Version of Kubernetes
-var kubernetesVersion = '1.22.6'
+var kubernetesVersion = '1.22.11'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2019-05-01' = {
   name: '${namePrefix}acr'
@@ -124,6 +130,28 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           nodeTaints: []
           enableNodePublicIP: false
           vnetSubnetID: aksVNet::defaultSubnet.id
+          tags: {}
+        }
+      ] : [] , enableArm ? [
+        {
+          name: 'armpol'
+          osDiskSizeGB: osDiskSizeGB
+          enableAutoScaling: false
+          count: 2
+          vmSize: armVMSize
+          osType: 'Linux'
+          type: 'VirtualMachineScaleSets'
+          mode: 'User'
+          maxPods: 110
+          availabilityZones: [
+            '1'
+            '2'
+            '3'
+          ]
+          nodeLabels: {}
+          nodeTaints: []
+          enableNodePublicIP: false
+          vnetSubnetID: enableWindows ? aksVNet::defaultSubnet.id : null
           tags: {}
         }
       ] : [])

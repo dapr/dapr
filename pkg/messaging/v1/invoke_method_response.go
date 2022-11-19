@@ -18,7 +18,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -57,21 +56,23 @@ func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *Inv
 
 // WithRawData sets Message using byte data and content type.
 func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *InvokeMethodResponse {
-	// TODO: Remove the entire block once feature is finalized
-	if contentType == "" && !config.GetNoDefaultContentType() {
-		contentType = JSONContentType
-	}
-
 	imr.r.Message.ContentType = contentType
 
-	// Clone data to prevent GC from deallocating data
-	imr.r.Message.Data = &anypb.Any{Value: cloneBytes(data)}
+	imr.r.Message.Data = &anypb.Any{
+		Value: data,
+	}
 
 	return imr
 }
 
 // WithHeaders sets gRPC response header metadata.
 func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodResponse {
+	imr.r.Headers = MetadataToInternalMetadata(headers)
+	return imr
+}
+
+// WithFastHTTPHeaders populates HTTP response header to gRPC header metadata.
+func (imr *InvokeMethodResponse) WithHTTPHeaders(headers map[string][]string) *InvokeMethodResponse {
 	imr.r.Headers = MetadataToInternalMetadata(headers)
 	return imr
 }
@@ -98,14 +99,14 @@ func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethod
 
 // Status gets Response status.
 func (imr *InvokeMethodResponse) Status() *internalv1pb.Status {
-	return imr.r.GetStatus()
+	return imr.r.Status
 }
 
 // IsHTTPResponse returns true if response status code is http response status.
 func (imr *InvokeMethodResponse) IsHTTPResponse() bool {
 	// gRPC status code <= 15 - https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 	// HTTP status code >= 100 - https://tools.ietf.org/html/rfc2616#section-10
-	return imr.r.GetStatus().Code >= 100
+	return imr.r.Status.Code >= 100
 }
 
 // Proto clones the internal InvokeMethodResponse pb object.
@@ -131,25 +132,16 @@ func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
 // RawData returns content_type and byte array body.
 func (imr *InvokeMethodResponse) RawData() (string, []byte) {
 	m := imr.r.Message
-	if m == nil || m.GetData() == nil {
+	if m == nil || m.Data == nil {
 		return "", nil
 	}
 
-	contentType := m.GetContentType()
-	dataTypeURL := m.GetData().GetTypeUrl()
-	dataValue := m.GetData().GetValue()
-
-	// TODO: Remove outer if once feature is finalized
-	if !config.GetNoDefaultContentType() {
-		// set content_type to application/json only if typeurl is unset and data is given
-		if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
-			contentType = JSONContentType
-		}
-	}
+	contentType := m.ContentType
+	dataTypeURL := m.Data.TypeUrl
 
 	if dataTypeURL != "" {
 		contentType = ProtobufContentType
 	}
 
-	return contentType, dataValue
+	return contentType, m.Data.Value
 }

@@ -1,0 +1,275 @@
+/*
+Copyright 2022 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.components.v1;
+
+import "google/protobuf/any.proto";
+import "dapr/proto/components/v1/common.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
+
+// QueriableStateStore service provides a gRPC interface for querier state store
+// components. It was designed to embed query features to the StateStore Service
+// as a complementary service.
+service QueriableStateStore {
+  // Query performs a query request on the statestore.
+  rpc Query(QueryRequest) returns (QueryResponse) {}
+}
+
+message Sorting {
+  // The key that should be used for sorting.
+  string key = 1;
+  enum Order {
+    ASC = 0;
+    DESC = 1;
+  }
+  // The order that should be used.
+  Order order = 2;
+}
+
+message Pagination {
+  // Maximum of results that should be returned.
+  int64 limit = 1;
+  // The pagination token.
+  string token = 2;
+}
+
+message Query {
+  // Filters that should be applied.
+  map<string, google.protobuf.Any> filter = 1;
+  // The sort order.
+  repeated Sorting sort = 2;
+  // The query pagination params.
+  Pagination pagination = 3;
+}
+
+// QueryRequest is for querying state store.
+message QueryRequest {
+  // The query to be performed.
+  Query query = 1;
+  // Request associated metadata.
+  map<string, string> metadata = 2;
+}
+
+// QueryItem is an object representing a single entry in query results.
+message QueryItem {
+  // The returned item Key.
+  string key = 1;
+  // The returned item Data.
+  bytes data = 2;
+  // The returned item ETag
+  Etag etag = 3;
+  // The returned error string.
+  string error = 4;
+  // The returned contenttype
+  string content_type = 5;
+}
+
+// QueryResponse is the query response.
+message QueryResponse {
+  // The query response items.
+  repeated QueryItem items = 1;
+  // The response token.
+  string token = 2;
+  // Response associated metadata.
+  map<string, string> metadata = 3;
+}
+
+// TransactionalStateStore service provides a gRPC interface for transactional
+// state store components. It was designed to embed transactional features to
+// the StateStore Service as a complementary service.
+service TransactionalStateStore {
+  // Transact executes multiples operation in a transactional environment.
+  rpc Transact(TransactionalStateRequest) returns (TransactionalStateResponse) {
+  }
+}
+
+// TransactionalStateOperation describes operation type, key, and value for
+// transactional operation.
+message TransactionalStateOperation {
+  // request is either delete or set.
+  oneof request {
+    DeleteRequest delete = 1;
+    SetRequest set = 2;
+  }
+}
+
+// TransactionalStateRequest describes a transactional operation against a state
+// store that comprises multiple types of operations The Request field is either
+// a DeleteRequest or SetRequest.
+message TransactionalStateRequest {
+  // Operations that should be performed.
+  repeated TransactionalStateOperation operations = 1;
+  // Request associated metadata.
+  map<string, string> metadata = 2;
+}
+
+// reserved for future-proof extensibility
+message TransactionalStateResponse {}
+
+// StateStore service provides a gRPC interface for state store components.
+service StateStore {
+  // Initializes the state store component with the given metadata.
+  rpc Init(InitRequest) returns (InitResponse) {}
+
+  // Returns a list of implemented state store features.
+  rpc Features(FeaturesRequest) returns (FeaturesResponse) {}
+
+  // Deletes the specified key from the state store.
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+
+  // Get data from the given key.
+  rpc Get(GetRequest) returns (GetResponse) {}
+
+  // Sets the value of the specified key.
+  rpc Set(SetRequest) returns (SetResponse) {}
+
+  // Ping the state store. Used for liveness porpuses.
+  rpc Ping(PingRequest) returns (PingResponse) {}
+
+  // Deletes many keys at once.
+  rpc BulkDelete(BulkDeleteRequest) returns (BulkDeleteResponse) {}
+
+  // Retrieves many keys at once.
+  rpc BulkGet(BulkGetRequest) returns (BulkGetResponse) {}
+
+  // Set the value of many keys at once.
+  rpc BulkSet(BulkSetRequest) returns (BulkSetResponse) {}
+}
+
+// Etag represents a state item version
+message Etag {
+  // value sets the etag value
+  string value = 1;
+}
+
+// StateOptions configures concurrency and consistency for state operations
+message StateOptions {
+  // Enum describing the supported concurrency for state.
+  enum StateConcurrency {
+    CONCURRENCY_UNSPECIFIED = 0;
+    CONCURRENCY_FIRST_WRITE = 1;
+    CONCURRENCY_LAST_WRITE = 2;
+  }
+
+  // Enum describing the supported consistency for state.
+  enum StateConsistency {
+    CONSISTENCY_UNSPECIFIED = 0;
+    CONSISTENCY_EVENTUAL = 1;
+    CONSISTENCY_STRONG = 2;
+  }
+
+  StateConcurrency concurrency = 1;
+  StateConsistency consistency = 2;
+}
+
+// InitRequest is the request for initializing the component.
+message InitRequest {
+  MetadataRequest metadata = 1;
+}
+
+// reserved for future-proof extensibility
+message InitResponse {}
+
+message GetRequest {
+  // The key that should be retrieved.
+  string key = 1;
+  // Request associated metadata.
+  map<string, string> metadata = 2;
+  // The get consistency level.
+  StateOptions.StateConsistency consistency = 3;
+}
+
+message GetResponse {
+  // The data of the GetRequest response.
+  bytes data = 1;
+  // The etag of the associated key.
+  Etag etag = 2;
+  // Metadata related to the response.
+  map<string, string> metadata = 3;
+  // The response data contenttype
+  string content_type = 4;
+}
+
+message DeleteRequest {
+  // The key that should be deleted.
+  string key = 1;
+  // The etag is used as a If-Match header, to allow certain levels of
+  // consistency.
+  Etag etag = 2;
+  // The request metadata.
+  map<string, string> metadata = 3;
+  StateOptions options = 4;
+}
+
+// reserved for future-proof extensibility
+message DeleteResponse {}
+
+message SetRequest {
+  // The key that should be set.
+  string key = 1;
+  // Value is the desired content of the given key.
+  bytes value = 2;
+  // The etag is used as a If-Match header, to allow certain levels of
+  // consistency.
+  Etag etag = 3;
+  // The request metadata.
+  map<string, string> metadata = 4;
+  // The Set request options.
+  StateOptions options = 5;
+  // The data contenttype
+  string content_type = 6;
+}
+
+// reserved for future-proof extensibility
+message SetResponse {}
+
+message BulkDeleteRequest {
+  repeated DeleteRequest items = 1;
+}
+
+// reserved for future-proof extensibility
+message BulkDeleteResponse {}
+
+message BulkGetRequest {
+  repeated GetRequest items = 1;
+}
+
+message BulkStateItem {
+  // The key of the fetched item.
+  string key = 1;
+  // The associated data of the fetched item.
+  bytes data = 2;
+  // The item ETag
+  Etag etag = 3;
+  // A fetch error if there's some.
+  string error = 4;
+  // The State Item metadata.
+  map<string, string> metadata = 5;
+  // The data contenttype
+  string content_type = 6;
+}
+
+message BulkGetResponse {
+  repeated BulkStateItem items = 1;
+  bool got = 2;
+}
+
+message BulkSetRequest {
+  repeated SetRequest items = 1;
+}
+
+// reserved for future-proof extensibility
+message BulkSetResponse {}

@@ -25,6 +25,9 @@ E2E tests are designed for verifying the functional correctness by replicating e
     export DAPR_NAMESPACE=dapr-tests
     export DAPR_MTLS_ENABLED=true
 
+    # If you want to enable debug logs for the daprd container set this
+    # export DEBUG_LOGGING=true
+
     # If you want to run tests against Windows or arm kubernetes clusters, uncomment and set these
     # export TARGET_OS=linux
     # export TARGET_ARCH=amd64
@@ -33,6 +36,10 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # or vice versa) uncomment and set these
     # export GOOS=linux
     # export GOARCH=amd64
+
+    # If you want to use a single container image `dapr` instead of individual images 
+    # (like sentry, injector, daprd, etc.), uncomment and set this.
+    # export ONLY_DAPR_IMAGE=true
 
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube

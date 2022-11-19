@@ -36,6 +36,8 @@ type Configuration struct {
 // ConfigurationSpec is the spec for an configuration.
 type ConfigurationSpec struct {
 	// +optional
+	AppHTTPPipelineSpec PipelineSpec `json:"appHttpPipeline,omitempty"`
+	// +optional
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
@@ -55,6 +57,8 @@ type ConfigurationSpec struct {
 	APISpec APISpec `json:"api,omitempty"`
 	// +optional
 	ComponentsSpec ComponentsSpec `json:"components,omitempty"`
+	// +optional
+	LoggingSpec LoggingSpec `json:"logging,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -205,6 +209,25 @@ type ConfigurationList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Configuration `json:"items"`
+}
+
+// LoggingSpec defines the configuration for logging.
+type LoggingSpec struct {
+	// Configure API logging.
+	// +optional
+	APILogging APILoggingSpec `json:"apiLogging" yaml:"apiLogging"`
+}
+
+// APILoggingSpec defines the configuration for API logging.
+type APILoggingSpec struct {
+	// Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly.
+	// The default value is false.
+	// +optional
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// If true, health checks are not reported in API logs. Default: false.
+	// This option has no effect if API logging is disabled.
+	// +optional
+	OmitHealthChecks bool `json:"omitHealthChecks" yaml:"omitHealthChecks"`
 }
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value.
