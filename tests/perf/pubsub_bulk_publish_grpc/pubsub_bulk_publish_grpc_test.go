@@ -107,7 +107,7 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 
 			// Perform baseline test - publish messages with individual Publish calls
 			p.Grpc = true
-			p.Dapr = fmt.Sprintf("capability=pubsub,target=dapr,method=publish-multi,store=%s,topic=topic123,contenttype=text/plain,numevents=%d,rawpayload=%s", tc.pubsub, numMessagesToPublish, strconv.FormatBool(tc.isRawPayload))
+			p.Dapr = fmt.Sprintf("capability=pubsub,target=dapr,method=publish,store=%s,topic=topic123,contenttype=text/plain,numevents=%d,rawpayload=%s", tc.pubsub, numMessagesToPublish, strconv.FormatBool(tc.isRawPayload))
 			p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 			body, err := json.Marshal(&p)
 			require.NoError(t, err)
