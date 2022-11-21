@@ -43,6 +43,7 @@ jobs:
       ARCHIVE_OUTDIR: dist/archives
       TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-2019, macOS-latest]
         target_arch: [arm, arm64, amd64]

@@ -45,7 +45,7 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 // DirectMessaging is the API interface for invoking a remote app.
 type DirectMessaging interface {
@@ -53,20 +53,20 @@ type DirectMessaging interface {
 }
 
 type directMessaging struct {
-	appChannel          channel.AppChannel
-	connectionCreatorFn messageClientConnection
-	appID               string
-	mode                modes.DaprMode
-	grpcPort            int
-	namespace           string
-	resolver            nr.Resolver
-	hostAddress         string
-	hostName            string
-	maxRequestBodySize  int
-	proxy               Proxy
-	readBufferSize      int
-	resiliency          resiliency.Provider
-	isResiliencyEnabled bool
+	appChannel           channel.AppChannel
+	connectionCreatorFn  messageClientConnection
+	appID                string
+	mode                 modes.DaprMode
+	grpcPort             int
+	namespace            string
+	resolver             nr.Resolver
+	hostAddress          string
+	hostName             string
+	maxRequestBodySizeMB int
+	proxy                Proxy
+	readBufferSize       int
+	resiliency           resiliency.Provider
+	isResiliencyEnabled  bool
 }
 
 type remoteApp struct {
@@ -97,20 +97,20 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:               opts.AppID,
-		namespace:           opts.Namespace,
-		grpcPort:            opts.Port,
-		mode:                opts.Mode,
-		appChannel:          opts.AppChannel,
-		connectionCreatorFn: opts.ClientConnFn,
-		resolver:            opts.Resolver,
-		maxRequestBodySize:  opts.MaxRequestBodySize,
-		proxy:               opts.Proxy,
-		readBufferSize:      opts.ReadBufferSize,
-		resiliency:          opts.Resiliency,
-		isResiliencyEnabled: opts.IsResiliencyEnabled,
-		hostAddress:         hAddr,
-		hostName:            hName,
+		appID:                opts.AppID,
+		namespace:            opts.Namespace,
+		grpcPort:             opts.Port,
+		mode:                 opts.Mode,
+		appChannel:           opts.AppChannel,
+		connectionCreatorFn:  opts.ClientConnFn,
+		resolver:             opts.Resolver,
+		maxRequestBodySizeMB: opts.MaxRequestBodySize,
+		proxy:                opts.Proxy,
+		readBufferSize:       opts.ReadBufferSize,
+		resiliency:           opts.Resiliency,
+		isResiliencyEnabled:  opts.IsResiliencyEnabled,
+		hostAddress:          hAddr,
+		hostName:             hName,
 	}
 
 	if dm.proxy != nil {
@@ -154,7 +154,7 @@ func (d *directMessaging) invokeWithRetry(
 	numRetries int,
 	backoffInterval time.Duration,
 	app remoteApp,
-	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
+	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
@@ -165,23 +165,22 @@ func (d *directMessaging) invokeWithRetry(
 			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
 			var resp *invokev1.InvokeMethodResponse
 			err := policy(func(ctx context.Context) (rErr error) {
+				var teardown func(destroy bool)
 				retriesExhaustedPath = false
-				resp, rErr = fn(ctx, app.id, app.namespace, app.address, req)
+				resp, teardown, rErr = fn(ctx, app.id, app.namespace, app.address, req)
 				if rErr == nil {
+					teardown(false)
 					return nil
 				}
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
-					_, teardown, connerr := d.connectionCreatorFn(ctx, app.address, app.id, app.namespace, false, true, false)
-					defer teardown()
-					if connerr != nil {
-						nullifyResponsePath = true
-						return backoff.Permanent(connerr)
-					}
+					// Destroy the connection and force a re-connection on the next attempt
+					teardown(true)
 					retriesExhaustedPath = true
 					return rErr
 				}
+				teardown(false)
 				return backoff.Permanent(rErr)
 			})
 			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
@@ -195,11 +194,15 @@ func (d *directMessaging) invokeWithRetry(
 
 			return resp, err
 		}
-		return fn(ctx, app.id, app.namespace, app.address, req)
+
+		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
+		teardown(false)
+		return resp, err
 	}
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, app.id, app.namespace, app.address, req)
+		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
+			teardown(false)
 			return resp, nil
 		}
 		log.Debugf("retry count: %d, grpc call failed, ns: %s, addr: %s, appid: %s, err: %s",
@@ -208,13 +211,11 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, teardown, connerr := d.connectionCreatorFn(context.TODO(), app.address, app.id, app.namespace, false, true, false)
-			defer teardown()
-			if connerr != nil {
-				return nil, connerr
-			}
+			// Destroy the connection and force a re-connection on the next attempt
+			teardown(true)
 			continue
 		}
+		teardown(false)
 		return resp, err
 	}
 	return nil, errors.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
@@ -235,11 +236,10 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
-	defer teardown()
+func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
+	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ctx = d.setContextSpan(ctx)
@@ -251,14 +251,32 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
 	var opts []grpc.CallOption
-	opts = append(opts, grpc.MaxCallRecvMsgSize(d.maxRequestBodySize*1024*1024), grpc.MaxCallSendMsgSize(d.maxRequestBodySize*1024*1024))
+	opts = append(
+		opts,
+		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB<<20),
+		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB<<20),
+	)
 
-	resp, err := clientV1.CallLocal(ctx, req.Proto(), opts...)
+	start := time.Now()
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+
+	var resp *internalv1pb.InternalInvokeResponse
+	defer func() {
+		if resp != nil {
+			diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, resp.Status.Code, start)
+		}
+	}()
+
+	resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
 	if err != nil {
-		return nil, err
+		return nil, teardown, err
 	}
 
-	return invokev1.InternalInvokeResponse(resp)
+	imr, err := invokev1.InternalInvokeResponse(resp)
+	if err != nil {
+		return nil, nil, err
+	}
+	return imr, teardown, err
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {

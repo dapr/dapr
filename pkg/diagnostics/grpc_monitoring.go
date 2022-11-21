@@ -21,11 +21,11 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 )
 
 // This implementation is inspired by
@@ -290,15 +290,16 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 // StreamingServerInterceptor is a stream interceptor for gRPC proxying calls that arrive from the application to Dapr
 func (g *grpcMetrics) StreamingServerInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		md, _ := metadata.FromIncomingContext(ss.Context())
-		vals := md.Get(GRPCProxyAppIDKey)
-		if len(vals) == 0 {
+		ctx := ss.Context()
+		md, _ := metadata.FromIncomingContext(ctx)
+		vals, ok := md[GRPCProxyAppIDKey]
+		if !ok || len(vals) == 0 {
 			return handler(srv, ss)
 		}
 
 		now := time.Now()
 		err := handler(srv, ss)
-		g.StreamServerRequestSent(ss.Context(), info.FullMethod, status.Code(err).String(), now)
+		g.StreamServerRequestSent(ctx, info.FullMethod, status.Code(err).String(), now)
 
 		return err
 	}
@@ -307,16 +308,16 @@ func (g *grpcMetrics) StreamingServerInterceptor() grpc.StreamServerInterceptor 
 // StreamingClientInterceptor is a stream interceptor for gRPC proxying calls that arrive from a remote Dapr sidecar
 func (g *grpcMetrics) StreamingClientInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		md, _ := metadata.FromIncomingContext(ss.Context())
-
-		vals := md.Get(GRPCProxyAppIDKey)
-		if len(vals) == 0 {
+		ctx := ss.Context()
+		md, _ := metadata.FromIncomingContext(ctx)
+		vals, ok := md[GRPCProxyAppIDKey]
+		if !ok || len(vals) == 0 {
 			return handler(srv, ss)
 		}
 
 		now := time.Now()
 		err := handler(srv, ss)
-		g.StreamClientRequestSent(ss.Context(), info.FullMethod, status.Code(err).String(), now)
+		g.StreamClientRequestSent(ctx, info.FullMethod, status.Code(err).String(), now)
 
 		return err
 	}
