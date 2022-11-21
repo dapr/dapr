@@ -1,0 +1,122 @@
+/*
+Copyright 2022 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.components.v1;
+
+import "dapr/proto/components/v1/common.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
+
+// Interface for input bindings
+service InputBinding {
+  // Initializes the inputbinding component component with the given metadata.
+  rpc Init(InputBindingInitRequest) returns (InputBindingInitResponse) {}
+
+  // Establishes a stream with the server, which sends messages down to the
+  // client. The client streams acknowledgements back to the server. The server
+  // will close the stream and return the status on any error. In case of closed
+  // connection, the client should re-establish the stream.
+  rpc Read(stream ReadRequest) returns (stream ReadResponse) {}
+
+  // Ping the InputBinding. Used for liveness porpuses.
+  rpc Ping(PingRequest) returns (PingResponse) {}
+}
+
+service OutputBinding {
+  // Initializes the outputbinding component component with the given metadata.
+  rpc Init(OutputBindingInitRequest) returns (OutputBindingInitResponse) {}
+
+  // Invoke remote systems with optional payloads.
+  rpc Invoke(InvokeRequest) returns (InvokeResponse) {}
+
+  // ListOperations list system supported operations.
+  rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse) {}
+
+  // Ping the OutputBinding. Used for liveness porpuses.
+  rpc Ping(PingRequest) returns (PingResponse) {}
+}
+// reserved for future-proof extensibility
+message ListOperationsRequest {}
+
+message ListOperationsResponse {
+  // the list of all supported component operations.
+  repeated string operations = 1;
+}
+
+// InputBindingInitRequest is the request for initializing the input binding
+// component.
+message InputBindingInitRequest {
+  // The metadata request.
+  MetadataRequest metadata = 1;
+}
+
+// reserved for future-proof extensibility
+message InputBindingInitResponse {}
+
+// OutputBindingInitRequest is the request for initializing the output binding
+// component.
+message OutputBindingInitRequest {
+  // The metadata request.
+  MetadataRequest metadata = 1;
+}
+
+// reserved for future-proof extensibility
+message OutputBindingInitResponse {}
+
+// Used for describing errors when ack'ing messages.
+message AckResponseError {
+  string message = 1;
+}
+
+message ReadRequest {
+  // The handle response.
+  bytes response_data = 1;
+  // The unique message ID.
+  string message_id = 2;
+  // Optional, should not be fulfilled when the message was successfully
+  // handled.
+  AckResponseError response_error = 3;
+}
+
+message ReadResponse {
+  // The Read binding Data.
+  bytes data = 1;
+  // The message metadata
+  map<string, string> metadata = 2;
+  // The message content type.
+  string content_type = 3;
+  // The {transient} message ID used for ACK-ing it later.
+  string message_id = 4;
+}
+
+// Used for invoking systems with optional payload.
+message InvokeRequest {
+  // The invoke payload.
+  bytes data = 1;
+  // The invoke metadata.
+  map<string, string> metadata = 2;
+  // The system supported operation.
+  string operation = 3;
+}
+
+// Response from the invoked system.
+message InvokeResponse {
+  // The response payload.
+  bytes data = 1;
+  // The response metadata.
+  map<string, string> metadata = 2;
+  // The response content-type.
+  string content_type = 3;
+}

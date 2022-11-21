@@ -1,10 +1,12 @@
+enabled: true
 replicaCount: 1
 logLevel: info
+component: dashboard
 
 image:
   registry: docker.io/daprio
   name: dashboard
-  tag: "0.10.0"
+  tag: "0.11.0"
   imagePullSecrets: ""
 
 nameOverride: ""

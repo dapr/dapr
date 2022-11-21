@@ -5,15 +5,19 @@ import (
 	"time"
 
 	"go.uber.org/ratelimit"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/utils"
 )
 
 const (
-	sidecarContainerName     = "daprd"
-	daprEnabledAnnotationKey = "dapr.io/enabled"
+	sidecarContainerName          = "daprd"
+	daprEnabledAnnotationKey      = "dapr.io/enabled"
+	sidecarInjectorDeploymentName = "dapr-sidecar-injector"
+	sidecarInjectorWaitInterval   = 5 * time.Second // How long to wait for the sidecar injector deployment to be up and running before retrying
 )
 
 // DaprWatchdog is a controller that periodically polls all pods and ensures that they are in the correct state.
@@ -68,11 +72,21 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
-			case <-workCh:
-				dw.listPods(ctx)
+			case _, ok := <-workCh:
+				if !ok {
+					continue
+				}
+				ok = dw.listPods(ctx)
 				if firstCompleteCh != nil {
-					close(firstCompleteCh)
-					firstCompleteCh = nil
+					if ok {
+						close(firstCompleteCh)
+						firstCompleteCh = nil
+					} else {
+						// Ensure that there's at least one successful run
+						// If it failed, retry after a bit
+						time.Sleep(sidecarInjectorWaitInterval)
+						workCh <- struct{}{}
+					}
 				}
 			}
 		}
@@ -115,17 +129,36 @@ forloop:
 	return nil
 }
 
-func (dw *DaprWatchdog) listPods(ctx context.Context) {
+func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 	log.Infof("DaprWatchdog started checking pods")
+
+	// Look for the dapr-sidecar-injector deployment first and ensure it's running
+	// Otherwise, the pods would come back up without the sidecar again
+	deployment := &appsv1.DeploymentList{}
+	err := dw.client.List(ctx, deployment, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(
+			map[string]string{"app": sidecarInjectorDeploymentName},
+		),
+	})
+	if err != nil {
+		log.Errorf("Failed to list pods to get dapr-sidecar-injector. Error: %v", err)
+		return false
+	}
+	if len(deployment.Items) == 0 || deployment.Items[0].Status.ReadyReplicas < 1 {
+		log.Warnf("Could not find a running dapr-sidecar-injector; will retry later")
+		return false
+	}
+
+	log.Debugf("Found running dapr-sidecar-injector container")
 
 	// Request the list of pods
 	// We are not using pagination because we may be deleting pods during the iterations
 	// The client implements some level of caching anyways
 	pod := &corev1.PodList{}
-	err := dw.client.List(ctx, pod)
+	err = dw.client.List(ctx, pod)
 	if err != nil {
 		log.Errorf("Failed to list pods. Error: %v", err)
-		return
+		return false
 	}
 
 	for _, v := range pod.Items {
@@ -173,4 +206,6 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 	}
 
 	log.Infof("DaprWatchdog completed checking pods")
+
+	return true
 }

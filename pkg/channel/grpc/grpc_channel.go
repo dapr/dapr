@@ -16,10 +16,12 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -31,29 +33,31 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
-	client             *grpc.ClientConn
-	baseAddress        string
-	ch                 chan struct{}
-	tracingSpec        config.TracingSpec
-	appMetadataToken   string
-	maxRequestBodySize int
-	readBufferSize     int
-	appHealth          *apphealth.AppHealth
+	appCallbackClient    runtimev1pb.AppCallbackClient
+	appHealthClient      runtimev1pb.AppCallbackHealthCheckClient
+	baseAddress          string
+	ch                   chan struct{}
+	tracingSpec          config.TracingSpec
+	appMetadataToken     string
+	maxRequestBodySizeMB int
+	appHealth            *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
 func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int) *Channel {
+	// readBufferSize is unused
 	c := &Channel{
-		client:             conn,
-		baseAddress:        fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
-		tracingSpec:        spec,
-		appMetadataToken:   auth.GetAppToken(),
-		maxRequestBodySize: maxRequestBodySize,
-		readBufferSize:     readBufferSize,
+		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
+		appHealthClient:      runtimev1pb.NewAppCallbackHealthCheckClient(conn),
+		baseAddress:          net.JoinHostPort(channel.DefaultChannelAddress, strconv.Itoa(port)),
+		tracingSpec:          spec,
+		appMetadataToken:     auth.GetAppToken(),
+		maxRequestBodySizeMB: maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -99,23 +103,27 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		g.ch <- struct{}{}
 	}
 
-	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
-	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
+	md := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
 
 	if g.appMetadataToken != "" {
-		grpcMetadata.Set(auth.APITokenHeader, g.appMetadataToken)
+		md.Set(authConsts.APITokenHeader, g.appMetadataToken)
 	}
 
 	// Prepare gRPC Metadata
-	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
+	ctx = grpcMetadata.NewOutgoingContext(context.Background(), md)
 
-	var header, trailer metadata.MD
+	var header, trailer grpcMetadata.MD
 
 	var opts []grpc.CallOption
-	opts = append(opts, grpc.Header(&header), grpc.Trailer(&trailer),
-		grpc.MaxCallSendMsgSize(g.maxRequestBodySize*1024*1024), grpc.MaxCallRecvMsgSize(g.maxRequestBodySize*1024*1024))
+	opts = append(
+		opts,
+		grpc.Header(&header),
+		grpc.Trailer(&trailer),
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySizeMB<<20),
+		grpc.MaxCallRecvMsgSize(g.maxRequestBodySizeMB<<20),
+	)
 
-	resp, err := clientV1.OnInvoke(ctx, req.Message(), opts...)
+	resp, err := g.appCallbackClient.OnInvoke(ctx, req.Message(), opts...)
 
 	if g.ch != nil {
 		<-g.ch
@@ -138,8 +146,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 // HealthProbe performs a health probe.
 func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
-	clientV1 := runtimev1pb.NewAppCallbackHealthCheckClient(g.client)
-	_, err := clientV1.HealthCheck(ctx, &emptypb.Empty{})
+	_, err := g.appHealthClient.HealthCheck(ctx, &emptypb.Empty{})
 
 	// Errors here are network-level errors, so we are not returning them as errors
 	// Instead, we just return a failed probe

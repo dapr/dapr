@@ -293,7 +293,7 @@ func (p *ActorPlacement) Start() {
 // Stop shuts down server stream gracefully.
 func (p *ActorPlacement) Stop() {
 	// CAS to avoid stop more than once.
-	if p.shutdown.CAS(false, true) {
+	if p.shutdown.CompareAndSwap(false, true) {
 		p.closeStream()
 	}
 	p.shutdownConnLoop.Wait()
@@ -417,7 +417,7 @@ func (p *ActorPlacement) blockPlacements() {
 }
 
 func (p *ActorPlacement) unblockPlacements() {
-	if p.tableIsBlocked.CAS(true, false) {
+	if p.tableIsBlocked.CompareAndSwap(true, false) {
 		close(p.unblockSignal)
 	}
 }

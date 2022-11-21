@@ -30,26 +30,32 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
-const (
-	operatorCallTimeout          = time.Second * 5
-	operatorMaxRetries           = 100
-	AllowAccess                  = "allow"
-	DenyAccess                   = "deny"
-	DefaultTrustDomain           = "public"
-	DefaultNamespace             = "default"
-	ActionPolicyApp              = "app"
-	ActionPolicyGlobal           = "global"
-	SpiffeIDPrefix               = "spiffe://"
-	HTTPProtocol                 = "http"
-	GRPCProtocol                 = "grpc"
-	Resiliency           Feature = "Resiliency"
-	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
-	AppHealthCheck       Feature = "AppHealthCheck"
-)
+// Feature Flags section
 
 type Feature string
 
-var noDefaultContentTypeValue = false
+const (
+	// Enable support for resiliency
+	Resiliency Feature = "Resiliency"
+	// Enables the app health check feature, allowing the use of the CLI flags
+	AppHealthCheck Feature = "AppHealthCheck"
+)
+
+// end feature flags section
+
+const (
+	operatorCallTimeout = time.Second * 5
+	operatorMaxRetries  = 100
+	AllowAccess         = "allow"
+	DenyAccess          = "deny"
+	DefaultTrustDomain  = "public"
+	DefaultNamespace    = "default"
+	ActionPolicyApp     = "app"
+	ActionPolicyGlobal  = "global"
+	SpiffeIDPrefix      = "spiffe://"
+	HTTPProtocol        = "http"
+	GRPCProtocol        = "grpc"
+)
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
@@ -84,16 +90,18 @@ type AccessControlListOperationAction struct {
 }
 
 type ConfigurationSpec struct {
-	HTTPPipelineSpec   PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
-	TracingSpec        TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec           MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
-	MetricSpec         MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
-	Secrets            SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
-	AccessControlSpec  AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
-	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
-	Features           []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
-	APISpec            APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
-	ComponentsSpec     ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
+	HTTPPipelineSpec    PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	AppHTTPPipelineSpec PipelineSpec       `json:"appHttpPipeline,omitempty" yaml:"appHttpPipeline,omitempty"`
+	TracingSpec         TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	MTLSSpec            MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
+	MetricSpec          MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
+	Secrets             SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+	AccessControlSpec   AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
+	NameResolutionSpec  NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
+	Features            []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
+	APISpec             APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
+	ComponentsSpec      ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
+	LoggingSpec         LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -218,6 +226,22 @@ type ComponentsSpec struct {
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
 }
 
+// LoggingSpec defines the configuration for logging.
+type LoggingSpec struct {
+	// Configure API logging.
+	APILogging APILoggingSpec `json:"apiLogging,omitempty" yaml:"apiLogging,omitempty"`
+}
+
+// APILoggingSpec defines the configuration for API logging.
+type APILoggingSpec struct {
+	// Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly.
+	// The default value is false.
+	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	// If true, health checks are not reported in API logs. Default: false.
+	// This option has no effect if API logging is disabled.
+	OmitHealthChecks bool `json:"omitHealthChecks,omitempty" yaml:"omitHealthChecks,omitempty"`
+}
+
 // LoadDefaultConfiguration returns the default config.
 func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
@@ -264,8 +288,6 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 		return nil, string(b), err
 	}
 
-	noDefaultContentTypeValue = IsFeatureEnabled(conf.Spec.Features, NoDefaultContentType)
-
 	return conf, string(b), nil
 }
 
@@ -292,8 +314,6 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 	if err != nil {
 		return nil, err
 	}
-
-	noDefaultContentTypeValue = IsFeatureEnabled(conf.Spec.Features, NoDefaultContentType)
 
 	return conf, nil
 }
@@ -360,16 +380,4 @@ func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
 		}
 	}
 	return false
-}
-
-// GetNoDefaultContentType returns the value of the noDefaultContentType flag.
-// It requires the configuration to be loaded, otherwise it returns false.
-func GetNoDefaultContentType() bool {
-	return noDefaultContentTypeValue
-}
-
-// SetNoDefaultContentType sets the value of noDefaultContentTypeValue.
-// This should only be used for testing.
-func SetNoDefaultContentType(val bool) {
-	noDefaultContentTypeValue = val
 }

@@ -24,9 +24,9 @@ import (
 	"strings"
 	"sync"
 
-	cl "actorload/pkg/actor/client"
-	http_client "actorload/pkg/actor/client/http"
-	actor_rt "actorload/pkg/actor/runtime"
+	cl "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client"
+	httpClient "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client/http"
+	rt "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/runtime"
 
 	"github.com/go-chi/chi"
 )
@@ -41,7 +41,7 @@ type ActorService struct {
 
 	activeActors sync.Map
 	actorClient  cl.ActorClient
-	config       actor_rt.DaprConfig
+	config       rt.DaprConfig
 
 	activationHandler   ActorActivationHandler
 	deactivationHandler ActorActivationHandler
@@ -49,11 +49,11 @@ type ActorService struct {
 	invocationMap map[string]ActorInvokeFn
 }
 
-func NewActorService(port int, config *actor_rt.DaprConfig) *ActorService {
-	var daprConfig actor_rt.DaprConfig
+func NewActorService(port int, config *rt.DaprConfig) *ActorService {
+	var daprConfig rt.DaprConfig
 
 	if config == nil {
-		daprConfig = actor_rt.DaprConfig{
+		daprConfig = rt.DaprConfig{
 			Entities:                []string{},
 			ActorIdleTimeout:        "60m",
 			ActorScanInterval:       "10s",
@@ -67,7 +67,7 @@ func NewActorService(port int, config *actor_rt.DaprConfig) *ActorService {
 	return &ActorService{
 		address:             fmt.Sprintf("127.0.0.1:%d", port),
 		server:              nil,
-		actorClient:         http_client.NewClient(),
+		actorClient:         httpClient.NewClient(),
 		invocationMap:       map[string]ActorInvokeFn{},
 		config:              daprConfig,
 		activationHandler:   nil,

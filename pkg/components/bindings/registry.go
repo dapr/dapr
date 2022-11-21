@@ -31,11 +31,7 @@ type Registry struct {
 }
 
 // DefaultRegistry is the singleton with the registry.
-var DefaultRegistry *Registry
-
-func init() {
-	DefaultRegistry = NewRegistry()
-}
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry is used to create new bindings.
 func NewRegistry() *Registry {
@@ -100,6 +96,7 @@ func (b *Registry) getInputBinding(name, version string) (func() bindings.InputB
 			return b.wrapInputBindingFn(bindingFn), true
 		}
 	}
+
 	return nil, false
 }
 
@@ -116,6 +113,7 @@ func (b *Registry) getOutputBinding(name, version string) (func() bindings.Outpu
 			return b.wrapOutputBindingFn(bindingFn), true
 		}
 	}
+
 	return nil, false
 }
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,7 +14,10 @@ limitations under the License.
 package injector
 
 import (
+	"encoding/json"
+
 	"github.com/kelseyhightower/envconfig"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/utils"
 )
@@ -29,6 +32,10 @@ type Config struct {
 	KubeClusterDomain           string `envconfig:"KUBE_CLUSTER_DOMAIN"`
 	AllowedServiceAccounts      string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
+	RunAsNonRoot                string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
+	ReadOnlyRootFilesystem      string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
+
+	parsedEntrypointTolerations []corev1.Toleration
 }
 
 // NewConfigWithDefaults returns a Config object with default values already
@@ -59,5 +66,57 @@ func GetConfig() (Config, error) {
 			c.KubeClusterDomain = clusterDomain
 		}
 	}
+
+	c.parseTolerationsJSON()
+
 	return c, nil
+}
+
+func (c Config) GetPullPolicy() corev1.PullPolicy {
+	switch c.SidecarImagePullPolicy {
+	case "Always":
+		return corev1.PullAlways
+	case "Never":
+		return corev1.PullNever
+	case "IfNotPresent":
+		return corev1.PullIfNotPresent
+	default:
+		return corev1.PullIfNotPresent
+	}
+}
+
+func (c *Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
+	return c.parsedEntrypointTolerations
+}
+
+func (c *Config) GetRunAsNonRoot() bool {
+	// Default is true if empty
+	if c.RunAsNonRoot == "" {
+		return true
+	}
+	return utils.IsTruthy(c.RunAsNonRoot)
+}
+
+func (c *Config) GetReadOnlyRootFilesystem() bool {
+	// Default is true if empty
+	if c.ReadOnlyRootFilesystem == "" {
+		return true
+	}
+	return utils.IsTruthy(c.ReadOnlyRootFilesystem)
+}
+
+func (c *Config) parseTolerationsJSON() {
+	if c.IgnoreEntrypointTolerations == "" {
+		return
+	}
+
+	// If the string contains an invalid value, log a warning and continue.
+	ts := []corev1.Toleration{}
+	err := json.Unmarshal([]byte(c.IgnoreEntrypointTolerations), &ts)
+	if err != nil {
+		log.Warnf("couldn't parse entrypoint tolerations (%s): %v", c.IgnoreEntrypointTolerations, err)
+		return
+	}
+
+	c.parsedEntrypointTolerations = ts
 }

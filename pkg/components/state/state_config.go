@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 )
@@ -34,8 +35,9 @@ const (
 )
 
 var (
-	statesConfiguration = map[string]*StoreConfiguration{}
-	namespace           = os.Getenv("NAMESPACE")
+	statesConfigurationLock sync.Mutex
+	statesConfiguration     = map[string]*StoreConfiguration{}
+	namespace               = os.Getenv("NAMESPACE")
 )
 
 type StoreConfiguration struct {
@@ -54,6 +56,8 @@ func SaveStateConfiguration(storeName string, metadata map[string]string) error 
 		}
 	}
 
+	statesConfigurationLock.Lock()
+	defer statesConfigurationLock.Unlock()
 	statesConfiguration[storeName] = &StoreConfiguration{keyPrefixStrategy: strategy}
 	return nil
 }
@@ -96,6 +100,8 @@ func GetOriginalStateKey(modifiedStateKey string) string {
 }
 
 func getStateConfiguration(storeName string) *StoreConfiguration {
+	statesConfigurationLock.Lock()
+	defer statesConfigurationLock.Unlock()
 	c := statesConfiguration[storeName]
 	if c == nil {
 		c = &StoreConfiguration{keyPrefixStrategy: strategyDefault}

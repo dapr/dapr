@@ -22,16 +22,14 @@ import (
 	"strings"
 	"time"
 
-	actor_cl "actorload/pkg/actor/client"
-	cl "actorload/pkg/actor/client"
-	http_client "actorload/pkg/actor/client/http"
-
 	"fortio.org/fortio/log"
 	"fortio.org/fortio/periodic"
 	"fortio.org/fortio/stats"
 	"github.com/google/uuid"
 
-	telemetry "actorload/pkg/telemetry"
+	actorClient "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client"
+	httpClient "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client/http"
+	telemetry "github.com/dapr/dapr/tests/apps/actorload/pkg/telemetry"
 )
 
 const (
@@ -44,7 +42,7 @@ const (
 type actorLoadTestRunnable struct {
 	periodic.RunnerResults
 
-	client            cl.ActorClient
+	client            actorClient.ActorClient
 	currentActorIndex int
 
 	payload []byte
@@ -78,7 +76,7 @@ func (lt *actorLoadTestRunnable) Run(t int) {
 		lt.testActorMethod,
 		"application/json", lt.payload)
 	if err != nil {
-		if actorErr, ok := err.(*http_client.DaprActorClientError); ok {
+		if actorErr, ok := err.(*httpClient.DaprActorClientError); ok {
 			code = actorErr.Code
 		} else {
 			code = 500
@@ -122,7 +120,7 @@ func generatePayload(length int) []byte {
 	return payload
 }
 
-func activateRandomActors(client actor_cl.ActorClient, actorType string, maxActor int) []string {
+func activateRandomActors(client actorClient.ActorClient, actorType string, maxActor int) []string {
 	activatedActors := []string{}
 	for i := 0; i < maxActor; i++ {
 		actorID := strings.Replace(uuid.New().String(), "-", "", -1)
@@ -143,7 +141,7 @@ func activateRandomActors(client actor_cl.ActorClient, actorType string, maxActo
 }
 
 func startLoadTest(opt *actorLoadTestOptions, telemetryClient *telemetry.TelemetryClient) (*actorLoadTestRunnable, error) {
-	client := http_client.NewClient()
+	client := httpClient.NewClient()
 	defer client.Close()
 
 	// Wait until Dapr runtime endpoint is available.
@@ -180,7 +178,7 @@ func startLoadTest(opt *actorLoadTestOptions, telemetryClient *telemetry.Telemet
 	// Set up parallel test threads.
 	for i := 0; i < opt.NumThreads; i++ {
 		r.Options().Runners[i] = &testRunnable[i]
-		testRunnable[i].client = http_client.NewClient()
+		testRunnable[i].client = httpClient.NewClient()
 		testRunnable[i].actors = activatedActors
 		testRunnable[i].testActorType = opt.TestActorType
 		testRunnable[i].testActorMethod = opt.ActorMethod

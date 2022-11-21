@@ -18,6 +18,8 @@
 # Optional secrets:
 # - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
 # - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
+# - AZURE_ARM_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs for Arm64 (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
+# - AZURE_ARM_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs for Arm64 (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
 
 name: dapr-test
 
@@ -30,18 +32,17 @@ on:
   # Dispatch on external events
   repository_dispatch:
     types: [e2e-test]
-
 env:
   # Version of Go
-  GOVER: "1.19"
+  GOVER: "^1.19.2"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.22.6"
+  KUBECTLVER: "v1.25.2"
   # If not empty, uses cloud resources for testing
   TEST_CLOUD_ENV: "azure"
   # Version of Helm
-  HELMVER: "v3.7.2"
+  HELMVER: "v3.10.0"
   # Kubernetes namespace to use
   DAPR_NAMESPACE: "dapr-tests"
   # Timeout for tests
@@ -50,13 +51,16 @@ env:
   HA_MODE: true
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
+  AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  # Whether to collect TCP dumps
+  TCP_DUMPS: false
 
 jobs:
   deploy-infrastructure:
     name: Deploy test infrastructure
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -66,7 +70,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -76,8 +80,25 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
+      - name: Create PR comment
+        if: env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          hide: true
+          hide_classify: OUTDATED
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            # Dapr E2E test
+
+            🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+            Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
         uses: actions/checkout@v2
@@ -101,20 +122,22 @@ jobs:
       - name: Deploy the test cluster
         if: env.TEST_PREFIX != ''
         run: |
-          # Select two random Azure regions
+          # Select one random Azure region
           REGIONS=(${{ env.AZURE_REGIONS }})
           REGIONS_SIZE=${#REGIONS[@]}
           REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
           REGION1=${REGIONS[$REGIONS_IDX]}
-          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
+          echo "REGION1=${REGION1}" >> $GITHUB_ENV
           REGION2=${REGIONS[$REGIONS_IDX]}
-          echo "Deploying to Azure regions: Linux=${REGION1} Windows=${REGION2}"
-
+          echo "REGION2=${REGION2}" >> $GITHUB_ENV
+          REGION3=${{ env.AZURE_ARM_REGIONS }}
+          echo "REGION3=${REGION3}" >> $GITHUB_ENV
+          echo "Deploying to Azure regions: Linux_amd64=${REGION1} Windows=${REGION2} Linux_arm64=${REGION3}"
           # Tags
           DATE_TAG=$(date --iso-8601=seconds)
           echo "Tags: date=${DATE_TAG}"
 
-          # Deploy both Linux and Windows cluster
+          # Deploy Linux arm64/amd64 and Windows clusters
           # Retry the deployment twice in case of transient failures (such as capacity constraints)
           success=false
           for i in 1 2 3; do 
@@ -126,9 +149,12 @@ jobs:
                 namePrefix="${{ env.TEST_PREFIX }}" \
                 location1=${REGION1} \
                 location2=${REGION2} \
+                location3=${REGION3} \
                 dateTag="${DATE_TAG}" \
                 diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
                 diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
+                armDiagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_ARM_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
+                armDiagStorageResourceId="${{ secrets.AZURE_ARM_DIAG_STORAGE_ID }}" \
               && success=true \
               && break \
               || sleep 120
@@ -136,9 +162,43 @@ jobs:
           # Exit with error if failed
           $success || exit 1
         shell: bash
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Infrastructure deployed
+
+            | Cluster | Resource group name | Azure region |
+            | --- | --- | --- |
+            | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
+            | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
+            | Linux/arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Infrastructure deployment failed
+
+            | Cluster | Resource group name | Azure region |
+            | --- | --- | --- |
+            | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
+            | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
+            | Linux/arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
+
+            Please check the logs for details on the failure.
 
   build:
-    name: Build for  ${{ matrix.target_os }}
+    name: Build for  ${{ matrix.target_os }} on ${{ matrix.target_arch }}
     runs-on: ${{ matrix.os }}
     env:
       GOOS: ${{ matrix.target_os }}
@@ -148,13 +208,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2019]
+        os: [ubuntu-22.04, windows-2019]
         target_arch: [amd64]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target_os: linux
           - os: windows-2019
             target_os: windows
+          - target_arch: arm64
+            target_os: linux
+            os: ubuntu-latest
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -164,7 +227,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -174,7 +237,9 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
       # In windows-2019 images, WSL comes with bash.exe (but no distribution) and that causes issues
       # See: https://github.community/t/wsl-not-available-for-hosted-windows-machine/124389
@@ -218,8 +283,13 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Login to cache registry
-        if: env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+      - name: Login to cache registry for Windows
+        if: runner.os == 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+        run: |
+          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken)
+          docker login ${{ env.DAPR_CACHE_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
+      - name: Login to cache registry for Linux or Mac
+        if: runner.os != 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
           az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
         shell: bash
@@ -231,6 +301,8 @@ jobs:
           TEST_PREFIX=""
           if [ "${{ env.TARGET_OS }}" == "windows" ] ; then
             TEST_PREFIX="dapre2e${SUFFIX}w"
+          elif [ "${{ env.TARGET_ARCH }}" == "arm64" ] ; then  
+            TEST_PREFIX="dapre2e${SUFFIX}la"
           else
             TEST_PREFIX="dapre2e${SUFFIX}l"
           fi
@@ -256,22 +328,15 @@ jobs:
       - name: Wait for Azure Container Registry deployment
         timeout-minutes: 30
         if: env.TEST_PREFIX != ''
-        run: |
-          elapsed=0
-          until [ $elapsed -ge 1800 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
-          do
-              echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
-              sleep 20
-              elapsed=$(expr $elapsed + 20)
-          done
-
-          if [ $elapsed -ge 1800 ]; then
-            echo "Azure Container Registry not ready on time"
-            exit 1
-          fi
+        run: ./tests/test-infra/wait_${{ env.TEST_CLOUD_ENV }}_registry.sh ${{ env.TEST_PREFIX }}acr
         shell: bash
-      - name: Login to Azure Container Registry
-        if: env.TEST_PREFIX != ''
+      - name: Login to Azure Container Registry for Windows
+        if: runner.os == 'Windows' && env.TEST_PREFIX != ''
+        run: |
+          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken)
+          docker login ${{ env.DAPR_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
+      - name: Login to Azure Container Registry for Linux or Mac
+        if: runner.os != 'Windows' && env.TEST_PREFIX != ''
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
@@ -290,14 +355,39 @@ jobs:
         run: |
           make build-push-e2e-app-all
         shell: bash
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Build succeeded for ${{ matrix.target_os }}/${{ matrix.target_arch }}
+
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Build failed for ${{ matrix.target_os }}/${{ matrix.target_arch }}
+
+            Please check the logs for details on the error.
 
   test-e2e:
-    name: End-to-end ${{ matrix.target_os }} tests
+    name: End-to-end ${{ matrix.target_os }} on ${{ matrix.target_arch }} tests
     needs:
       - build
       - deploy-infrastructure
     # Always run on Linux as the local OS is irrelevant and this is faster
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
@@ -307,7 +397,10 @@ jobs:
       fail-fast: false
       matrix:
         target_os: [linux, windows]
-        target_arch: [amd64]
+        target_arch: [amd64, arm64]
+        exclude:
+          - target_os: windows
+            target_arch: arm64
     steps:
       - name: Set up log paths
         run: |
@@ -322,7 +415,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -332,7 +425,9 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
@@ -376,6 +471,8 @@ jobs:
           TEST_PREFIX=""
           if [ "${{ env.TARGET_OS }}" == "windows" ] ; then
             TEST_PREFIX="dapre2e${SUFFIX}w"
+          elif [ "${{ env.TARGET_ARCH }}" == "arm64" ] ; then  
+            TEST_PREFIX="dapre2e${SUFFIX}la"
           else
             TEST_PREFIX="dapre2e${SUFFIX}l"
           fi
@@ -388,6 +485,7 @@ jobs:
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash
       - name: Enable tcpdump
+        if: env.TCP_DUMPS == 'true'
         run: |
           sudo tcpdump -nn -i any -w sntp.cap &
           sleep 1
@@ -416,7 +514,7 @@ jobs:
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
-          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_dashboard.enabled=false"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
@@ -424,8 +522,12 @@ jobs:
       - name: Show dapr configurations
         if: env.TEST_PREFIX != ''
         run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
+      - name: Determine if E2E tests should run
+        if: env.TEST_PREFIX != '' && env.TEST_CLOUD_ENV != ''
+        run: ./tests/test-infra/skip_${{ env.TEST_CLOUD_ENV }}.sh
+        shell: bash
       - name: Run E2E tests
-        if: env.TEST_PREFIX != ''
+        if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: make test-e2e-all
       - name: Save control plane K8s resources
         if: always() && env.TEST_PREFIX != ''
@@ -436,7 +538,7 @@ jobs:
         run: |
           make save-dapr-control-plane-k8s-logs
       - name: Stop tcpdump
-        if: always()
+        if: always() && env.TCP_DUMPS == 'true'
         run: |
           sleep 1
           sudo kill -2 $(pgrep tcpdump)
@@ -445,12 +547,18 @@ jobs:
       - name: Compress logs
         if: always()
         run: |
-          gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
-          gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
-          gzip --fast sntp.cap
+          test ${{ env.DAPR_CONTAINER_LOG_PATH }} \
+            && gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }} \
+            || true
+          test ${{ env.DAPR_TEST_LOG_PATH }} \
+            && gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }} \
+            || true
+          test -f sntp.cap \
+            && gzip --fast sntp.cap \
+            || true
         shell: bash
       - name: Upload tcpdump
-        if: always()
+        if: always() && env.TCP_DUMPS == 'true'
         uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_tcpdump
@@ -474,45 +582,60 @@ jobs:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
-      - name: Add test result comment to PR
-        if: always() && github.event_name == 'repository_dispatch' && env.TEST_PREFIX != ''
-        env:
-          JOB_CONTEXT: ${{ toJson(job) }}
-        uses: actions/github-script@0.3.0
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != '' && env.SKIP_E2E != 'true'
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          github-token: ${{secrets.DAPR_BOT_TOKEN}}
-          script: |
-            const testPayload = context.payload.client_payload;
-            const jobContext = JSON.parse(process.env.JOB_CONTEXT);
-            const jobStatus = jobContext.status.toLowerCase();
-            const targetOs = process.env.TARGET_OS;
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Tests succeeded on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
-            console.log(`Current Job Status: ${jobStatus}`);
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for skipped test run
+        if: success() && env.PR_NUMBER != '' && env.SKIP_E2E == 'true'
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Tests skipped on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
-            var message = "";
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Tests failed on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
-            const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            Please check the logs for details on the error.
+      - name: Update PR comment for cancellation
+        if: cancelled() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Tests cancelled for ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
-            if (jobStatus == "cancelled") {
-              message = `End-to-end tests cancelled on ${targetOs}. Please check the [build logs](${checkLink})`;
-            } else if (jobStatus == "success") {
-              message = `Congrats! All [end-to-end tests](${checkLink}) have passed on ${targetOs}. Thanks for your contribution!`;
-            } else if (jobStatus == "failure") {
-              message = `End-to-end tests failed on ${targetOs}. Please check the [build logs](${checkLink})`;
-            }
-
-            if (message) {
-              await github.issues.createComment({
-                owner: testPayload.issue.owner,
-                repo: testPayload.issue.repo,
-                issue_number: testPayload.issue.number,
-                body: message
-              });
-            }
+            The Action has been canceled
 
   cleanup:
     name: Clean up Azure resources
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs:
       - test-e2e
     if: always()
@@ -540,4 +663,10 @@ jobs:
           # We are not waiting for these commands to complete, and we're ignoring errors
           echo "Starting removal of resource group Dapr-E2E-${{ env.TEST_PREFIX }}w"
           az group delete --no-wait --yes --name "Dapr-E2E-${{ env.TEST_PREFIX }}w" || true
+        shell: bash
+      - name: Delete Arm64 cluster
+        run: |
+          # We are not waiting for these commands to complete, and we're ignoring errors
+          echo "Starting removal of resource group Dapr-E2E-${{ env.TEST_PREFIX }}la"
+          az group delete --no-wait --yes --name "Dapr-E2E-${{ env.TEST_PREFIX }}la" || true
         shell: bash

@@ -21,22 +21,19 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/dapr/components-contrib/lock"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/version"
-
-	"github.com/dapr/components-contrib/configuration"
-
+	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
+	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -45,12 +42,14 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -60,6 +59,8 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -69,7 +70,7 @@ const (
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 //
-//nolint:nosnakecase
+//nolint:interfacebloat
 type API interface {
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -77,6 +78,7 @@ type API interface {
 
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
+	BulkPublishEventAlpha1(ctx context.Context, req *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
@@ -135,6 +137,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
+	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	daprRunTimeVersion         string
 }
 
@@ -267,53 +270,59 @@ func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.Un
 	return result
 }
 
+// APIOpts contains options for NewAPI.
+type APIOpts struct {
+	AppID                       string
+	AppChannel                  channel.AppChannel
+	Resiliency                  resiliency.Provider
+	StateStores                 map[string]state.Store
+	SecretStores                map[string]secretstores.SecretStore
+	SecretsConfiguration        map[string]config.SecretsScope
+	ConfigurationStores         map[string]configuration.Store
+	LockStores                  map[string]lock.Store
+	PubsubAdapter               runtimePubsub.Adapter
+	DirectMessaging             messaging.DirectMessaging
+	Actor                       actors.Actors
+	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec                 config.TracingSpec
+	AccessControlList           *config.AccessControlList
+	AppProtocol                 string
+	Shutdown                    func()
+	GetComponentsFn             func() []componentsV1alpha.Component
+	GetComponentsCapabilitiesFn func() map[string][]string
+	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+}
+
 // NewAPI returns a new gRPC API.
-func NewAPI(
-	appID string, appChannel channel.AppChannel,
-	resiliency resiliency.Provider,
-	stateStores map[string]state.Store,
-	secretStores map[string]secretstores.SecretStore,
-	secretsConfiguration map[string]config.SecretsScope,
-	configurationStores map[string]configuration.Store,
-	lockStores map[string]lock.Store,
-	pubsubAdapter runtimePubsub.Adapter,
-	directMessaging messaging.DirectMessaging,
-	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec,
-	accessControlList *config.AccessControlList,
-	appProtocol string,
-	getComponentsFn func() []componentsV1alpha.Component,
-	shutdown func(),
-	getComponentsCapabilitiesFn func() map[string][]string,
-) API {
+func NewAPI(opts APIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range stateStores {
+	for key, store := range opts.StateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
 	return &api{
-		directMessaging:            directMessaging,
-		actor:                      actor,
-		id:                         appID,
-		resiliency:                 resiliency,
-		appChannel:                 appChannel,
-		pubsubAdapter:              pubsubAdapter,
-		stateStores:                stateStores,
+		directMessaging:            opts.DirectMessaging,
+		actor:                      opts.Actor,
+		id:                         opts.AppID,
+		resiliency:                 opts.Resiliency,
+		appChannel:                 opts.AppChannel,
+		pubsubAdapter:              opts.PubsubAdapter,
+		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
-		secretStores:               secretStores,
-		configurationStores:        configurationStores,
+		secretStores:               opts.SecretStores,
+		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		lockStores:                 lockStores,
-		secretsConfiguration:       secretsConfiguration,
-		sendToOutputBindingFn:      sendToOutputBindingFn,
-		tracingSpec:                tracingSpec,
-		accessControlList:          accessControlList,
-		appProtocol:                appProtocol,
-		shutdown:                   shutdown,
-		getComponentsFn:            getComponentsFn,
-		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		lockStores:                 opts.LockStores,
+		secretsConfiguration:       opts.SecretsConfiguration,
+		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
+		tracingSpec:                opts.TracingSpec,
+		accessControlList:          opts.AccessControlList,
+		appProtocol:                opts.AppProtocol,
+		shutdown:                   opts.Shutdown,
+		getComponentsFn:            opts.GetComponentsFn,
+		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		daprRunTimeVersion:         version.Version(),
 	}
 }
@@ -347,11 +356,30 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
+	var callerAppID string
+	callerIDHeader, ok := req.Metadata()[invokev1.CallerIDHeader]
+	if ok && len(callerIDHeader.Values) > 0 {
+		callerAppID = callerIDHeader.Values[0]
+	} else {
+		callerAppID = "unknown"
+	}
+
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message().Method)
+
+	var statusCode int32
+	defer func() {
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+	}()
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
+		statusCode = int32(codes.Internal)
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
+	} else {
+		statusCode = resp.Status().Code
 	}
+
 	return resp.Proto(), err
 }
 
@@ -376,39 +404,39 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), nil
 }
 
-func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
+// validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
+// or an error.
+func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, error) {
 	if a.pubsubAdapter == nil {
-		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, "", "", false, status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
 	}
 
-	pubsubName := in.PubsubName
 	if pubsubName == "" {
-		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, "", "", false, status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
 	}
 
 	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
 	if thepubsub == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
 	}
 
-	topic := in.Topic
 	if topic == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
 	}
 
-	rawPayload, metaErr := contribMetadata.IsRawPayload(in.Metadata)
+	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+	}
+
+	return thepubsub, pubsubName, topic, rawPayload, nil
+}
+
+func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
+	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.PubsubName, in.Topic, in.Metadata)
+	if validationErr != nil {
+		apiServerLogger.Debug(validationErr)
+		return &emptypb.Empty{}, validationErr
 	}
 
 	span := diagUtils.SpanFromContext(ctx)
@@ -493,13 +521,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
 	var resp *invokev1.InvokeMethodResponse
-	var requestErr bool
 	respError := policy(func(ctx context.Context) (rErr error) {
-		requestErr = false
 		resp, rErr = a.directMessaging.Invoke(ctx, in.Id, req)
-
 		if rErr != nil {
-			requestErr = true
 			rErr = status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
 			return rErr
 		}
@@ -509,7 +533,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		// If the status is OK, respError will be nil.
 		var respError error
 		if resp.IsHTTPResponse() {
-			errorMessage := []byte("")
+			errorMessage := []byte{}
 			if resp != nil {
 				_, errorMessage = resp.RawData()
 			}
@@ -528,16 +552,150 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	})
 
 	// In this case, there was an error with the actual request or a resiliency policy stopped the request.
-	if requestErr || (errors.Is(respError, context.DeadlineExceeded) || breaker.IsErrorPermanent(respError)) {
-		return nil, respError
+	if respError != nil {
+		// Check if it's returned by status.Errorf
+		_, ok := respError.(interface{ GRPCStatus() *status.Status })
+		if ok || (errors.Is(respError, context.DeadlineExceeded) || breaker.IsErrorPermanent(respError)) {
+			return nil, respError
+		}
 	}
 	return resp.Message(), respError
 }
 
+func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.PubsubName, in.Topic, in.Metadata)
+	if validationErr != nil {
+		apiServerLogger.Debug(validationErr)
+		return &runtimev1pb.BulkPublishResponse{}, validationErr
+	}
+
+	span := diagUtils.SpanFromContext(ctx)
+	// Populate W3C tracestate to cloudevent envelope
+	traceState := diag.TraceStateToW3CString(span.SpanContext())
+
+	spanMap := map[int]otelTrace.Span{}
+	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
+	closeChildSpans := func(ctx context.Context, err error) {
+		for _, span := range spanMap {
+			diag.UpdateSpanStatusFromGRPCError(span, err)
+			span.End()
+		}
+	}
+
+	features := thepubsub.Features()
+
+	entries := make([]pubsub.BulkMessageEntry, len(in.Entries))
+	for i, entry := range in.Entries {
+		if entry.EntryId == "" {
+			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "missing entryId")
+			apiServerLogger.Debug(err)
+			return &runtimev1pb.BulkPublishResponse{}, err
+		}
+		entries[i].EntryId = entry.EntryId
+		entries[i].ContentType = entry.ContentType
+		entries[i].Event = entry.Event
+		// Populate entry metadata with request level metadata. Entry level metadata keys
+		// override request level metadata.
+		if entry.Metadata != nil {
+			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(in.Metadata, entry.Metadata)
+		}
+
+		if !rawPayload {
+			// For multiple events in a single bulk call traceParent is different for each event.
+			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
+			// Populate W3C traceparent to cloudevent envelope
+			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
+			spanMap[i] = childSpan
+
+			var envelope map[string]interface{}
+
+			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+				ID:              a.id,
+				Topic:           topic,
+				DataContentType: entries[i].ContentType,
+				Data:            entries[i].Event,
+				TraceID:         corID,
+				TraceState:      traceState,
+				Pubsub:          pubsubName,
+			})
+			if err != nil {
+				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+				apiServerLogger.Debug(err)
+				closeChildSpans(ctx, err)
+				return &runtimev1pb.BulkPublishResponse{}, err
+			}
+
+			pubsub.ApplyMetadata(envelope, features, entries[i].Metadata)
+
+			entries[i].Event, err = json.Marshal(envelope)
+			if err != nil {
+				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+				apiServerLogger.Debug(err)
+				closeChildSpans(ctx, err)
+				return &runtimev1pb.BulkPublishResponse{}, err
+			}
+		}
+	}
+
+	req := pubsub.BulkPublishRequest{
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Entries:    entries,
+		Metadata:   in.Metadata,
+	}
+
+	start := time.Now()
+	res, err := a.pubsubAdapter.BulkPublish(&req)
+	elapsed := diag.ElapsedSince(start)
+	var eventsPublished int64 = 0
+
+	// BulkPublishResponse contains all failed entries from the request.
+	// If there are no failed entries, then the statuses array will be empty.
+	bulkRes := runtimev1pb.BulkPublishResponse{}
+
+	if len(res.Statuses) != 0 {
+		bulkRes.Statuses = make([]*runtimev1pb.BulkPublishResponseEntry, 0, len(res.Statuses))
+		for _, r := range res.Statuses {
+			if r.Status == pubsub.PublishSucceeded {
+				// Only count the events that have been successfully published to the pub/sub component
+				eventsPublished++
+			} else {
+				resEntry := runtimev1pb.BulkPublishResponseEntry{}
+				resEntry.EntryId = r.EntryId
+				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
+				if r.Error != nil {
+					resEntry.Error = r.Error.Error()
+				}
+				bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
+			}
+		}
+	}
+
+	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
+
+	if err != nil {
+		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
+			nerr = status.Errorf(codes.PermissionDenied, err.Error())
+		}
+
+		if errors.As(err, &runtimePubsub.NotFoundError{}) {
+			nerr = status.Errorf(codes.NotFound, err.Error())
+		}
+		apiServerLogger.Debug(nerr)
+		closeChildSpans(ctx, nerr)
+		return &bulkRes, nerr
+	}
+
+	closeChildSpans(ctx, nil)
+	return &bulkRes, nil
+}
+
 func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
 	req := &bindings.InvokeRequest{
-		Metadata:  make(map[string]string),
+		Metadata:  make(map[string]string, len(in.Metadata)),
 		Operation: bindings.OperationKind(in.Operation),
+		Data:      in.Data,
 	}
 	for key, val := range in.Metadata {
 		req.Metadata[key] = val
@@ -546,12 +704,9 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
-			req.Metadata[key] = val[0]
+			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
+			req.Metadata[sanitizedKey] = val[0]
 		}
-	}
-
-	if in.Data != nil {
-		req.Data = in.Data
 	}
 
 	r := &runtimev1pb.InvokeBindingResponse{}
@@ -638,16 +793,23 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		fn := func(param interface{}) {
 			req := param.(*state.GetRequest)
 			var r *state.GetResponse
-			err = policy(func(ctx context.Context) (rErr error) {
-				r, rErr = store.Get(req)
-				return rErr
+			ok := atomic.Bool{}
+			policyErr := policy(func(ctx context.Context) error {
+				res, rErr := store.Get(req)
+				if rErr != nil {
+					return rErr
+				}
+				if ok.CompareAndSwap(false, true) {
+					r = res
+				}
+				return nil
 			})
 
 			item := &runtimev1pb.BulkStateItem{
 				Key: stateLoader.GetOriginalStateKey(req.Key),
 			}
-			if err != nil {
-				item.Error = err.Error()
+			if policyErr != nil {
+				item.Error = policyErr.Error()
 			} else if r != nil {
 				item.Data = r.Data
 				item.Etag = stringValueOrEmpty(r.ETag)
@@ -1008,7 +1170,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.GetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(req)
+		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1021,11 +1183,9 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
-	response := &runtimev1pb.GetSecretResponse{}
-	if getResponse.Data != nil {
-		response.Data = getResponse.Data
-	}
-	return response, nil
+	return &runtimev1pb.GetSecretResponse{
+		Data: getResponse.Data,
+	}, nil
 }
 
 func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error) {
@@ -1051,7 +1211,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.BulkGetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(req)
+		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1437,6 +1597,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req := invokev1.NewInvokeMethodRequest(in.Method)
 	req.WithActor(in.ActorType, in.ActorId)
 	req.WithRawData(in.Data, "")
+	reqMetadata := map[string][]string{}
+	for k, v := range in.Metadata {
+		reqMetadata[k] = []string{v}
+	}
+	req.WithMetadata(reqMetadata)
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1515,11 +1680,29 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
+	subscriptions, err := a.getSubscriptionsFn()
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetMetadataResponse{}, err
+	}
+	ps := []*runtimev1pb.PubsubSubscription{}
+	for _, s := range subscriptions {
+		ps = append(ps, &runtimev1pb.PubsubSubscription{
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
+		})
+	}
+
 	response := &runtimev1pb.GetMetadataResponse{
 		Id:                   a.id,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
+		Subscriptions:        ps,
 	}
 
 	return response, nil
@@ -1530,6 +1713,19 @@ func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 		return val
 	}
 	return make([]string, 0)
+}
+
+func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
+	out := &runtimev1pb.PubsubSubscriptionRules{
+		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
+	}
+	for _, r := range rules {
+		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
+			Match: fmt.Sprintf("%s", r.Match),
+			Path:  r.Path,
+		})
+	}
+	return out
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.
@@ -1632,6 +1828,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		Id:    e.ID,
 	}); err != nil {
 		apiServerLogger.Debug(err)
+		return err
 	}
 	return nil
 }
@@ -1701,6 +1898,12 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return err
+	}
+	if err := handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
+		Id: id,
+	}); err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}

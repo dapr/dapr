@@ -35,9 +35,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/version"
-
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -46,6 +43,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -58,6 +56,8 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/dapr/utils"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -77,6 +77,7 @@ type api struct {
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
 	getComponentsFn            func() []componentsV1alpha1.Component
+	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
 	lockStores                 map[string]lock.Store
@@ -96,6 +97,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
+	maxRequestBodySize         int64 // In bytes
 }
 
 type registeredComponent struct {
@@ -105,11 +107,25 @@ type registeredComponent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
+type pubsubSubscription struct {
+	PubsubName      string                    `json:"pubsubname"`
+	Topic           string                    `json:"topic"`
+	DeadLetterTopic string                    `json:"deadLetterTopic"`
+	Metadata        map[string]string         `json:"metadata"`
+	Rules           []*pubsubSubscriptionRule `json:"rules,omitempty"`
+}
+
+type pubsubSubscriptionRule struct {
+	Match string `json:"match"`
+	Path  string `json:"path"`
+}
+
 type metadata struct {
 	ID                   string                     `json:"id"`
 	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
 	Extended             map[string]string          `json:"extended"`
 	RegisteredComponents []registeredComponent      `json:"components"`
+	Subscriptions        []pubsubSubscription       `json:"subscriptions"`
 }
 
 const (
@@ -136,50 +152,57 @@ const (
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
+// APIOpts contains the options for NewAPI.
+type APIOpts struct {
+	AppID                       string
+	AppChannel                  channel.AppChannel
+	DirectMessaging             messaging.DirectMessaging
+	GetComponentsFn             func() []componentsV1alpha1.Component
+	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	Resiliency                  resiliency.Provider
+	StateStores                 map[string]state.Store
+	LockStores                  map[string]lock.Store
+	SecretStores                map[string]secretstores.SecretStore
+	SecretsConfiguration        map[string]config.SecretsScope
+	ConfigurationStores         map[string]configuration.Store
+	PubsubAdapter               runtimePubsub.Adapter
+	Actor                       actors.Actors
+	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec                 config.TracingSpec
+	Shutdown                    func()
+	GetComponentsCapabilitiesFn func() map[string][]string
+	MaxRequestBodySize          int64 // In bytes
+}
+
 // NewAPI returns a new API.
-func NewAPI(
-	appID string,
-	appChannel channel.AppChannel,
-	directMessaging messaging.DirectMessaging,
-	getComponentsFn func() []componentsV1alpha1.Component,
-	resiliency resiliency.Provider,
-	stateStores map[string]state.Store,
-	lockStores map[string]lock.Store,
-	secretStores map[string]secretstores.SecretStore,
-	secretsConfiguration map[string]config.SecretsScope,
-	configurationStores map[string]configuration.Store,
-	pubsubAdapter runtimePubsub.Adapter,
-	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec,
-	shutdown func(),
-	getComponentsCapabilitiesFn func() map[string][]string,
-) API {
+func NewAPI(opts APIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range stateStores {
+	for key, store := range opts.StateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
 	api := &api{
-		appChannel:                 appChannel,
-		getComponentsFn:            getComponentsFn,
-		resiliency:                 resiliency,
-		directMessaging:            directMessaging,
-		stateStores:                stateStores,
-		lockStores:                 lockStores,
+		id:                         opts.AppID,
+		appChannel:                 opts.AppChannel,
+		directMessaging:            opts.DirectMessaging,
+		getComponentsFn:            opts.GetComponentsFn,
+		getSubscriptionsFn:         opts.GetSubscriptionsFn,
+		resiliency:                 opts.Resiliency,
+		stateStores:                opts.StateStores,
+		lockStores:                 opts.LockStores,
+		secretStores:               opts.SecretStores,
+		secretsConfiguration:       opts.SecretsConfiguration,
+		configurationStores:        opts.ConfigurationStores,
+		pubsubAdapter:              opts.PubsubAdapter,
+		actor:                      opts.Actor,
+		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
+		tracingSpec:                opts.TracingSpec,
+		shutdown:                   opts.Shutdown,
+		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+		maxRequestBodySize:         opts.MaxRequestBodySize,
 		transactionalStateStores:   transactionalStateStores,
-		secretStores:               secretStores,
-		secretsConfiguration:       secretsConfiguration,
-		configurationStores:        configurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		actor:                      actor,
-		pubsubAdapter:              pubsubAdapter,
-		sendToOutputBindingFn:      sendToOutputBindingFn,
-		id:                         appID,
-		tracingSpec:                tracingSpec,
-		shutdown:                   shutdown,
-		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
 	}
 
@@ -289,6 +312,12 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 			Route:   "publish/{pubsubname}/{topic:*}",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
+			Route:   "publish/bulk/{pubsubname}/{topic:*}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onBulkPublish,
 		},
 	}
 }
@@ -407,16 +436,20 @@ func (a *api) constructShutdownEndpoints() []Endpoint {
 func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz",
-			Version: apiVersionV1,
-			Handler: a.onGetHealthz,
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "healthz",
+			Version:       apiVersionV1,
+			Handler:       a.onGetHealthz,
+			AlwaysAllowed: true,
+			IsHealthCheck: true,
 		},
 		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz/outbound",
-			Version: apiVersionV1,
-			Handler: a.onGetOutboundHealthz,
+			Methods:       []string{fasthttp.MethodGet},
+			Route:         "healthz/outbound",
+			Version:       apiVersionV1,
+			Handler:       a.onGetOutboundHealthz,
+			AlwaysAllowed: true,
+			IsHealthCheck: true,
 		},
 	}
 }
@@ -797,6 +830,11 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	if h.appChannel == nil {
+		err := errors.Errorf("app channel is nil. unable to send configuration update from %s", h.storeName)
+		log.Error(err)
+		return err
+	}
 	for key := range e.Items {
 		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, key))
 		req.WithHTTPExtension(nethttp.MethodPost, "")
@@ -912,7 +950,12 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-
+	if a.appChannel == nil {
+		msg := NewErrorResponse("ERR_APP_CHANNEL_NIL", "app channel is not initialized. cannot subscribe to configuration updates")
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
 	metadata := getMetadataFromRequest(reqCtx)
 	subscribeKeys := make([]string, 0)
 
@@ -922,36 +965,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		keys = append(keys, string(queryKeyByte))
 	}
 
-	// empty list means subscribing to all configuration keys
-	if len(keys) == 0 {
-		getConfigurationReq := &configuration.GetRequest{
-			Keys:     []string{},
-			Metadata: metadata,
-		}
-
-		start := time.Now()
-		policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
-		var getResponse *configuration.GetResponse
-		err = policy(func(ctx context.Context) (rErr error) {
-			getResponse, rErr = store.Get(ctx, getConfigurationReq)
-			return rErr
-		})
-		elapsed := diag.ElapsedSince(start)
-		diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
-
-		if err != nil {
-			msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
-			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-			log.Debug(msg)
-			return
-		}
-		items := getResponse.Items
-		for key := range items {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", storeName, key)]; !ok {
-				subscribeKeys = append(subscribeKeys, key)
-			}
-		}
-	} else {
+	if len(keys) > 0 {
 		subscribeKeys = append(subscribeKeys, keys...)
 	}
 
@@ -1166,7 +1180,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
 	var resp secretstores.GetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = store.GetSecret(req)
+		resp, rErr = store.GetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1207,7 +1221,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
 	var resp secretstores.BulkGetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = store.BulkGetSecret(req)
+		resp, rErr = store.BulkGetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1853,11 +1867,30 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
+	subscriptions, err := a.getSubscriptionsFn()
+	if err != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_GET_SUBSCRIPTIONS", fmt.Sprintf(messages.ErrPubsubGetSubscriptions, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	ps := []pubsubSubscription{}
+	for _, s := range subscriptions {
+		ps = append(ps, pubsubSubscription{
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
+		})
+	}
+
 	mtd := metadata{
 		ID:                   a.id,
 		ActiveActorsCount:    activeActorsCount,
 		Extended:             temp,
 		RegisteredComponents: registeredComponents,
+		Subscriptions:        ps,
 	}
 
 	mtdBytes, err := json.Marshal(mtd)
@@ -1875,6 +1908,17 @@ func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
 		return val
 	}
 	return make([]string, 0)
+}
+
+func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) []*pubsubSubscriptionRule {
+	out := make([]*pubsubSubscriptionRule, 0)
+	for _, r := range rules {
+		out = append(out, &pubsubSubscriptionRule{
+			Match: fmt.Sprintf("%s", r.Match),
+			Path:  r.Path,
+		})
+	}
+	return out
 }
 
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
@@ -1896,37 +1940,9 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	if a.pubsubAdapter == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
-	if pubsubName == "" {
-		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
-	if thepubsub == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	topic := reqCtx.UserValue(topicParam).(string)
-	if topic == "" {
-		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
+	thepubsub, pubsubName, topic, sc, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
+	if errRes != nil {
+		respond(reqCtx, withError(sc, *errRes))
 
 		return
 	}
@@ -2018,6 +2034,232 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respond(reqCtx, withEmpty())
 	}
+}
+
+type bulkPublishMessageEntry struct {
+	EntryId     string            `json:"entryId,omitempty"` //nolint:stylecheck
+	Event       interface{}       `json:"event"`
+	ContentType string            `json:"contentType"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
+	thepubsub, pubsubName, topic, sc, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
+	if errRes != nil {
+		respond(reqCtx, withError(sc, *errRes))
+
+		return
+	}
+
+	body := reqCtx.PostBody()
+	metadata := getMetadataFromRequest(reqCtx)
+	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
+	if metaErr != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
+			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+
+		return
+	}
+
+	// Extract trace context from context.
+	span := diagUtils.SpanFromContext(reqCtx)
+	// Populate W3C tracestate to cloudevent envelope
+	traceState := diag.TraceStateToW3CString(span.SpanContext())
+
+	incomingEntries := make([]bulkPublishMessageEntry, 0)
+	err := json.Unmarshal(body, &incomingEntries)
+	if err != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+			fmt.Sprintf(messages.ErrPubsubUnmarshal, topic, pubsubName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+
+		return
+	}
+	entries := make([]pubsub.BulkMessageEntry, len(incomingEntries))
+
+	entryIdSet := map[string]struct{}{} //nolint:stylecheck
+
+	for i, entry := range incomingEntries {
+		var dBytes []byte
+
+		dBytes, cErr := ConvertEventToBytes(entry.Event, entry.ContentType)
+		if cErr != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, cErr.Error()))
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+			log.Debug(msg)
+			return
+		}
+		entries[i] = pubsub.BulkMessageEntry{
+			Event:       dBytes,
+			ContentType: entry.ContentType,
+		}
+		if entry.Metadata != nil {
+			// Populate entry metadata with request level metadata. Entry level metadata keys
+			// override request level metadata.
+			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
+		}
+		if _, ok := entryIdSet[entry.EntryId]; ok || entry.EntryId == "" {
+			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: entryId is duplicated or not present for entry"))
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+			log.Debug(msg)
+
+			return
+		}
+		entryIdSet[entry.EntryId] = struct{}{}
+		entries[i].EntryId = entry.EntryId
+	}
+
+	spanMap := map[int]trace.Span{}
+	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
+	closeChildSpans := func(ctx *fasthttp.RequestCtx) {
+		for _, span := range spanMap {
+			diag.UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
+			span.End()
+		}
+	}
+	features := thepubsub.Features()
+	if !rawPayload {
+		for i := range entries {
+			// For multiple events in a single bulk call traceParent is different for each event.
+			childSpan := diag.StartProducerSpanChildFromParent(reqCtx, span)
+			// Populate W3C traceparent to cloudevent envelope
+			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
+			spanMap[i] = childSpan
+
+			var envelope map[string]interface{}
+
+			envelope, err = runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+				ID:              a.id,
+				Topic:           topic,
+				DataContentType: entries[i].ContentType,
+				Data:            entries[i].Event,
+				TraceID:         corID,
+				TraceState:      traceState,
+				Pubsub:          pubsubName,
+			})
+			if err != nil {
+				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)
+				log.Debug(msg)
+
+				return
+			}
+
+			pubsub.ApplyMetadata(envelope, features, entries[i].Metadata)
+
+			entries[i].Event, err = json.Marshal(envelope)
+			if err != nil {
+				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+					fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
+				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)
+				log.Debug(msg)
+
+				return
+			}
+		}
+	}
+
+	req := pubsub.BulkPublishRequest{
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Entries:    entries,
+		Metadata:   metadata,
+	}
+
+	start := time.Now()
+	res, err := a.pubsubAdapter.BulkPublish(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	// BulkPublishResponse contains all failed entries from the request.
+	// If there are no errors, then an empty response is returned.
+	bulkRes := BulkPublishResponse{}
+	var eventsPublished int64 = 0
+	if len(res.Statuses) != 0 {
+		bulkRes.Statuses = make([]BulkPublishResponseEntry, 0, len(res.Statuses))
+		for _, r := range res.Statuses {
+			if r.Status == pubsub.PublishSucceeded {
+				// Only count the events that have been successfully published to the pub/sub component
+				eventsPublished++
+			} else {
+				resEntry := BulkPublishResponseEntry{}
+				resEntry.EntryId = r.EntryId
+				resEntry.Status = string(pubsub.PublishFailed)
+				if r.Error != nil {
+					resEntry.Error = r.Error.Error()
+				}
+				bulkRes.Statuses = append(bulkRes.Statuses, resEntry)
+			}
+		}
+	}
+	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
+	if err != nil {
+		status := fasthttp.StatusInternalServerError
+		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
+
+		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
+			msg := NewErrorResponse("ERR_PUBSUB_FORBIDDEN", err.Error())
+			status = fasthttp.StatusForbidden
+			respond(reqCtx, withError(status, msg), closeChildSpans)
+			log.Debug(msg)
+
+			return
+		}
+
+		if errors.As(err, &runtimePubsub.NotFoundError{}) {
+			msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
+			status = fasthttp.StatusBadRequest
+			respond(reqCtx, withError(status, msg), closeChildSpans)
+			log.Debug(msg)
+
+			return
+		}
+
+		// Return the error along with the list of failed entries.
+		resData, _ := json.Marshal(bulkRes)
+		respond(reqCtx, withJSON(status, resData), closeChildSpans)
+		return
+	}
+
+	// If there are no errors, then an empty response is returned.
+	respond(reqCtx, withEmpty(), closeChildSpans)
+}
+
+// validateAndGetPubsubAndTopic takes input as request context and returns the pubsub interface, pubsub name, topic name,
+// or error status code and an ErrorResponse object.
+func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, int, *ErrorResponse) {
+	if a.pubsubAdapter == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
+
+		return nil, "", "", fasthttp.StatusBadRequest, &msg
+	}
+
+	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
+	if pubsubName == "" {
+		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+
+	topic := reqCtx.UserValue(topicParam).(string)
+	if topic == "" {
+		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+	return thepubsub, pubsubName, topic, fasthttp.StatusOK, nil
 }
 
 // GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.

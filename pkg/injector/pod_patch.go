@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,154 +16,38 @@ package injector
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"path"
-	"strconv"
-	"strings"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/credentials"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/components"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/dapr/utils"
 )
 
-//nolint:gosec
 const (
-	sidecarContainerName              = "daprd"
-	daprEnabledKey                    = "dapr.io/enabled"
-	daprAppPortKey                    = "dapr.io/app-port"
-	daprConfigKey                     = "dapr.io/config"
-	daprAppProtocolKey                = "dapr.io/app-protocol"
-	appIDKey                          = "dapr.io/app-id"
-	daprEnableProfilingKey            = "dapr.io/enable-profiling"
-	daprLogLevel                      = "dapr.io/log-level"
-	daprAPITokenSecret                = "dapr.io/api-token-secret" /* #nosec */
-	daprAppTokenSecret                = "dapr.io/app-token-secret" /* #nosec */
-	daprLogAsJSON                     = "dapr.io/log-as-json"
-	daprAppMaxConcurrencyKey          = "dapr.io/app-max-concurrency"
-	daprEnableMetricsKey              = "dapr.io/enable-metrics"
-	daprMetricsPortKey                = "dapr.io/metrics-port"
-	daprEnableDebugKey                = "dapr.io/enable-debug"
-	daprDebugPortKey                  = "dapr.io/debug-port"
-	daprEnvKey                        = "dapr.io/env"
-	daprCPULimitKey                   = "dapr.io/sidecar-cpu-limit"
-	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
-	daprCPURequestKey                 = "dapr.io/sidecar-cpu-request"
-	daprMemoryRequestKey              = "dapr.io/sidecar-memory-request"
-	daprListenAddresses               = "dapr.io/sidecar-listen-addresses"
-	daprLivenessProbeDelayKey         = "dapr.io/sidecar-liveness-probe-delay-seconds"
-	daprLivenessProbeTimeoutKey       = "dapr.io/sidecar-liveness-probe-timeout-seconds"
-	daprLivenessProbePeriodKey        = "dapr.io/sidecar-liveness-probe-period-seconds"
-	daprLivenessProbeThresholdKey     = "dapr.io/sidecar-liveness-probe-threshold"
-	daprReadinessProbeDelayKey        = "dapr.io/sidecar-readiness-probe-delay-seconds"
-	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
-	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
-	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
-	daprImage                         = "dapr.io/sidecar-image"
-	daprAppSSLKey                     = "dapr.io/app-ssl"
-	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
-	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
-	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
-	daprEnableAPILogging              = "dapr.io/enable-api-logging"
-	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
-	daprVolumeMountsReadOnlyKey       = "dapr.io/volume-mounts"
-	daprVolumeMountsReadWriteKey      = "dapr.io/volume-mounts-rw"
-	daprDisableBuiltinK8sSecretStore  = "dapr.io/disable-builtin-k8s-secret-store"
-	daprEnableAppHealthCheck          = "dapr.io/enable-app-health-check"
-	daprAppHealthCheckPath            = "dapr.io/app-health-check-path"
-	daprAppHealthProbeInterval        = "dapr.io/app-health-probe-interval"
-	daprAppHealthProbeTimeout         = "dapr.io/app-health-probe-timeout"
-	daprAppHealthThreshold            = "dapr.io/app-health-threshold"
-	unixDomainSocketVolume            = "dapr-unix-domain-socket"
-	daprPlacementAddressesKey         = "dapr.io/placement-host-address"
-	containersPath                    = "/spec/containers"
-	sidecarHTTPPort                   = 3500
-	sidecarAPIGRPCPort                = 50001
-	sidecarInternalGRPCPort           = 50002
-	sidecarPublicPort                 = 3501
-	userContainerDaprHTTPPortName     = "DAPR_HTTP_PORT"
-	userContainerDaprGRPCPortName     = "DAPR_GRPC_PORT"
-	apiAddress                        = "dapr-api"
-	placementService                  = "dapr-placement-server"
-	sentryService                     = "dapr-sentry"
-	apiPort                           = 80
-	placementServicePort              = 50005
-	sentryServicePort                 = 80
-	sidecarHTTPPortName               = "dapr-http"
-	sidecarGRPCPortName               = "dapr-grpc"
-	sidecarInternalGRPCPortName       = "dapr-internal"
-	sidecarMetricsPortName            = "dapr-metrics"
-	sidecarDebugPortName              = "dapr-debug"
-	defaultLogLevel                   = "info"
-	defaultLogAsJSON                  = false
-	defaultAppSSL                     = false
-	kubernetesMountPath               = "/var/run/secrets/kubernetes.io/serviceaccount"
-	defaultConfig                     = "daprsystem"
-	defaultEnabledMetric              = true
-	defaultMetricsPort                = 9090
-	defaultSidecarDebug               = false
-	defaultSidecarDebugPort           = 40000
-	defaultSidecarListenAddresses     = "[::1],127.0.0.1"
-	sidecarHealthzPath                = "healthz"
-	defaultHealthzProbeDelaySeconds   = 3
-	defaultHealthzProbeTimeoutSeconds = 3
-	defaultHealthzProbePeriodSeconds  = 6
-	defaultHealthzProbeThreshold      = 3
-	apiVersionV1                      = "v1.0"
-	defaultMtlsEnabled                = true
-	defaultAPILoggingEnabled          = false
-	defaultBuiltinSecretStoreDisabled = false
-	defaultAppCheckPath               = "/health"
-	defaultAppHealthProbeInterval     = 5   // in seconds
-	defaultAppHealthProbeTimeout      = 500 // in ms
-	defaultAppHealthThreshold         = 3
+	defaultConfig      = "daprsystem"
+	defaultMtlsEnabled = true
 )
-
-// sidecarContainerConfig contains the configuration for the sidecar container.
-type sidecarContainerConfig struct {
-	appID                       string
-	annotations                 map[string]string
-	certChain                   string
-	certKey                     string
-	controlPlaneAddress         string
-	daprSidecarImage            string
-	identity                    string
-	ignoreEntrypointTolerations string
-	imagePullPolicy             string
-	mtlsEnabled                 bool
-	namespace                   string
-	placementServiceAddress     string
-	sentryAddress               string
-	socketVolumeMount           *corev1.VolumeMount
-	tokenVolumeMount            *corev1.VolumeMount
-	tolerations                 []corev1.Toleration
-	trustAnchors                string
-	volumeMounts                []corev1.VolumeMount
-}
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
-) ([]PatchOperation, error) {
+) (patchOps []sidecar.PatchOperation, err error) {
 	req := ar.Request
 	var pod corev1.Pod
-	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
+	err = json.Unmarshal(req.Object.Raw, &pod)
+	if err != nil {
 		errors.Wrap(err, "could not unmarshal raw object")
 		return nil, err
 	}
 
 	log.Infof(
-		"AdmissionReview for Kind=%v, Namespace=%v Name=%v (%v) UID=%v "+
-			"patchOperation=%v UserInfo=%v",
+		"AdmissionReview for Kind=%v, Namespace=%s Name=%s (%s) UID=%v patchOperation=%v UserInfo=%v",
 		req.Kind,
 		req.Namespace,
 		req.Name,
@@ -173,206 +57,97 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		req.UserInfo,
 	)
 
-	if !isResourceDaprEnabled(pod.Annotations) || podContainsSidecarContainer(&pod) {
+	an := sidecar.Annotations(pod.Annotations)
+	if !an.GetBoolOrDefault(annotations.KeyEnabled, false) || sidecar.PodContainsSidecarContainer(&pod) {
 		return nil, nil
 	}
 
-	appID := getAppID(pod)
-	err := validation.ValidateKubernetesAppID(appID)
+	appID := sidecar.GetAppID(pod.ObjectMeta)
+	err = validation.ValidateKubernetesAppID(appID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Keep DNS resolution outside of getSidecarContainer for unit testing.
-	placementAddress := getServiceAddress(placementService, namespace, i.config.KubeClusterDomain, placementServicePort)
-	sentryAddress := getServiceAddress(sentryService, namespace, i.config.KubeClusterDomain, sentryServicePort)
-	apiSvcAddress := getServiceAddress(apiAddress, namespace, i.config.KubeClusterDomain, apiPort)
+	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
+	placementAddress := sidecar.ServiceAddress(sidecar.ServicePlacement, namespace, i.config.KubeClusterDomain)
+	sentryAddress := sidecar.ServiceAddress(sidecar.ServiceSentry, namespace, i.config.KubeClusterDomain)
+	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, namespace, i.config.KubeClusterDomain)
 
-	var trustAnchors string
-	var certChain string
-	var certKey string
+	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(context.TODO(), kubeClient, namespace)
 
-	trustAnchors, certChain, certKey = getTrustAnchorsAndCertChain(kubeClient, namespace)
-	socketVolumeMount := appendUnixDomainSocketVolume(&pod)
-
-	cfg := sidecarContainerConfig{
-		appID:                       appID,
-		annotations:                 pod.Annotations,
-		certChain:                   certChain,
-		certKey:                     certKey,
-		controlPlaneAddress:         apiSvcAddress,
-		daprSidecarImage:            image,
-		identity:                    fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName),
-		ignoreEntrypointTolerations: i.config.IgnoreEntrypointTolerations,
-		imagePullPolicy:             imagePullPolicy,
-		mtlsEnabled:                 mTLSEnabled(daprClient),
-		namespace:                   req.Namespace,
-		placementServiceAddress:     placementAddress,
-		sentryAddress:               sentryAddress,
-		socketVolumeMount:           socketVolumeMount,
-		tokenVolumeMount:            getTokenVolumeMount(pod),
-		tolerations:                 pod.Spec.Tolerations,
-		trustAnchors:                trustAnchors,
-		volumeMounts:                getVolumeMounts(pod),
+	// Get all volume mounts
+	volumeMounts := sidecar.GetVolumeMounts(pod)
+	socketVolumeMount := sidecar.GetUnixDomainSocketVolumeMount(&pod)
+	if socketVolumeMount != nil {
+		volumeMounts = append(volumeMounts, *socketVolumeMount)
 	}
-	sidecarContainer, err := getSidecarContainer(cfg)
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      sidecar.TokenVolumeName,
+		MountPath: sidecar.TokenVolumeKubernetesMountPath,
+		ReadOnly:  true,
+	})
+
+	// Pluggable components
+	appContainers, componentContainers := components.SplitContainers(pod)
+	componentPatchOps, componentsSocketVolumeMount := components.PatchOps(componentContainers, &pod)
+
+	// Projected volume with the token
+	tokenVolume := sidecar.GetTokenVolume()
+
+	// Get the sidecar container
+	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
+		AppID:                        appID,
+		Annotations:                  an,
+		CertChain:                    certChain,
+		CertKey:                      certKey,
+		ControlPlaneAddress:          apiSvcAddress,
+		DaprSidecarImage:             image,
+		Identity:                     req.Namespace + ":" + pod.Spec.ServiceAccountName,
+		IgnoreEntrypointTolerations:  i.config.GetIgnoreEntrypointTolerations(),
+		ImagePullPolicy:              i.config.GetPullPolicy(),
+		MTLSEnabled:                  mTLSEnabled(daprClient),
+		Namespace:                    req.Namespace,
+		PlacementServiceAddress:      placementAddress,
+		SentryAddress:                sentryAddress,
+		Tolerations:                  pod.Spec.Tolerations,
+		TrustAnchors:                 trustAnchors,
+		VolumeMounts:                 volumeMounts,
+		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
+		RunAsNonRoot:                 i.config.GetRunAsNonRoot(),
+		ReadOnlyRootFilesystem:       i.config.GetReadOnlyRootFilesystem(),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	patchOps := []PatchOperation{}
-	envPatchOps := []PatchOperation{}
-	socketVolumePatchOps := []PatchOperation{}
-	var path string
-	var value interface{}
+	// Create the list of patch operations
+	patchOps = []sidecar.PatchOperation{}
 	if len(pod.Spec.Containers) == 0 {
-		path = containersPath
-		value = []corev1.Container{*sidecarContainer}
-	} else {
-		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		socketVolumePatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketVolumeMount)
-		path = "/spec/containers/-"
-		value = sidecarContainer
-	}
-
-	patchOps = append(
-		patchOps,
-		PatchOperation{
+		patchOps = append(patchOps, sidecar.PatchOperation{
 			Op:    "add",
-			Path:  path,
-			Value: value,
-		},
+			Path:  sidecar.PatchPathContainers,
+			Value: []corev1.Container{*sidecarContainer},
+		})
+	} else {
+		patchOps = append(patchOps, sidecar.PatchOperation{
+			Op:    "add",
+			Path:  sidecar.PatchPathContainers + "/-",
+			Value: sidecarContainer,
+		})
+		patchOps = append(patchOps,
+			sidecar.AddDaprEnvVarsToContainers(appContainers)...)
+		patchOps = append(patchOps,
+			sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
+	}
+	volumePatchOps := sidecar.GetVolumesPatchOperations(
+		pod.Spec.Volumes,
+		[]corev1.Volume{tokenVolume},
+		sidecar.PatchPathVolumes,
 	)
-	patchOps = append(patchOps, envPatchOps...)
-	patchOps = append(patchOps, socketVolumePatchOps...)
+	patchOps = append(patchOps, volumePatchOps...)
+	patchOps = append(patchOps, componentPatchOps...)
 
 	return patchOps, nil
-}
-
-// This function add Dapr environment variables to all the containers in any Dapr enabled pod.
-// The containers can be injected or user defined.
-func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
-	portEnv := []corev1.EnvVar{
-		{
-			Name:  userContainerDaprHTTPPortName,
-			Value: strconv.Itoa(sidecarHTTPPort),
-		},
-		{
-			Name:  userContainerDaprGRPCPortName,
-			Value: strconv.Itoa(sidecarAPIGRPCPort),
-		},
-	}
-	envPatchOps := make([]PatchOperation, 0, len(containers))
-	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", containersPath, i)
-		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
-		envPatchOps = append(envPatchOps, patchOps...)
-	}
-	return envPatchOps
-}
-
-// This function only add new environment variables if they do not exist.
-// It does not override existing values for those variables if they have been defined already.
-func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path string) []PatchOperation {
-	if len(envs) == 0 {
-		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
-		return []PatchOperation{
-			{
-				Op:    "add",
-				Path:  path,
-				Value: addEnv,
-			},
-		}
-	}
-	// If there are existing env vars, then we are adding to an existing slice of env vars.
-	path += "/-"
-
-	var patchOps []PatchOperation
-LoopEnv:
-	for _, env := range addEnv {
-		for _, actual := range envs {
-			if actual.Name == env.Name {
-				// Add only env vars that do not conflict with existing user defined/injected env vars.
-				continue LoopEnv
-			}
-		}
-		patchOps = append(patchOps, PatchOperation{
-			Op:    "add",
-			Path:  path,
-			Value: env,
-		})
-	}
-	return patchOps
-}
-
-// This function add Dapr unix domain socket volume to all the containers in any Dapr enabled pod.
-func addSocketVolumeToContainers(containers []corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
-	if socketVolumeMount == nil {
-		return []PatchOperation{}
-	}
-
-	return addVolumeToContainers(containers, *socketVolumeMount)
-}
-
-func addVolumeToContainers(containers []corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
-	volumeMount := []corev1.VolumeMount{addMounts}
-	volumeMountPatchOps := make([]PatchOperation, 0, len(containers))
-	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/volumeMounts", containersPath, i)
-		patchOps := getVolumeMountPatchOperations(container.VolumeMounts, volumeMount, path)
-		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
-	}
-	return volumeMountPatchOps
-}
-
-// It does not override existing values for those variables if they have been defined already.
-func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
-	if len(volumeMounts) == 0 {
-		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
-		return []PatchOperation{
-			{
-				Op:    "add",
-				Path:  path,
-				Value: addMounts,
-			},
-		}
-	}
-	// If there are existing volume mounts, then we are adding to an existing slice of volume mounts.
-	path += "/-"
-
-	var patchOps []PatchOperation
-
-	for _, addMount := range addMounts {
-		isConflict := false
-		for _, mount := range volumeMounts {
-			// conflict cases
-			if addMount.Name == mount.Name || addMount.MountPath == mount.MountPath {
-				isConflict = true
-				break
-			}
-		}
-
-		if !isConflict {
-			patchOps = append(patchOps, PatchOperation{
-				Op:    "add",
-				Path:  path,
-				Value: addMount,
-			})
-		}
-	}
-
-	return patchOps
-}
-
-func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, metaV1.GetOptions{})
-	if err != nil {
-		return "", "", ""
-	}
-	rootCert := secret.Data[credentials.RootCertFilename]
-	certChain := secret.Data[credentials.IssuerCertFilename]
-	certKey := secret.Data[credentials.IssuerKeyFilename]
-	return string(rootCert), string(certChain), string(certKey)
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
@@ -389,633 +164,4 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 	}
 	log.Infof("Dapr system configuration (%s) is not found, use default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
-}
-
-func getTokenVolumeMount(pod corev1.Pod) *corev1.VolumeMount {
-	for _, c := range pod.Spec.Containers {
-		for _, v := range c.VolumeMounts {
-			if v.MountPath == kubernetesMountPath {
-				return &v
-			}
-		}
-	}
-	return nil
-}
-
-func podContainsSidecarContainer(pod *corev1.Pod) bool {
-	for _, c := range pod.Spec.Containers {
-		if c.Name == sidecarContainerName {
-			return true
-		}
-	}
-	return false
-}
-
-func getMaxConcurrency(annotations map[string]string) (int32, error) {
-	return getInt32Annotation(annotations, daprAppMaxConcurrencyKey)
-}
-
-func getAppPort(annotations map[string]string) (int32, error) {
-	return getInt32Annotation(annotations, daprAppPortKey)
-}
-
-func getConfig(annotations map[string]string) string {
-	return getStringAnnotation(annotations, daprConfigKey)
-}
-
-func getProtocol(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "http")
-}
-
-func getEnableMetrics(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnableMetricsKey, defaultEnabledMetric)
-}
-
-func getMetricsPort(annotations map[string]string) int {
-	return int(getInt32AnnotationOrDefault(annotations, daprMetricsPortKey, defaultMetricsPort))
-}
-
-func getPlacementAddresses(annotations map[string]string) string {
-	return getStringAnnotation(annotations, daprPlacementAddressesKey)
-}
-
-func existPlacementAddressesAnnotation(annotations map[string]string) bool {
-	return existAnnotation(annotations, daprPlacementAddressesKey)
-}
-
-func getEnableDebug(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnableDebugKey, defaultSidecarDebug)
-}
-
-func getDebugPort(annotations map[string]string) int {
-	return int(getInt32AnnotationOrDefault(annotations, daprDebugPortKey, defaultSidecarDebugPort))
-}
-
-func getAppID(pod corev1.Pod) string {
-	return getStringAnnotationOrDefault(pod.Annotations, appIDKey, pod.GetName())
-}
-
-func getLogLevel(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprLogLevel, defaultLogLevel)
-}
-
-func logAsJSONEnabled(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprLogAsJSON, defaultLogAsJSON)
-}
-
-func profilingEnabled(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnableProfilingKey, false)
-}
-
-func appSSLEnabled(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprAppSSLKey, defaultAppSSL)
-}
-
-func getAPITokenSecret(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprAPITokenSecret, "")
-}
-
-func GetAppTokenSecret(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprAppTokenSecret, "")
-}
-
-func getMaxRequestBodySize(annotations map[string]string) (int32, error) {
-	return getInt32Annotation(annotations, daprMaxRequestBodySize)
-}
-
-func getListenAddresses(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprListenAddresses, defaultSidecarListenAddresses)
-}
-
-func getReadBufferSize(annotations map[string]string) (int32, error) {
-	return getInt32Annotation(annotations, daprReadBufferSize)
-}
-
-func getGracefulShutdownSeconds(annotations map[string]string) (int32, error) {
-	return getInt32Annotation(annotations, daprGracefulShutdownSeconds)
-}
-
-func getUnixDomainSocketPath(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprUnixDomainSocketPath, "")
-}
-
-func getVolumeMountsReadOnly(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprVolumeMountsReadOnlyKey, "")
-}
-
-func getVolumeMountsReadWrite(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprVolumeMountsReadWriteKey, "")
-}
-
-func getDisableBuiltinK8sSecretStore(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprDisableBuiltinK8sSecretStore, defaultBuiltinSecretStoreDisabled)
-}
-
-func getEnableAppHealthCheck(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnableAppHealthCheck, defaultBuiltinSecretStoreDisabled)
-}
-
-func getAppHealthCheckPath(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprAppHealthCheckPath, defaultAppCheckPath)
-}
-
-func getAppHealthProbeInterval(annotations map[string]string) int32 {
-	return getInt32AnnotationOrDefault(annotations, daprAppHealthProbeInterval, defaultAppHealthProbeInterval)
-}
-
-func getAppHealthProbeTimeout(annotations map[string]string) int32 {
-	return getInt32AnnotationOrDefault(annotations, daprAppHealthProbeTimeout, defaultAppHealthProbeTimeout)
-}
-
-func getAppHealthThreshold(annotations map[string]string) int32 {
-	return getInt32AnnotationOrDefault(annotations, daprAppHealthThreshold, defaultAppHealthThreshold)
-}
-
-func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
-	enabled, ok := annotations[key]
-	if !ok {
-		return defaultValue
-	}
-	return utils.IsTruthy(enabled)
-}
-
-func getStringAnnotationOrDefault(annotations map[string]string, key, defaultValue string) string {
-	if val, ok := annotations[key]; ok && val != "" {
-		return val
-	}
-	return defaultValue
-}
-
-func getStringAnnotation(annotations map[string]string, key string) string {
-	return annotations[key]
-}
-
-func existAnnotation(annotations map[string]string, key string) bool {
-	_, exist := annotations[key]
-	return exist
-}
-
-func getInt32AnnotationOrDefault(annotations map[string]string, key string, defaultValue int) int32 {
-	s, ok := annotations[key]
-	if !ok {
-		return int32(defaultValue)
-	}
-	value, err := strconv.ParseInt(s, 10, 32)
-	if err != nil {
-		return int32(defaultValue)
-	}
-	return int32(value)
-}
-
-func getInt32Annotation(annotations map[string]string, key string) (int32, error) {
-	s, ok := annotations[key]
-	if !ok {
-		return -1, nil
-	}
-	value, err := strconv.ParseInt(s, 10, 32)
-	if err != nil {
-		return -1, errors.Wrapf(err, "error parsing %s int value %s ", key, s)
-	}
-	return int32(value), nil
-}
-
-func getProbeHTTPHandler(port int32, pathElements ...string) corev1.ProbeHandler {
-	return corev1.ProbeHandler{
-		HTTPGet: &corev1.HTTPGetAction{
-			Path: formatProbePath(pathElements...),
-			Port: intstr.IntOrString{IntVal: port},
-		},
-	}
-}
-
-func formatProbePath(elements ...string) string {
-	pathStr := path.Join(elements...)
-	if !strings.HasPrefix(pathStr, "/") {
-		pathStr = fmt.Sprintf("/%s", pathStr)
-	}
-	return pathStr
-}
-
-func appendQuantityToResourceList(quantity string, resourceName corev1.ResourceName, resourceList corev1.ResourceList) (*corev1.ResourceList, error) {
-	q, err := resource.ParseQuantity(quantity)
-	if err != nil {
-		return nil, err
-	}
-	resourceList[resourceName] = q
-	return &resourceList, nil
-}
-
-func getResourceRequirements(annotations map[string]string) (*corev1.ResourceRequirements, error) {
-	r := corev1.ResourceRequirements{
-		Limits:   corev1.ResourceList{},
-		Requests: corev1.ResourceList{},
-	}
-	cpuLimit, ok := annotations[daprCPULimitKey]
-	if ok {
-		list, err := appendQuantityToResourceList(cpuLimit, corev1.ResourceCPU, r.Limits)
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing sidecar cpu limit")
-		}
-		r.Limits = *list
-	}
-	memLimit, ok := annotations[daprMemoryLimitKey]
-	if ok {
-		list, err := appendQuantityToResourceList(memLimit, corev1.ResourceMemory, r.Limits)
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing sidecar memory limit")
-		}
-		r.Limits = *list
-	}
-	cpuRequest, ok := annotations[daprCPURequestKey]
-	if ok {
-		list, err := appendQuantityToResourceList(cpuRequest, corev1.ResourceCPU, r.Requests)
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing sidecar cpu request")
-		}
-		r.Requests = *list
-	}
-	memRequest, ok := annotations[daprMemoryRequestKey]
-	if ok {
-		list, err := appendQuantityToResourceList(memRequest, corev1.ResourceMemory, r.Requests)
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing sidecar memory request")
-		}
-		r.Requests = *list
-	}
-
-	if len(r.Limits) > 0 || len(r.Requests) > 0 {
-		return &r, nil
-	}
-	return nil, nil
-}
-
-func isResourceDaprEnabled(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnabledKey, false)
-}
-
-func getEnableAPILogging(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnableAPILogging, defaultAPILoggingEnabled)
-}
-
-func getServiceAddress(name, namespace, clusterDomain string, port int) string {
-	return fmt.Sprintf("%s.%s.svc.%s:%d", name, namespace, clusterDomain, port)
-}
-
-func getPullPolicy(pullPolicy string) corev1.PullPolicy {
-	switch pullPolicy {
-	case "Always":
-		return corev1.PullAlways
-	case "Never":
-		return corev1.PullNever
-	case "IfNotPresent":
-		return corev1.PullIfNotPresent
-	default:
-		return corev1.PullIfNotPresent
-	}
-}
-
-func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) {
-	appPort, err := getAppPort(cfg.annotations)
-	if err != nil {
-		return nil, err
-	}
-	appPortStr := ""
-	if appPort > 0 {
-		appPortStr = fmt.Sprintf("%v", appPort)
-	}
-
-	metricsEnabled := getEnableMetrics(cfg.annotations)
-	apiLoggingEnabled := getEnableAPILogging(cfg.annotations)
-	metricsPort := getMetricsPort(cfg.annotations)
-	sidecarListenAddresses := getListenAddresses(cfg.annotations)
-
-	maxConcurrency, err := getMaxConcurrency(cfg.annotations)
-	if err != nil {
-		log.Warn(err)
-	}
-
-	pullPolicy := getPullPolicy(cfg.imagePullPolicy)
-
-	httpHandler := getProbeHTTPHandler(sidecarPublicPort, apiVersionV1, sidecarHealthzPath)
-
-	allowPrivilegeEscalation := false
-
-	requestBodySize, err := getMaxRequestBodySize(cfg.annotations)
-	if err != nil {
-		log.Warn(err)
-	}
-
-	readBufferSize, err := getReadBufferSize(cfg.annotations)
-	if err != nil {
-		log.Warn(err)
-	}
-
-	gracefulShutdownSeconds, err := getGracefulShutdownSeconds(cfg.annotations)
-	if err != nil {
-		log.Warn(err)
-	}
-
-	if existPlacementAddressesAnnotation(cfg.annotations) {
-		cfg.placementServiceAddress = getPlacementAddresses(cfg.annotations)
-	}
-
-	ports := []corev1.ContainerPort{
-		{
-			ContainerPort: int32(sidecarHTTPPort),
-			Name:          sidecarHTTPPortName,
-		},
-		{
-			ContainerPort: int32(sidecarAPIGRPCPort),
-			Name:          sidecarGRPCPortName,
-		},
-		{
-			ContainerPort: int32(sidecarInternalGRPCPort),
-			Name:          sidecarInternalGRPCPortName,
-		},
-		{
-			ContainerPort: int32(metricsPort),
-			Name:          sidecarMetricsPortName,
-		},
-	}
-
-	cmd := []string{"/daprd"}
-
-	args := []string{
-		"--mode", "kubernetes",
-		"--dapr-http-port", strconv.Itoa(sidecarHTTPPort),
-		"--dapr-grpc-port", strconv.Itoa(sidecarAPIGRPCPort),
-		"--dapr-internal-grpc-port", strconv.Itoa(sidecarInternalGRPCPort),
-		"--dapr-listen-addresses", sidecarListenAddresses,
-		"--dapr-public-port", strconv.Itoa(sidecarPublicPort),
-		"--app-port", appPortStr,
-		"--app-id", cfg.appID,
-		"--control-plane-address", cfg.controlPlaneAddress,
-		"--app-protocol", getProtocol(cfg.annotations),
-		"--placement-host-address", cfg.placementServiceAddress,
-		"--config", getConfig(cfg.annotations),
-		"--log-level", getLogLevel(cfg.annotations),
-		"--app-max-concurrency", strconv.Itoa(int(maxConcurrency)),
-		"--sentry-address", cfg.sentryAddress,
-		"--enable-metrics=" + strconv.FormatBool(metricsEnabled),
-		"--metrics-port", strconv.Itoa(metricsPort),
-		"--dapr-http-max-request-size", strconv.Itoa(int(requestBodySize)),
-		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
-		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
-		"--enable-api-logging=" + strconv.FormatBool(apiLoggingEnabled),
-		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(getDisableBuiltinK8sSecretStore(cfg.annotations)),
-	}
-
-	if getEnableAppHealthCheck(cfg.annotations) {
-		args = append(args,
-			"--enable-app-health-check=true",
-			"--app-health-check-path", getAppHealthCheckPath(cfg.annotations),
-			"--app-health-probe-interval", strconv.Itoa(int(getAppHealthProbeInterval(cfg.annotations))),
-			"--app-health-probe-timeout", strconv.Itoa(int(getAppHealthProbeTimeout(cfg.annotations))),
-			"--app-health-threshold", strconv.Itoa(int(getAppHealthThreshold(cfg.annotations))),
-		)
-	}
-
-	debugEnabled := getEnableDebug(cfg.annotations)
-	debugPort := getDebugPort(cfg.annotations)
-	if debugEnabled {
-		ports = append(ports, corev1.ContainerPort{
-			Name:          sidecarDebugPortName,
-			ContainerPort: int32(debugPort),
-		})
-
-		cmd = []string{"/dlv"}
-
-		args = append([]string{
-			fmt.Sprintf("--listen=:%v", debugPort),
-			"--accept-multiclient",
-			"--headless=true",
-			"--log",
-			"--api-version=2",
-			"exec",
-			"/daprd",
-			"--",
-		}, args...)
-	}
-
-	if image := getStringAnnotation(cfg.annotations, daprImage); image != "" {
-		cfg.daprSidecarImage = image
-	}
-
-	c := &corev1.Container{
-		Name:            sidecarContainerName,
-		Image:           cfg.daprSidecarImage,
-		ImagePullPolicy: pullPolicy,
-		SecurityContext: &corev1.SecurityContext{
-			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
-		},
-		Ports: ports,
-		Args:  append(cmd, args...),
-		Env: []corev1.EnvVar{
-			{
-				Name:  "NAMESPACE",
-				Value: cfg.namespace,
-			},
-			{
-				Name: "POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
-				},
-			},
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler:        httpHandler,
-			InitialDelaySeconds: getInt32AnnotationOrDefault(cfg.annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
-			TimeoutSeconds:      getInt32AnnotationOrDefault(cfg.annotations, daprReadinessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
-			PeriodSeconds:       getInt32AnnotationOrDefault(cfg.annotations, daprReadinessProbePeriodKey, defaultHealthzProbePeriodSeconds),
-			FailureThreshold:    getInt32AnnotationOrDefault(cfg.annotations, daprReadinessProbeThresholdKey, defaultHealthzProbeThreshold),
-		},
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler:        httpHandler,
-			InitialDelaySeconds: getInt32AnnotationOrDefault(cfg.annotations, daprLivenessProbeDelayKey, defaultHealthzProbeDelaySeconds),
-			TimeoutSeconds:      getInt32AnnotationOrDefault(cfg.annotations, daprLivenessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
-			PeriodSeconds:       getInt32AnnotationOrDefault(cfg.annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),
-			FailureThreshold:    getInt32AnnotationOrDefault(cfg.annotations, daprLivenessProbeThresholdKey, defaultHealthzProbeThreshold),
-		},
-	}
-
-	// If the pod contains any of the tolerations specified by the configuration,
-	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.
-	// This is to allow the Docker images to specify an ENTRYPOINT
-	// which is otherwise overridden by Command.
-	if podContainsTolerations(cfg.ignoreEntrypointTolerations, cfg.tolerations) {
-		c.Command = cmd
-		c.Args = args
-	} else {
-		c.Args = cmd
-		c.Args = append(c.Args, args...)
-	}
-
-	c.Env = append(c.Env, utils.ParseEnvString(cfg.annotations[daprEnvKey])...)
-
-	// This is a special case that requires administrator privileges in Windows containers
-	// to install the certificates to the root store. If this environment variable is set,
-	// the container security context should be set to run as administrator.
-	for _, env := range c.Env {
-		if env.Name == "SSL_CERT_DIR" {
-			userName := "ContainerAdministrator"
-			c.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
-				RunAsUserName: &userName,
-			}
-			break
-		}
-	}
-
-	if cfg.socketVolumeMount != nil {
-		c.VolumeMounts = []corev1.VolumeMount{*cfg.socketVolumeMount}
-	}
-
-	if cfg.tokenVolumeMount != nil {
-		c.VolumeMounts = append(c.VolumeMounts, *cfg.tokenVolumeMount)
-	}
-
-	if len(cfg.volumeMounts) != 0 {
-		c.VolumeMounts = append(c.VolumeMounts, cfg.volumeMounts...)
-	}
-
-	if logAsJSONEnabled(cfg.annotations) {
-		c.Args = append(c.Args, "--log-as-json")
-	}
-
-	if profilingEnabled(cfg.annotations) {
-		c.Args = append(c.Args, "--enable-profiling")
-	}
-
-	c.Env = append(c.Env, corev1.EnvVar{
-		Name:  certs.TrustAnchorsEnvVar,
-		Value: cfg.trustAnchors,
-	},
-		corev1.EnvVar{
-			Name:  certs.CertChainEnvVar,
-			Value: cfg.certChain,
-		},
-		corev1.EnvVar{
-			Name:  certs.CertKeyEnvVar,
-			Value: cfg.certKey,
-		},
-		corev1.EnvVar{
-			Name:  "SENTRY_LOCAL_IDENTITY",
-			Value: cfg.identity,
-		})
-
-	if cfg.mtlsEnabled {
-		c.Args = append(c.Args, "--enable-mtls")
-	}
-
-	if appSSLEnabled(cfg.annotations) {
-		c.Args = append(c.Args, "--app-ssl")
-	}
-
-	secret := getAPITokenSecret(cfg.annotations)
-	if secret != "" {
-		c.Env = append(c.Env, corev1.EnvVar{
-			Name: auth.APITokenEnvVar,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "token",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret,
-					},
-				},
-			},
-		})
-	}
-
-	appSecret := GetAppTokenSecret(cfg.annotations)
-	if appSecret != "" {
-		c.Env = append(c.Env, corev1.EnvVar{
-			Name: auth.AppAPITokenEnvVar,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "token",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: appSecret,
-					},
-				},
-			},
-		})
-	}
-
-	resources, err := getResourceRequirements(cfg.annotations)
-	if err != nil {
-		log.Warnf("couldn't set container resource requirements: %s. using defaults", err)
-	}
-	if resources != nil {
-		c.Resources = *resources
-	}
-	return c, nil
-}
-
-func appendUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
-	unixDomainSocket := getUnixDomainSocketPath(pod.Annotations)
-
-	if unixDomainSocket == "" {
-		return nil
-	}
-
-	// socketVolume is an EmptyDir
-	socketVolume := &corev1.Volume{
-		Name: unixDomainSocketVolume,
-	}
-
-	pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
-
-	return &corev1.VolumeMount{Name: unixDomainSocketVolume, MountPath: unixDomainSocket}
-}
-
-func podContainsVolume(pod corev1.Pod, name string) bool {
-	for _, volume := range pod.Spec.Volumes {
-		if volume.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
-	volumeMounts := []corev1.VolumeMount{}
-
-	vs := append(
-		utils.ParseVolumeMountsString(getVolumeMountsReadOnly(pod.Annotations), true),
-		utils.ParseVolumeMountsString(getVolumeMountsReadWrite(pod.Annotations), false)...)
-
-	for _, v := range vs {
-		if podContainsVolume(pod, v.Name) {
-			volumeMounts = append(volumeMounts, v)
-		} else {
-			log.Warnf("volume %s is not present in pod %s, skipping.", v.Name, pod.Name)
-		}
-	}
-
-	return volumeMounts
-}
-
-// podContainsTolerations returns true if the pod contains any of the tolerations specified in tolerationsJSON.
-// If the JSON string is empty or contain an invalid JSON value, it returns false.
-func podContainsTolerations(tolerationsJSON string, podTolerations []corev1.Toleration) bool {
-	if tolerationsJSON == "" {
-		return false
-	}
-
-	// If the string contains an invalid value, return false.
-	ts := []corev1.Toleration{}
-	err := json.Unmarshal([]byte(tolerationsJSON), &ts)
-	if err != nil {
-		log.Warnf("couldn't unmarshal tolerationsJSON: %s", err)
-		return false
-	}
-
-	// If the pod contains any of the tolerations specified, return true.
-	for _, t := range ts {
-		if utils.Contains(podTolerations, t) {
-			return true
-		}
-	}
-	return false
 }

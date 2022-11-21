@@ -1,176 +1,20 @@
 name: dapr-bot
 
 on:
-  issue_comment: {types: created}
+  issue_comment:
+    types: [created]
 
 jobs:
   daprbot:
     name: bot-processor
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v2 # required to make the script available for next step
       - name: Comment analyzer
-        uses: actions/github-script@v1
+        uses: actions/github-script@v4
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
-            // list of owner who can control dapr-bot workflow
-            // TODO: Read owners from OWNERS file.
-            const owners = [
-              'artursouza',
-              'berndverst',
-              'daixiang0',
-              'halspang',
-              'ItalyPaleAle',
-              'johnewart',
-              'msfussell',
-              'mukundansundar',
-              'pkedy',
-              'pruthvidhodda',
-              'shubham1172',
-              'skyao',
-              'tanvigour',
-              'yaron2'
-            ];
-
-            const payload = context.payload;
-            const issue = context.issue;
-            const isFromPulls = !!payload.issue.pull_request;
-            const commentBody = payload.comment.body;
-
-            if (!isFromPulls && commentBody && commentBody.indexOf("/assign") == 0) {
-              if (!issue.assignees || issue.assignees.length === 0) {
-                await github.issues.addAssignees({
-                  owner: issue.owner,
-                  repo: issue.repo,
-                  issue_number: issue.number,
-                  assignees: [context.actor],
-                })
-              }
-
-              return;
-            }
-
-            // actions above this check are enabled for everyone.
-            if (owners.indexOf(context.actor) < 0) {
-              return;
-            }
-
-            if (commentBody && commentBody.indexOf("/make-me-laugh") == 0) {
-              const result = await github.request("https://official-joke-api.appspot.com/random_joke");
-              jokedata = result.data;
-              joke = "I have a bad feeling about this.";
-              if (jokedata && jokedata.setup && jokedata.punchline) {
-                joke = `${jokedata.setup} - ${jokedata.punchline}`;
-              }
-
-              await github.issues.createComment({
-                owner: issue.owner,
-                repo: issue.repo,
-                issue_number: issue.number,
-                body: joke,
-              });
-
-              return;
-            }
-
-            // Pollyfill: register createDispatchEvent because actions/github-script@0.3.0 
-            // does not have createDispatchEvent.
-            github.registerEndpoints({
-              repos: {
-                createDispatchEvent: {
-                  "headers": { "accept": "application/vnd.github.everest-preview+json" },
-                  "method": "POST",
-                  "params": {
-                    "client_payload": { "type": "object" },
-                    "event_type": { "type": "string" },
-                    "owner": { "required": true, "type": "string" },
-                    "repo": { "required": true, "type": "string" }
-                  },
-                  "url": "/repos/:owner/:repo/dispatches"
-                }
-              }
-            });
-
-            if (isFromPulls && commentBody) {
-              if (commentBody.indexOf("/ok-to-test") == 0) {
-                // Get pull request
-                const pull = await github.pulls.get({
-                  owner: issue.owner,
-                  repo: issue.repo,
-                  pull_number: issue.number
-                });
-
-                if (pull && pull.data) {                
-                  // Get commit id and repo from pull head
-                  const testPayload = {
-                    pull_head_ref: pull.data.head.sha,
-                    pull_head_repo: pull.data.head.repo.full_name,
-                    command: "ok-to-test",
-                    issue: issue,
-                  };
-      
-                  // Fire repository_dispatch event to trigger e2e test
-                  await github.repos.createDispatchEvent({
-                    owner: issue.owner,
-                    repo: issue.repo,
-                    event_type: "e2e-test",
-                    client_payload: testPayload,
-                  });
-                  
-                  console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
-                }
-              } else if (commentBody.indexOf("/build-windows-base") == 0) {
-                // Get pull request
-                const pull = await github.pulls.get({
-                  owner: issue.owner,
-                  repo: issue.repo,
-                  pull_number: issue.number
-                });
-
-                if (pull && pull.data) {
-                  // Get commit id and repo from pull head
-                  const testPayload = {
-                    pull_head_ref: pull.data.head.sha,
-                    pull_head_repo: pull.data.head.repo.full_name,
-                    command: "windows-base",
-                    issue: issue,
-                  };
-
-                  // Fire repository_dispatch event to trigger e2e test
-                  await github.repos.createDispatchEvent({
-                    owner: issue.owner,
-                    repo: issue.repo,
-                    event_type: "windows-base",
-                    client_payload: testPayload,
-                  });
-
-                  console.log(`Trigger a build of the windows base image ${JSON.stringify(testPayload)}`);
-                }
-              } else if (commentBody.indexOf("/ok-to-perf") == 0) {
-                // Get pull request
-                const pull = await github.pulls.get({
-                  owner: issue.owner,
-                  repo: issue.repo,
-                  pull_number: issue.number
-                });
-                if (pull && pull.data) {                
-                  // Get commit id and repo from pull head
-                  const perfPayload = {
-                    pull_head_ref: pull.data.head.sha,
-                    pull_head_repo: pull.data.head.repo.full_name,
-                    command: "ok-to-perf",
-                    issue: issue,
-                  };
-      
-                  // Fire repository_dispatch event to trigger e2e test
-                  await github.repos.createDispatchEvent({
-                    owner: issue.owner,
-                    repo: issue.repo,
-                    event_type: "perf-test",
-                    client_payload: perfPayload,
-                  });
-                  
-                  console.log(`Trigger Perf test for ${JSON.stringify(perfPayload)}`);
-                }
-              }
-            }
+            const script = require('./.github/scripts/dapr_bot.js')
+            await script({github, context})
