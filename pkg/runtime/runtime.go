@@ -41,6 +41,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
+	gogrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -49,7 +50,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/strings/slices"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -139,6 +140,8 @@ var log = logger.NewLogger("dapr.runtime")
 // was encountered when processing a cloud event's data property.
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
+var cloudEventDuplicateKeys = sets.NewString(pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field)
+
 type TopicRoutes map[string]TopicRouteElem
 
 type TopicRouteElem struct {
@@ -194,6 +197,7 @@ type DaprRuntime struct {
 	topicsLock             *sync.RWMutex
 	topicRoutes            map[string]TopicRoutes        // Key is "componentName"
 	topicCtxCancels        map[string]context.CancelFunc // Key is "componentName||topicName"
+	subscriptions          []runtimePubsub.Subscription
 	inputBindingRoutes     map[string]string
 	shutdownC              chan error
 	apiClosers             []io.Closer
@@ -255,6 +259,7 @@ type pubsubItem struct {
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
+
 	rt := &DaprRuntime{
 		ctx:                        ctx,
 		cancel:                     cancel,
@@ -264,7 +269,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		componentsLock:             &sync.RWMutex{},
 		components:                 make([]componentsV1alpha1.Component, 0),
 		actorStateStoreLock:        &sync.RWMutex{},
-		grpc:                       grpc.NewGRPCManager(runtimeConfig.Mode),
+		grpc:                       createGRPCManager(runtimeConfig, globalConfig),
 		inputBindings:              map[string]bindings.InputBinding{},
 		outputBindings:             map[string]bindings.OutputBinding{},
 		secretStores:               map[string]secretstores.SecretStore{},
@@ -952,8 +957,13 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 }
 
 func (a *DaprRuntime) initProxy() {
-	a.proxy = messaging.NewProxy(a.grpc.GetGRPCConnection, a.runtimeConfig.ID,
-		fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList, a.runtimeConfig.AppSSL, a.resiliency)
+	a.proxy = messaging.NewProxy(messaging.ProxyOpts{
+		AppClientFn:       a.grpc.GetAppClient,
+		ConnectionFactory: a.grpc.GetGRPCConnection,
+		AppID:             a.runtimeConfig.ID,
+		ACL:               a.accessControlList,
+		Resiliency:        a.resiliency,
+	})
 
 	log.Info("gRPC proxy enabled")
 }
@@ -1188,7 +1198,11 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 
-		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+		conn, err := a.grpc.GetAppClient()
+		if err != nil {
+			return nil, fmt.Errorf("error while getting app client: %w", err)
+		}
+		client := runtimev1pb.NewAppCallbackClient(conn)
 		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
 			Data:     data,
@@ -1198,7 +1212,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		var resp *runtimev1pb.BindingEventResponse
 		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		err := policy(func(ctx context.Context) (err error) {
+		err = policy(func(ctx context.Context) (err error) {
 			resp, err = client.OnBindingEvent(ctx, req)
 			return err
 		})
@@ -1328,6 +1342,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		AppChannel:                  a.appChannel,
 		DirectMessaging:             a.directMessaging,
 		GetComponentsFn:             a.getComponents,
+		GetSubscriptionsFn:          a.getSubscriptions,
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
 		LockStores:                  a.lockStores,
@@ -1439,6 +1454,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		GetSubscriptionsFn:          a.getSubscriptions,
 	})
 }
 
@@ -1450,26 +1466,34 @@ func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
 	return a
 }
 
-func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
-	client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+func (a *DaprRuntime) getSubscribedBindingsGRPC() ([]string, error) {
+	conn, err := a.grpc.GetAppClient()
+	if err != nil {
+		return nil, fmt.Errorf("error while getting app client: %w", err)
+	}
+	client := runtimev1pb.NewAppCallbackClient(conn)
 	resp, err := client.ListInputBindings(context.Background(), &emptypb.Empty{})
 	bindings := []string{}
 
 	if err == nil && resp != nil {
 		bindings = resp.Bindings
 	}
-	return bindings
+	return bindings, nil
 }
 
-func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
+func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	// if gRPC, looks for the binding in the list of bindings returned from the app
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		if a.subscribeBindingList == nil {
-			a.subscribeBindingList = a.getSubscribedBindingsGRPC()
+			list, err := a.getSubscribedBindingsGRPC()
+			if err != nil {
+				return false, err
+			}
+			a.subscribeBindingList = list
 		}
 		for _, b := range a.subscribeBindingList {
 			if b == binding {
-				return true
+				return true, nil
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
@@ -1487,9 +1511,9 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 		}
 		code := resp.Status().Code
 
-		return code/100 == 2 || code == nethttp.StatusMethodNotAllowed
+		return code/100 == 2 || code == nethttp.StatusMethodNotAllowed, nil
 	}
-	return false
+	return false, nil
 }
 
 func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
@@ -1694,16 +1718,9 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription
 	return subs[:i]
 }
 
-func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
-	if a.topicRoutes != nil {
-		return a.topicRoutes, nil
-	}
-
-	topicRoutes := make(map[string]TopicRoutes)
-
-	if a.appChannel == nil {
-		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
-		return topicRoutes, nil
+func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
+	if a.subscriptions != nil {
+		return a.subscriptions, nil
 	}
 
 	var (
@@ -1711,12 +1728,22 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 		err           error
 	)
 
+	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
+		return subscriptions, nil
+	}
+
 	// handle app subscriptions
 	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+		var conn gogrpc.ClientConnInterface
+		conn, err = a.grpc.GetAppClient()
+		if err != nil {
+			return nil, fmt.Errorf("error while getting app client: %w", err)
+		}
+		client := runtimev1pb.NewAppCallbackClient(conn)
 		subscriptions, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
 	}
 	if err != nil {
@@ -1741,6 +1768,27 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 		if !skip {
 			subscriptions = append(subscriptions, s)
 		}
+	}
+
+	a.subscriptions = subscriptions
+	return subscriptions, nil
+}
+
+func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
+	if a.topicRoutes != nil {
+		return a.topicRoutes, nil
+	}
+
+	topicRoutes := make(map[string]TopicRoutes)
+
+	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
+		return topicRoutes, nil
+	}
+
+	subscriptions, err := a.getSubscriptions()
+	if err != nil {
+		return nil, err
 	}
 
 	for _, s := range subscriptions {
@@ -2109,10 +2157,9 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	// Assemble Cloud Event Extensions:
 	// Create copy of the cloud event with duplicated data removed
 
-	checkDuplicateKeys := []string{pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field}
 	extensions := map[string]interface{}{}
 	for key, value := range cloudEvent {
-		if !slices.Contains(checkDuplicateKeys, key) {
+		if !cloudEventDuplicateKeys.Has(key) {
 			extensions[key] = value
 		}
 	}
@@ -2132,7 +2179,11 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
-	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+	conn, err := a.grpc.GetAppClient()
+	if err != nil {
+		return fmt.Errorf("error while getting app client: %w", err)
+	}
+	clientV1 := runtimev1pb.NewAppCallbackClient(conn)
 
 	start := time.Now()
 	res, err := clientV1.OnTopicEvent(ctx, envelope)
@@ -2688,7 +2739,7 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 	var ch channel.AppChannel
 	switch a.runtimeConfig.ApplicationProtocol {
 	case GRPCProtocol:
-		ch, err = a.grpc.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		ch, err = a.grpc.GetAppChannel()
 		if err != nil {
 			return err
 		}
@@ -2921,7 +2972,11 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
 
 	for name, binding := range a.inputBindings {
-		if !a.isAppSubscribedToBinding(name) {
+		isSubscribed, err := a.isAppSubscribedToBinding(name)
+		if err != nil {
+			return err
+		}
+		if !isSubscribed {
 			log.Infof("app has not subscribed to binding %s.", name)
 			continue
 		}
@@ -2947,4 +3002,22 @@ func (a *DaprRuntime) stopReadingFromBindings() {
 // Returns "componentName||topicName", which is used as key for some maps
 func pubsubTopicKey(componentName, topicName string) string {
 	return componentName + "||" + topicName
+}
+
+func createGRPCManager(runtimeConfig *Config, globalConfig *config.Configuration) *grpc.Manager {
+	grpcAppChannelConfig := &grpc.AppChannelConfig{}
+	if globalConfig != nil {
+		grpcAppChannelConfig.TracingSpec = globalConfig.Spec.TracingSpec
+	}
+	if runtimeConfig != nil {
+		grpcAppChannelConfig.Port = runtimeConfig.ApplicationPort
+		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.MaxConcurrency
+		grpcAppChannelConfig.SSLEnabled = runtimeConfig.AppSSL
+		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.MaxRequestBodySize
+		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.ReadBufferSize
+	}
+
+	m := grpc.NewGRPCManager(runtimeConfig.Mode, grpcAppChannelConfig)
+	m.StartCollector()
+	return m
 }

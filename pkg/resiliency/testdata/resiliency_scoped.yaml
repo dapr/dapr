@@ -27,7 +27,14 @@ spec:
       retryForever:
         policy: exponential
         maxInterval: 15s
-        maxRetries: 0 # Retry indefinitely
+        maxRetries: -1 # Retry indefinitely
+
+      noRetry:
+        policy: constant
+        maxRetries: 0 # No retries
+
+      missingMaxRetries:
+        policy: constant
 
       important:
         policy: constant

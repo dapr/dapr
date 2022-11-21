@@ -500,6 +500,9 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD: "{}"
         run: make test-perf-actor_reminder
+      - name: Run stress test actor double activation with SDK
+        if: env.TEST_PREFIX != ''
+        run: make test-perf-actor_double_activation
       - name: Save control plane logs
         if: always() && env.TEST_PREFIX != ''
         run: |
