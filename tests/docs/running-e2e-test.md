@@ -25,6 +25,9 @@ E2E tests are designed for verifying the functional correctness by replicating e
     export DAPR_NAMESPACE=dapr-tests
     export DAPR_MTLS_ENABLED=true
 
+    # If you want to enable debug logs for the daprd container set this
+    # export DEBUG_LOGGING=true
+
     # If you want to run tests against Windows or arm kubernetes clusters, uncomment and set these
     # export TARGET_OS=linux
     # export TARGET_ARCH=amd64
