@@ -27,7 +27,6 @@ import (
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -50,6 +49,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -70,7 +70,7 @@ const (
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 //
-//nolint:nosnakecase
+//nolint:interfacebloat
 type API interface {
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -137,6 +137,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
+	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	daprRunTimeVersion         string
 }
 
@@ -289,6 +290,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
+	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
 }
 
 // NewAPI returns a new gRPC API.
@@ -320,6 +322,7 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsFn:            opts.GetComponentsFn,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		daprRunTimeVersion:         version.Version(),
 	}
 }
@@ -353,11 +356,30 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
+	var callerAppID string
+	callerIDHeader, ok := req.Metadata()[invokev1.CallerIDHeader]
+	if ok && len(callerIDHeader.Values) > 0 {
+		callerAppID = callerIDHeader.Values[0]
+	} else {
+		callerAppID = "unknown"
+	}
+
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message().Method)
+
+	var statusCode int32
+	defer func() {
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+	}()
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
+		statusCode = int32(codes.Internal)
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
+	} else {
+		statusCode = resp.Status().Code
 	}
+
 	return resp.Proto(), err
 }
 
@@ -627,23 +649,25 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	elapsed := diag.ElapsedSince(start)
 	var eventsPublished int64 = 0
 
+	// BulkPublishResponse contains all failed entries from the request.
+	// If there are no failed entries, then the statuses array will be empty.
 	bulkRes := runtimev1pb.BulkPublishResponse{}
 
 	if len(res.Statuses) != 0 {
 		bulkRes.Statuses = make([]*runtimev1pb.BulkPublishResponseEntry, 0, len(res.Statuses))
 		for _, r := range res.Statuses {
-			resEntry := runtimev1pb.BulkPublishResponseEntry{}
-			resEntry.EntryId = r.EntryId
-			if r.Error != nil {
-				resEntry.Error = r.Error.Error()
-			}
 			if r.Status == pubsub.PublishSucceeded {
-				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_SUCCESS //nolint:nosnakecase
+				// Only count the events that have been successfully published to the pub/sub component
 				eventsPublished++
 			} else {
+				resEntry := runtimev1pb.BulkPublishResponseEntry{}
+				resEntry.EntryId = r.EntryId
 				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
+				if r.Error != nil {
+					resEntry.Error = r.Error.Error()
+				}
+				bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
 			}
-			bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
 		}
 	}
 
@@ -1656,11 +1680,29 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
+	subscriptions, err := a.getSubscriptionsFn()
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetMetadataResponse{}, err
+	}
+	ps := []*runtimev1pb.PubsubSubscription{}
+	for _, s := range subscriptions {
+		ps = append(ps, &runtimev1pb.PubsubSubscription{
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
+		})
+	}
+
 	response := &runtimev1pb.GetMetadataResponse{
 		Id:                   a.id,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
+		Subscriptions:        ps,
 	}
 
 	return response, nil
@@ -1671,6 +1713,19 @@ func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 		return val
 	}
 	return make([]string, 0)
+}
+
+func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
+	out := &runtimev1pb.PubsubSubscriptionRules{
+		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
+	}
+	for _, r := range rules {
+		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
+			Match: fmt.Sprintf("%s", r.Match),
+			Path:  r.Path,
+		})
+	}
+	return out
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.

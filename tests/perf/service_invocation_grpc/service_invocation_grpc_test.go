@@ -116,7 +116,7 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	// Perform baseline test
 	p.Grpc = true
 	p.Dapr = "capability=invoke,target=appcallback,method=load"
-	p.TargetEndpoint = fmt.Sprintf("http://testapp:3000")
+	p.TargetEndpoint = "http://testapp:3000"
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
@@ -131,7 +131,7 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 
 	// Perform dapr test
 	p.Dapr = "capability=invoke,target=dapr,method=load,appid=testapp"
-	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
+	p.TargetEndpoint = "http://localhost:50001"
 	body, err = json.Marshal(&p)
 	require.NoError(t, err)
 
