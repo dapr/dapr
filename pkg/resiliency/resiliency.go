@@ -741,7 +741,7 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string, c
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
-		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies)
+		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies.Outbound)
 		if componentPolicies.Outbound.Timeout != "" {
 			t = r.timeouts[componentPolicies.Outbound.Timeout]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
@@ -785,7 +785,7 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string, co
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
-		r.log.Debugf("Found Component Inbound Policy for component %s: %+v", name, componentPolicies)
+		r.log.Debugf("Found Component Inbound Policy for component %s: %+v", name, componentPolicies.Inbound)
 		if componentPolicies.Inbound.Timeout != "" {
 			t = r.timeouts[componentPolicies.Inbound.Timeout]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)

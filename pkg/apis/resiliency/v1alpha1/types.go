@@ -46,7 +46,7 @@ type Retry struct {
 	Policy      string `json:"policy,omitempty" yaml:"policy,omitempty"`
 	Duration    string `json:"duration,omitempty" yaml:"duration,omitempty"`
 	MaxInterval string `json:"maxInterval,omitempty" yaml:"maxInterval,omitempty"`
-	MaxRetries  int    `json:"maxRetries,omitempty" yaml:"maxRetries,omitempty"`
+	MaxRetries  *int   `json:"maxRetries,omitempty" yaml:"maxRetries,omitempty"`
 }
 
 type CircuitBreaker struct {
