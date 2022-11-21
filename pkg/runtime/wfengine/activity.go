@@ -94,7 +94,7 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	}
 
 	// The actual execution is triggered by a reminder
-	err := a.createReliableReminder(ctx, actorID, "run-activity", ar.Generation)
+	err := a.createReliableReminder(ctx, actorID, ar.Generation)
 	return nil, err
 }
 
@@ -267,14 +267,15 @@ func getActivityInvocationKey(generation uint64) string {
 	return fmt.Sprintf("activityreq-%d", generation)
 }
 
-func (a *activityActor) createReliableReminder(ctx context.Context, actorID string, name string, data any) error {
-	wfLogger.Debugf("%s: creating '%s' reminder for immediate execution", actorID, name)
+func (a *activityActor) createReliableReminder(ctx context.Context, actorID string, data any) error {
+	const reminderName = "run-activity"
+	wfLogger.Debugf("%s: creating '%s' reminder for immediate execution", actorID, reminderName)
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: ActivityActorType,
 		ActorID:   actorID,
 		Data:      data,
 		DueTime:   "0s",
-		Name:      name,
+		Name:      reminderName,
 		Period:    a.reminderInterval.String(),
 	})
 }
