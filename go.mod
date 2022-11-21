@@ -88,7 +88,7 @@ require (
 	github.com/Azure/azure-sdk-for-go v65.0.0+incompatible // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.4 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.3 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.5.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
@@ -417,4 +417,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // TEMP until https://github.com/dapr/components-contrib/pull/2237 is merged
-replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221117153949-d9cc64186492
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221121223735-c03aec2cf6b8

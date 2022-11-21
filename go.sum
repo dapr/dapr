@@ -102,8 +102,8 @@ github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.4/go.mod h1:uGG2W01BaETf0Ozp+Q
 github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.11.0/go.mod h1:HcM1YX14R7CJcghJGOYCgdezslRSVzqwLf/q+4Y2r/0=
 github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0 h1:QkAcEIAKbNL4KoFr4SathZPhDhF4mVwpBMFlYjyAqy8=
 github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0/go.mod h1:bhXu1AjYL+wutSL/kpSq6s7733q2Rb0yuot9Zgfqa/0=
-github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.3 h1:QzjiMJn/pBxOq1xA3F6ODUvO1agmt7+mI+DZEx6dPtc=
-github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.3/go.mod h1:p74+tP95m8830ypJk53L93+BEsjTKY4SKQ75J2NmS5U=
+github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.5.0 h1:OrKZybbyagpgJiREiIVzH5mV/z9oS4rXqdX7i31DSF0=
+github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.5.0/go.mod h1:p74+tP95m8830ypJk53L93+BEsjTKY4SKQ75J2NmS5U=
 github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2 h1:yJegJqjhrMJ3Oe5s43jOTGL2AsE7pJyx+7Yqls/65tw=
 github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2/go.mod h1:Fy3bbChFm4cZn6oIxYYqKB2FG3rBDxk3NZDLDJCHl+Q=
 github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1 h1:bFa9IcjvrCber6gGgDAUZ+I2bO8J7s8JxXmu9fhi2ss=
@@ -920,8 +920,8 @@ github.com/influxdata/influxdb-client-go v1.4.0/go.mod h1:S+oZsPivqbcP1S9ur+T+Qq
 github.com/influxdata/influxdb1-client v0.0.0-20191209144304-8bf82d3c094d/go.mod h1:qj24IKcXYK6Iy9ceXlo3Tc+vtHo9lIhSX5JddghvEPo=
 github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 h1:W9WBk7wlPfJLvMCdtV4zPulc4uCPrlywQOmbFOhgQNU=
 github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839/go.mod h1:xaLFMmpvUxqXtVkUJfg9QmT88cDaCJ3ZKgdZ78oO8Qo=
-github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221117153949-d9cc64186492 h1:lo95nXBNUa9RP38s9pdylXnZdGdBzHMOBqwJmHZ0ePs=
-github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221117153949-d9cc64186492/go.mod h1:eXfn4fwrvhV2Ag3s7jrJY/ACOKIxCaEhScLLAOxlUvk=
+github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221121223735-c03aec2cf6b8 h1:gyBYQIftj8sKX93WiTQeI66v0xWLj36/144/LxvtDoQ=
+github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221121223735-c03aec2cf6b8/go.mod h1:Ai9/05MAbYodMIFHHuTSADALPXdNwGV/pUL/c8mynBY=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b h1:C8S2+VttkHFdOOCXJe+YGfa4vHYwlt4Zx+IVXQ97jYg=
