@@ -458,6 +458,11 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}
+	extensions, extensionsErr := extractCloudEventExtensions(event)
+	if extensionsErr != nil {
+		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
+	}
+	envelope.Extensions = extensions
 	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
 }
 

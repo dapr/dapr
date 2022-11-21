@@ -137,6 +137,9 @@ message TopicEventCERequest {
 
   // The content of the event.
   bytes data = 6;
+
+  // Custom attributes which includes cloud event extensions.
+  google.protobuf.Struct extensions = 7;
 }
 
 // TopicEventBulkRequestEntry represents a single message inside a bulk request
