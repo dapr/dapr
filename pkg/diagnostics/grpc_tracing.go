@@ -15,7 +15,6 @@ package diagnostics
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -266,18 +265,18 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 
 		// Rename spanname
 		if s.GetActor() == nil {
-			m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", appID, s.Message.GetMethod())
+			m[daprAPISpanNameInternal] = "CallLocal/" + appID + "/" + s.Message.GetMethod()
 			m[daprAPIInvokeMethod] = s.Message.GetMethod()
 		} else {
-			m[daprAPISpanNameInternal] = fmt.Sprintf("CallActor/%s/%s", s.GetActor().GetActorType(), s.Message.GetMethod())
-			m[daprAPIActorTypeID] = fmt.Sprintf("%s.%s", s.GetActor().GetActorType(), s.GetActor().GetActorId())
+			m[daprAPISpanNameInternal] = "CallActor/" + s.GetActor().GetActorType() + "/" + s.Message.GetMethod()
+			m[daprAPIActorTypeID] = s.GetActor().GetActorType() + "." + s.GetActor().GetActorId()
 		}
 
 	// Dapr APIs
 	case *runtimev1pb.InvokeServiceRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		m[netPeerNameSpanAttributeKey] = s.GetId()
-		m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", s.GetId(), s.Message.GetMethod())
+		m[daprAPISpanNameInternal] = "CallLocal/" + s.GetId() + "/" + s.Message.GetMethod()
 
 	case *runtimev1pb.PublishEventRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService
