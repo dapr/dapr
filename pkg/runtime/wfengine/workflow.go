@@ -115,7 +115,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
 	if err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data); err != nil {
-		if err == timeoutCtx.Err() {
+		if errors.Is(err, context.DeadlineExceeded) {
 			wfLogger.Warnf("%s: execution timed-out and will be retried later")
 
 			// Returning nil signals that we want the execution to be retried in the next period interval

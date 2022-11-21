@@ -110,7 +110,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 	defer cancelTimeout()
 
 	if err := a.executeActivity(timeoutCtx, actorID, reminderName, state.EventPayload); err != nil {
-		if err == timeoutCtx.Err() {
+		if errors.Is(err, context.DeadlineExceeded) {
 			wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later", actorID, reminderName)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
