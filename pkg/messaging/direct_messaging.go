@@ -137,12 +137,16 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
 func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, string, error) {
+	if targetAppID == "" {
+		return "", "", errors.New("app id is empty")
+	}
 	items := strings.Split(targetAppID, ".")
-	if len(items) == 1 {
+	switch len(items) {
+	case 1:
 		return targetAppID, d.namespace, nil
-	} else if len(items) == 2 {
+	case 2:
 		return items[0], items[1], nil
-	} else {
+	default:
 		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
 	}
 }
