@@ -30,7 +30,7 @@ const (
 
 var dns1123LabelRegexp = regexp.MustCompile("^" + dns1123LabelFmt + "$")
 
-// ValidateKubernetesAppID returns a bool that indicates whether a dapr app id is valid for the Kubernetes platform.
+// ValidateKubernetesAppID returns an error if the Dapr app id is not valid for the Kubernetes platform.
 func ValidateKubernetesAppID(appID string) error {
 	if appID == "" {
 		return errors.New("value for the dapr.io/app-id annotation is empty")
@@ -39,8 +39,19 @@ func ValidateKubernetesAppID(appID string) error {
 	if len(r) == 0 {
 		return nil
 	}
-	s := fmt.Sprintf("invalid app id(input: %s, service: %s): %s", appID, serviceName(appID), strings.Join(r, ","))
-	return errors.New(s)
+	return fmt.Errorf("invalid app id (input: %s, service: %s): %s", appID, serviceName(appID), strings.Join(r, ", "))
+}
+
+// ValidateSelfHostedAppID returns an error if the Dapr app id is not valid for self-hosted.
+func ValidateSelfHostedAppID(appID string) error {
+	if appID == "" {
+		return errors.New("parameter app-id cannot be empty")
+	}
+	r := isDNS1123Label(serviceName(appID))
+	if len(r) == 0 {
+		return nil
+	}
+	return fmt.Errorf("parameter app-id is invalid: %s", strings.Join(r, ", "))
 }
 
 func serviceName(appID string) string {
