@@ -401,7 +401,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
-					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", targetAddress, attempt, rErr)
+					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", targetAddress, attempt-1, rErr)
 				}
 
 				teardown(false)

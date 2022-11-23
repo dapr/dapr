@@ -176,7 +176,7 @@ func (d *directMessaging) invokeWithRetry(
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
-					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt, rErr)
+					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 				}
 				teardown(false)
 				return rResp, backoff.Permanent(rErr)
