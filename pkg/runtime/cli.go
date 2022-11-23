@@ -40,6 +40,7 @@ import (
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 )
@@ -124,11 +125,8 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	if *appID == "" {
-		return nil, errors.New("app-id parameter cannot be empty")
-	}
-	if strings.IndexRune(*appID, '.') != -1 {
-		return nil, errors.New("app-id parameter cannot contain dots")
+	if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
+		return nil, err
 	}
 
 	// Apply options to all loggers
