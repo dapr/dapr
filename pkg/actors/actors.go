@@ -388,7 +388,9 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	if a.isResiliencyEnabled {
 		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
+			attempts := atomic.Int32{}
 			respAny, err := policy(func(ctx context.Context) (any, error) {
+				attempt := attempts.Add(1)
 				rResp, teardown, rErr := fn(ctx, targetAddress, targetID, req)
 				if rErr == nil {
 					teardown(false)
@@ -399,23 +401,14 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
-					return rResp, rErr
+					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", targetAddress, attempt, rErr)
 				}
 
 				teardown(false)
 				return rResp, backoff.Permanent(rErr)
 			})
-			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
 			if err != nil {
-				var permanent *backoff.PermanentError
-				if !errors.As(err, &permanent) {
-					// If the error wasn't a permanent one, it means we just exhausted the retries
-					// The nunber of retries is hardcoded in the `DaprBuiltInActorRetries` policy
-					return nil, fmt.Errorf("failed to invoke target %s after 3 retries", targetAddress)
-				}
-
-				// If we're here, the error is a permanent one, so unwrap it
-				return nil, errors.Unwrap(err)
+				return nil, err
 			}
 			resp, _ := respAny.(*invokev1.InvokeMethodResponse)
 			return resp, nil

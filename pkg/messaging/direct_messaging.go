@@ -15,12 +15,14 @@ package messaging
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -142,7 +144,7 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	} else if len(items) == 2 {
 		return items[0], items[1], nil
 	} else {
-		return "", "", errors.Errorf("invalid app id %s", targetAppID)
+		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
 	}
 }
 
@@ -161,7 +163,9 @@ func (d *directMessaging) invokeWithRetry(
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
 			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
+			attempts := atomic.Int32{}
 			respAny, err := policy(func(ctx context.Context) (any, error) {
+				attempt := attempts.Add(1)
 				rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 				if rErr == nil {
 					teardown(false)
@@ -172,21 +176,13 @@ func (d *directMessaging) invokeWithRetry(
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
-					return rResp, rErr
+					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt, rErr)
 				}
 				teardown(false)
 				return rResp, backoff.Permanent(rErr)
 			})
-			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
 			if err != nil {
-				var permanent *backoff.PermanentError
-				if !errors.As(err, &permanent) {
-					// The nunber of retries is hardcoded in the `DaprBuiltInServiceRetries` policy
-					return nil, errors.Errorf("failed to invoke target %s after 3 retries. Error: %s", app.id, err.Error())
-				}
-
-				// If we're here, the error is a permanent one, so unwrap it
-				return nil, errors.Unwrap(err)
+				return nil, err
 			}
 
 			resp, _ := respAny.(*invokev1.InvokeMethodResponse)
@@ -216,7 +212,7 @@ func (d *directMessaging) invokeWithRetry(
 		teardown(false)
 		return resp, err
 	}
-	return nil, errors.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
