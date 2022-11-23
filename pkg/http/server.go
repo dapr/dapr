@@ -27,7 +27,6 @@ import (
 	routing "github.com/fasthttp/router"
 	"github.com/hashicorp/go-multierror"
 	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/pprofhandler"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -37,6 +36,7 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/utils/fasthttpadaptor"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
 	"github.com/dapr/kit/logger"
 )
@@ -328,12 +328,10 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 			continue
 		}
 
-		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		s.handle(e, parameterFinder, path, router)
+		s.handle(e, parameterFinder, "/"+e.Version+"/"+e.Route, router)
 
 		if e.Alias != "" {
-			path = fmt.Sprintf("/%s", e.Alias)
-			s.handle(e, parameterFinder, path, router)
+			s.handle(e, parameterFinder, "/"+e.Alias, router)
 		}
 	}
 
@@ -341,10 +339,11 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 }
 
 func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
+	pathIncludesParameters := parameterFinder.MatchString(path)
+
 	for _, m := range e.Methods {
 		handler := e.Handler
 
-		pathIncludesParameters := parameterFinder.MatchString(path)
 		if pathIncludesParameters && !e.KeepParamUnescape {
 			handler = s.unescapeRequestParametersHandler(handler)
 		}

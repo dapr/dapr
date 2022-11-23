@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestValidationForKubernetes(t *testing.T) {
+func TestValidateKubernetesAppID(t *testing.T) {
 	t.Run("invalid length", func(t *testing.T) {
 		id := ""
 		for i := 0; i < 64; i++ {
@@ -58,6 +58,41 @@ func TestValidationForKubernetes(t *testing.T) {
 	t.Run("invalid empty", func(t *testing.T) {
 		id := ""
 		err := ValidateKubernetesAppID(id)
-		assert.Regexp(t, "value for the dapr.io/app-id annotation is empty", err.Error())
+		assert.Contains(t, "value for the dapr.io/app-id annotation is empty", err.Error())
+	})
+}
+
+func TestValidateSelfHostedAppID(t *testing.T) {
+	t.Run("invalid length", func(t *testing.T) {
+		id := ""
+		for i := 0; i < 64; i++ {
+			id += "a"
+		}
+		err := ValidateSelfHostedAppID(id)
+		assert.Error(t, err)
+	})
+
+	t.Run("valid id", func(t *testing.T) {
+		id := "my-app-id"
+		err := ValidateSelfHostedAppID(id)
+		assert.NoError(t, err)
+	})
+
+	t.Run("invalid char: .", func(t *testing.T) {
+		id := "my-app-id.app"
+		err := ValidateSelfHostedAppID(id)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid chars space", func(t *testing.T) {
+		id := "my-app-id app"
+		err := ValidateSelfHostedAppID(id)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid empty", func(t *testing.T) {
+		id := ""
+		err := ValidateSelfHostedAppID(id)
+		assert.Contains(t, "parameter app-id cannot be empty", err.Error())
 	})
 }
