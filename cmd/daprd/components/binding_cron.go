@@ -24,7 +24,4 @@ func init() {
 	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
 		return cron.NewCron(l)
 	}, "cron")
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
-		return cron.NewCron(l)
-	}, "cron")
 }
