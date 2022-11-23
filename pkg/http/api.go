@@ -673,12 +673,13 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 				if err != nil {
 					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 					r.Error = err.Error()
-				}
-				resp, _ := respAny.(*state.GetResponse)
-				if resp != nil {
-					r.Data = json.RawMessage(resp.Data)
-					r.ETag = resp.ETag
-					r.Metadata = resp.Metadata
+				} else {
+					resp, ok := respAny.(*state.GetResponse)
+					if ok && resp != nil {
+						r.Data = json.RawMessage(resp.Data)
+						r.ETag = resp.ETag
+						r.Metadata = resp.Metadata
+					}
 				}
 			}
 

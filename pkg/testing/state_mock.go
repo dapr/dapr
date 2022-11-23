@@ -179,7 +179,13 @@ func (f *FailingStatestore) Get(req *state.GetRequest) (*state.GetResponse, erro
 	if err != nil {
 		return nil, err
 	}
-	return &state.GetResponse{}, nil
+
+	var res *state.GetResponse
+	if req.Key != "nilGetKey" {
+		res = &state.GetResponse{}
+	}
+
+	return res, nil
 }
 
 func (f *FailingStatestore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {

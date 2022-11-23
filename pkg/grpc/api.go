@@ -832,14 +832,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 			if policyErr != nil {
 				item.Error = policyErr.Error()
-			} else if resAny != nil {
+			} else {
 				res, ok := resAny.(*state.GetResponse)
 				if ok && res != nil {
 					item.Data = res.Data
 					item.Etag = stringValueOrEmpty(res.ETag)
 					item.Metadata = res.Metadata
-				} else {
-					item.Error = "res is empty"
 				}
 			}
 			resultCh <- item
@@ -848,8 +846,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 	limiter.Wait()
 	// collect result
-	resultLen := len(resultCh)
-	for i := 0; i < resultLen; i++ {
+	for i := 0; i < n; i++ {
 		item := <-resultCh
 
 		if encryption.EncryptedStateStore(in.StoreName) {

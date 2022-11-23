@@ -3721,6 +3721,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
+		// Adding this will make the bulk operation fail with a timeout, and Dapr should be able to recover nicely
 		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
 		t.Cleanup(func() {
 			failingStore.BulkFailKey = ""
@@ -3742,7 +3743,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
 		request := BulkGetRequest{
-			Keys: []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey"},
+			Keys: []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey", "nilGetKey"},
 		}
 		body, _ := json.Marshal(request)
 
@@ -3754,11 +3755,18 @@ func TestV1StateEndpoints(t *testing.T) {
 		json.Unmarshal(resp.RawBody, &bulkResponse)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Len(t, bulkResponse, 2)
+		assert.Len(t, bulkResponse, 3)
+		assert.Equal(t, "timeoutBulkGetKey", bulkResponse[0].Key)
 		assert.NotEmpty(t, bulkResponse[0].Error)
+		assert.Contains(t, bulkResponse[0].Error, "context deadline exceeded")
+		assert.Equal(t, "goodTimeoutBulkGetKey", bulkResponse[1].Key)
 		assert.Empty(t, bulkResponse[1].Error)
+		assert.Equal(t, "nilGetKey", bulkResponse[2].Key)
+		assert.Empty(t, bulkResponse[2].Error)
+		assert.Empty(t, bulkResponse[2].Data)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
 		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("nilGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 

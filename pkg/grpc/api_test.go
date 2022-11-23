@@ -2884,22 +2884,29 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		start := time.Now()
 		resp, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: "failStore",
-			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey"},
+			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey", "nilGetKey"},
 		})
 		end := time.Now()
 
 		assert.NoError(t, err)
-		assert.Len(t, resp.Items, 2)
+		assert.Len(t, resp.Items, 3)
 		for _, item := range resp.Items {
-			if item.Key == "timeoutBulkGetKey" {
+			switch item.Key {
+			case "timeoutBulkGetKey":
 				assert.NotEmpty(t, item.Error)
 				assert.Contains(t, item.Error, "context deadline exceeded")
-			} else {
+			case "goodTimeoutBulkGetKey":
 				assert.Empty(t, item.Error)
+			case "nilGetKey":
+				assert.Empty(t, item.Error)
+				assert.Empty(t, item.Data)
+			default:
+				t.Fatalf("unexpected key: %s", item.Key)
 			}
 		}
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
 		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("nilGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
