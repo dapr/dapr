@@ -622,7 +622,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
-	bgr := bgrAny.(*bulkGetRes)
+	bgr, _ := bgrAny.(*bulkGetRes)
 	if bgr == nil {
 		bgr = &bulkGetRes{}
 	}

@@ -3336,14 +3336,15 @@ func TestV1StateEndpoints(t *testing.T) {
 				"failingQueryKey":      1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":        time.Second * 10,
-				"timeoutSetKey":        time.Second * 10,
-				"timeoutDeleteKey":     time.Second * 10,
-				"timeoutBulkGetKey":    time.Second * 10,
-				"timeoutBulkSetKey":    time.Second * 10,
-				"timeoutBulkDeleteKey": time.Second * 10,
-				"timeoutMultiKey":      time.Second * 10,
-				"timeoutQueryKey":      time.Second * 10,
+				"timeoutGetKey":         time.Second * 10,
+				"timeoutSetKey":         time.Second * 10,
+				"timeoutDeleteKey":      time.Second * 10,
+				"timeoutBulkGetKey":     time.Second * 10,
+				"timeoutBulkGetKeyBulk": time.Second * 10,
+				"timeoutBulkSetKey":     time.Second * 10,
+				"timeoutBulkDeleteKey":  time.Second * 10,
+				"timeoutMultiKey":       time.Second * 10,
+				"timeoutQueryKey":       time.Second * 10,
 			},
 			map[string]int{},
 		),
@@ -3720,6 +3721,11 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
+		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
+		t.Cleanup(func() {
+			failingStore.BulkFailKey = ""
+		})
+
 		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
 		request := BulkGetRequest{
 			Keys: []string{"failingBulkGetKey", "goodBulkGetKey"},

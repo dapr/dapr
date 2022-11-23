@@ -2756,14 +2756,15 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				"failingQueryKey":      1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":        time.Second * 10,
-				"timeoutSetKey":        time.Second * 10,
-				"timeoutDeleteKey":     time.Second * 10,
-				"timeoutBulkGetKey":    time.Second * 10,
-				"timeoutBulkSetKey":    time.Second * 10,
-				"timeoutBulkDeleteKey": time.Second * 10,
-				"timeoutMultiKey":      time.Second * 10,
-				"timeoutQueryKey":      time.Second * 10,
+				"timeoutGetKey":         time.Second * 10,
+				"timeoutSetKey":         time.Second * 10,
+				"timeoutDeleteKey":      time.Second * 10,
+				"timeoutBulkGetKey":     time.Second * 10,
+				"timeoutBulkGetKeyBulk": time.Second * 10,
+				"timeoutBulkSetKey":     time.Second * 10,
+				"timeoutBulkDeleteKey":  time.Second * 10,
+				"timeoutMultiKey":       time.Second * 10,
+				"timeoutQueryKey":       time.Second * 10,
 			},
 			map[string]int{},
 		),
@@ -2863,6 +2864,12 @@ func TestStateAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
+		// Adding this will make the bulk operation fail with a timeout, and Dapr should be able to recover nicely
+		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
+		t.Cleanup(func() {
+			failingStore.BulkFailKey = ""
+		})
+
 		_, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: "failStore",
 			Keys:      []string{"failingBulkGetKey", "goodBulkGetKey"},

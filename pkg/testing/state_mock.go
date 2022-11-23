@@ -143,6 +143,7 @@ func (_m *MockStateStore) Close() error {
 
 type FailingStatestore struct {
 	Failure Failure
+	BulkFailKey string
 }
 
 func (f *FailingStatestore) GetComponentMetadata() map[string]string {
@@ -182,6 +183,13 @@ func (f *FailingStatestore) Get(req *state.GetRequest) (*state.GetResponse, erro
 }
 
 func (f *FailingStatestore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+	if f.BulkFailKey != "" {
+		err := f.Failure.PerformFailure(f.BulkFailKey)
+		if err != nil {
+			return true, nil, err
+		}
+	}
+	
 	// This makes the code fall back to individual gets, which is basically what we'd mimic here anyway.
 	return false, nil, nil
 }
