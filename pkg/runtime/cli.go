@@ -127,6 +127,9 @@ func FromFlags() (*DaprRuntime, error) {
 	if *appID == "" {
 		return nil, errors.New("app-id parameter cannot be empty")
 	}
+	if strings.IndexRune(*appID, '.') != -1 {
+		return nil, errors.New("app-id parameter cannot contain dots")
+	}
 
 	// Apply options to all loggers
 	loggerOptions.SetAppID(*appID)
