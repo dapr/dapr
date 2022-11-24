@@ -2,22 +2,19 @@ import http from "k6/http";
 import { check } from "k6";
 import exec from "k6/execution";
 
-
 const defaultMethod = "default"
-const actorType = "testactorfeatures"
+const actorType = __ENV.ACTOR_TYPE
 
 export const options = {
   discardResponseBodies: true,
   scenarios: {
     idStress: {
-      executor: "ramping-vus",
-      startVUs: 0,
-      stages: [
-        { duration: "3s", target: 1000 },
-        { duration: "3s", target: 2000 },
-        { duration: "3s", target: 3000 },
-      ],
-      gracefulRampDown: "0s",
+      executor: 'constant-arrival-rate',
+      rate: 100,
+      timeUnit: '1s', // 100 iterations per second, i.e. 100 RPS
+      duration: '10s',
+      preAllocatedVUs: 10, // how large the initial pool of VUs would be
+      maxVUs: 20, // if the preAllocatedVUs are not enough, we can initialize more
     },
   },
 };
