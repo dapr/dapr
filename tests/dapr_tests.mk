@@ -73,6 +73,7 @@ state_get_http \
 pubsub_publish_grpc \
 pubsub_bulk_publish_grpc \
 actor_double_activation \
+actor_id_scale \
 
 KUBECTL=kubectl
 
