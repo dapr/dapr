@@ -95,9 +95,9 @@ type K6RateMetric struct {
 	Type     string `json:"type"`
 	Contains string `json:"contains"`
 	Values   struct {
-		Rate   int `json:"rate"`
-		Passes int `json:"passes"`
-		Fails  int `json:"fails"`
+		Rate   float64 `json:"rate"`
+		Passes int     `json:"passes"`
+		Fails  int     `json:"fails"`
 	} `json:"values"`
 }
 

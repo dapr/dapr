@@ -13,9 +13,9 @@ export const options = {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "5s", target: 1000 },
-        { duration: "5s", target: 3000 },
-        { duration: "5s", target: 5000 },
+        { duration: "3s", target: 1000 },
+        { duration: "3s", target: 2000 },
+        { duration: "3s", target: 3000 },
       ],
       gracefulRampDown: "0s",
     },
@@ -25,7 +25,7 @@ export const options = {
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}/v1.0`;
 
 function callActorMethod(id, method) {
-  return http.post(
+  return http.put(
     `${DAPR_ADDRESS}/actors/${actorType}/${id}/method/${method}`,
     JSON.stringify({})
   );
