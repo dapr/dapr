@@ -2418,8 +2418,8 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 
-	log.Info("dapr shutting down.")
-
+	log.Info("Dapr shutting down in %f seconds", duration.Seconds())
+	<-time.After(duration)
 	log.Info("Stopping PubSub subscribers and input bindings")
 	a.stopSubscriptions()
 	a.stopReadingFromBindings()
@@ -2439,8 +2439,6 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 		}
 	}()
 
-	log.Infof("Waiting %s to finish outstanding operations", duration)
-	<-time.After(duration)
 	shutdownCancel()
 	a.shutdownOutputComponents()
 	a.shutdownC <- nil
