@@ -125,13 +125,12 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	if *mode == string(modes.KubernetesMode) {
-		if err := validation.ValidateKubernetesAppID(*appID); err != nil {
-			return nil, err
+	if *mode == string(modes.StandaloneMode) {
+		appIDLower := strings.ToLower(*appID)
+		if *appID != appIDLower {
+			log.Warnf("app-id should be lowercase, using %s instead", appIDLower)
+			*appID = appIDLower
 		}
-	} else {
-		// Convert appID to lowercase to be compatible with the validation.
-		*appID = strings.ToLower(*appID)
 		if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
 			return nil, err
 		}
