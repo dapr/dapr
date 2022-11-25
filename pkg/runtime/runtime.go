@@ -722,20 +722,23 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
 	routeMetadata := route.metadata
 
-	subscribeTopic := topic
-	if a.pubSubs[name].namespaceScoped {
-		subscribeTopic = a.namespace + topic
-	}
+	namespaced := a.pubSubs[name].namespaceScoped
 
 	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
-		err := a.bulkSubscribeTopic(ctx, policy, name, subscribeTopic, route)
+		err := a.bulkSubscribeTopic(ctx, policy, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
-			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", subscribeTopic, err)
+			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
 		}
 		a.topicCtxCancels[subKey] = cancel
 		return nil
 	}
+
+	subscribeTopic := topic
+	if namespaced {
+		subscribeTopic = a.namespace + topic
+	}
+
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
