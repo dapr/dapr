@@ -125,8 +125,16 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
-		return nil, err
+	if *mode == string(modes.KubernetesMode) {
+		if err := validation.ValidateKubernetesAppID(*appID); err != nil {
+			return nil, err
+		}
+	} else {
+		// Convert appID to lowercase to be compatible with the validation.
+		*appID = strings.ToLower(*appID)
+		if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply options to all loggers
