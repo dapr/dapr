@@ -7,14 +7,20 @@ const actorType = __ENV.ACTOR_TYPE
 
 export const options = {
   discardResponseBodies: true,
+  tresholds: {
+    checks: ['rate==1'],
+    http_req_duration: ['p(95)<200'], // 95% of requests should be below 200ms
+  },
   scenarios: {
     idStress: {
-      executor: 'constant-arrival-rate',
-      rate: 100,
-      timeUnit: '1s', // 100 iterations per second, i.e. 100 RPS
-      duration: '10s',
-      preAllocatedVUs: 10, // how large the initial pool of VUs would be
-      maxVUs: 20, // if the preAllocatedVUs are not enough, we can initialize more
+      executor: "ramping-vus",
+      startVUs: 0,
+      stages: [
+        { duration: "2s", target: 100 },
+        { duration: "2s", target: 300 },
+        { duration: "4s", target: 500 },
+      ],
+      gracefulRampDown: "0s",
     },
   },
 };
