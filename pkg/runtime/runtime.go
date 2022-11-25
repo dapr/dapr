@@ -254,6 +254,7 @@ type pubsubItem struct {
 	scopedSubscriptions []string
 	scopedPublishings   []string
 	allowedTopics       []string
+	namespaceScoped     bool
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
@@ -720,8 +721,11 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	ctx, cancel := context.WithCancel(parentCtx)
 	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
 	routeMetadata := route.metadata
+
+	namespaced := a.pubSubs[name].namespaceScoped
+
 	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
-		err := a.bulkSubscribeTopic(ctx, policy, name, topic, route)
+		err := a.bulkSubscribeTopic(ctx, policy, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
 			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
@@ -729,8 +733,14 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		a.topicCtxCancels[subKey] = cancel
 		return nil
 	}
+
+	subscribeTopic := topic
+	if namespaced {
+		subscribeTopic = a.namespace + topic
+	}
+
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
-		Topic:    topic,
+		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 		if msg.Metadata == nil {
@@ -739,56 +749,61 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		msg.Metadata[pubsubName] = name
 
+		msgTopic := msg.Topic
+		if a.pubSubs[name].namespaceScoped {
+			msgTopic = strings.Replace(msgTopic, a.namespace, "", 1)
+		}
+
 		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if route.deadLetterTopic != "" {
 				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 					return nil
 				}
 			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
 			return err
 		}
 
 		var cloudEvent map[string]interface{}
 		data := msg.Data
 		if rawPayload {
-			cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
+			cloudEvent = pubsub.FromRawPayload(msg.Data, msgTopic, name)
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
-				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
 				if route.deadLetterTopic != "" {
 					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 						return nil
 					}
 				}
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
 				return err
 			}
 		} else {
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
-				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
 				if route.deadLetterTopic != "" {
 					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 						return nil
 					}
 				}
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
 				return err
 			}
 		}
 
 		if pubsub.HasExpired(cloudEvent) {
 			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 
 			if route.deadLetterTopic != "" {
 				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
@@ -798,21 +813,21 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
 		if err != nil {
-			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
+			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msgTopic, err)
 			if route.deadLetterTopic != "" {
 				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 					return nil
 				}
 			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
 			return err
 		}
 		if !shouldProcess {
 			// The event does not match any route specified so ignore it.
-			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msgTopic)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 			if route.deadLetterTopic != "" {
 				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
 			}
@@ -823,7 +838,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			psm := &pubsubSubscribedMessage{
 				cloudEvent: cloudEvent,
 				data:       data,
-				topic:      msg.Topic,
+				topic:      msgTopic,
 				metadata:   msg.Metadata,
 				path:       routePath,
 				pubsub:     name,
@@ -1850,6 +1865,7 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 		scopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties),
 		scopedPublishings:   scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties),
 		allowedTopics:       scopes.GetAllowedTopics(properties),
+		namespaceScoped:     metadataContainsNamespace(c.Spec.Metadata),
 	}
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 
@@ -1873,6 +1889,11 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	}
 
 	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName, resiliency.Pubsub)
+
+	if ps.namespaceScoped {
+		req.Topic = a.namespace + req.Topic
+	}
+
 	return policy(func(ctx context.Context) (err error) {
 		return ps.component.Publish(req)
 	})
@@ -1892,6 +1913,16 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	}
 	log.Debugf("pubsub %s does not implement the bulkPublish API, defaulting to normal publish", req.PubsubName)
 	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
+}
+
+func metadataContainsNamespace(items []componentsV1alpha1.MetadataItem) bool {
+	for _, c := range items {
+		val := c.Value.String()
+		if strings.Contains(val, "{namespace}") {
+			return true
+		}
+	}
+	return false
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
