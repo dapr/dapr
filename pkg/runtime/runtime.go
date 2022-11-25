@@ -1887,7 +1887,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 
 	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName, resiliency.Pubsub)
 
-	if a.pubSubs[req.PubsubName].namespaceScoped {
+	if ps.namespaceScoped {
 		req.Topic = a.namespace + req.Topic
 	}
 
