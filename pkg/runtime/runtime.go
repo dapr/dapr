@@ -1890,8 +1890,8 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
 		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
-  
-  if ps.namespaceScoped {
+
+	if ps.namespaceScoped {
 		req.Topic = a.namespace + req.Topic
 	}
 
