@@ -2572,7 +2572,7 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 }
 
 func closeComponent(component any, logmsg string, merr *error) {
-	if closer, ok := component.(io.Closer); ok {
+	if closer, ok := component.(io.Closer); ok && closer != nil {
 		if err := closer.Close(); err != nil {
 			err = fmt.Errorf("error closing %s: %w", logmsg, err)
 			*merr = multierror.Append(*merr, err)
