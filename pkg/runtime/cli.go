@@ -126,11 +126,6 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if *mode == string(modes.StandaloneMode) {
-		appIDLower := strings.ToLower(*appID)
-		if *appID != appIDLower {
-			log.Warnf("app-id should be lowercase, using %s instead", appIDLower)
-			*appID = appIDLower
-		}
 		if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
 			return nil, err
 		}
