@@ -146,6 +146,7 @@ func (r testResolver) Init(metadata nr.Metadata) error {
 	// nop
 	return nil
 }
+
 func (r testResolver) ResolveID(req nr.ResolveRequest) (string, error) {
 	switch req.ID {
 	case "okapp":
