@@ -86,7 +86,7 @@ const (
 	ErrCryptoProvidersNotConfigured = "crypto providers not configured"
 	ErrCryptoProviderNotFound       = "crypto provider %s not found"
 	ErrCryptoGetKey                 = "failed to retrieve key %s: %s"
-	ErrCryptoOperation              = "failed to to perform operation: %s"
+	ErrCryptoOperation              = "failed to perform operation: %s"
 
 	// Lock.
 	ErrLockStoresNotConfigured    = "lock store is not configured"

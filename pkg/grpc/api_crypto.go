@@ -54,14 +54,17 @@ func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequ
 	var pk []byte
 	switch in.Format {
 	case runtimev1pb.SubtleGetKeyRequest_PEM: //nolint:nosnakecase
-		var v crypto.PublicKey
+		var (
+			v   crypto.PublicKey
+			der []byte
+		)
 		err = res.Raw(&v)
 		if err != nil {
 			err = status.Errorf(codes.Internal, "failed to marshal public key %s as PKIX: %s", in.Name, err.Error())
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.SubtleGetKeyResponse{}, err
 		}
-		der, err := x509.MarshalPKIXPublicKey(v)
+		der, err = x509.MarshalPKIXPublicKey(v)
 		if err != nil {
 			err = status.Errorf(codes.Internal, "failed to marshal public key %s as PKIX: %s", in.Name, err.Error())
 			apiServerLogger.Debug(err)
