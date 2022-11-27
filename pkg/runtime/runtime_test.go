@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -4507,7 +4508,7 @@ func TestAuthorizedComponents(t *testing.T) {
 }
 
 type mockPublishPubSub struct {
-	PublishedRequest *pubsub.PublishRequest
+	PublishedRequest atomic.Pointer[pubsub.PublishRequest]
 }
 
 // Init is a mock initialization method.
@@ -4517,7 +4518,7 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 
 // Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
-	m.PublishedRequest = req
+	m.PublishedRequest.Store(req)
 	return nil
 }
 
@@ -5384,11 +5385,15 @@ func TestNamespacedPublisher(t *testing.T) {
 	rt.namespace = "ns1"
 	defer stopRuntime(t, rt)
 
-	rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}, namespaceScoped: true}
+	rt.pubSubs[TestPubsubName] = pubsubItem{
+		component:       &mockPublishPubSub{},
+		namespaceScoped: true,
+	}
 	rt.Publish(&pubsub.PublishRequest{
 		PubsubName: TestPubsubName,
 		Topic:      "topic0",
 	})
 
-	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Topic)
+	pr := rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest
+	assert.Equal(t, "ns1topic0", pr.Load().Topic)
 }
