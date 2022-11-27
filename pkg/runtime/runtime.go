@@ -719,7 +719,9 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
+	policy := resiliency.NewRunner[any](ctx,
+		a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub),
+	)
 	routeMetadata := route.metadata
 
 	namespaced := a.pubSubs[name].namespaceScoped
@@ -1116,12 +1118,12 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		ops := binding.Operations()
 		for _, o := range ops {
 			if o == req.Operation {
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name, resiliency.Binding)
-				respAny, err := policy(func(ctx context.Context) (any, error) {
+				policy := resiliency.NewRunner[*bindings.InvokeResponse](a.ctx,
+					a.resiliency.ComponentOutboundPolicy(name, resiliency.Binding),
+				)
+				return policy(func(ctx context.Context) (*bindings.InvokeResponse, error) {
 					return binding.Invoke(ctx, req)
 				})
-				resp, _ := respAny.(*bindings.InvokeResponse)
-				return resp, err
 			}
 		}
 		supported := make([]string, 0, len(ops))
@@ -1137,7 +1139,9 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName, resiliency.Statestore)
+				policy := resiliency.NewRunner[any](a.ctx,
+					a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
+				)
 				_, err := policy(func(ctx context.Context) (any, error) {
 					return nil, a.stateStores[response.StoreName].BulkSet(reqs)
 				})
@@ -1226,12 +1230,13 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		start := time.Now()
 
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		respAny, err := policy(func(ctx context.Context) (any, error) {
+		policy := resiliency.NewRunner[*runtimev1pb.BindingEventResponse](ctx,
+			a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding),
+		)
+		resp, err := policy(func(ctx context.Context) (*runtimev1pb.BindingEventResponse, error) {
 			return client.OnBindingEvent(ctx, req)
 		})
 
-		resp, _ := respAny.(*runtimev1pb.BindingEventResponse)
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
 				bindingName,
@@ -1285,8 +1290,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req.WithMetadata(reqMetadata)
 
 		respErr := errors.New("error sending binding event to application")
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		respAny, err := policy(func(ctx context.Context) (any, error) {
+		policy := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+			a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding),
+		)
+		resp, err := policy(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 			rResp, rErr := a.appChannel.InvokeMethod(ctx, req)
 			if rErr != nil {
 				return rResp, rErr
@@ -1300,7 +1307,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return nil, fmt.Errorf("error invoking app: %w", err)
 		}
 
-		resp, _ := respAny.(*invokev1.InvokeMethodResponse)
 		if resp == nil {
 			return nil, errors.New("response object is nil")
 		}
@@ -1895,7 +1901,9 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		req.Topic = a.namespace + req.Topic
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName, resiliency.Pubsub)
+	policy := resiliency.NewRunner[any](a.ctx,
+		a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
+	)
 	_, err := policy(func(ctx context.Context) (any, error) {
 		return nil, ps.component.Publish(req)
 	})

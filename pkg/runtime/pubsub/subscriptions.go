@@ -64,17 +64,9 @@ type (
 )
 
 func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
-	var (
-		subscriptions     []Subscription
-		subscriptionItems []SubscriptionJSON
-	)
-
-	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-	req.WithHTTPExtension(http.MethodGet, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
-
-	// TODO Propagate Context
-	ctx := context.Background()
+	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+		WithHTTPExtension(http.MethodGet, "").
+		WithRawData(nil, invokev1.JSONContentType)
 
 	var (
 		resp *invokev1.InvokeMethodResponse
@@ -83,16 +75,16 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
-		policy := r.BuiltInPolicy(ctx, resiliency.BuiltInInitializationRetries)
-		var respAny any
-		respAny, err = policy(func(ctx context.Context) (any, error) {
+		policy := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
+			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+		)
+		resp, err = policy(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 			return channel.InvokeMethod(ctx, req)
 		})
-		resp, _ = respAny.(*invokev1.InvokeMethodResponse)
 	} else {
 		backoff := getSubscriptionsBackoff()
 		resp, err = retry.NotifyRecoverWithData(func() (*invokev1.InvokeMethodResponse, error) {
-			return channel.InvokeMethod(ctx, req)
+			return channel.InvokeMethod(context.TODO(), req)
 		}, backoff, func(err error, d time.Duration) {
 			log.Debug("failed getting http subscriptions, starting retry")
 		}, func() {})
@@ -101,6 +93,11 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	if err != nil {
 		return nil, err
 	}
+
+	var (
+		subscriptions     []Subscription
+		subscriptionItems []SubscriptionJSON
+	)
 
 	switch resp.Status().Code {
 	case http.StatusOK:
@@ -185,17 +182,17 @@ func getSubscriptionsBackoff() backoff.BackOff {
 
 func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
 	var (
-		subscriptions []Subscription
-		err           error
-		resp          *runtimev1pb.ListTopicSubscriptionsResponse
+		err  error
+		resp *runtimev1pb.ListTopicSubscriptionsResponse
 	)
 
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
-		policy := r.BuiltInPolicy(context.Background(), resiliency.BuiltInInitializationRetries)
-		var respAny any
-		respAny, err = policy(func(ctx context.Context) (any, error) {
-			rResp, rErr := channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
+		policy := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
+			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+		)
+		resp, err = policy(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+			rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
 
 			if rErr != nil {
 				s, ok := status.FromError(rErr)
@@ -207,12 +204,11 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			}
 			return rResp, rErr
 		})
-		resp, _ = respAny.(*runtimev1pb.ListTopicSubscriptionsResponse)
 	} else {
 		bo := getSubscriptionsBackoff()
 
 		resp, err = retry.NotifyRecoverWithData(func() (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-			rResp, rErr := channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
+			rResp, rErr := channel.ListTopicSubscriptions(context.TODO(), &emptypb.Empty{})
 
 			if rErr != nil {
 				s, ok := status.FromError(rErr)
@@ -232,21 +228,23 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 		return nil, err
 	}
 
-	if resp == nil || resp.Subscriptions == nil || len(resp.Subscriptions) == 0 {
+	var subscriptions []Subscription
+	if resp == nil || len(resp.Subscriptions) == 0 {
 		log.Debug(noSubscriptionsError)
 	} else {
-		for _, s := range resp.Subscriptions {
+		subscriptions = make([]Subscription, len(resp.Subscriptions))
+		for i, s := range resp.Subscriptions {
 			rules, err := parseRoutingRulesGRPC(s.Routes)
 			if err != nil {
 				return nil, err
 			}
-			subscriptions = append(subscriptions, Subscription{
+			subscriptions[i] = Subscription{
 				PubsubName:      s.PubsubName,
 				Topic:           s.GetTopic(),
 				Metadata:        s.GetMetadata(),
 				DeadLetterTopic: s.DeadLetterTopic,
 				Rules:           rules,
-			})
+			}
 		}
 	}
 

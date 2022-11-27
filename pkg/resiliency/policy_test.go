@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package resiliency_test
+package resiliency
 
 import (
 	"context"
@@ -22,13 +22,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
 )
 
-var log = logger.NewLogger("dapr.resiliency.test")
+var testLog = logger.NewLogger("dapr.resiliency.test")
 
 func TestPolicy(t *testing.T) {
 	retryValue := retry.DefaultConfig()
@@ -37,7 +36,7 @@ func TestPolicy(t *testing.T) {
 		Interval: 10 * time.Millisecond,
 		Timeout:  10 * time.Millisecond,
 	}
-	cbValue.Initialize(log)
+	cbValue.Initialize(testLog)
 	tests := map[string]struct {
 		t  time.Duration
 		r  *retry.Config
@@ -59,7 +58,13 @@ func TestPolicy(t *testing.T) {
 				called.Store(true)
 				return nil, nil
 			}
-			policy := resiliency.Policy(ctx, log, name, tt.t, tt.r, tt.cb)
+			policy := NewRunner[any](ctx, &PolicyDefinition{
+				log:  testLog,
+				name: name,
+				t:    tt.t,
+				r:    tt.r,
+				cb:   tt.cb,
+			})
 			policy(fn)
 			assert.True(t, called.Load())
 		})
@@ -97,7 +102,11 @@ func TestPolicyTimeout(t *testing.T) {
 				return nil, nil
 			}
 
-			policy := resiliency.Policy(context.Background(), log, "timeout", test.timeout, nil, nil)
+			policy := NewRunner[any](context.Background(), &PolicyDefinition{
+				log:  testLog,
+				name: "timeout",
+				t:    test.timeout,
+			})
 			policy(fn)
 
 			assert.Equal(t, test.expected, called.Load())
@@ -138,7 +147,12 @@ func TestPolicyRetry(t *testing.T) {
 				return nil, nil
 			}
 
-			policy := resiliency.Policy(context.Background(), log, "retry", 10*time.Millisecond, &retry.Config{MaxRetries: test.maxRetries}, nil)
+			policy := NewRunner[any](context.Background(), &PolicyDefinition{
+				log:  testLog,
+				name: "retry",
+				t:    10 * time.Millisecond,
+				r:    &retry.Config{MaxRetries: test.maxRetries},
+			})
 			policy(fn)
 			assert.Equal(t, test.expected, called.Load())
 		})

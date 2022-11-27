@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -610,8 +611,9 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	bgrAny, rErr := policy(func(ctx context.Context) (any, error) {
+	policyDef := a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore)
+	bgrPolicy := resiliency.NewRunner[*bulkGetRes](reqCtx, policyDef)
+	bgr, rErr := bgrPolicy(func(ctx context.Context) (*bulkGetRes, error) {
 		rBulkGet, rBulkResponse, rErr := store.BulkGet(reqs)
 		return &bulkGetRes{
 			bulkGet:   rBulkGet,
@@ -622,7 +624,6 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
-	bgr, _ := bgrAny.(*bulkGetRes)
 	if bgr == nil {
 		bgr = &bulkGetRes{}
 	}
@@ -667,19 +668,17 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 					Metadata: metadata,
 				}
 
-				respAny, err := policy(func(ctx context.Context) (any, error) {
+				policy := resiliency.NewRunner[*state.GetResponse](reqCtx, policyDef)
+				resp, err := policy(func(ctx context.Context) (*state.GetResponse, error) {
 					return store.Get(gr)
 				})
 				if err != nil {
 					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 					r.Error = err.Error()
-				} else {
-					resp, ok := respAny.(*state.GetResponse)
-					if ok && resp != nil {
-						r.Data = json.RawMessage(resp.Data)
-						r.ETag = resp.ETag
-						r.Metadata = resp.Metadata
-					}
+				} else if resp != nil {
+					r.Data = json.RawMessage(resp.Data)
+					r.ETag = resp.ETag
+					r.Metadata = resp.Metadata
 				}
 			}
 
@@ -770,8 +769,10 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	respAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[*state.GetResponse](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+	)
+	resp, err := policy(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(req)
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -785,7 +786,6 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp := respAny.(*state.GetResponse)
 	if resp == nil || resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
@@ -853,7 +853,9 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		eventBody, _ := json.Marshal(e)
 		req.WithRawData(eventBody, invokev1.JSONContentType)
 
-		policy := h.res.ComponentInboundPolicy(ctx, h.storeName, resiliency.Configuration)
+		policy := resiliency.NewRunner[any](ctx,
+			h.res.ComponentInboundPolicy(h.storeName, resiliency.Configuration),
+		)
 		_, err := policy(func(ctx context.Context) (any, error) {
 			rResp, rErr := h.appChannel.InvokeMethod(ctx, req)
 			if rErr != nil {
@@ -888,8 +890,6 @@ func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Lock)
-
 	req.ResourceID, err = lockLoader.GetModifiedLockKey(req.ResourceID, storeName, a.id)
 	if err != nil {
 		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
@@ -898,7 +898,10 @@ func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	respAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[*lock.TryLockResponse](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Lock),
+	)
+	resp, err := policy(func(ctx context.Context) (*lock.TryLockResponse, error) {
 		return store.TryLock(&req)
 	})
 	if err != nil {
@@ -908,7 +911,6 @@ func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp, _ := respAny.(*lock.TryLockResponse)
 	b, _ := json.Marshal(resp)
 	respond(reqCtx, withJSON(200, b))
 }
@@ -929,8 +931,6 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Lock)
-
 	req.ResourceID, err = lockLoader.GetModifiedLockKey(req.ResourceID, storeName, a.id)
 	if err != nil {
 		msg := NewErrorResponse("ERR_UNLOCK", err.Error())
@@ -939,7 +939,10 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	respAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[*lock.UnlockResponse](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Lock),
+	)
+	resp, err := policy(func(ctx context.Context) (*lock.UnlockResponse, error) {
 		return store.Unlock(req)
 	})
 	if err != nil {
@@ -949,7 +952,6 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp, _ := respAny.(*lock.UnlockResponse)
 	b, _ := json.Marshal(resp)
 	respond(reqCtx, withJSON(200, b))
 }
@@ -993,8 +995,10 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
-	subscribeIDAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[string](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+	)
+	subscribeID, err := policy(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, req, handler.updateEventHandler)
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1007,7 +1011,6 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	subscribeID, _ := subscribeIDAny.(string)
 	respBytes, _ := json.Marshal(&subscribeConfigurationResponse{
 		ID: subscribeID,
 	})
@@ -1026,7 +1029,9 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		ID: subscribeID,
 	}
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
+	policy := resiliency.NewRunner[any](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+	)
 	_, err = policy(func(ctx context.Context) (any, error) {
 		return nil, store.Unsubscribe(ctx, &req)
 	})
@@ -1069,8 +1074,10 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
-	getResponseAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[*configuration.GetResponse](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+	)
+	getResponse, err := policy(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, req)
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1084,7 +1091,6 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	getResponse, _ := getResponseAny.(*configuration.GetResponse)
 	if getResponse == nil || getResponse.Items == nil || len(getResponse.Items) == 0 {
 		respond(reqCtx, withEmpty())
 		return
@@ -1095,9 +1101,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
 }
 
-func extractEtag(reqCtx *fasthttp.RequestCtx) (bool, string) {
-	var etag string
-	var hasEtag bool
+func extractEtag(reqCtx *fasthttp.RequestCtx) (hasEtag bool, etag string) {
 	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
 		if string(key) == "If-Match" {
 			etag = string(value)
@@ -1144,7 +1148,9 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
+	policy := resiliency.NewRunner[any](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+	)
 	_, err = policy(func(ctx context.Context) (any, error) {
 		return nil, store.Delete(&req)
 	})
@@ -1186,8 +1192,10 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
-	respAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[*secretstores.GetSecretResponse](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
+	)
+	resp, err := policy(func(ctx context.Context) (*secretstores.GetSecretResponse, error) {
 		rResp, rErr := store.GetSecret(ctx, req)
 		return &rResp, rErr
 	})
@@ -1203,7 +1211,6 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp, _ := respAny.(*secretstores.GetSecretResponse)
 	if resp == nil || resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
@@ -1227,8 +1234,10 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
-	respAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[*secretstores.BulkGetSecretResponse](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
+	)
+	resp, err := policy(func(ctx context.Context) (*secretstores.BulkGetSecretResponse, error) {
 		rResp, rErr := store.BulkGetSecret(ctx, req)
 		return &rResp, rErr
 	})
@@ -1244,7 +1253,6 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp := respAny.(*secretstores.BulkGetSecretResponse)
 	if resp == nil || resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
@@ -1337,7 +1345,9 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
+	policy := resiliency.NewRunner[any](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+	)
 	_, err = policy(func(ctx context.Context) (any, error) {
 		return nil, store.BulkSet(reqs)
 	})
@@ -1436,9 +1446,11 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Save headers to internal metadata
 	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
 
-	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, targetID+":"+invokeMethodName)
+	policy := resiliency.NewRunner[*directMessagingPolicyRes](reqCtx,
+		a.resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName),
+	)
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
-	dmprAny, err := policy(func(ctx context.Context) (any, error) {
+	dmpr, err := policy(func(ctx context.Context) (*directMessagingPolicyRes, error) {
 		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
 		if rErr != nil {
 			// Allowlists policies that are applied on the callee side can return a Permission Denied error.
@@ -1488,7 +1500,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	dmpr, _ := dmprAny.(*directMessagingPolicyRes)
 	if dmpr == nil {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", "failed to cast response object")))
 		return
@@ -1798,8 +1809,10 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policy := a.resiliency.ActorPreLockPolicy(reqCtx, actorType, actorID)
-	respAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[*invokev1.InvokeMethodResponse](reqCtx,
+		a.resiliency.ActorPreLockPolicy(actorType, actorID),
+	)
+	resp, err := policy(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.actor.Call(ctx, req)
 	})
 	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
@@ -1809,7 +1822,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp, _ := respAny.(*invokev1.InvokeMethodResponse)
 	if resp == nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, "failed to cast response"))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -2329,10 +2341,10 @@ func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 
 func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	metadata := map[string]string{}
+	prefixBytes := []byte(metadataPrefix)
 	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
-		queryKey := string(key)
-		if strings.HasPrefix(queryKey, metadataPrefix) {
-			k := strings.TrimPrefix(queryKey, metadataPrefix)
+		if bytes.HasPrefix(key, prefixBytes) {
+			k := string(key[len(prefixBytes):])
 			metadata[k] = string(value)
 		}
 	})
@@ -2388,8 +2400,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	operations := []state.TransactionalStateOperation{}
-	for _, o := range req.Operations {
+	operations := make([]state.TransactionalStateOperation, len(req.Operations))
+	for i, o := range req.Operations {
 		switch o.Operation {
 		case state.Upsert:
 			var upsertReq state.SetRequest
@@ -2408,10 +2420,10 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(err)
 				return
 			}
-			operations = append(operations, state.TransactionalStateOperation{
+			operations[i] = state.TransactionalStateOperation{
 				Request:   upsertReq,
 				Operation: state.Upsert,
-			})
+			}
 		case state.Delete:
 			var delReq state.DeleteRequest
 			err := mapstructure.Decode(o.Request, &delReq)
@@ -2429,10 +2441,10 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(msg)
 				return
 			}
-			operations = append(operations, state.TransactionalStateOperation{
+			operations[i] = state.TransactionalStateOperation{
 				Request:   delReq,
 				Operation: state.Delete,
-			})
+			}
 		default:
 			msg := NewErrorResponse(
 				"ERR_NOT_SUPPORTED_STATE_OPERATION",
@@ -2465,7 +2477,9 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
+	policy := resiliency.NewRunner[any](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   req.Metadata,
@@ -2518,8 +2532,10 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	req.Metadata = getMetadataFromRequest(reqCtx)
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	respAny, err := policy(func(ctx context.Context) (any, error) {
+	policy := resiliency.NewRunner[*state.QueryResponse](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+	)
+	resp, err := policy(func(ctx context.Context) (*state.QueryResponse, error) {
 		return querier.Query(&req)
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -2532,7 +2548,6 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	resp, _ := respAny.(*state.QueryResponse)
 	if resp == nil || len(resp.Results) == 0 {
 		respond(reqCtx, withEmpty())
 		return

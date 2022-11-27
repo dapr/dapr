@@ -67,7 +67,7 @@ type bulkSubIngressDiagnostics struct {
 //     3.B. Send the envelope to app by invoking http endpoint
 //  4. Check if any error has occurred so far in processing for any of the message and invoke DLQ, if configured.
 //  5. Send back responses array to broker interface.
-func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.Runner,
+func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.Runner[any],
 	psName string, topic string, route TopicRouteElem, namespacedConsumer bool,
 ) error {
 	ps, ok := a.pubSubs[psName]
@@ -252,7 +252,7 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRout
 // createEnvelopeAndInvokeSubscriber creates the envelope and invokes the subscriber.
 func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm pubsubBulkSubscribedMessage, topic string, psName string,
 	msg *pubsub.BulkMessage, route TopicRouteElem, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
-	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner[any], bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
 ) error {
 	var id string
 	idObj, err := uuid.NewRandom()
