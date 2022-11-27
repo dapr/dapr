@@ -5394,6 +5394,5 @@ func TestNamespacedPublisher(t *testing.T) {
 		Topic:      "topic0",
 	})
 
-	pr := rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest
-	assert.Equal(t, "ns1topic0", pr.Load().Topic)
+	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Load().Topic)
 }
