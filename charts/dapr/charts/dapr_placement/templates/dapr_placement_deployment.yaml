@@ -4,6 +4,9 @@ metadata:
   name: dapr-placement-server
   labels:
     app: dapr-placement-server
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
 {{- if eq .Values.global.ha.enabled true }}
   replicas: 3
@@ -19,11 +22,9 @@ spec:
     metadata:
       labels:
         app: dapr-placement-server
-        app.kubernetes.io/name: {{ .Release.Name }}
-        app.kubernetes.io/version: {{ .Values.global.tag }}
-        app.kubernetes.io/component: placement
-        app.kubernetes.io/part-of: "dapr"
-        app.kubernetes.io/managed-by: "helm"
+        {{- range $key, $value := .Values.global.k8sLabels }}
+        {{ $key }}: {{ tpl $value $ }}
+        {{- end }}
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -61,7 +62,7 @@ spec:
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
-        image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
+        image: "{{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         resources:

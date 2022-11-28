@@ -21,7 +21,6 @@ import (
 	"github.com/dapr/components-contrib/state/query"
 	"github.com/dapr/components-contrib/state/utils"
 	"github.com/dapr/dapr/pkg/components/pluggable"
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/kit/logger"
 
@@ -45,7 +44,7 @@ type grpcStateStore struct {
 // Init initializes the grpc state passing out the metadata to the grpc component.
 // It also fetches and set the current components features.
 func (ss *grpcStateStore) Init(metadata state.Metadata) error {
-	if err := ss.Dial(); err != nil {
+	if err := ss.Dial(metadata.Name); err != nil {
 		return err
 	}
 
@@ -67,8 +66,8 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		return err
 	}
 
-	ss.features = make([]state.Feature, len(featureResponse.Feature))
-	for idx, f := range featureResponse.Feature {
+	ss.features = make([]state.Feature, len(featureResponse.Features))
+	for idx, f := range featureResponse.Features {
 		ss.features[idx] = state.Feature(f)
 	}
 
@@ -78,6 +77,12 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 // Features list all implemented features.
 func (ss *grpcStateStore) Features() []state.Feature {
 	return ss.features
+}
+
+// Returns the component metadata options
+func (ss *grpcStateStore) GetComponentMetadata() map[string]string {
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
+	return map[string]string{}
 }
 
 // Delete performs a delete operation.
@@ -319,7 +324,7 @@ func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 		Etag:        toETagRequest(req.ETag),
 		Metadata:    req.GetMetadata(),
 		ContentType: strValueIfNotNil(req.ContentType),
-		Options: &v1.StateOptions{
+		Options: &proto.StateOptions{
 			Concurrency: concurrencyOf(req.Options.Concurrency),
 			Consistency: consistencyOf(req.Options.Consistency),
 		},
@@ -343,25 +348,25 @@ func toDeleteRequest(req *state.DeleteRequest) *proto.DeleteRequest {
 		Key:      req.Key,
 		Etag:     toETagRequest(req.ETag),
 		Metadata: req.Metadata,
-		Options: &v1.StateOptions{
+		Options: &proto.StateOptions{
 			Concurrency: concurrencyOf(req.Options.Concurrency),
 			Consistency: consistencyOf(req.Options.Consistency),
 		},
 	}
 }
 
-func fromETagResponse(etag *v1.Etag) *string {
+func fromETagResponse(etag *proto.Etag) *string {
 	if etag == nil {
 		return nil
 	}
 	return &etag.Value
 }
 
-func toETagRequest(etag *string) *v1.Etag {
+func toETagRequest(etag *string) *proto.Etag {
 	if etag == nil {
 		return nil
 	}
-	return &v1.Etag{
+	return &proto.Etag{
 		Value: *etag,
 	}
 }
@@ -378,31 +383,31 @@ func toGetRequest(req *state.GetRequest) *proto.GetRequest {
 }
 
 //nolint:nosnakecase
-var consistencyModels = map[string]v1.StateOptions_StateConsistency{
-	state.Eventual: v1.StateOptions_CONSISTENCY_EVENTUAL,
-	state.Strong:   v1.StateOptions_CONSISTENCY_STRONG,
+var consistencyModels = map[string]proto.StateOptions_StateConsistency{
+	state.Eventual: proto.StateOptions_CONSISTENCY_EVENTUAL,
+	state.Strong:   proto.StateOptions_CONSISTENCY_STRONG,
 }
 
 //nolint:nosnakecase
-func consistencyOf(value string) v1.StateOptions_StateConsistency {
+func consistencyOf(value string) proto.StateOptions_StateConsistency {
 	consistency, ok := consistencyModels[value]
 	if !ok {
-		return v1.StateOptions_CONSISTENCY_UNSPECIFIED
+		return proto.StateOptions_CONSISTENCY_UNSPECIFIED
 	}
 	return consistency
 }
 
 //nolint:nosnakecase
-var concurrencyModels = map[string]v1.StateOptions_StateConcurrency{
-	state.FirstWrite: v1.StateOptions_CONCURRENCY_FIRST_WRITE,
-	state.LastWrite:  v1.StateOptions_CONCURRENCY_LAST_WRITE,
+var concurrencyModels = map[string]proto.StateOptions_StateConcurrency{
+	state.FirstWrite: proto.StateOptions_CONCURRENCY_FIRST_WRITE,
+	state.LastWrite:  proto.StateOptions_CONCURRENCY_LAST_WRITE,
 }
 
 //nolint:nosnakecase
-func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
+func concurrencyOf(value string) proto.StateOptions_StateConcurrency {
 	concurrency, ok := concurrencyModels[value]
 	if !ok {
-		return v1.StateOptions_CONCURRENCY_UNSPECIFIED
+		return proto.StateOptions_CONCURRENCY_UNSPECIFIED
 	}
 	return concurrency
 }
@@ -453,8 +458,15 @@ func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
-func newGRPCStateStore(socket string) func(l logger.Logger) state.Store {
+func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) state.Store {
 	return func(l logger.Logger) state.Store {
-		return NewGRPCStateStore(l, socket)
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, newStateStoreClient))
 	}
+}
+
+func init() {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.StateStore_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterComponent(newGRPCStateStore(dialer), name)
+	})
 }

@@ -66,6 +66,8 @@ var log = logger.NewLogger("dapr.runtime.actor")
 var pattern = regexp.MustCompile(`^(R(?P<repetition>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
 
 // Actors allow calling into virtual actors as well as actor state management.
+//
+//nolint:interfacebloat
 type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
@@ -82,12 +84,15 @@ type Actors interface {
 	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
 }
 
+// GRPCConnectionFn is the type of the function that returns a gRPC connection
+type GRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
+
 type actorsRuntime struct {
 	appChannel             channel.AppChannel
 	store                  state.Store
 	transactionalStore     state.TransactionalStore
 	placement              *internal.ActorPlacement
-	grpcConnectionFn       func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+	grpcConnectionFn       GRPCConnectionFn
 	config                 Config
 	actorsTable            *sync.Map
 	activeTimers           *sync.Map
@@ -139,32 +144,39 @@ const (
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
 
+// ActorsOpts contains options for NewActors.
+type ActorsOpts struct {
+	StateStore       state.Store
+	AppChannel       channel.AppChannel
+	GRPCConnectionFn GRPCConnectionFn
+	Config           Config
+	CertChain        *daprCredentials.CertChain
+	TracingSpec      configuration.TracingSpec
+	Features         []configuration.FeatureSpec
+	Resiliency       resiliency.Provider
+	StateStoreName   string
+}
+
 // NewActors create a new actors runtime with given config.
-func NewActors(
-	stateStore state.Store,
-	appChannel channel.AppChannel,
-	grpcConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error),
-	config Config,
-	certChain *daprCredentials.CertChain,
-	tracingSpec configuration.TracingSpec,
-	features []configuration.FeatureSpec,
-	resiliency resiliency.Provider,
-	stateStoreName string,
-) Actors {
+func NewActors(opts ActorsOpts) Actors {
 	var transactionalStore state.TransactionalStore
-	if stateStore != nil {
-		features := stateStore.Features()
+	if opts.StateStore != nil {
+		features := opts.StateStore.Features()
 		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
-			transactionalStore = stateStore.(state.TransactionalStore)
+			transactionalStore = opts.StateStore.(state.TransactionalStore)
 		}
 	}
 
 	return &actorsRuntime{
-		appChannel:             appChannel,
-		config:                 config,
-		store:                  stateStore,
+		store:                  opts.StateStore,
+		appChannel:             opts.AppChannel,
+		grpcConnectionFn:       opts.GRPCConnectionFn,
+		config:                 opts.Config,
+		certChain:              opts.CertChain,
+		tracingSpec:            opts.TracingSpec,
+		resiliency:             opts.Resiliency,
+		storeName:              opts.StateStoreName,
 		transactionalStore:     transactionalStore,
-		grpcConnectionFn:       grpcConnectionFn,
 		actorsTable:            &sync.Map{},
 		activeTimers:           &sync.Map{},
 		activeTimersLock:       &sync.RWMutex{},
@@ -177,11 +189,7 @@ func NewActors(
 		evaluationBusy:         false,
 		evaluationChan:         make(chan bool),
 		appHealthy:             atomic.NewBool(true),
-		certChain:              certChain,
-		tracingSpec:            tracingSpec,
-		resiliency:             resiliency,
-		storeName:              stateStoreName,
-		isResiliencyEnabled:    configuration.IsFeatureEnabled(features, configuration.Resiliency),
+		isResiliencyEnabled:    configuration.IsFeatureEnabled(opts.Features, configuration.Resiliency),
 	}
 }
 
@@ -364,7 +372,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	ctx context.Context,
 	numRetries int,
 	backoffInterval time.Duration,
-	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
+	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	targetAddress, targetID string, req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
@@ -375,23 +383,23 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
 			var resp *invokev1.InvokeMethodResponse
 			err := policy(func(ctx context.Context) (rErr error) {
+				var teardown func(destroy bool)
 				retriesExhaustedPath = false
-				resp, rErr = fn(ctx, targetAddress, targetID, req)
+				resp, teardown, rErr = fn(ctx, targetAddress, targetID, req)
 				if rErr == nil {
+					teardown(false)
 					return nil
 				}
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
-					_, teardown, connerr := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
-					teardown()
-					if connerr != nil {
-						nullifyResponsePath = true
-						return backoff.Permanent(connerr)
-					}
+					// Destroy the connection and force a re-connection on the next attempt
+					teardown(true)
 					retriesExhaustedPath = true
 					return rErr
 				}
+
+				teardown(false)
 				return backoff.Permanent(rErr)
 			})
 			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
@@ -406,24 +414,27 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 			// We're safe to Unwrap here because it's either nil or a permanent error which contains the Unwrap method.
 			return resp, errors.Unwrap(err)
 		}
-		return fn(ctx, targetAddress, targetID, req)
+
+		resp, teardown, err := fn(ctx, targetAddress, targetID, req)
+		teardown(false)
+		return resp, err
 	}
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, targetAddress, targetID, req)
+		resp, teardown, err := fn(ctx, targetAddress, targetID, req)
 		if err == nil {
+			teardown(false)
 			return resp, nil
 		}
 		time.Sleep(backoffInterval)
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, teardown, cerr := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
-			teardown()
-			if cerr != nil {
-				return nil, cerr
-			}
+			// Destroy the connection and force a re-connection on the next attempt
+			teardown(true)
 			continue
 		}
+
+		teardown(false)
 		return resp, err
 	}
 	return nil, errors.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
@@ -455,7 +466,11 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 			reentrancyID = &headerValue.GetValues()[0]
 		} else {
 			reentrancyHeader := fasthttp.RequestHeader{}
-			uuid := uuid.New().String()
+			uuidObj, err := uuid.NewRandom()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate UUID: %w", err)
+			}
+			uuid := uuidObj.String()
 			reentrancyHeader.Add("Dapr-Reentrancy-Id", uuid)
 			req.AddHeaders(&reentrancyHeader)
 			reentrancyID = &uuid
@@ -510,11 +525,10 @@ func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
 	req *invokev1.InvokeMethodRequest,
-) (*invokev1.InvokeMethodResponse, error) {
-	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, false, false)
-	defer teardown()
+) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
+	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace)
 	if err != nil {
-		return nil, err
+		return nil, teardown, err
 	}
 
 	span := diagUtils.SpanFromContext(ctx)
@@ -522,20 +536,20 @@ func (a *actorsRuntime) callRemoteActor(
 	client := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := client.CallActor(ctx, req.Proto())
 	if err != nil {
-		return nil, err
+		return nil, teardown, err
 	}
 
 	invokeResponse, invokeErr := invokev1.InternalInvokeResponse(resp)
 	if invokeErr != nil {
-		return nil, invokeErr
+		return nil, teardown, invokeErr
 	}
 
 	// Generated gRPC client eats the response when we send
 	if _, ok := invokeResponse.Headers()["X-Daprerrorresponseheader"]; ok {
-		return invokeResponse, ErrDaprResponseHeader
+		return invokeResponse, teardown, ErrDaprResponseHeader
 	}
 
-	return invokeResponse, nil
+	return invokeResponse, teardown, nil
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
@@ -1131,7 +1145,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	defer a.activeRemindersLock.Unlock()
 	if r, exists := a.getReminder(req.Name, req.ActorType, req.ActorID); exists {
 		if a.reminderRequiresUpdate(req, r) {
-			err := a.DeleteReminder(ctx, &DeleteReminderRequest{
+			err := a.doDeleteReminder(ctx, &DeleteReminderRequest{
 				ActorID:   req.ActorID,
 				ActorType: req.ActorType,
 				Name:      req.Name,
@@ -1719,6 +1733,12 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+	a.activeRemindersLock.Lock()
+	defer a.activeRemindersLock.Unlock()
+	return a.doDeleteReminder(ctx, req)
+}
+
+func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -1861,7 +1881,7 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 	}
 
 	// delete old reminder
-	err := a.DeleteReminder(ctx, &DeleteReminderRequest{
+	err := a.doDeleteReminder(ctx, &DeleteReminderRequest{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
 		Name:      req.OldName,

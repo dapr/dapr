@@ -16,9 +16,12 @@ package diagnostics
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/config"
 
@@ -101,6 +104,12 @@ func TestTraceStateFromW3CString(t *testing.T) {
 		got := TraceStateFromW3CString(scText)
 		assert.Equal(t, ts, *got)
 	})
+	t.Run("invalid Tracestate", func(t *testing.T) {
+		ts := trace.TraceState{}
+		// A non-parsable tracestate should equate back to an empty one.
+		got := TraceStateFromW3CString("bad tracestate")
+		assert.Equal(t, ts, *got)
+	})
 }
 
 func TestStartInternalCallbackSpan(t *testing.T) {
@@ -132,7 +141,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
 	})
 
-	t.Run("traceparent is provided but sampling is disabled", func(t *testing.T) {
+	t.Run("traceparent is provided with sampling flag = 1 but sampling is disabled", func(t *testing.T) {
 		traceSpec := config.TracingSpec{SamplingRate: "0"}
 
 		scConfig := trace.SpanContextConfig{
@@ -148,6 +157,66 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 		assert.Nil(t, gotSp)
 		assert.NotNil(t, ctx)
 	})
+
+	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
+		numTraces := 100000
+		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", 0)
+		// We use a fixed seed for the RNG so we can use an exact number here
+		require.Equal(t, sampledCount, 1012, "Expected to sample 1012 traces but only sampled %d", sampledCount)
+		require.Less(t, sampledCount, numTraces, "Expected to sample fewer than the total number of traces, but sampled all of them!")
+	})
+
+	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (and P=1.00)", func(t *testing.T) {
+		numTraces := 1000
+		sampledCount := runTraces(t, "test_trace", numTraces, "1.00", 0)
+		require.Equal(t, sampledCount, numTraces, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
+	})
+
+	t.Run("traceparent is provided with sampling flag = 1 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
+		numTraces := 1000
+		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", 1)
+		require.Equal(t, sampledCount, numTraces, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
+	})
+}
+
+func runTraces(t *testing.T, testName string, numTraces int, samplingRate string, parentTraceFlag int) int {
+	d := NewDaprTraceSampler(samplingRate)
+	tracerOptions := []sdktrace.TracerProviderOption{
+		sdktrace.WithSampler(d),
+	}
+
+	tp := sdktrace.NewTracerProvider(tracerOptions...)
+
+	tracerName := fmt.Sprintf("%s_%s", testName, samplingRate)
+	otel.SetTracerProvider(tp)
+	tracer := otel.Tracer(tracerName)
+
+	// This is taken from otel's tests for the ratio sampler so we can generate IDs
+	idg := defaultIDGenerator()
+	sampledCount := 0
+
+	for i := 0; i < numTraces; i++ {
+		traceID, _ := idg.NewIDs(context.Background())
+		scConfig := trace.SpanContextConfig{
+			TraceID:    traceID,
+			SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+			TraceFlags: trace.TraceFlags(parentTraceFlag),
+		}
+
+		parent := trace.NewSpanContext(scConfig)
+
+		ctx := context.Background()
+		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
+		ctx, span := tracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
+		assert.NotNil(t, span)
+		assert.NotNil(t, ctx)
+
+		if span.SpanContext().IsSampled() {
+			sampledCount += 1
+		}
+	}
+
+	return sampledCount
 }
 
 // This test would allow us to know when the span attribute keys are
@@ -214,4 +283,61 @@ func (o *otelFakeSpanProcessor) Shutdown(ctx context.Context) error {
 // ForceFlush implements the SpanProcessor interface.
 func (o *otelFakeSpanProcessor) ForceFlush(ctx context.Context) error {
 	return nil
+}
+
+// This was taken from the otel testing to generate IDs
+// origin: go.opentelemetry.io/otel/sdk@v1.11.1/trace/id_generator.go
+// Copyright: The OpenTelemetry Authors
+// License (Apache 2.0): https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.11.1/LICENSE
+
+// IDGenerator allows custom generators for TraceID and SpanID.
+type IDGenerator interface {
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+
+	// NewIDs returns a new trace and span ID.
+	NewIDs(ctx context.Context) (trace.TraceID, trace.SpanID)
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+
+	// NewSpanID returns a ID for a new span in the trace with traceID.
+	NewSpanID(ctx context.Context, traceID trace.TraceID) trace.SpanID
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+}
+
+type randomIDGenerator struct {
+	sync.Mutex
+	randSource *rand.Rand
+}
+
+var _ IDGenerator = &randomIDGenerator{}
+
+// NewSpanID returns a non-zero span ID from a randomly-chosen sequence.
+func (gen *randomIDGenerator) NewSpanID(ctx context.Context, traceID trace.TraceID) trace.SpanID {
+	gen.Lock()
+	defer gen.Unlock()
+	sid := trace.SpanID{}
+	_, _ = gen.randSource.Read(sid[:])
+	return sid
+}
+
+// NewIDs returns a non-zero trace ID and a non-zero span ID from a
+// randomly-chosen sequence.
+func (gen *randomIDGenerator) NewIDs(ctx context.Context) (trace.TraceID, trace.SpanID) {
+	gen.Lock()
+	defer gen.Unlock()
+	tid := trace.TraceID{}
+	_, _ = gen.randSource.Read(tid[:])
+	sid := trace.SpanID{}
+	_, _ = gen.randSource.Read(sid[:])
+	return tid, sid
+}
+
+func defaultIDGenerator() IDGenerator {
+	gen := &randomIDGenerator{
+		// Use a fixed seed to make the tests deterministic.
+		randSource: rand.New(rand.NewSource(1)), //nolint:gosec
+	}
+	return gen
 }

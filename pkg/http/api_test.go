@@ -27,19 +27,20 @@ import (
 	"testing"
 	"time"
 
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	routing "github.com/fasthttp/router"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/fasthttputil"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -56,12 +57,15 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/utils/nethttpadaptor"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -73,13 +77,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  10,
+					MaxRetries:  ptr.Of(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -288,7 +292,449 @@ func TestPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
+			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"]) //nolint:dupword
+		}
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestBulkPubSubEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+				switch req.PubsubName {
+				case "errorpubsub":
+					err := fmt.Errorf("Error from pubsub %s", req.PubsubName)
+					res := pubsub.BulkPublishResponse{}
+					for _, entry := range req.Entries {
+						_, shouldErr := entry.Metadata["shouldErr"]
+						if shouldErr {
+							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+								EntryId: entry.EntryId,
+								Status:  pubsub.PublishFailed,
+								Error:   err,
+							})
+						} else {
+							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+								EntryId: entry.EntryId,
+								Status:  pubsub.PublishSucceeded,
+							})
+						}
+					}
+					return res, err
+				case "errnotfound":
+					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
+				case "errnotallowed":
+					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				default:
+					res := pubsub.BulkPublishResponse{}
+					for _, entry := range req.Entries {
+						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+							EntryId: entry.EntryId,
+							Status:  pubsub.PublishSucceeded,
+						})
+					}
+					return res, nil
+				}
+			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
+			},
+		},
+	}
+	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
+
+	bulkRequest := []bulkPublishMessageEntry{
+		{
+			EntryId: "1",
+			Event: map[string]string{
+				"key":   "first",
+				"value": "first value",
+			},
+			ContentType: "application/json",
+		},
+		{
+			EntryId: "2",
+			Event: map[string]string{
+				"key":   "second",
+				"value": "second value",
+			},
+			ContentType: "application/json",
+			Metadata: map[string]string{
+				"md1": "mdVal1",
+				"md2": "mdVal2",
+			},
+		},
+		{
+			EntryId: "3",
+			Event: map[string]string{
+				"key":   "third",
+				"value": "third value",
+			},
+			ContentType: "application/json",
+		},
+	}
+
+	// setup
+	reqBytes, _ := json.Marshal(bulkRequest)
+	resBytes := []byte{}
+	t.Run("Bulk Publish successfully - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish multi path successfully - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/A/B/C", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish complete failure - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+
+		errBulkRequest := []bulkPublishMessageEntry{}
+		for _, entry := range bulkRequest {
+			if entry.Metadata == nil {
+				entry.Metadata = map[string]string{}
+			}
+			entry.Metadata["shouldErr"] = "true"
+			errBulkRequest = append(errBulkRequest, entry)
+		}
+
+		errBulkResponse := pubsub.BulkPublishResponse{
+			Statuses: []pubsub.BulkPublishResponseEntry{
+				{
+					EntryId: "1",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "2",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "3",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+			},
+		}
+
+		errReqBytes, _ := json.Marshal(errBulkRequest)
+
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+
+			bulkResp := BulkPublishResponse{}
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
+			for i, entry := range bulkResp.Statuses {
+				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
+				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
+				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			}
+		}
+	})
+
+	t.Run("Bulk Publish partial failure - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+
+		errBulkRequest := []bulkPublishMessageEntry{}
+		for _, entry := range bulkRequest {
+			// Fail entries 2 and 3
+			if entry.EntryId == "2" || entry.EntryId == "3" {
+				if entry.Metadata == nil {
+					entry.Metadata = map[string]string{}
+				}
+				entry.Metadata["shouldErr"] = "true"
+			}
+			errBulkRequest = append(errBulkRequest, entry)
+		}
+
+		errBulkResponse := pubsub.BulkPublishResponse{
+			Statuses: []pubsub.BulkPublishResponseEntry{
+				{
+					EntryId: "2",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "3",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+			},
+		}
+
+		errReqBytes, _ := json.Marshal(errBulkRequest)
+
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+
+			bulkResp := BulkPublishResponse{}
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
+			for i, entry := range bulkResp.Statuses {
+				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
+				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
+				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			}
+		}
+	})
+
+	t.Run("Bulk Publish without topic name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Bulk Publish without entryId - 400", func(t *testing.T) {
+		reqWithoutEntryId := []bulkPublishMessageEntry{ //nolint:stylecheck
+			{
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				Event: map[string]string{
+					"key":   "second",
+					"value": "second value",
+				},
+				ContentType: "application/json",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		reqBytesWithoutEntryId, _ := json.Marshal(reqWithoutEntryId) //nolint:stylecheck
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryId, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error: entryId is duplicated or not present for entry")
+		}
+	})
+
+	t.Run("Bulk Publish with duplicate entryId - 400", func(t *testing.T) {
+		reqWithoutEntryId := []bulkPublishMessageEntry{ //nolint:stylecheck
+			{
+				EntryId: "1",
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				EntryId: "1",
+				Event: map[string]string{
+					"key":   "second",
+					"value": "second value",
+				},
+				ContentType: "application/json",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		reqBytesWithoutEntryId, _ := json.Marshal(reqWithoutEntryId) //nolint:stylecheck
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryId, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error: entryId is duplicated or not present for entry")
+		}
+	})
+
+	t.Run("Bulk Publish metadata error - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic?metadata.rawPayload=100", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_REQUEST_METADATA", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "failed deserializing metadata")
+		}
+	})
+
+	t.Run("Bulk Publish dataContentType mismatch - 400", func(t *testing.T) {
+		dCTMismatch := []bulkPublishMessageEntry{
+			{
+				EntryId: "1",
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				EntryId: "2",
+				Event: map[string]string{
+					"key":   "second",
+					"value": "second value",
+				},
+				ContentType: "text/xml",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		rBytes, _ := json.Marshal(dCTMismatch)
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, rBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error: mismatch between contentType and event")
+		}
+	})
+
+	t.Run("Bulk Publish bad request - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\":\"value\"}"), nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error when unmarshaling the request for topic topic") //nolint:dupword
+		}
+	})
+
+	t.Run("Bulk Publish without topic name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Bulk Publish with topic name '/' - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname//", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "success publishing with %s", method)
+			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish without topic or pubsub name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+		}
+	})
+
+	t.Run("Bulk Publish without topic or pubsub name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+		}
+	})
+
+	t.Run("Bulk Publish Pubsub not configured - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		// setup
+		savePubSubAdapter := testAPI.pubsubAdapter
+		testAPI.pubsubAdapter = nil
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+		}
+		testAPI.pubsubAdapter = savePubSubAdapter
+	})
+
+	t.Run("Bulk publish Pubsub not found - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errnotfound/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("Bulk publish Pubsub not allowed - 403", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errnotallowed/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 403, resp.StatusCode, "unexpected success bulk publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -298,11 +744,13 @@ func TestPubSubEndpoints(t *testing.T) {
 func TestShutdownEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	shutdownCh := make(chan struct{})
 	m := mock.Mock{}
 	m.On("shutdown", mock.Anything).Return()
 	testAPI := &api{
 		shutdown: func() {
 			m.MethodCalled("shutdown")
+			close(shutdownCh)
 		},
 	}
 
@@ -312,8 +760,11 @@ func TestShutdownEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
-		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
-			<-time.After(200 * time.Millisecond)
+		select {
+		case <-time.After(time.Second):
+			t.Fatal("Did not shut down within 1 second")
+		case <-shutdownCh:
+			// All good
 		}
 		m.AssertCalled(t, "shutdown")
 	})
@@ -916,17 +1367,17 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingKey":        1,
 				"extraFailingKey":   3,
 				"circuitBreakerKey": 10,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	fakeServer := newFakeHTTPServer()
@@ -948,7 +1399,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["failingKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
@@ -965,7 +1416,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["timeoutKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("timeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -981,7 +1432,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["extraFailingKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("extraFailingKey"))
 	})
 
 	t.Run("Test invoke direct messages can trip circuit breaker", func(t *testing.T) {
@@ -995,13 +1446,13 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		// Circuit Breaker trips on the 5th failure, stopping retries.
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 
 		// Request occurs when the circuit breaker is open, which shouldn't even hit the app.
 		resp = fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Contains(t, string(resp.RawBody), "circuit breaker is open", "Should have received a circuit breaker open error.")
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 	})
 
 	fakeServer.Shutdown()
@@ -1715,15 +2166,15 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	failingActors := &actors.FailingActors{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingId": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutId": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	t.Run("Direct Message - retries with resiliency", func(t *testing.T) {
@@ -1733,7 +2184,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingActors.Failure.CallCount["failingId"])
+		assert.Equal(t, 2, failingActors.Failure.CallCount("failingId"))
 	})
 
 	fakeServer.Shutdown()
@@ -1789,31 +2240,70 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
+		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+			return []runtimePubsub.Subscription{
+				{
+					PubsubName:      "test",
+					Topic:           "topic",
+					DeadLetterTopic: "dead",
+					Metadata:        map[string]string{},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Match: &expr.Expr{},
+							Path:  "path",
+						},
+					},
+				},
+			}, nil
+		},
 	}
 	// PutMetadata only stroes string(request body)
 	testAPI.extendedMetadata.Store("test", "value")
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
-	expectedBody := map[string]interface{}{
-		"id":     "xyz",
-		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"extended": map[string]string{
+	expectedBody := metadata{
+		ID: "xyz",
+		ActiveActorsCount: []actors.ActiveActorsCount{
+			{
+				Type:  "abcd",
+				Count: 10,
+			},
+			{
+				Type:  "xyz",
+				Count: 5,
+			},
+		},
+		Extended: map[string]string{
 			"test":               "value",
 			"daprRuntimeVersion": "edge",
 		},
-		"components": []map[string]interface{}{
+		RegisteredComponents: []registeredComponent{
 			{
-				"name":         "MockComponent1Name",
-				"type":         "mock.component1Type",
-				"version":      "v1.0",
-				"capabilities": []string{"mock.feat.MockComponent1Name"},
+				Name:         "MockComponent1Name",
+				Type:         "mock.component1Type",
+				Version:      "v1.0",
+				Capabilities: []string{"mock.feat.MockComponent1Name"},
 			},
 			{
-				"name":         "MockComponent2Name",
-				"type":         "mock.component2Type",
-				"version":      "v1.0",
-				"capabilities": []string{"mock.feat.MockComponent2Name"},
+				Name:         "MockComponent2Name",
+				Type:         "mock.component2Type",
+				Version:      "v1.0",
+				Capabilities: []string{"mock.feat.MockComponent2Name"},
+			},
+		},
+		Subscriptions: []pubsubSubscription{
+			{
+				PubsubName:      "test",
+				Topic:           "topic",
+				DeadLetterTopic: "dead",
+				Metadata:        map[string]string{},
+				Rules: []*pubsubSubscriptionRule{
+					{
+						Match: "",
+						Path:  "path",
+					},
+				},
 			},
 		},
 	}
@@ -2251,7 +2741,7 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode, "Accessing configuration store with bad key should return 500")
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_GET", resp.ErrorBody["errorCode"])
-		assert.Equal(t, "fail to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
+		assert.Equal(t, "failed to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
 	})
 
 	t.Run("Get with none exist configurations store", func(t *testing.T) {
@@ -2261,7 +2751,7 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode, "Accessing configuration store with none exist configurations store should return 400")
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, "error configuration stores nonExistStore not found", resp.ErrorBody["message"])
+		assert.Equal(t, "configuration store nonExistStore not found", resp.ErrorBody["message"])
 	})
 }
 
@@ -2284,12 +2774,14 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
 		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
-		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when app channel is empty")
 
 		rspMap1 := resp1.JSONBody
-		assert.NotNil(t, rspMap1)
+		assert.Nil(t, rspMap1)
 
-		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
+		uuid, err := uuid.NewRandom()
+		assert.Nil(t, err, "unable to generate id")
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 		assert.Equal(t, 200, resp2.StatusCode, "unsubscribe configuration store,should return 200")
@@ -2299,12 +2791,13 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	t.Run("error in unsubscribe configurations", func(t *testing.T) {
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
 		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
-		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
-
+		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when appchannel is not initialized")
 		rspMap1 := resp1.JSONBody
-		assert.NotNil(t, rspMap1)
+		assert.Nil(t, rspMap1)
 
-		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", rspMap1.(map[string]interface{})["id"].(string))
+		uuid, err := uuid.NewRandom()
+		assert.Nil(t, err, "unable to generate id")
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 
@@ -2491,13 +2984,7 @@ func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
 	registry := httpMiddlewareLoader.NewRegistry()
 	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-				return func(ctx *fasthttp.RequestCtx) {
-					body := string(ctx.PostBody())
-					ctx.Request.SetBody([]byte(strings.ToUpper(body)))
-					h(ctx)
-				}
-			}, nil
+			return utils.UppercaseRequestMiddleware, nil
 		}
 	}, "uppercase")
 	var handlers []httpMiddleware.Middleware
@@ -2723,7 +3210,11 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		handler := pipeline.Apply(router.Handler)
+		handler := fasthttpadaptor.NewFastHTTPHandler(
+			pipeline.Apply(
+				nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler),
+			),
+		)
 		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(handler, "fakeAppID", spec)); err != nil {
 			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
@@ -2833,8 +3324,8 @@ func TestV1StateEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	var fakeStore state.Store = fakeStateStoreQuerier{}
 	failingStore := &daprt.FailingStatestore{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingGetKey":        1,
 				"failingSetKey":        1,
 				"failingDeleteKey":     1,
@@ -2844,7 +3335,7 @@ func TestV1StateEndpoints(t *testing.T) {
 				"failingMultiKey":      1,
 				"failingQueryKey":      1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutGetKey":        time.Second * 10,
 				"timeoutSetKey":        time.Second * 10,
 				"timeoutDeleteKey":     time.Second * 10,
@@ -2854,8 +3345,8 @@ func TestV1StateEndpoints(t *testing.T) {
 				"timeoutMultiKey":      time.Second * 10,
 				"timeoutQueryKey":      time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 	fakeStores := map[string]state.Store{
 		"store1":    fakeStore,
@@ -3163,7 +3654,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingGetKey"))
 	})
 
 	t.Run("get state request times out with resiliency", func(t *testing.T) {
@@ -3174,7 +3665,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3188,7 +3679,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingSetKey"))
 	})
 
 	t.Run("set state request times out with resiliency", func(t *testing.T) {
@@ -3204,7 +3695,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3213,7 +3704,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingDeleteKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingDeleteKey"))
 	})
 
 	t.Run("delete state request times out with resiliency", func(t *testing.T) {
@@ -3224,7 +3715,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutDeleteKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutDeleteKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3238,8 +3729,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkGetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkGetKey"))
 	})
 
 	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
@@ -3260,8 +3751,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Len(t, bulkResponse, 2)
 		assert.NotEmpty(t, bulkResponse[0].Error)
 		assert.Empty(t, bulkResponse[1].Error)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkGetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodTimeoutBulkGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3281,8 +3772,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkSetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkSetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkSetKey"))
 	})
 
 	t.Run("bulk state set times out with resiliency", func(t *testing.T) {
@@ -3303,8 +3794,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkSetKey"])
-		assert.Equal(t, 0, failingStore.Failure.CallCount["goodTimeoutBulkSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkSetKey"))
+		assert.Equal(t, 0, failingStore.Failure.CallCount("goodTimeoutBulkSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3326,7 +3817,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingMultiKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingMultiKey"))
 	})
 
 	t.Run("state transaction times out with resiliency", func(t *testing.T) {
@@ -3347,7 +3838,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutMultiKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutMultiKey"))
 	})
 
 	t.Run("state query retries with resiliency", func(t *testing.T) {
@@ -3359,7 +3850,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingQueryKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingQueryKey"))
 	})
 
 	t.Run("state query times out with resiliency", func(t *testing.T) {
@@ -3371,7 +3862,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutQueryKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutQueryKey"))
 	})
 }
 
@@ -3450,6 +3941,10 @@ const (
 
 type fakeStateStore struct {
 	counter int
+}
+
+func (c fakeStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (c fakeStateStore) Ping() error {
@@ -3565,11 +4060,11 @@ func TestV1SecretEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	fakeStore := daprt.FakeSecretStore{}
 	failingStore := daprt.FailingSecretStore{
-		Failure: daprt.Failure{
-			Fails:     map[string]int{"key": 1, "bulk": 1},
-			Timeouts:  map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
-			CallCount: map[string]int{},
-		},
+		Failure: daprt.NewFailure(
+			map[string]int{"key": 1, "bulk": 1},
+			map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			map[string]int{},
+		),
 	}
 	fakeStores := map[string]secretstores.SecretStore{
 		"store1":     fakeStore,
@@ -3713,7 +4208,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["key"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("key"))
 	})
 
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
@@ -3725,7 +4220,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeout"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3735,7 +4230,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"metadata.key": "bulk"})
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["bulk"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("bulk"))
 	})
 
 	t.Run("Get bulk secret - timeout before request ends", func(t *testing.T) {
@@ -3746,7 +4241,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["bulkTimeout"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }

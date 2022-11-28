@@ -56,7 +56,6 @@ func (s *opentelemetryTracerProviderStore) RegisterResource(res *resource.Resour
 }
 
 // RegisterSampler adds a custom sampler for registration with open telemetry global trace provider
-
 func (s *opentelemetryTracerProviderStore) RegisterSampler(sampler sdktrace.Sampler) {
 	s.sampler = sampler
 }
@@ -110,7 +109,6 @@ func (s *fakeTracerProviderStore) RegisterResource(res *resource.Resource) {
 }
 
 // RegisterSampler adds a custom sampler for registration with open telemetry global trace provider
-
 func (s *fakeTracerProviderStore) RegisterSampler(sampler sdktrace.Sampler) {
 	s.sampler = sampler
 }

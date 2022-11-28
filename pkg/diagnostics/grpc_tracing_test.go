@@ -25,7 +25,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 
 	"go.opentelemetry.io/otel"
 	otelcodes "go.opentelemetry.io/otel/codes"
@@ -35,6 +35,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -57,6 +58,7 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 		{"/dapr.proto.runtime.v1.Dapr/GetSecret", "GetSecretRequest", "Dapr", "mysecretstore"},
 		{"/dapr.proto.runtime.v1.Dapr/InvokeBinding", "InvokeBindingRequest", "Dapr", "mybindings"},
 		{"/dapr.proto.runtime.v1.Dapr/PublishEvent", "PublishEventRequest", "Dapr", "mytopic"},
+		{"/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1", "BulkPublishEventRequest", "Dapr", "mytopic"},
 	}
 	var req interface{}
 	for _, tt := range tests {
@@ -76,6 +78,8 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 				req = &runtimev1pb.InvokeBindingRequest{Name: "mybindings"}
 			case "PublishEventRequest":
 				req = &runtimev1pb.PublishEventRequest{Topic: "mytopic"}
+			case "BulkPublishEventRequest":
+				req = &runtimev1pb.BulkPublishRequest{Topic: "mytopic"}
 			case "TopicEventRequest":
 				req = &runtimev1pb.TopicEventRequest{Topic: "mytopic"}
 			case "BindingEventRequest":
@@ -91,13 +95,17 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 }
 
 func TestUserDefinedMetadata(t *testing.T) {
-	md := metadata.MD{
+	md := grpcMetadata.MD{
 		"dapr-userdefined-1": []string{"value1"},
-		"dapr-userdefined-2": []string{"value2", "value3"},
+		"DAPR-userdefined-2": []string{"value2", "value3"}, // Will be lowercased
 		"no-attr":            []string{"value3"},
 	}
 
-	testCtx := metadata.NewIncomingContext(context.Background(), md)
+	testCtx := grpcMetadata.NewIncomingContext(context.Background(), md)
+	metadata.SetMetadataInContextUnary(testCtx, nil, nil, func(ctx context.Context, req any) (any, error) {
+		testCtx = ctx
+		return nil, nil
+	})
 
 	m := userDefinedMetadata(testCtx)
 
@@ -134,7 +142,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("grpc-trace-bin is given", func(t *testing.T) {
-		ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
+		ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
 		fakeInfo := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
@@ -149,7 +157,9 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 			return nil, errors.New("fake error")
 		}
 
-		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+		metadata.SetMetadataInContextUnary(ctx, fakeReq, fakeInfo, func(ctx context.Context, req any) (any, error) {
+			return interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+		})
 
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
@@ -287,15 +297,15 @@ func (f *fakeStream) Context() context.Context {
 	return context.TODO()
 }
 
-func (f *fakeStream) SetHeader(metadata.MD) error {
+func (f *fakeStream) SetHeader(grpcMetadata.MD) error {
 	return nil
 }
 
-func (f *fakeStream) SendHeader(metadata.MD) error {
+func (f *fakeStream) SendHeader(grpcMetadata.MD) error {
 	return nil
 }
 
-func (f *fakeStream) SetTrailer(metadata.MD) {
+func (f *fakeStream) SetTrailer(grpcMetadata.MD) {
 }
 
 func (f *fakeStream) SendMsg(m interface{}) error {

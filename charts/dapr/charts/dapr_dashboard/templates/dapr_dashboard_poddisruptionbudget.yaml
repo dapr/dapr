@@ -1,3 +1,4 @@
+{{- if eq .Values.enabled true }}
 {{- if eq .Values.global.ha.enabled true }}
 {{- if .Capabilities.APIVersions.Has "policy/v1" }}
 apiVersion: policy/v1
@@ -9,6 +10,9 @@ metadata:
   name: dapr-dashboard-disruption-budget
   labels:
     app: dapr-dashboard
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
 {{- if .Values.global.ha.disruption.minimumAvailable }}
   minAvailable: {{ .Values.global.ha.disruption.minimumAvailable }}
@@ -19,12 +23,11 @@ spec:
   selector:
     matchLabels:
       app: dapr-dashboard
-      app.kubernetes.io/name: {{ .Release.Name }}
-      app.kubernetes.io/version: {{ .Values.global.tag }}
-      app.kubernetes.io/component: dashboard
-      app.kubernetes.io/part-of: "dapr"
-      app.kubernetes.io/managed-by: "helm"
+      {{- range $key, $value := .Values.global.k8sLabels }}
+      {{ $key }}: {{ tpl $value $ }}
+      {{- end }}
       {{- with .Values.global.labels }}
         {{- toYaml . | nindent 6 }}
       {{- end }}
+{{- end }}
 {{- end }}

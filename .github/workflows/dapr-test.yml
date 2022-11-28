@@ -34,15 +34,15 @@ on:
     types: [e2e-test]
 env:
   # Version of Go
-  GOVER: "1.19"
+  GOVER: "^1.19.2"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.22.6"
+  KUBECTLVER: "v1.25.2"
   # If not empty, uses cloud resources for testing
   TEST_CLOUD_ENV: "azure"
   # Version of Helm
-  HELMVER: "v3.7.2"
+  HELMVER: "v3.10.0"
   # Kubernetes namespace to use
   DAPR_NAMESPACE: "dapr-tests"
   # Timeout for tests
@@ -86,7 +86,7 @@ jobs:
             }
       - name: Create PR comment
         if: env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -164,7 +164,7 @@ jobs:
         shell: bash
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -177,10 +177,10 @@ jobs:
             | --- | --- | --- |
             | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
             | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
-            | Linux_arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
+            | Linux/arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -193,7 +193,7 @@ jobs:
             | --- | --- | --- |
             | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
             | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
-            | Linux_arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
+            | Linux/arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
 
             Please check the logs for details on the failure.
 
@@ -328,18 +328,7 @@ jobs:
       - name: Wait for Azure Container Registry deployment
         timeout-minutes: 30
         if: env.TEST_PREFIX != ''
-        run: |
-          elapsed=0
-          until [ $elapsed -ge 1200 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
-          do
-              echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
-              sleep 20
-              elapsed=$(expr $elapsed + 20)
-          done
-
-          if [ $elapsed -ge 1200 ]; then
-            echo "Azure Container Registry not ready on time"
-          fi
+        run: ./tests/test-infra/wait_${{ env.TEST_CLOUD_ENV }}_registry.sh ${{ env.TEST_PREFIX }}acr
         shell: bash
       - name: Login to Azure Container Registry for Windows
         if: runner.os == 'Windows' && env.TEST_PREFIX != ''
@@ -368,7 +357,7 @@ jobs:
         shell: bash
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -381,7 +370,7 @@ jobs:
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -525,7 +514,7 @@ jobs:
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
-          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_dashboard.enabled=false"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
@@ -594,8 +583,8 @@ jobs:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
       - name: Update PR comment for success
-        if: success() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        if: success() && env.PR_NUMBER != '' && env.SKIP_E2E != 'true'
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -606,9 +595,22 @@ jobs:
 
             - Image tag: `${{ env.DAPR_TAG }}`
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for skipped test run
+        if: success() && env.PR_NUMBER != '' && env.SKIP_E2E == 'true'
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Tests skipped on ${{ matrix.target_os }}/${{ matrix.target_arch }}
+
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -620,7 +622,7 @@ jobs:
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
         if: cancelled() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}

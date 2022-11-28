@@ -53,6 +53,9 @@ service Dapr {
   // Publishes events to the specific topic.
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
 
+  // Bulk Publishes multiple events to the specified topic.
+  rpc BulkPublishEventAlpha1(BulkPublishRequest) returns (BulkPublishResponse) {}
+
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
 
@@ -287,6 +290,61 @@ message PublishEventRequest {
   map<string, string> metadata = 5;
 }
 
+// BulkPublishRequest is the message to bulk publish events to pubsub topic
+message BulkPublishRequest {
+  // The name of the pubsub component
+  string pubsub_name = 1;
+
+  // The pubsub topic
+  string topic = 2;
+
+  // The entries which contain the individual events and associated details to be published
+  repeated BulkPublishRequestEntry entries = 3;
+
+  // The request level metadata passing to to the pubsub components
+  map<string, string> metadata = 4;
+}
+
+// BulkPublishRequestEntry is the message containing the event to be bulk published
+message BulkPublishRequestEntry {
+  // The request scoped unique ID referring to this message. Used to map status in response
+  string entry_id = 1;
+
+  // The event which will be pulished to the topic
+  bytes event = 2;
+
+  // The content type for the event
+  string content_type = 3;
+
+  // The event level metadata passing to the pubsub component
+  map<string, string> metadata = 4;
+}
+
+// BulkPublishResponse is the message returned from a BulkPublishEvent call
+message BulkPublishResponse {
+  // The publish statuses for different events in the BulkPublishEvent call
+  repeated BulkPublishResponseEntry statuses = 1;
+}
+
+// BulkPublishResponseEntry is the message mapping response status for each event in the BulkPublishEvent call
+message BulkPublishResponseEntry {
+
+  enum Status {
+    SUCCESS = 0;
+    FAILED = 1;
+  }
+
+  // The response scoped unique ID referring to this message
+  string entry_id = 1;
+
+  // The status of event publish
+  Status status  = 2;
+
+  // The error message if any on failure
+  string error = 3;
+}
+
+
 // InvokeBindingRequest is the message to send data to output bindings
 message InvokeBindingRequest {
   // The name of the output binding to invoke.
@@ -469,6 +527,7 @@ message GetMetadataResponse {
   repeated ActiveActorsCount active_actors_count = 2;
   repeated RegisteredComponents registered_components = 3;
   map<string, string> extended_metadata = 4;
+  repeated PubsubSubscription subscriptions = 5;
 }
 
 message ActiveActorsCount {
@@ -481,6 +540,23 @@ message RegisteredComponents {
   string type = 2;
   string version = 3;
   repeated string capabilities = 4;
+}
+
+message PubsubSubscription {
+  string pubsub_name = 1;
+  string topic = 2;
+  map<string,string> metadata = 3;
+  PubsubSubscriptionRules rules = 4;
+  string dead_letter_topic = 5;
+}
+
+message PubsubSubscriptionRules {
+  repeated PubsubSubscriptionRule rules = 1;
+}
+
+message PubsubSubscriptionRule {
+  string match = 1;
+  string path = 2;
 }
 
 message SetMetadataRequest {

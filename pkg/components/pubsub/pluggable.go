@@ -39,7 +39,7 @@ type grpcPubSub struct {
 // Init initializes the grpc pubsub passing out the metadata to the grpc component.
 // It also fetches and set the component features.
 func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
-	if err := p.Dial(); err != nil {
+	if err := p.Dial(metadata.Name); err != nil {
 		return err
 	}
 
@@ -61,8 +61,8 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 		return err
 	}
 
-	p.features = make([]pubsub.Feature, len(featureResponse.Feature))
-	for idx, f := range featureResponse.Feature {
+	p.features = make([]pubsub.Feature, len(featureResponse.Features))
+	for idx, f := range featureResponse.Features {
 		p.features[idx] = pubsub.Feature(f)
 	}
 
@@ -185,6 +185,12 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 	return p.pullMessages(ctx, subscription, handler)
 }
 
+// Returns the component metadata options
+func (p *grpcPubSub) GetComponentMetadata() map[string]string {
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
+	return map[string]string{}
+}
+
 // fromConnector creates a new GRPC pubsub using the given underlying connector.
 func fromConnector(l logger.Logger, connector *pluggable.GRPCConnector[proto.PubSubClient]) *grpcPubSub {
 	return &grpcPubSub{
@@ -200,8 +206,15 @@ func NewGRPCPubSub(l logger.Logger, socket string) *grpcPubSub {
 }
 
 // newGRPCPubSub creates a new grpc pubsub for the given pluggable component.
-func newGRPCPubSub(socket string) func(l logger.Logger) pubsub.PubSub {
+func newGRPCPubSub(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) pubsub.PubSub {
 	return func(l logger.Logger) pubsub.PubSub {
-		return fromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewPubSubClient))
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, proto.NewPubSubClient))
 	}
+}
+
+func init() {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.PubSub_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterComponent(newGRPCPubSub(dialer), name)
+	})
 }

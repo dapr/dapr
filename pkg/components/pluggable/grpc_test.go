@@ -53,7 +53,7 @@ func TestGRPCConnector(t *testing.T) {
 			return clientFake
 		}
 		connector := NewGRPCConnector("/tmp/socket.sock", fakeFactory)
-		require.NoError(t, connector.Dial())
+		require.NoError(t, connector.Dial(""))
 		acceptedStatus := []connectivity.State{
 			connectivity.TransientFailure,
 			connectivity.Idle,
@@ -73,15 +73,14 @@ func TestGRPCConnector(t *testing.T) {
 			return clientFake
 		}
 
-		connector := NewGRPCConnector("/tmp/socket.sock", fakeFactory)
+		const fakeSocketPath = "/tmp/socket.sock"
+		connector := NewGRPCConnector(fakeSocketPath, fakeFactory)
 
-		socket := connector.socket
-
-		listener, err := net.Listen("unix", socket)
+		listener, err := net.Listen("unix", fakeSocketPath)
 		require.NoError(t, err)
 		defer listener.Close()
 
-		require.NoError(t, connector.Dial(), grpc.WithBlock())
+		require.NoError(t, connector.Dial(""), grpc.WithBlock())
 		defer connector.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

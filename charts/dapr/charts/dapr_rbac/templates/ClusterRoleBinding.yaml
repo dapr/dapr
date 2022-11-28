@@ -2,6 +2,10 @@ kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-operator
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 subjects:
 - kind: ServiceAccount
   name: dapr-operator
@@ -15,6 +19,10 @@ kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-role-tokenreview-binding
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 subjects:
 - kind: ServiceAccount
   name: dapr-operator
@@ -28,6 +36,10 @@ kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-operator-admin
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 rules:
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
@@ -54,9 +66,6 @@ rules:
     resources: ["components"]
     verbs: [ "get", "list", "watch"]
   - apiGroups: ["dapr.io"]
-    resources: ["pluggablecomponents"]
-    verbs: [ "get", "list", "watch"]
-  - apiGroups: ["dapr.io"]
     resources: ["configurations"]
     verbs: [ "get", "list", "watch"]
   - apiGroups: ["dapr.io"]
@@ -78,6 +87,10 @@ kind: Role
 metadata:
   name: secret-reader
   namespace: {{ .Values.secretReader.namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
@@ -88,6 +101,10 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-secret-reader
   namespace: {{ .Values.secretReader.namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 subjects:
 - kind: ServiceAccount
   name: default
@@ -101,6 +118,10 @@ kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dashboard-reader
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}  
 rules:
 - apiGroups: ["", "dapr.io", "apps", "extensions"]
   resources: ["deployments", "pods", "pods/log", "components", "configurations", "namespaces", "pluggablecomponents"]
@@ -110,6 +131,10 @@ kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dashboard-reader-global
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 subjects:
 - kind: ServiceAccount
   name: dashboard-reader

@@ -10,19 +10,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 syntax = "proto3";
 
 package dapr.proto.components.v1;
 
 import "google/protobuf/any.proto";
-import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/components/v1/common.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
 
-
-// QueriableStateStore service provides a gRPC interface for querier state store components.
-// It was designed to embed query features to the StateStore Service as a complementary service.
+// QueriableStateStore service provides a gRPC interface for querier state store
+// components. It was designed to embed query features to the StateStore Service
+// as a complementary service.
 service QueriableStateStore {
   // Query performs a query request on the statestore.
   rpc Query(QueryRequest) returns (QueryResponse) {}
@@ -70,7 +70,7 @@ message QueryItem {
   // The returned item Data.
   bytes data = 2;
   // The returned item ETag
-  dapr.proto.common.v1.Etag etag = 3;
+  Etag etag = 3;
   // The returned error string.
   string error = 4;
   // The returned contenttype
@@ -87,14 +87,17 @@ message QueryResponse {
   map<string, string> metadata = 3;
 }
 
-// TransactionalStateStore service provides a gRPC interface for transactional state store components.
-// It was designed to embed transactional features to the StateStore Service as a complementary service.
+// TransactionalStateStore service provides a gRPC interface for transactional
+// state store components. It was designed to embed transactional features to
+// the StateStore Service as a complementary service.
 service TransactionalStateStore {
-    // Transact executes multiples operation in a transactional environment.
-    rpc Transact(TransactionalStateRequest) returns (TransactionalStateResponse) {}
+  // Transact executes multiples operation in a transactional environment.
+  rpc Transact(TransactionalStateRequest) returns (TransactionalStateResponse) {
+  }
 }
 
-// TransactionalStateOperation describes operation type, key, and value for transactional operation.
+// TransactionalStateOperation describes operation type, key, and value for
+// transactional operation.
 message TransactionalStateOperation {
   // request is either delete or set.
   oneof request {
@@ -103,8 +106,9 @@ message TransactionalStateOperation {
   }
 }
 
-// TransactionalStateRequest describes a transactional operation against a state store that comprises multiple types of operations
-// The Request field is either a DeleteRequest or SetRequest.
+// TransactionalStateRequest describes a transactional operation against a state
+// store that comprises multiple types of operations The Request field is either
+// a DeleteRequest or SetRequest.
 message TransactionalStateRequest {
   // Operations that should be performed.
   repeated TransactionalStateOperation operations = 1;
@@ -145,6 +149,32 @@ service StateStore {
   rpc BulkSet(BulkSetRequest) returns (BulkSetResponse) {}
 }
 
+// Etag represents a state item version
+message Etag {
+  // value sets the etag value
+  string value = 1;
+}
+
+// StateOptions configures concurrency and consistency for state operations
+message StateOptions {
+  // Enum describing the supported concurrency for state.
+  enum StateConcurrency {
+    CONCURRENCY_UNSPECIFIED = 0;
+    CONCURRENCY_FIRST_WRITE = 1;
+    CONCURRENCY_LAST_WRITE = 2;
+  }
+
+  // Enum describing the supported consistency for state.
+  enum StateConsistency {
+    CONSISTENCY_UNSPECIFIED = 0;
+    CONSISTENCY_EVENTUAL = 1;
+    CONSISTENCY_STRONG = 2;
+  }
+
+  StateConcurrency concurrency = 1;
+  StateConsistency consistency = 2;
+}
+
 // InitRequest is the request for initializing the component.
 message InitRequest {
   MetadataRequest metadata = 1;
@@ -159,14 +189,14 @@ message GetRequest {
   // Request associated metadata.
   map<string, string> metadata = 2;
   // The get consistency level.
-  dapr.proto.common.v1.StateOptions.StateConsistency consistency = 3;
+  StateOptions.StateConsistency consistency = 3;
 }
 
 message GetResponse {
   // The data of the GetRequest response.
   bytes data = 1;
   // The etag of the associated key.
-  dapr.proto.common.v1.Etag etag = 2;
+  Etag etag = 2;
   // Metadata related to the response.
   map<string, string> metadata = 3;
   // The response data contenttype
@@ -176,11 +206,12 @@ message GetResponse {
 message DeleteRequest {
   // The key that should be deleted.
   string key = 1;
-  // The etag is used as a If-Match header, to allow certain levels of consistency.
-  dapr.proto.common.v1.Etag etag = 2;
+  // The etag is used as a If-Match header, to allow certain levels of
+  // consistency.
+  Etag etag = 2;
   // The request metadata.
   map<string, string> metadata = 3;
-  dapr.proto.common.v1.StateOptions options = 4;
+  StateOptions options = 4;
 }
 
 // reserved for future-proof extensibility
@@ -191,12 +222,13 @@ message SetRequest {
   string key = 1;
   // Value is the desired content of the given key.
   bytes value = 2;
-  // The etag is used as a If-Match header, to allow certain levels of consistency.
-  dapr.proto.common.v1.Etag etag = 3;
+  // The etag is used as a If-Match header, to allow certain levels of
+  // consistency.
+  Etag etag = 3;
   // The request metadata.
   map<string, string> metadata = 4;
   // The Set request options.
-  dapr.proto.common.v1.StateOptions options = 5;
+  StateOptions options = 5;
   // The data contenttype
   string content_type = 6;
 }
@@ -221,7 +253,7 @@ message BulkStateItem {
   // The associated data of the fetched item.
   bytes data = 2;
   // The item ETag
-  dapr.proto.common.v1.Etag etag = 3;
+  Etag etag = 3;
   // A fetch error if there's some.
   string error = 4;
   // The State Item metadata.
