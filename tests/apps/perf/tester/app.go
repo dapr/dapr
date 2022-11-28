@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 )
 
 // TODO: change to take from "github.com/dapr/dapr/tests/perf" once in repository. otherwise fails on go get step in Dockerfile.
@@ -98,13 +99,22 @@ func buildFortioArgs(params TestParameters) []string {
 
 	if len(params.Payload) > 0 {
 		args = []string{
-			"load", "-json", "result.json", "-content-type", "application/json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
-			"-t", params.TestDuration, "-payload", params.Payload,
+			"load",
+			"-json", "result.json",
+			"-content-type", "application/json",
+			"-qps", strconv.Itoa(params.QPS),
+			"-c", strconv.Itoa(params.ClientConnections),
+			"-t", params.TestDuration,
+			"-payload", params.Payload,
 		}
 	} else {
 		args = []string{
-			"load", "-json", "result.json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
-			"-t", params.TestDuration, "-payload-size", fmt.Sprint(params.PayloadSizeKB),
+			"load",
+			"-json", "result.json",
+			"-qps", strconv.Itoa(params.QPS),
+			"-c", strconv.Itoa(params.ClientConnections),
+			"-t", params.TestDuration,
+			"-payload-size", strconv.Itoa(params.PayloadSizeKB),
 		}
 	}
 	if params.StdClient {

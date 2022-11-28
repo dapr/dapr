@@ -57,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -76,13 +77,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  10,
+					MaxRetries:  ptr.Of(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -291,7 +292,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
+			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"]) //nolint:dupword
 		}
 	})
 
@@ -308,13 +309,21 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					err := fmt.Errorf("Error from pubsub %s", req.PubsubName)
 					res := pubsub.BulkPublishResponse{}
 					for _, entry := range req.Entries {
-						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-							EntryId: entry.EntryId,
-							Status:  pubsub.PublishFailed,
-							Error:   err,
-						})
+						_, shouldErr := entry.Metadata["shouldErr"]
+						if shouldErr {
+							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+								EntryId: entry.EntryId,
+								Status:  pubsub.PublishFailed,
+								Error:   err,
+							})
+						} else {
+							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+								EntryId: entry.EntryId,
+								Status:  pubsub.PublishSucceeded,
+							})
+						}
 					}
-					return pubsub.BulkPublishResponse{}, err
+					return res, err
 				case "errnotfound":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				case "errnotallowed":
@@ -360,55 +369,144 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				"md2": "mdVal2",
 			},
 		},
-	}
-	bulkRes := BulkPublishResponse{
-		Statuses: []BulkPublishResponseEntry{
-			{
-				EntryId: "1",
-				Status:  "SUCCESS",
+		{
+			EntryId: "3",
+			Event: map[string]string{
+				"key":   "third",
+				"value": "third value",
 			},
-			{
-				EntryId: "2",
-				Status:  "SUCCESS",
-			},
+			ContentType: "application/json",
 		},
 	}
+
 	// setup
 	reqBytes, _ := json.Marshal(bulkRequest)
-	resBytes, _ := json.Marshal(bulkRes)
-	t.Run("Bulk Publish successfully - 200", func(t *testing.T) {
+	resBytes := []byte{}
+	t.Run("Bulk Publish successfully - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
 		}
 	})
 
-	t.Run("Bulk Publish multi path successfully - 200", func(t *testing.T) {
+	t.Run("Bulk Publish multi path successfully - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/A/B/C", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
 		}
 	})
 
-	t.Run("Bulk Publish unsuccessfully - 500 InternalError", func(t *testing.T) {
+	t.Run("Bulk Publish complete failure - 500 InternalError", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
+
+		errBulkRequest := []bulkPublishMessageEntry{}
+		for _, entry := range bulkRequest {
+			if entry.Metadata == nil {
+				entry.Metadata = map[string]string{}
+			}
+			entry.Metadata["shouldErr"] = "true"
+			errBulkRequest = append(errBulkRequest, entry)
+		}
+
+		errBulkResponse := pubsub.BulkPublishResponse{
+			Statuses: []pubsub.BulkPublishResponseEntry{
+				{
+					EntryId: "1",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "2",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "3",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+			},
+		}
+
+		errReqBytes, _ := json.Marshal(errBulkRequest)
+
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
+			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+
+			bulkResp := BulkPublishResponse{}
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
+			for i, entry := range bulkResp.Statuses {
+				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
+				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
+				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			}
+		}
+	})
+
+	t.Run("Bulk Publish partial failure - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+
+		errBulkRequest := []bulkPublishMessageEntry{}
+		for _, entry := range bulkRequest {
+			// Fail entries 2 and 3
+			if entry.EntryId == "2" || entry.EntryId == "3" {
+				if entry.Metadata == nil {
+					entry.Metadata = map[string]string{}
+				}
+				entry.Metadata["shouldErr"] = "true"
+			}
+			errBulkRequest = append(errBulkRequest, entry)
+		}
+
+		errBulkResponse := pubsub.BulkPublishResponse{
+			Statuses: []pubsub.BulkPublishResponseEntry{
+				{
+					EntryId: "2",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+				{
+					EntryId: "3",
+					Status:  pubsub.PublishFailed,
+					Error:   errors.New("Error from pubsub errorpubsub"),
+				},
+			},
+		}
+
+		errReqBytes, _ := json.Marshal(errBulkRequest)
+
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+
+			bulkResp := BulkPublishResponse{}
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
+			for i, entry := range bulkResp.Statuses {
+				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
+				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
+				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			}
 		}
 	})
 
@@ -551,7 +649,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
-			assert.Contains(t, resp.ErrorBody["message"], "error when unmarshaling the request for topic topic")
+			assert.Contains(t, resp.ErrorBody["message"], "error when unmarshaling the request for topic topic") //nolint:dupword
 		}
 	})
 
@@ -566,14 +664,14 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Bulk Publish with topic name '/' - 200", func(t *testing.T) {
+	t.Run("Bulk Publish with topic name '/' - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname//", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "success publishing with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "success publishing with %s", method)
 			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
 		}
 	})
@@ -2142,31 +2240,70 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
+		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+			return []runtimePubsub.Subscription{
+				{
+					PubsubName:      "test",
+					Topic:           "topic",
+					DeadLetterTopic: "dead",
+					Metadata:        map[string]string{},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Match: &expr.Expr{},
+							Path:  "path",
+						},
+					},
+				},
+			}, nil
+		},
 	}
 	// PutMetadata only stroes string(request body)
 	testAPI.extendedMetadata.Store("test", "value")
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
-	expectedBody := map[string]interface{}{
-		"id":     "xyz",
-		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"extended": map[string]string{
+	expectedBody := metadata{
+		ID: "xyz",
+		ActiveActorsCount: []actors.ActiveActorsCount{
+			{
+				Type:  "abcd",
+				Count: 10,
+			},
+			{
+				Type:  "xyz",
+				Count: 5,
+			},
+		},
+		Extended: map[string]string{
 			"test":               "value",
 			"daprRuntimeVersion": "edge",
 		},
-		"components": []map[string]interface{}{
+		RegisteredComponents: []registeredComponent{
 			{
-				"name":         "MockComponent1Name",
-				"type":         "mock.component1Type",
-				"version":      "v1.0",
-				"capabilities": []string{"mock.feat.MockComponent1Name"},
+				Name:         "MockComponent1Name",
+				Type:         "mock.component1Type",
+				Version:      "v1.0",
+				Capabilities: []string{"mock.feat.MockComponent1Name"},
 			},
 			{
-				"name":         "MockComponent2Name",
-				"type":         "mock.component2Type",
-				"version":      "v1.0",
-				"capabilities": []string{"mock.feat.MockComponent2Name"},
+				Name:         "MockComponent2Name",
+				Type:         "mock.component2Type",
+				Version:      "v1.0",
+				Capabilities: []string{"mock.feat.MockComponent2Name"},
+			},
+		},
+		Subscriptions: []pubsubSubscription{
+			{
+				PubsubName:      "test",
+				Topic:           "topic",
+				DeadLetterTopic: "dead",
+				Metadata:        map[string]string{},
+				Rules: []*pubsubSubscriptionRule{
+					{
+						Match: "",
+						Path:  "path",
+					},
+				},
 			},
 		},
 	}
@@ -3804,6 +3941,10 @@ const (
 
 type fakeStateStore struct {
 	counter int
+}
+
+func (c fakeStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (c fakeStateStore) Ping() error {
