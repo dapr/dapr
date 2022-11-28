@@ -61,11 +61,6 @@
 		"go.useLanguageServer": true,
 		"go.gopath": "/go"
 	},
-    "hostRequirements": {
-        "cpus": 8,
-        "memory": "12gb",
-        "storage": "64gb" 
-    },
 	"workspaceFolder": "/workspaces/dapr",
 	"workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspaces/dapr",
 }

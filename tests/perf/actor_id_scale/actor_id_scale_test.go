@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 			AppName:           serviceApplicationName,
 			DaprEnabled:       true,
 			ImageName:         "perf-actorfeatures",
-			Replicas:          5,
+			Replicas:          10,
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
 			AppPort:           3000,
@@ -79,7 +79,7 @@ func TestActorIdStress(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(testServiceAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
-	k6Test := loadtest.NewK6("./test.js", loadtest.WithParallelism(1), loadtest.WithRunnerEnvVar("ACTOR_TYPE", actorType))
+	k6Test := loadtest.NewK6("./test.js", loadtest.WithParallelism(5), loadtest.WithRunnerEnvVar("ACTOR_TYPE", actorType))
 	defer k6Test.Dispose()
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
@@ -103,4 +103,5 @@ func TestActorIdStress(t *testing.T) {
 	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
 	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 	t.Logf("target dapr app or sidecar restarted %v times", restarts)
+	require.Equal(t, 0, restarts)
 }
