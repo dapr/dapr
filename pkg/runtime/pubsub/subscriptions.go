@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -279,10 +280,13 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Sub
 			continue
 		}
 
-		subs, err = appendSubscription(subs, b)
-		if err != nil {
-			log.Warnf("failed to add subscription from file %s: %s", filePath, err)
-			continue
+		bytesArray := bytes.Split(b, []byte("\n---"))
+		for _, item := range bytesArray {
+			subs, err = appendSubscription(subs, item)
+			if err != nil {
+				log.Warnf("failed to add subscription from file %s: %s", filePath, err)
+				continue
+			}
 		}
 	}
 
