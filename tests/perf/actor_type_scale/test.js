@@ -1,9 +1,14 @@
 import http from "k6/http";
 import { check } from "k6";
 import exec from "k6/execution";
+import { SharedArray } from 'k6/data';
 
 const defaultMethod = "default"
-const actorType = __ENV.ACTOR_TYPE
+const actorsTypes = __ENV.ACTORS_TYPES
+
+const actors = new SharedArray('actors types', function () {
+  return actorsTypes.split(",")
+});
 
 export const options = {
   discardResponseBodies: true,
@@ -27,14 +32,14 @@ export const options = {
 
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}/v1.0`;
 
-function callActorMethod(id, method) {
+function callActorMethod(actor, id, method) {
   return http.put(
-    `${DAPR_ADDRESS}/actors/${actorType}/${id}/method/${method}`,
+    `${DAPR_ADDRESS}/actors/${actor}/${id}/method/${method}`,
     JSON.stringify({})
   );
 }
 export default function () {
-  const result = callActorMethod(exec.scenario.iterationInTest, defaultMethod);
+  const result = callActorMethod(actors[exec.scenario.iterationInTest % actors.length], exec.scenario.iterationInTest, defaultMethod);
   check(result, {
     "response code was 2xx": (result) => result.status >= 200 && result.status < 300,
   })
