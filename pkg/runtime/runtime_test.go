@@ -77,6 +77,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -132,7 +133,7 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -1383,6 +1384,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
+		rt.subscriptions = nil
 		rt.pubSubs = make(map[string]pubsubItem)
 
 		return mockPubSub, mockPubSub2
@@ -2792,7 +2794,9 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 					return nil
 				},
 			}
-			rt.grpc.AppClient = &mockClientConn
+			rt.grpc.SetLocalConnCreateFn(func() (grpc.ClientConnInterface, error) {
+				return &mockClientConn, nil
+			})
 
 			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
 			if tc.ExpectError {
@@ -3078,6 +3082,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "", []byte("Test Message"), "", "")
+	// add custom attributes
+	envelope["customInt"] = 123
+	envelope["customString"] = "abc"
+	envelope["customBool"] = true
+	envelope["customFloat"] = 1.23
+	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
+	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -3091,6 +3102,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
+	// add custom attributes
+	envelope["customInt"] = 123
+	envelope["customString"] = "abc"
+	envelope["customBool"] = true
+	envelope["customFloat"] = 1.23
+	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
+	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	base64, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -3103,12 +3121,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name             string
-		message          *pubsubSubscribedMessage
-		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
-		errorExpected    bool
-		noResponseStatus bool
-		responseError    error
+		name                        string
+		message                     *pubsubSubscribedMessage
+		responseStatus              runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+		errorExpected               bool
+		noResponseStatus            bool
+		responseError               error
+		validateCloudEventExtension *map[string]interface{}
 	}{
 		{
 			name:             "failed to publish message to user app with unimplemented error",
@@ -3156,6 +3175,32 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
 			errorExpected:  true,
 		},
+		{
+			name:           "succeeded to publish message to user app and validated cloud event extension attributes",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+				"customInt":    float64(123),
+				"customString": "abc",
+				"customBool":   true,
+				"customFloat":  float64(1.23),
+				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+			}),
+		},
+		{
+			name:           "succeeded to publish message to user app and validated cloud event extension attributes with base64 encoded data",
+			message:        testPubSubMessageBase64,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+				"customInt":    float64(123),
+				"customString": "abc",
+				"customBool":   true,
+				"customFloat":  float64(1.23),
+				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+			}),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -3175,12 +3220,14 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create mock application server first
 			if !tc.noResponseStatus {
 				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-					TopicEventResponseStatus: tc.responseStatus,
-					Error:                    tc.responseError,
+					TopicEventResponseStatus:    tc.responseStatus,
+					Error:                       tc.responseError,
+					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})
 			} else {
 				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-					Error: tc.responseError,
+					Error:                       tc.responseError,
+					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})
 			}
 			if grpcServer != nil {
@@ -3191,7 +3238,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer rt.grpc.CloseAppClient()
 
 			// act
 			err = rt.publishMessageGRPC(context.Background(), tc.message)
@@ -3876,10 +3923,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer rt.grpc.CloseAppClient()
 
 			// act
-			resp := rt.getSubscribedBindingsGRPC()
+			resp, _ := rt.getSubscribedBindingsGRPC()
 
 			// assert
 			assert.Equal(t, tc.expectedResponse, resp, "expected response to match")
@@ -4459,7 +4506,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 }
 
-type mockPublishPubSub struct{}
+type mockPublishPubSub struct {
+	PublishedRequest *pubsub.PublishRequest
+}
 
 // Init is a mock initialization method.
 func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
@@ -4468,6 +4517,7 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 
 // Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
+	m.PublishedRequest = req
 	return nil
 }
 
@@ -5301,4 +5351,44 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
+}
+
+func TestMetadataContainsNamespace(t *testing.T) {
+	t.Run("namespace field present", func(t *testing.T) {
+		r := metadataContainsNamespace(
+			[]componentsV1alpha1.MetadataItem{
+				{
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("{namespace}")},
+					},
+				},
+			},
+		)
+
+		assert.True(t, r)
+	})
+
+	t.Run("namespace field not present", func(t *testing.T) {
+		r := metadataContainsNamespace(
+			[]componentsV1alpha1.MetadataItem{
+				{},
+			},
+		)
+
+		assert.False(t, r)
+	})
+}
+
+func TestNamespacedPublisher(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.namespace = "ns1"
+	defer stopRuntime(t, rt)
+
+	rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}, namespaceScoped: true}
+	rt.Publish(&pubsub.PublishRequest{
+		PubsubName: TestPubsubName,
+		Topic:      "topic0",
+	})
+
+	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Topic)
 }

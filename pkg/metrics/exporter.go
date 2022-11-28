@@ -92,6 +92,7 @@ func (m *promMetricsExporter) startMetricServer() error {
 		mux := http.NewServeMux()
 		mux.Handle(defaultMetricsPath, m.ocExporter)
 
+		//nolint:gosec
 		if err := http.ListenAndServe(addr, mux); err != nil {
 			m.exporter.logger.Fatalf("failed to start metrics server: %v", err)
 		}

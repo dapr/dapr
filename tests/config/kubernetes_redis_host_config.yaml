@@ -1,0 +1,10 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: redishostconfig
+spec:
+  secrets:
+    scopes:
+      - storeName: "kubernetes"
+        defaultAccess: "allow"
+        allowedSecrets: ["redissecret"]

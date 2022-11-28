@@ -27,7 +27,6 @@ import (
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -50,6 +49,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -70,7 +70,7 @@ const (
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 //
-//nolint:nosnakecase
+//nolint:interfacebloat
 type API interface {
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -137,6 +137,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
+	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	daprRunTimeVersion         string
 }
 
@@ -289,6 +290,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
+	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
 }
 
 // NewAPI returns a new gRPC API.
@@ -320,6 +322,7 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsFn:            opts.GetComponentsFn,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		daprRunTimeVersion:         version.Version(),
 	}
 }
@@ -353,11 +356,30 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
+	var callerAppID string
+	callerIDHeader, ok := req.Metadata()[invokev1.CallerIDHeader]
+	if ok && len(callerIDHeader.Values) > 0 {
+		callerAppID = callerIDHeader.Values[0]
+	} else {
+		callerAppID = "unknown"
+	}
+
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message().Method)
+
+	var statusCode int32
+	defer func() {
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+	}()
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
+		statusCode = int32(codes.Internal)
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
+	} else {
+		statusCode = resp.Status().Code
 	}
+
 	return resp.Proto(), err
 }
 
@@ -1658,11 +1680,29 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
+	subscriptions, err := a.getSubscriptionsFn()
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetMetadataResponse{}, err
+	}
+	ps := []*runtimev1pb.PubsubSubscription{}
+	for _, s := range subscriptions {
+		ps = append(ps, &runtimev1pb.PubsubSubscription{
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
+		})
+	}
+
 	response := &runtimev1pb.GetMetadataResponse{
 		Id:                   a.id,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
+		Subscriptions:        ps,
 	}
 
 	return response, nil
@@ -1673,6 +1713,19 @@ func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 		return val
 	}
 	return make([]string, 0)
+}
+
+func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
+	out := &runtimev1pb.PubsubSubscriptionRules{
+		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
+	}
+	for _, r := range rules {
+		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
+			Match: fmt.Sprintf("%s", r.Match),
+			Path:  r.Path,
+		})
+	}
+	return out
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.
@@ -1796,27 +1849,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	newCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// empty list means subscribing to all configuration keys
-	if len(request.Keys) == 0 {
-		getConfigurationReq := &runtimev1pb.GetConfigurationRequest{
-			StoreName: request.StoreName,
-			Keys:      []string{},
-			Metadata:  request.GetMetadata(),
-		}
-		resp, err2 := a.GetConfigurationAlpha1(newCtx, getConfigurationReq)
-		if err2 != nil {
-			err2 = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationGet, request.Keys, request.StoreName, err2))
-			apiServerLogger.Debug(err2)
-			return err2
-		}
-
-		items := resp.GetItems()
-		for key := range items {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, key)]; !ok {
-				subscribeKeys = append(subscribeKeys, key)
-			}
-		}
-	} else {
+	if len(request.Keys) > 0 {
 		subscribeKeys = append(subscribeKeys, request.Keys...)
 	}
 

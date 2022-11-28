@@ -229,6 +229,7 @@ linters:
   enable-all: true
   disable:
     # TODO Enforce the below linters later
+    - nosnakecase
     - dupl
     - errcheck
     - funlen
@@ -281,3 +282,5 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - structcheck
+    - varcheck
+    - deadcode

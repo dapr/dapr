@@ -6,10 +6,11 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.2.0
+	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc
 	github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f
-	github.com/fasthttp/router v1.4.12
+	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3
 	github.com/gogo/protobuf v1.3.2
@@ -54,7 +55,7 @@ require (
 	golang.org/x/net v0.1.0
 	golang.org/x/sync v0.1.0
 	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c
-	google.golang.org/grpc v1.50.1
+	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.25.3
@@ -216,6 +217,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.6.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/grafana/k6-operator v0.0.7
 	github.com/grandcat/zeroconf v1.0.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0 // indirect
@@ -251,7 +253,7 @@ require (
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k0kubun/pp v3.0.1+incompatible // indirect
-	github.com/klauspost/compress v1.15.11 // indirect
+	github.com/klauspost/compress v1.15.12 // indirect
 	github.com/knadh/koanf v1.4.1 // indirect
 	github.com/kubemq-io/kubemq-go v1.7.6 // indirect
 	github.com/kubemq-io/protobuf v1.3.1 // indirect
@@ -264,7 +266,7 @@ require (
 	github.com/linkedin/goavro/v2 v2.9.8 // indirect
 	github.com/machinebox/graphql v0.2.2 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
-	github.com/mailru/easyjson v0.7.6 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/matoous/go-nanoid/v2 v2.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-ieproxy v0.0.1 // indirect
