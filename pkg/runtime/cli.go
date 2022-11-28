@@ -125,8 +125,10 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
-		return nil, err
+	if *mode == string(modes.StandaloneMode) {
+		if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply options to all loggers
