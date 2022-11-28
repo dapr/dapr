@@ -113,6 +113,11 @@ const (
 	// setting this environment variable restores the
 	// partial hot reloading support for k8s.
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
+	// For a pubsub's topics, enlisted to be subscribed currently, there should be a way to tell component
+	// that this is the last subscription topic or not out of current topics list, so that component can
+	// decide, if they want to subscribe to topics in one go, instead of re-subscribing again and again
+	// with each topic of this list.
+	lastSubscriptionTopic = "lastSubscriptionTopic"
 
 	componentFormat = "%s (%s/%s)"
 
@@ -901,7 +906,16 @@ func (a *DaprRuntime) beginPubSub(name string) error {
 		return nil
 	}
 
+	vLength := len(v)
+	n := 0
 	for topic, route := range v {
+		n++
+		if vLength == n {
+			if route.metadata == nil {
+				route.metadata = make(map[string]string, 1)
+			}
+			route.metadata[lastSubscriptionTopic] = "true"
+		}
 		err = a.subscribeTopic(a.pubsubCtx, name, topic, route)
 		if err != nil {
 			// Log the error only
