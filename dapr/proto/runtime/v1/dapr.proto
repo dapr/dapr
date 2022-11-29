@@ -689,19 +689,19 @@ message WorkflowReference {
 }
 
 message GetWorkflowRequest {
-  WorkflowReference workflow_reference  = 1;
+  string instance_id  = 1;
   string workflow_type = 2;
   string workflow_component = 3; 
 }
 
 message GetWorkflowResponse {
-  WorkflowReference workflow_reference = 1;
+  string instance_id = 1;
   int64 start_time = 2;
   map<string, string> metadata = 3;
 }
 
 message StartWorkflowRequest {
-  WorkflowReference workflow_reference = 1;
+  string instance_id = 1;
   string workflow_component = 2;
   string workflow_name = 3;
   map<string, string> options = 4;
@@ -709,7 +709,7 @@ message StartWorkflowRequest {
 }
 
 message TerminateWorkflowRequest {
-  WorkflowReference workflow_reference = 1;
+  string instance_id = 1;
   string workflow_component = 2;
 }
 

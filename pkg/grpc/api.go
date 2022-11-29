@@ -1742,7 +1742,7 @@ func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataReques
 }
 
 func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if in.WorkflowReference.InstanceId == "" {
+	if in.InstanceId == "" {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -1759,7 +1759,7 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 	req := workflows.WorkflowReference{
-		InstanceID: in.WorkflowReference.InstanceId,
+		InstanceID: in.InstanceId,
 	}
 	response, err := workflowRun.Get(ctx, &req)
 	if err != nil {
@@ -1780,9 +1780,9 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 	}
 
 	res := &runtimev1pb.GetWorkflowResponse{
-		WorkflowReference: id,
-		StartTime:         t.Unix(),
-		Metadata:          response.Metadata,
+		InstanceId: id.InstanceId,
+		StartTime:  t.Unix(),
+		Metadata:   response.Metadata,
 	}
 	return res, nil
 }
@@ -1800,7 +1800,7 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
-	if in.WorkflowReference.InstanceId == "" {
+	if in.InstanceId == "" {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
@@ -1814,7 +1814,7 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	}
 
 	wf := workflows.WorkflowReference{
-		InstanceID: in.WorkflowReference.InstanceId,
+		InstanceID: in.InstanceId,
 	}
 	req := workflows.StartRequest{
 		WorkflowReference: wf,
@@ -1836,7 +1836,7 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 }
 
 func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
-	if in.WorkflowReference.InstanceId == "" {
+	if in.InstanceId == "" {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.TerminateWorkflowResponse{}, err
@@ -1856,7 +1856,7 @@ func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Termi
 	}
 
 	req := workflows.WorkflowReference{
-		InstanceID: in.WorkflowReference.InstanceId,
+		InstanceID: in.InstanceId,
 	}
 
 	err := workflowRun.Terminate(ctx, &req)
