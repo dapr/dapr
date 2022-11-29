@@ -181,11 +181,12 @@ func (p *ActorPlacement) Start() {
 			p.clientLock.RLock()
 			clientStream := p.clientStream
 			p.clientLock.RUnlock()
-			resp, err := clientStream.Recv()
+
 			if p.shutdown.Load() {
 				break
 			}
 
+			resp, err := clientStream.Recv()
 			// TODO: we may need to handle specific errors later.
 			if err != nil {
 				p.closeStream()
@@ -304,15 +305,8 @@ func (p *ActorPlacement) closeStream() {
 		p.clientLock.Lock()
 		defer p.clientLock.Unlock()
 
-		if p.clientStream != nil {
-			p.clientStream.CloseSend()
-			p.clientStream = nil
-		}
-
-		if p.clientConn != nil {
-			p.clientConn.Close()
-			p.clientConn = nil
-		}
+		p.clientStream.CloseSend()
+		p.clientConn.Close()
 	}()
 
 	func() {
