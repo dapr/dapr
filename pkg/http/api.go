@@ -1421,6 +1421,7 @@ type directMessagingPolicyRes struct {
 	body        []byte
 	statusCode  int
 	contentType string
+	headers     invokev1.DaprInternalMetadata
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
@@ -1451,6 +1452,8 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	)
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
 	dmpr, err := policyRunner(func(ctx context.Context) (*directMessagingPolicyRes, error) {
+		dmpr := &directMessagingPolicyRes{}
+
 		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
 		if rErr != nil {
 			// Allowlists policies that are applied on the callee side can return a Permission Denied error.
@@ -1462,12 +1465,10 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			if status.Code(rErr) == codes.PermissionDenied {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
-			return nil, invokeErr
+			return dmpr, invokeErr
 		}
 
-		dmpr := &directMessagingPolicyRes{}
-
-		invokev1.InternalMetadataToHTTPHeader(reqCtx, rResp.Headers(), reqCtx.Response.Header.Set)
+		dmpr.headers = rResp.Headers()
 		dmpr.contentType, dmpr.body = rResp.RawData()
 
 		// Construct response
@@ -1494,6 +1495,10 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if dmpr != nil && len(dmpr.headers) > 0 {
+		invokev1.InternalMetadataToHTTPHeader(reqCtx, dmpr.headers, reqCtx.Response.Header.Set)
+	}
+
 	invokeErr := invokeError{}
 	if errors.As(err, &invokeErr) {
 		respond(reqCtx, withError(invokeErr.statusCode, invokeErr.msg))
@@ -1501,7 +1506,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if dmpr == nil {
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", "failed to cast response object")))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", "response object is nil")))
 		return
 	}
 
