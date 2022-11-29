@@ -14,34 +14,40 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"log"
 
-	"github.com/dapr/go-sdk/service/common"
-	daprd "github.com/dapr/go-sdk/service/grpc"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+)
+
+const (
+	pubSubName = "inmemorypubsub"
+	topic      = "perf-sub-topic"
 )
 
 func main() {
-	s, err := daprd.NewService(":3000")
+	s, err := newService(":3000")
 	if err != nil {
-		log.Fatalf("failed to start the server: %v", err)
+		log.Fatalf("failed to create service: %v", err)
 	}
 
-	sub := common.Subscription{
-		PubsubName: "pubsub",
-		Topic:      "topic",
+	sub := &runtimev1pb.TopicSubscription{
+		PubsubName: pubSubName,
+		Topic:      topic,
+	}
+	s.addTopicSubscription(sub)
+
+	bulkSub := &runtimev1pb.TopicSubscription{
+		PubsubName: pubSubName,
+		Topic:      "bulk-" + topic,
+		Metadata:   map[string]string{"bulkSubscribe": "true"},
+	}
+	s.addTopicSubscription(bulkSub)
+
+	if err = s.start(); err != nil {
+		log.Fatalf("failed to start service: %v", err)
 	}
 
-	if err := s.AddTopicEventHandler(&sub, topicEventHandle); err != nil {
-		log.Fatalf("error adding invocation handler: %v", err)
-	}
-
-	if err := s.Start(); err != nil {
-		log.Fatalf("server error: %v", err)
-	}
-}
-
-func topicEventHandle(ctx context.Context, e *common.TopicEvent) (bool, error) {
-	// TODO
-	return false, nil
+	// if err = s.stop(); err != nil {
+	// 	log.Fatalf("failed to stop service: %v", err)
+	// }
 }
