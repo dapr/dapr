@@ -10,7 +10,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/dapr/components-contrib v1.9.1-0.20221115192719-e8d070a44d4d
 	github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f
-	github.com/fasthttp/router v1.4.12
+	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3
 	github.com/gogo/protobuf v1.3.2
@@ -57,7 +57,7 @@ require (
 	golang.org/x/net v0.1.0
 	golang.org/x/sync v0.1.0
 	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c
-	google.golang.org/grpc v1.50.1
+	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.25.3
@@ -258,7 +258,7 @@ require (
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k0kubun/pp v3.0.1+incompatible // indirect
-	github.com/klauspost/compress v1.15.11 // indirect
+	github.com/klauspost/compress v1.15.12 // indirect
 	github.com/knadh/koanf v1.4.1 // indirect
 	github.com/kubemq-io/kubemq-go v1.7.6 // indirect
 	github.com/kubemq-io/protobuf v1.3.1 // indirect

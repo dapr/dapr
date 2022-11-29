@@ -3060,8 +3060,8 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 		_, err = resp.Recv()
 		assert.NoError(t, err)
-		// Subscribe now calls Get first so we have an extra call.
-		assert.Equal(t, 3, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
+
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
 	})
 
 	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
