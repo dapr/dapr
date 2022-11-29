@@ -41,16 +41,13 @@ const (
 )
 
 var (
-	appPort = 3000
-	// daprGRPCPort          = 50001
+	appPort               = 3000
 	daprHTTPPort          = 3500
 	daprTemporalNamespace = "temporal-system"
 	serviceName           = "dapr-temporal-frontend.dapr-tests.svc.cluster.local"
 	temporalPort          = 7233
 
 	httpClient = utils.NewHTTPClient()
-	// grpcClient runtimev1pb.DaprClient
-
 )
 
 func init() {
@@ -58,10 +55,6 @@ func init() {
 	if p != "" && p != "0" {
 		daprHTTPPort, _ = strconv.Atoi(p)
 	}
-	// p = os.Getenv("DAPR_GRPC_PORT")
-	// if p != "" && p != "0" {
-	// 	daprGRPCPort, _ = strconv.Atoi(p)
-	// }
 	p = os.Getenv("PORT")
 	if p != "" && p != "0" {
 		appPort, _ = strconv.Atoi(p)
@@ -135,6 +128,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	}`)
 	workflowURL := fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/WorkflowID/start")
 	res, err := httpClient.Post(workflowURL, "application/json", bytes.NewBuffer(jsonData))
+	log.Printf("res: %v", res)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
 	}
@@ -144,20 +138,16 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	body, _ := io.ReadAll(res.Body)
 	var resultData workflows.WorkflowReference
 	json.Unmarshal(body, &resultData)
-	time.Sleep(2 * time.Second) // Sleep before the terminate call
+	time.Sleep(2 * time.Second) // Sleep before the terminate call to ensure that temporal has time to start the activity
 
 	// TERMINATE TEST //
-	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/"+resultData.InstanceID+"/terminate")
-	res, err = httpClient.Post(workflowURL, "", nil)
+	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/"+resultData.InstanceID+"/terminate")
+	_, err = httpClient.Post(workflowURL, "", nil)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
 	}
-	defer res.Body.Close()
 
-	// Get the data response from the terminate workflow call
-	body, _ = io.ReadAll(res.Body)
-	json.Unmarshal(body, &resultData)
-
+	time.Sleep(2 * time.Second) // Sleep after the terminate call to ensure that temporal has time to terminate the activity
 	// Use the data that was retrieved back from the start workflow call (InstanceID) to get info on the workflow
 	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/"+resultData.InstanceID+"")
 	res, err = httpClient.Get(workflowURL)
@@ -196,7 +186,7 @@ func appRouter() *mux.Router {
 func main() {
 	log.Printf("Workflow Test - listening on http://localhost:%d", appPort)
 
-	temporalHostPort := serviceName + fmt.Sprint(temporalPort)
+	temporalHostPort := serviceName + ":" + fmt.Sprint(temporalPort)
 
 	client2, _ := client.NewNamespaceClient(client.Options{HostPort: temporalHostPort})
 	_ = client2.Register(context.Background(), &workflowservice.RegisterNamespaceRequest{
@@ -252,6 +242,6 @@ func HelloTemporalWF(ctx workflow.Context) (string, error) {
 }
 
 func HelloTemporalAct(ctx context.Context) (result string, err error) {
-	time.Sleep(5 * time.Second) // This 5s sleep is to allow for terminate to be called
+	time.Sleep(8 * time.Second) // This 5s sleep is to allow for terminate to be called
 	return "Hello Temporal", nil
 }
