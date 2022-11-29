@@ -305,8 +305,13 @@ func (p *ActorPlacement) closeStream() {
 		p.clientLock.Lock()
 		defer p.clientLock.Unlock()
 
-		p.clientStream.CloseSend()
-		p.clientConn.Close()
+		if p.clientStream != nil {
+			p.clientStream.CloseSend()
+		}
+
+		if p.clientConn != nil {
+			p.clientConn.Close()
+		}
 	}()
 
 	func() {
