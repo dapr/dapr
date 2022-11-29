@@ -128,7 +128,6 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	}`)
 	workflowURL := fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/WorkflowID/start")
 	res, err := httpClient.Post(workflowURL, "application/json", bytes.NewBuffer(jsonData))
-	log.Printf("res: %v", res)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
 	}
@@ -142,10 +141,11 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 
 	// TERMINATE TEST //
 	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/"+resultData.InstanceID+"/terminate")
-	_, err = httpClient.Post(workflowURL, "", nil)
+	res, err = httpClient.Post(workflowURL, "", nil)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
 	}
+	defer res.Body.Close()
 
 	time.Sleep(2 * time.Second) // Sleep after the terminate call to ensure that temporal has time to terminate the activity
 	// Use the data that was retrieved back from the start workflow call (InstanceID) to get info on the workflow
