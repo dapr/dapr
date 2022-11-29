@@ -340,8 +340,8 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 		noOp := resiliency.NoOp{}
 		policyDef = noOp.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
 	}
-	policy := resiliency.NewRunner[*lookupActorRes](ctx, policyDef)
-	lar, err := policy(func(ctx context.Context) (*lookupActorRes, error) {
+	policyRunner := resiliency.NewRunner[*lookupActorRes](ctx, policyDef)
+	lar, err := policyRunner(func(ctx context.Context) (*lookupActorRes, error) {
 		rAddr, rAppID := a.placement.LookupActor(actor.GetActorType(), actor.GetActorId())
 		if rAddr == "" {
 			return nil, fmt.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
@@ -386,11 +386,11 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if a.isResiliencyEnabled {
 		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
-			policy := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
 				a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
 			)
 			attempts := atomic.Int32{}
-			return policy(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 				attempt := attempts.Add(1)
 				rResp, teardown, rErr := fn(ctx, targetAddress, targetID, req)
 				if rErr == nil {
@@ -479,23 +479,26 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	defer act.unlock()
 
 	// Replace method to actors method.
-	originalMethod := req.Message().Method
-	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)
+	msg := req.Message()
+	originalMethod := msg.Method
+	msg.Method = "actors/" + actorTypeID.GetActorType() + "/" + actorTypeID.GetActorId() + "/method/" + msg.Method
 
 	// Reset the method so we can perform retries.
-	defer func() { req.Message().Method = originalMethod }()
+	defer func() {
+		msg.Method = originalMethod
+	}()
 
 	// Original code overrides method with PUT. Why?
-	if req.Message().GetHttpExtension() == nil {
+	if msg.GetHttpExtension() == nil {
 		req.WithHTTPExtension(nethttp.MethodPut, "")
 	} else {
-		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
+		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
 	}
 
-	policy := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
 		a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID),
 	)
-	resp, err := policy(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.appChannel.InvokeMethod(ctx, req)
 	})
 	if err != nil {
@@ -503,7 +506,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	}
 
 	if resp == nil {
-		return nil, errors.New("response object is nil")
+		return nil, errors.New("error from actor service: response object is nil")
 	}
 	_, respData := resp.RawData()
 	if resp.Status().Code != nethttp.StatusOK {
@@ -564,14 +567,14 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 
-	policy := resiliency.NewRunner[*state.GetResponse](ctx,
+	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
 	storeReq := &state.GetRequest{
 		Key:      key,
 		Metadata: metadata,
 	}
-	resp, err := policy(func(ctx context.Context) (*state.GetResponse, error) {
+	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return a.store.Get(storeReq)
 	})
 	if err != nil {
@@ -630,14 +633,14 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		}
 	}
 
-	policy := resiliency.NewRunner[any](ctx,
+	policyRunner := resiliency.NewRunner[any](ctx,
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
 	stateReq := &state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   metadata,
 	}
-	_, err := policy(func(ctx context.Context) (any, error) {
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, a.transactionalStore.Multi(stateReq)
 	})
 	return err
@@ -652,8 +655,8 @@ func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedReque
 		noOp := resiliency.NoOp{}
 		policyDef = noOp.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
 	}
-	policy := resiliency.NewRunner[any](ctx, policyDef)
-	_, err := policy(func(ctx context.Context) (any, error) {
+	policyRunner := resiliency.NewRunner[any](ctx, policyDef)
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		_, exists := a.actorsTable.Load(key)
 		if !exists {
 			// Error message isn't used - we just need to have an error
@@ -812,13 +815,13 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
-	policy := resiliency.NewRunner[*state.GetResponse](context.TODO(),
+	policyRunner := resiliency.NewRunner[*state.GetResponse](context.TODO(),
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
 	storeReq := &state.GetRequest{
 		Key: constructCompositeKey(actorKey, name),
 	}
-	resp, err := policy(func(ctx context.Context) (*state.GetResponse, error) {
+	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return a.store.Get(storeReq)
 	})
 	if err != nil {
@@ -846,7 +849,7 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 		RepetitionLeft: repetition,
 	}
 
-	policy := resiliency.NewRunner[any](context.TODO(),
+	policyRunner := resiliency.NewRunner[any](context.TODO(),
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
 	setReq := &state.SetRequest{
@@ -857,7 +860,7 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 			Concurrency: state.FirstWrite,
 		},
 	}
-	_, err := policy(func(ctx context.Context) (any, error) {
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, a.store.Set(setReq)
 	})
 	return err
@@ -1018,10 +1021,10 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	req.WithActor(reminder.ActorType, reminder.ActorID)
 	req.WithRawData(b, invokev1.JSONContentType)
 
-	policy := resiliency.NewRunner[any](context.TODO(),
+	policyRunner := resiliency.NewRunner[any](context.TODO(),
 		a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID),
 	)
-	_, err = policy(func(ctx context.Context) (any, error) {
+	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return a.callLocalActor(ctx, req)
 	})
 	return err
@@ -1384,10 +1387,10 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req.WithActor(actorType, actorID)
 	req.WithRawData(b, invokev1.JSONContentType)
 
-	policy := resiliency.NewRunner[any](context.TODO(),
+	policyRunner := resiliency.NewRunner[any](context.TODO(),
 		a.resiliency.ActorPreLockPolicy(actorType, actorID),
 	)
-	_, err = policy(func(ctx context.Context) (any, error) {
+	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return a.callLocalActor(ctx, req)
 	})
 	if err != nil {
@@ -1405,10 +1408,10 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 			Concurrency: state.FirstWrite,
 		},
 	}
-	policy := resiliency.NewRunner[any](context.TODO(),
+	policyRunner := resiliency.NewRunner[any](context.TODO(),
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
-	_, err := policy(func(ctx context.Context) (any, error) {
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, a.store.Set(setReq)
 	})
 	return err
@@ -1430,11 +1433,11 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (re
 			noOp := resiliency.NoOp{}
 			policyDef = noOp.EndpointPolicy("", "")
 		}
-		policy := resiliency.NewRunner[*ActorMetadata](context.TODO(), policyDef)
+		policyRunner := resiliency.NewRunner[*ActorMetadata](context.TODO(), policyDef)
 		getReq := &state.GetRequest{
 			Key: constructCompositeKey("actors", actorType, "metadata"),
 		}
-		return policy(func(ctx context.Context) (*ActorMetadata, error) {
+		return policyRunner(func(ctx context.Context) (*ActorMetadata, error) {
 			rResp, rErr := a.store.Get(getReq)
 			if rErr != nil {
 				return nil, rErr
@@ -1602,8 +1605,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			})
 		}
 
-		policy := resiliency.NewRunner[*bulkGetRes](context.TODO(), policyDef)
-		bgr, err := policy(func(ctx context.Context) (*bulkGetRes, error) {
+		policyRunner := resiliency.NewRunner[*bulkGetRes](context.TODO(), policyDef)
+		bgr, err := policyRunner(func(ctx context.Context) (*bulkGetRes, error) {
 			rBulkGet, rBulkResponse, rErr := a.store.BulkGet(getRequests)
 			if rErr != nil {
 				return &bulkGetRes{}, rErr
@@ -1631,8 +1634,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 
 				fn := func(param interface{}) {
 					r := param.(*state.BulkGetResponse)
-					policy := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
-					resp, ferr := policy(func(ctx context.Context) (*state.GetResponse, error) {
+					policyRunner := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
+					resp, ferr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 						return a.store.Get(&getRequest)
 					})
 					if ferr != nil {
@@ -1688,8 +1691,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	}
 
 	key := constructCompositeKey("actors", actorType)
-	policy := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
-	resp, err := policy(func(ctx context.Context) (*state.GetResponse, error) {
+	policyRunner := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
+	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return a.store.Get(&state.GetRequest{
 			Key: key,
 		})
@@ -1734,7 +1737,7 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
 	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
-	policy := resiliency.NewRunner[any](ctx,
+	policyRunner := resiliency.NewRunner[any](ctx,
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
 	req := &state.SetRequest{
@@ -1746,7 +1749,7 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 			Concurrency: state.FirstWrite,
 		},
 	}
-	_, err := policy(func(ctx context.Context) (any, error) {
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, a.store.Set(req)
 	})
 	return err
@@ -1789,8 +1792,8 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 			noOp := resiliency.NoOp{}
 			policyDef = noOp.EndpointPolicy("", "")
 		}
-		policy := resiliency.NewRunner[any](ctx, policyDef)
-		_, err = policy(func(ctx context.Context) (any, error) {
+		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
+		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			reminders, actorMetadata, rErr := a.getRemindersForActorType(req.ActorType, false)
 			if rErr != nil {
 				return nil, rErr
@@ -1871,13 +1874,13 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 		return err
 	}
 
-	policy := resiliency.NewRunner[any](ctx,
+	policyRunner := resiliency.NewRunner[any](ctx,
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
 	deleteReq := &state.DeleteRequest{
 		Key: reminderKey,
 	}
-	_, err = policy(func(ctx context.Context) (any, error) {
+	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, a.store.Delete(deleteReq)
 	})
 	return err
@@ -1954,8 +1957,8 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 			noOp := resiliency.NoOp{}
 			policyDef = noOp.EndpointPolicy("", "")
 		}
-		policy := resiliency.NewRunner[any](ctx, policyDef)
-		_, err = policy(func(ctx context.Context) (any, error) {
+		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
+		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			reminders, actorMetadata, rErr := a.getRemindersForActorType(reminder.ActorType, false)
 			if rErr != nil {
 				return nil, rErr

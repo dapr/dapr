@@ -166,11 +166,11 @@ func (d *directMessaging) invokeWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			policy := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
 				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
 			)
 			attempts := atomic.Int32{}
-			return policy(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 				attempt := attempts.Add(1)
 				rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 				if rErr == nil {

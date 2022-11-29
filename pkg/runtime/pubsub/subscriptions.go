@@ -76,10 +76,10 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
-		policy := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
+		policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
 			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
 		)
-		resp, err = policy(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+		resp, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 			return channel.InvokeMethod(ctx, req)
 		})
 	} else {
@@ -189,10 +189,10 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
-		policy := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
+		policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
 			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
 		)
-		resp, err = policy(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+		resp, err = policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 			rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
 
 			if rErr != nil {

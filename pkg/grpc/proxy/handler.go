@@ -114,12 +114,12 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 			policyDef = noOp.EndpointPolicy("", "")
 		}
 	}
-	policy := resiliency.NewRunner[struct{}](ctx, policyDef)
+	policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
 
 	clientStreamOpts := []grpc.CallOption{
 		grpc.CallContentSubtype((&codec.Proxy{}).Name()),
 	}
-	_, cErr := policy(func(ctx context.Context) (struct{}, error) {
+	_, cErr := policyRunner(func(ctx context.Context) (struct{}, error) {
 		// We require that the director's returned context inherits from the ctx.
 		outgoingCtx, backendConn, target, teardown, err := s.director(ctx, fullMethodName)
 		defer teardown(false)

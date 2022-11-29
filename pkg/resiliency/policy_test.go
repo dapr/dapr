@@ -37,7 +37,7 @@ func TestPolicy(t *testing.T) {
 		Timeout:  10 * time.Millisecond,
 	}
 	cbValue.Initialize(testLog)
-	tests := map[string]struct {
+	tests := map[string]*struct {
 		t  time.Duration
 		r  *retry.Config
 		cb *breaker.CircuitBreaker
@@ -48,6 +48,7 @@ func TestPolicy(t *testing.T) {
 			r:  &retryValue,
 			cb: &cbValue,
 		},
+		"nil policy": nil,
 	}
 
 	ctx := context.Background()
@@ -58,13 +59,17 @@ func TestPolicy(t *testing.T) {
 				called.Store(true)
 				return nil, nil
 			}
-			policy := NewRunner[any](ctx, &PolicyDefinition{
-				log:  testLog,
-				name: name,
-				t:    tt.t,
-				r:    tt.r,
-				cb:   tt.cb,
-			})
+			var policyDef *PolicyDefinition
+			if tt != nil {
+				policyDef = &PolicyDefinition{
+					log:  testLog,
+					name: name,
+					t:    tt.t,
+					r:    tt.r,
+					cb:   tt.cb,
+				}
+			}
+			policy := NewRunner[any](ctx, policyDef)
 			policy(fn)
 			assert.True(t, called.Load())
 		})
