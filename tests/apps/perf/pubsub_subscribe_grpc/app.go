@@ -43,11 +43,8 @@ func main() {
 	}
 	s.addTopicSubscription(bulkSub)
 
+	defer s.stop()
 	if err = s.start(); err != nil {
 		log.Fatalf("failed to start service: %v", err)
 	}
-
-	// if err = s.stop(); err != nil {
-	// 	log.Fatalf("failed to stop service: %v", err)
-	// }
 }

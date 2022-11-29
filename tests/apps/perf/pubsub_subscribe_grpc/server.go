@@ -24,9 +24,7 @@ import (
 
 // Server is the gRPC service implementation for Dapr.
 type Server struct {
-	runtimev1pb.UnimplementedAppCallbackServer
 	runtimev1pb.UnimplementedAppCallbackHealthCheckServer
-	runtimev1pb.UnimplementedAppCallbackAlphaServer
 	runtimev1pb.UnimplementedDaprServer
 	listener      net.Listener
 	grpcServer    *grpc.Server

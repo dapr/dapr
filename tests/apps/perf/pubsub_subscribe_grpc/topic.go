@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -24,7 +23,6 @@ func (s *Server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*
 		subs = append(subs, sub)
 	}
 
-	fmt.Printf("Sending %d topic subscriptions", len(subs))
 	return &runtimev1pb.ListTopicSubscriptionsResponse{Subscriptions: subs}, nil
 }
 
@@ -39,7 +37,6 @@ func (s *Server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 		return &runtimev1pb.TopicEventResponse{Status: runtimev1pb.TopicEventResponse_DROP}, errors.New("topic subscription not found")
 	}
 
-	fmt.Printf("Got event from topic: %s, pubsub: %s, data: %s", in.Topic, in.PubsubName, string(in.Data))
 	return &runtimev1pb.TopicEventResponse{Status: runtimev1pb.TopicEventResponse_SUCCESS}, nil
 }
 
@@ -55,7 +52,6 @@ func (s *Server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 		return &runtimev1pb.TopicEventBulkResponse{Statuses: statuses}, errors.New("topic subscription not found")
 	}
 
-	fmt.Printf("Got %d events from topic: %s, pubsub: %s", len(in.Entries), in.Topic, in.PubsubName)
 	for _, entry := range in.Entries {
 		statuses = append(statuses, &runtimev1pb.TopicEventBulkResponseEntry{
 			EntryId: entry.EntryId,
