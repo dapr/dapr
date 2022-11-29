@@ -31,7 +31,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 func TestAddDNSResolverPrefix(t *testing.T) {
@@ -146,17 +145,17 @@ func TestAppHealthyStatus(t *testing.T) {
 
 type fakeStream struct {
 	//nolint:nosnakecase
-	v1pb.Placement_ReportDaprStatusClient
-	send            func(host *v1pb.Host) error
-	recv            func() (*v1pb.PlacementOrder, error)
+	placementv1pb.Placement_ReportDaprStatusClient
+	send            func(host *placementv1pb.Host) error
+	recv            func() (*placementv1pb.PlacementOrder, error)
 	closeSendCalled atomic.Int64
 }
 
-func (f *fakeStream) Send(host *v1pb.Host) error {
+func (f *fakeStream) Send(host *placementv1pb.Host) error {
 	return f.send(host)
 }
 
-func (f *fakeStream) Recv() (*v1pb.PlacementOrder, error) {
+func (f *fakeStream) Recv() (*placementv1pb.PlacementOrder, error) {
 	return f.recv()
 }
 
@@ -195,14 +194,14 @@ func TestCloseOnRecv(t *testing.T) {
 
 		testPlacement.clientLock.Lock()
 		fs := &fakeStream{
-			recv: func() (*v1pb.PlacementOrder, error) {
+			recv: func() (*placementv1pb.PlacementOrder, error) {
 				defer func() {
 					called++
 				}()
 				if called == 0 { // first call should close stream and wait
 					recvGroup.Done()
 					closeGroup.Wait()
-					return &v1pb.PlacementOrder{
+					return &placementv1pb.PlacementOrder{
 						Operation: unlockOperation,
 					}, nil
 				}
@@ -211,11 +210,11 @@ func TestCloseOnRecv(t *testing.T) {
 					return nil, errors.New("force reconnect")
 				}
 
-				return &v1pb.PlacementOrder{
+				return &placementv1pb.PlacementOrder{
 					Operation: unlockOperation,
 				}, nil
 			},
-			send: func(host *v1pb.Host) error {
+			send: func(host *placementv1pb.Host) error {
 				return nil
 			},
 		}
