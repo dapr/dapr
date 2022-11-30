@@ -4,7 +4,7 @@
 // - protoc             v3.20.1
 // source: proto/v1/notifier.proto
 
-package proto
+package pubsub_bulk_subscribe_grpc
 
 import (
 	context "context"
