@@ -27,11 +27,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/signal"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -739,32 +741,9 @@ func TestInitState(t *testing.T) {
 		},
 	}
 
-	initMockStateStoreForRuntime := func(rt *DaprRuntime, e error) *daprt.MockStateStore {
-		mockStateStore := new(daprt.MockStateStore)
-
-		rt.stateStoreRegistry.RegisterComponent(
-			func(_ logger.Logger) state.Store {
-				return mockStateStore
-			},
-			"mockState",
-		)
-
-		expectedMetadata := state.Metadata{Base: mdata.Base{
-			Name: TestPubsubName,
-			Properties: map[string]string{
-				actorStateStore:        "true",
-				"primaryEncryptionKey": primaryKey,
-			},
-		}}
-
-		mockStateStore.On("Init", expectedMetadata).Return(e)
-
-		return mockStateStore
-	}
-
 	t.Run("test init state store", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRuntime(rt, nil)
+		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
 		// act
 		err := rt.initState(mockStateComponent)
@@ -775,7 +754,7 @@ func TestInitState(t *testing.T) {
 
 	t.Run("test init state store error", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRuntime(rt, assert.AnError)
+		initMockStateStoreForRuntime(rt, primaryKey, assert.AnError)
 
 		// act
 		err := rt.initState(mockStateComponent)
@@ -787,7 +766,7 @@ func TestInitState(t *testing.T) {
 
 	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRuntime(rt, nil)
+		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
 		// act
 		err := rt.initState(mockStateComponent)
@@ -800,7 +779,7 @@ func TestInitState(t *testing.T) {
 
 	t.Run("test init state store, encryption enabled", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRuntime(rt, nil)
+		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
 		rt.secretStores["mockSecretStore"] = &mockSecretStore{}
 
@@ -5116,4 +5095,231 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
+}
+
+func TestMetadataContainsNamespace(t *testing.T) {
+	t.Run("namespace field present", func(t *testing.T) {
+		r := metadataContainsNamespace(
+			[]componentsV1alpha1.MetadataItem{
+				{
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("{namespace}")},
+					},
+				},
+			},
+		)
+
+		assert.True(t, r)
+	})
+
+	t.Run("namespace field not present", func(t *testing.T) {
+		r := metadataContainsNamespace(
+			[]componentsV1alpha1.MetadataItem{
+				{},
+			},
+		)
+
+		assert.False(t, r)
+	})
+}
+
+func TestNamespacedPublisher(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.namespace = "ns1"
+	defer stopRuntime(t, rt)
+
+	rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}, namespaceScoped: true}
+	rt.Publish(&pubsub.PublishRequest{
+		PubsubName: TestPubsubName,
+		Topic:      "topic0",
+	})
+
+	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Topic)
+}
+
+func TestGracefulShutdownPubSub(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	//setup pubsub
+	testGracefulRestartPubSub := "shutdownPubsub"
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: testGracefulRestartPubSub,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
+			return &mockSubscribePubSub{}
+		},
+		"mockPubSub",
+	)
+
+	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+	req.WithHTTPExtension(http.MethodGet, "")
+	req.WithRawData(nil, invokev1.JSONContentType)
+	subscriptionItems := []runtimePubsub.SubscriptionJSON{
+		{PubsubName: testGracefulRestartPubSub, Topic: "topic0", Route: "shutdown"},
+	}
+	sub, _ := json.Marshal(subscriptionItems)
+	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+	fakeResp.WithRawData(sub, "application/json")
+
+	mockAppChannel := new(channelt.MockAppChannel)
+	rt.appChannel = mockAppChannel
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
+
+	require.NoError(t, rt.initPubSub(pubsubComponent))
+	rt.startSubscriptions()
+	assert.NotNil(t, rt.pubsubCtx)
+	assert.NotNil(t, rt.topicCtxCancels)
+	assert.NotNil(t, rt.topicRoutes)
+
+	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	}()
+
+	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	time.Sleep(1 * time.Second)
+	assert.Nil(t, rt.pubsubCtx)
+	assert.Nil(t, rt.topicCtxCancels)
+	assert.Nil(t, rt.topicRoutes)
+}
+
+func TestGracefulShutdownBindings(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	rt.bindingsRegistry.RegisterInputBinding(
+		func(_ logger.Logger) bindings.InputBinding {
+			return &daprt.MockBinding{}
+		},
+		"testInputBinding",
+	)
+	cin := componentsV1alpha1.Component{}
+	cin.ObjectMeta.Name = "testInputBinding"
+	cin.Spec.Type = "bindings.testInputBinding"
+
+	rt.bindingsRegistry.RegisterOutputBinding(
+		func(_ logger.Logger) bindings.OutputBinding {
+			return &daprt.MockBinding{}
+		},
+		"testOutputBinding",
+	)
+	cout := componentsV1alpha1.Component{}
+	cout.ObjectMeta.Name = "testOutputBinding"
+	cout.Spec.Type = "bindings.testOutputBinding"
+	require.NoError(t, rt.initInputBinding(cin))
+	require.NoError(t, rt.initOutputBinding(cout))
+
+	assert.Equal(t, len(rt.inputBindings), 1)
+	assert.Equal(t, len(rt.outputBindings), 1)
+
+	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	}()
+
+	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	time.Sleep(1 * time.Second)
+	assert.Nil(t, rt.inputBindingsCancel)
+	assert.Nil(t, rt.inputBindingsCtx)
+}
+
+func TestGracefulShutdownActors(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	primaryKey := hex.EncodeToString(bytes)
+
+	mockStateComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "state.mockState",
+			Version: "v1",
+			Metadata: []componentsV1alpha1.MetadataItem{
+				{
+					Name: "actorStateStore",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("true")},
+					},
+				},
+				{
+					Name: "primaryEncryptionKey",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte(primaryKey)},
+					},
+				},
+			},
+		},
+		Auth: componentsV1alpha1.Auth{
+			SecretStore: "mockSecretStore",
+		},
+	}
+
+	// setup
+	initMockStateStoreForRuntime(rt, primaryKey, nil)
+
+	// act
+	err := rt.initState(mockStateComponent)
+
+	// assert
+	assert.NoError(t, err, "expected no error")
+
+	rt.namespace = "test"
+	rt.runtimeConfig.mtlsEnabled = true
+	assert.Nil(t, rt.initActors())
+
+	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	}()
+
+	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	time.Sleep(3 * time.Second)
+
+	var activeActCount int
+	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
+	for _, v := range activeActors {
+		activeActCount += v.Count
+	}
+	assert.Equal(t, activeActCount, 0)
+}
+
+func initMockStateStoreForRuntime(rt *DaprRuntime, primaryKey string, e error) *daprt.MockStateStore {
+	mockStateStore := new(daprt.MockStateStore)
+
+	rt.stateStoreRegistry.RegisterComponent(
+		func(_ logger.Logger) state.Store {
+			return mockStateStore
+		},
+		"mockState",
+	)
+
+	expectedMetadata := state.Metadata{Base: mdata.Base{
+		Name: TestPubsubName,
+		Properties: map[string]string{
+			actorStateStore:        "true",
+			"primaryEncryptionKey": primaryKey,
+		},
+	}}
+
+	mockStateStore.On("Init", expectedMetadata).Return(e)
+
+	return mockStateStore
 }
