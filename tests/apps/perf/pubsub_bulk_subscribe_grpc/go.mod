@@ -1,4 +1,4 @@
-module github.com/dapr/dapr/tests/apps/perf/pubsub_subscribe_grpc
+module github.com/dapr/dapr/tests/apps/perf/pubsub_bulk_subscribe_grpc
 
 go 1.19
 

@@ -19,7 +19,7 @@ import (
 	"sync/atomic"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	apppb "github.com/dapr/dapr/tests/apps/perf/pubsub_subscribe_grpc/pkg/proto"
+	apppb "github.com/dapr/dapr/tests/apps/perf/pubsub_bulk_subscribe_grpc/pkg/proto"
 
 	"google.golang.org/grpc"
 )

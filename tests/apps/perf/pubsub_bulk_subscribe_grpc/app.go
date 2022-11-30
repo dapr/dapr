@@ -17,7 +17,7 @@ import (
 	"log"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/tests/apps/perf/pubsub_subscribe_grpc/pkg/server"
+	"github.com/dapr/dapr/tests/apps/perf/pubsub_bulk_subscribe_grpc/pkg/server"
 )
 
 const (
