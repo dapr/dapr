@@ -303,12 +303,10 @@ func (p *ActorPlacement) closeStream() {
 
 		if p.clientStream != nil {
 			p.clientStream.CloseSend()
-			p.clientStream = nil
 		}
 
 		if p.clientConn != nil {
 			p.clientConn.Close()
-			p.clientConn = nil
 		}
 	}()
 
