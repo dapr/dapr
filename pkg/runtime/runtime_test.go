@@ -5140,10 +5140,10 @@ func TestNamespacedPublisher(t *testing.T) {
 func TestGracefulShutdownPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	// setup pubsub
-	testGracefulRestartPubSub := "shutdownPubsub"
+	testGracefulShutdownPubSub := "shutdownPubsub"
 	pubsubComponent := componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
-			Name: testGracefulRestartPubSub,
+			Name: testGracefulShutdownPubSub,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
@@ -5162,7 +5162,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	req.WithHTTPExtension(http.MethodGet, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 	subscriptionItems := []runtimePubsub.SubscriptionJSON{
-		{PubsubName: testGracefulRestartPubSub, Topic: "topic0", Route: "shutdown"},
+		{PubsubName: testGracefulShutdownPubSub, Topic: "topic0", Route: "shutdown"},
 	}
 	sub, _ := json.Marshal(subscriptionItems)
 	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -5179,7 +5179,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	assert.NotNil(t, rt.topicRoutes)
 
 	sendSigterm(rt)
-	time.Sleep(1 * time.Second)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
 	assert.Nil(t, rt.pubsubCtx)
 	assert.Nil(t, rt.topicCtxCancels)
 	assert.Nil(t, rt.topicRoutes)
@@ -5214,7 +5214,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	assert.Equal(t, len(rt.outputBindings), 1)
 
 	sendSigterm(rt)
-	time.Sleep(1 * time.Second)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
 	assert.Nil(t, rt.inputBindingsCancel)
 	assert.Nil(t, rt.inputBindingsCtx)
 }
@@ -5224,7 +5224,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
-	primaryKey := hex.EncodeToString(bytes)
+	encryptKey := hex.EncodeToString(bytes)
 
 	mockStateComponent := componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
@@ -5243,7 +5243,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 				{
 					Name: "primaryEncryptionKey",
 					Value: componentsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte(primaryKey)},
+						JSON: v1.JSON{Raw: []byte(encryptKey)},
 					},
 				},
 			},
@@ -5254,7 +5254,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	}
 
 	// setup
-	initMockStateStoreForRuntime(rt, primaryKey, nil)
+	initMockStateStoreForRuntime(rt, encryptKey, nil)
 
 	// act
 	err := rt.initState(mockStateComponent)
@@ -5267,7 +5267,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	assert.Nil(t, rt.initActors())
 
 	sendSigterm(rt)
-	time.Sleep(rt.runtimeConfig.GracefulShutdownDuration)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
 
 	var activeActCount int
 	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
@@ -5277,7 +5277,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	assert.Equal(t, activeActCount, 0)
 }
 
-func initMockStateStoreForRuntime(rt *DaprRuntime, primaryKey string, e error) *daprt.MockStateStore {
+func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *daprt.MockStateStore {
 	mockStateStore := new(daprt.MockStateStore)
 
 	rt.stateStoreRegistry.RegisterComponent(
@@ -5291,7 +5291,7 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, primaryKey string, e error) *
 		Name: TestPubsubName,
 		Properties: map[string]string{
 			actorStateStore:        "true",
-			"primaryEncryptionKey": primaryKey,
+			"primaryEncryptionKey": encryptKey,
 		},
 	}}
 
