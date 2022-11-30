@@ -24,15 +24,19 @@ import (
 	"google.golang.org/grpc"
 )
 
+const defaultChannelSize = 1000
+
 // Server is the gRPC service implementation for Dapr.
 type Server struct {
 	apppb.UnimplementedPerfTestNotifierServer
 	runtimev1pb.UnimplementedAppCallbackHealthCheckServer
 	runtimev1pb.UnimplementedDaprServer
-	listener      net.Listener
-	grpcServer    *grpc.Server
-	started       uint32
-	subscriptions map[string]*runtimev1pb.TopicSubscription
+	listener                   net.Listener
+	grpcServer                 *grpc.Server
+	started                    uint32
+	onTopicEventNotifyChan     chan struct{}
+	onBulkTopicEventNotifyChan chan int
+	subscriptions              map[string]*runtimev1pb.TopicSubscription
 }
 
 func NewService(address string) (*Server, error) {
@@ -42,8 +46,10 @@ func NewService(address string) (*Server, error) {
 	}
 
 	s := &Server{
-		listener:      lis,
-		subscriptions: map[string]*runtimev1pb.TopicSubscription{},
+		listener:                   lis,
+		subscriptions:              map[string]*runtimev1pb.TopicSubscription{},
+		onTopicEventNotifyChan:     make(chan struct{}, defaultChannelSize),
+		onBulkTopicEventNotifyChan: make(chan int, defaultChannelSize),
 	}
 	gs := grpc.NewServer()
 
@@ -73,6 +79,31 @@ func (s *Server) Stop() error {
 }
 
 // Subscribe implements proto.PerfTestNotifierServer
-func (*Server) Subscribe(*apppb.Request, apppb.PerfTestNotifier_SubscribeServer) error {
-	panic("unimplemented")
+func (s *Server) Subscribe(r *apppb.Request, a apppb.PerfTestNotifier_SubscribeServer) error {
+	count := 0
+	bulkCount := 0
+	for {
+		select {
+		case <-s.onTopicEventNotifyChan:
+			count++
+			// If N messages are received, test is completed, notify the client.
+			if count >= int(r.NumMessages) {
+				if err := a.Send(&apppb.Response{}); err != nil {
+					return err
+				}
+				count = 0
+			}
+		case _bulkCount := <-s.onBulkTopicEventNotifyChan:
+			bulkCount += _bulkCount
+			// If N messages are received, test is completed, notify the client.
+			if bulkCount >= int(r.NumMessages) {
+				if err := a.Send(&apppb.Response{}); err != nil {
+					return err
+				}
+				bulkCount = 0
+			}
+		case <-a.Context().Done():
+			return nil
+		}
+	}
 }

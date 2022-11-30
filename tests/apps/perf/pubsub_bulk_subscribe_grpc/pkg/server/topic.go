@@ -50,6 +50,7 @@ func (s *Server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 		return &runtimev1pb.TopicEventResponse{Status: runtimev1pb.TopicEventResponse_DROP}, errors.New("topic subscription not found")
 	}
 
+	s.onTopicEventNotifyChan <- struct{}{}
 	return &runtimev1pb.TopicEventResponse{Status: runtimev1pb.TopicEventResponse_SUCCESS}, nil
 }
 
@@ -70,5 +71,7 @@ func (s *Server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 			EntryId: entry.EntryId,
 			Status:  runtimev1pb.TopicEventResponse_SUCCESS})
 	}
+
+	s.onBulkTopicEventNotifyChan <- len(in.Entries)
 	return &runtimev1pb.TopicEventBulkResponse{Statuses: statuses}, nil
 }

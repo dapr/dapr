@@ -10,6 +10,7 @@ service PerfTestNotifier {
 
 message Request {
     int32 id = 1;
+    int32 numMessages = 2;
 }
 
 message Response {
