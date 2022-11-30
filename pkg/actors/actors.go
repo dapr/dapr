@@ -1021,10 +1021,10 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	req.WithActor(reminder.ActorType, reminder.ActorID)
 	req.WithRawData(b, invokev1.JSONContentType)
 
-	policyRunner := resiliency.NewRunner[any](context.TODO(),
+	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
 		a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID),
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
+	_, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
 	return err
@@ -1387,10 +1387,10 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req.WithActor(actorType, actorID)
 	req.WithRawData(b, invokev1.JSONContentType)
 
-	policyRunner := resiliency.NewRunner[any](context.TODO(),
+	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
 		a.resiliency.ActorPreLockPolicy(actorType, actorID),
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
+	_, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
 	if err != nil {
