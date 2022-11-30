@@ -5413,19 +5413,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	assert.NotNil(t, rt.topicCtxCancels)
 	assert.NotNil(t, rt.topicRoutes)
 
-	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-	}()
-
-	if p, err := os.FindProcess(os.Getpid()); err != nil {
-		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-	} else {
-		p.Signal(syscall.SIGTERM)
-	}
+	sendSigterm(rt)
 	time.Sleep(1 * time.Second)
 	assert.Nil(t, rt.pubsubCtx)
 	assert.Nil(t, rt.topicCtxCancels)
@@ -5460,18 +5448,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	assert.Equal(t, len(rt.inputBindings), 1)
 	assert.Equal(t, len(rt.outputBindings), 1)
 
-	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-	}()
-	if p, err := os.FindProcess(os.Getpid()); err != nil {
-		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-	} else {
-		p.Signal(syscall.SIGTERM)
-	}
+	sendSigterm(rt)
 	time.Sleep(1 * time.Second)
 	assert.Nil(t, rt.inputBindingsCancel)
 	assert.Nil(t, rt.inputBindingsCtx)
@@ -5524,20 +5501,8 @@ func TestGracefulShutdownActors(t *testing.T) {
 	rt.runtimeConfig.mtlsEnabled = true
 	assert.Nil(t, rt.initActors())
 
-	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-	}()
-
-	if p, err := os.FindProcess(os.Getpid()); err != nil {
-		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-	} else {
-		p.Signal(syscall.SIGTERM)
-	}
-	time.Sleep(3 * time.Second)
+	sendSigterm(rt)
+	time.Sleep(rt.runtimeConfig.GracefulShutdownDuration)
 
 	var activeActCount int
 	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
@@ -5568,4 +5533,21 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, primaryKey string, e error) *
 	mockStateStore.On("Init", expectedMetadata).Return(e)
 
 	return mockStateStore
+}
+
+func sendSigterm(rt *DaprRuntime) {
+	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	}()
+	if p, err := os.FindProcess(os.Getpid()); err != nil {
+		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	} else {
+		if err := p.Signal(syscall.SIGTERM); err != nil { // SIGTERM cannot be sent on WINDOWS
+			rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+		}
+	}
 }
