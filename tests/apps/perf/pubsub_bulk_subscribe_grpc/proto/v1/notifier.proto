@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package test.proto.v1;
+option go_package = "github.com/dapr/dapr/tests/apps/perf/pubsub_subscribe_grpc/pkg/proto/v1;proto";
+
+service PerfTestNotifier {
+    // Subscribe to receive notifications about new test results.
+    rpc Subscribe(Request) returns (stream Response) {}
+}
+
+message Request {
+    int32 id = 1;
+}
+
+message Response {
+    string message = 1;
+}

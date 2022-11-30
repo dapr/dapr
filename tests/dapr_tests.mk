@@ -53,7 +53,7 @@ pluggable_redis-pubsub \
 pluggable_kafka-bindings \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_bulk_subscribe_grpc
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -72,6 +72,7 @@ state_get_http \
 pubsub_publish_grpc \
 pubsub_bulk_publish_grpc \
 actor_double_activation \
+pubsub_bulk_subscribe_grpc \
 
 KUBECTL=kubectl
 

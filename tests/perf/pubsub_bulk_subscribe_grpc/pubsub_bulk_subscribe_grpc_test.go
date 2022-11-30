@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub_subscribe_grpc_perf
+package pubsub_bulk_subscribe_grpc_perf
 
 import (
 	"encoding/json"
@@ -33,18 +33,18 @@ import (
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
 
-const testLabel = "pubsub_subscribe_grpc"
+const testLabel = "pubsub_bulk_subscribe_grpc"
 
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
-	utils.SetupLogs("pubsub_subscribe_grpc")
+	utils.SetupLogs("pubsub_bulk_subscribe_grpc")
 
 	testApps := []kube.AppDescription{
 		{
 			AppName:           "testapp",
 			DaprEnabled:       true,
-			ImageName:         "perf-pubsub_subscribe_grpc",
+			ImageName:         "perf-pubsub_bulk_subscribe_grpc",
 			Replicas:          1,
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
@@ -87,13 +87,13 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("pubsub_subscribe_grpc", testApps, nil, nil)
+	tr = runner.NewTestRunner("pubsub_bulk_subscribe_grpc", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
-func TestPubsubSubscribeGrpcPerformance(t *testing.T) {
+func TestPubsubBulkSubscribeGrpcPerformance(t *testing.T) {
 	p := perf.Params()
-	t.Logf("running pubsub subscribe grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
+	t.Logf("running pubsub bulk subscribe grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
@@ -109,14 +109,14 @@ func TestPubsubSubscribeGrpcPerformance(t *testing.T) {
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
-	t.Logf("teter app url: %s", testerAppURL)
+	t.Logf("tester app url: %s", testerAppURL)
 	_, err = utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 	require.NoError(t, err)
 
-	// Perform baseline test
+	// Perform baseline test - publish N messages in bulk and wait for all of them to be received by the test app.
 	p.Grpc = true
-	p.Dapr = "capability=pubsub,target=appcallback,method=subscribe"
-	p.TargetEndpoint = "http://testapp:3000"
+	p.Dapr = "capability=pubsub,target=dapr,method=bulkpublish,store=inmemorypubsub,topic=topic123,contenttype=text/plain,numevents=100,callback=true"
+	p.TargetEndpoint = testAppURL
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package server
 
 import (
 	"errors"
@@ -19,11 +19,14 @@ import (
 	"sync/atomic"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	apppb "github.com/dapr/dapr/tests/apps/perf/pubsub_subscribe_grpc/pkg/proto"
+
 	"google.golang.org/grpc"
 )
 
 // Server is the gRPC service implementation for Dapr.
 type Server struct {
+	apppb.UnimplementedPerfTestNotifierServer
 	runtimev1pb.UnimplementedAppCallbackHealthCheckServer
 	runtimev1pb.UnimplementedDaprServer
 	listener      net.Listener
@@ -32,7 +35,7 @@ type Server struct {
 	subscriptions map[string]*runtimev1pb.TopicSubscription
 }
 
-func newService(address string) (*Server, error) {
+func NewService(address string) (*Server, error) {
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		return nil, err
@@ -47,23 +50,29 @@ func newService(address string) (*Server, error) {
 	runtimev1pb.RegisterAppCallbackServer(gs, s)
 	runtimev1pb.RegisterAppCallbackHealthCheckServer(gs, s)
 	runtimev1pb.RegisterAppCallbackAlphaServer(gs, s)
+	apppb.RegisterPerfTestNotifierServer(gs, s)
 
 	s.grpcServer = gs
 	return s, nil
 }
 
-func (s *Server) start() error {
+func (s *Server) Start() error {
 	if !atomic.CompareAndSwapUint32(&s.started, 0, 1) {
 		return errors.New("a gRPC server can only be started once")
 	}
 	return s.grpcServer.Serve(s.listener)
 }
 
-func (s *Server) stop() error {
+func (s *Server) Stop() error {
 	if atomic.LoadUint32(&s.started) == 0 {
 		return nil
 	}
 	s.grpcServer.Stop()
 	s.grpcServer = nil
 	return nil
+}
+
+// Subscribe implements proto.PerfTestNotifierServer
+func (*Server) Subscribe(*apppb.Request, apppb.PerfTestNotifier_SubscribeServer) error {
+	panic("unimplemented")
 }

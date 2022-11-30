@@ -17,6 +17,7 @@ import (
 	"log"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/apps/perf/pubsub_subscribe_grpc/pkg/server"
 )
 
 const (
@@ -25,7 +26,7 @@ const (
 )
 
 func main() {
-	s, err := newService(":3000")
+	s, err := server.NewService(":3000")
 	if err != nil {
 		log.Fatalf("failed to create service: %v", err)
 	}
@@ -34,17 +35,17 @@ func main() {
 		PubsubName: pubSubName,
 		Topic:      topic,
 	}
-	s.addTopicSubscription(sub)
+	s.AddTopicSubscription(sub)
 
 	bulkSub := &runtimev1pb.TopicSubscription{
 		PubsubName: pubSubName,
 		Topic:      "bulk-" + topic,
 		Metadata:   map[string]string{"bulkSubscribe": "true"},
 	}
-	s.addTopicSubscription(bulkSub)
+	s.AddTopicSubscription(bulkSub)
 
-	defer s.stop()
-	if err = s.start(); err != nil {
+	defer s.Stop()
+	if err = s.Start(); err != nil {
 		log.Fatalf("failed to start service: %v", err)
 	}
 }
