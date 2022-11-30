@@ -5374,7 +5374,7 @@ func TestNamespacedPublisher(t *testing.T) {
 
 func TestGracefulShutdownPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	//setup pubsub
+	// setup pubsub
 	testGracefulRestartPubSub := "shutdownPubsub"
 	pubsubComponent := componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
@@ -5421,7 +5421,11 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 	}()
 
-	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	if p, err := os.FindProcess(os.Getpid()); err != nil {
+		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	} else {
+		p.Signal(syscall.SIGTERM)
+	}
 	time.Sleep(1 * time.Second)
 	assert.Nil(t, rt.pubsubCtx)
 	assert.Nil(t, rt.topicCtxCancels)
@@ -5463,8 +5467,11 @@ func TestGracefulShutdownBindings(t *testing.T) {
 		<-sigs
 		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 	}()
-
-	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	if p, err := os.FindProcess(os.Getpid()); err != nil {
+		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	} else {
+		p.Signal(syscall.SIGTERM)
+	}
 	time.Sleep(1 * time.Second)
 	assert.Nil(t, rt.inputBindingsCancel)
 	assert.Nil(t, rt.inputBindingsCtx)
@@ -5525,7 +5532,11 @@ func TestGracefulShutdownActors(t *testing.T) {
 		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 	}()
 
-	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	if p, err := os.FindProcess(os.Getpid()); err != nil {
+		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	} else {
+		p.Signal(syscall.SIGTERM)
+	}
 	time.Sleep(3 * time.Second)
 
 	var activeActCount int
