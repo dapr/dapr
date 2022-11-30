@@ -2598,14 +2598,17 @@ func (a *DaprRuntime) cleanSocket() {
 func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
-
-	log.Info("Dapr shutting down in %f seconds", duration.Seconds())
-	<-time.After(duration)
+	log.Info("Dapr shutting down")
 	log.Info("Stopping PubSub subscribers and input bindings")
 	a.stopSubscriptions()
 	a.stopReadingFromBindings()
-	a.cancel()
+
+	log.Info("Initiating actor shutdown")
 	a.stopActor()
+
+	log.Infof("Holding shutdown for %s to allow graceful stop of outstanding operations", duration.String())
+	<-time.After(duration)
+
 	log.Info("Stopping Dapr APIs")
 	for _, closer := range a.apiClosers {
 		if err := closer.Close(); err != nil {
@@ -2620,8 +2623,10 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 		}
 	}()
 
+	log.Info("Shutting down tracing provider")
 	shutdownCancel()
 	a.shutdownOutputComponents()
+	a.cancel()
 	a.shutdownC <- nil
 }
 
