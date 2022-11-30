@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PROTO_PREFIX:=github.com/dapr/dapr/tests/apps/perf/pubsub_bulk_subscribe_grpc/pkg/proto
+PROTO_PREFIX:=github.com/dapr/dapr/tests/proto/pubsub_bulk_subscribe_grpc
 
 protoc \
   --go_out=. \
