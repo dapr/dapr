@@ -14,6 +14,7 @@ limitations under the License.
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -140,6 +141,106 @@ func TestAppHealthyStatus(t *testing.T) {
 	// clean up
 	testPlacement.Stop()
 	cleanup()
+}
+
+type fakeStream struct {
+	//nolint:nosnakecase
+	placementv1pb.Placement_ReportDaprStatusClient
+	send            func(host *placementv1pb.Host) error
+	recv            func() (*placementv1pb.PlacementOrder, error)
+	closeSendCalled atomic.Int64
+}
+
+func (f *fakeStream) Send(host *placementv1pb.Host) error {
+	return f.send(host)
+}
+
+func (f *fakeStream) Recv() (*placementv1pb.PlacementOrder, error) {
+	return f.recv()
+}
+
+func (f *fakeStream) CloseSend() error {
+	f.closeSendCalled.Add(1)
+	return nil
+}
+
+func TestCloseOnRecv(t *testing.T) {
+	t.Run("should not panic", func(t *testing.T) {
+		address, testSrv, cleanup := newTestServer()
+
+		// set leader
+		testSrv.setLeader(true)
+
+		appHealth := atomic.Bool{}
+		appHealth.Store(true)
+
+		appHealthFunc := appHealth.Load
+		noopTableUpdateFunc := func() {}
+		testPlacement := NewActorPlacement(
+			[]string{address}, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
+			appHealthFunc, noopTableUpdateFunc)
+
+		// act
+		testPlacement.Start()
+
+		assert.NotNil(t, testPlacement.clientStream)
+
+		var called int
+		recvGroup := sync.WaitGroup{}
+		recvGroup.Add(1)
+
+		closeGroup := sync.WaitGroup{}
+		closeGroup.Add(1)
+
+		testPlacement.clientLock.Lock()
+		fs := &fakeStream{
+			recv: func() (*placementv1pb.PlacementOrder, error) {
+				defer func() {
+					called++
+				}()
+				if called == 0 { // first call should close stream and wait
+					recvGroup.Done()
+					closeGroup.Wait()
+					return &placementv1pb.PlacementOrder{
+						Operation: unlockOperation,
+					}, nil
+				}
+
+				if called == 1 { // force reconnect
+					return nil, errors.New("force reconnect")
+				}
+
+				return &placementv1pb.PlacementOrder{
+					Operation: unlockOperation,
+				}, nil
+			},
+			send: func(host *placementv1pb.Host) error {
+				return nil
+			},
+		}
+		testPlacement.clientStream = fs
+		testPlacement.clientLock.Unlock()
+
+		go func() {
+			recvGroup.Wait()
+			testPlacement.closeStream()
+			closeGroup.Done()
+		}()
+		// should not panic
+		closeGroup.Wait()
+		testPlacement.streamConnectedCond.L.Lock()
+		for !testPlacement.streamConnAlive {
+			testPlacement.streamConnectedCond.Wait()
+		}
+		testPlacement.streamConnectedCond.L.Unlock()
+
+		assert.Equal(t, called, 2)
+		assert.GreaterOrEqual(t, fs.closeSendCalled.Load(), int64(2))
+		assert.NotEqual(t, testPlacement.clientStream, fs)
+		// clean up
+		testPlacement.Stop()
+		cleanup()
+	})
 }
 
 func TestOnPlacementOrder(t *testing.T) {
