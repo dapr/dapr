@@ -171,7 +171,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 		}
 		var overallInvokeErr error
 		for path, psm := range routePathBulkMessageMap {
-			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, psm, topic, psName, msg, route, &bulkResponses, &entryIdIndexMap, path, policy, &bulkSubDiag)
+			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, psm, topic, psName, msg, route, &bulkResponses, &entryIdIndexMap, path, policy, &bulkSubDiag, rawPayload)
 			if invokeErr != nil {
 				hasAnyError = true
 				err = invokeErr
@@ -253,7 +253,7 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRout
 func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm pubsubBulkSubscribedMessage, topic string, psName string,
 	msg *pubsub.BulkMessage, route TopicRouteElem, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
 	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner[any], bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
-) error {
+	rawPayload bool) error {
 	var id string
 	idObj, err := uuid.NewRandom()
 	if err != nil {
@@ -307,7 +307,7 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 		case HTTPProtocol:
 			pErr = a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
 		case GRPCProtocol:
-			pErr = a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
+			pErr = a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag, rawPayload)
 		default:
 			pErr = backoff.Permanent(errors.New("invalid application protocol"))
 		}
@@ -500,12 +500,8 @@ func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
 func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBulkSubscribedMessage,
 	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIdIndexMap map[string]int, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
-) error {
+	rawPayload bool) error {
 	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(msg.entries))
-	rawPayload := true
-	if msg.cloudEvents[0] != nil {
-		rawPayload = false
-	}
 	for i, entry := range msg.entries {
 		item, err := fetchEntry(rawPayload, entry, msg.cloudEvents[i])
 		if err != nil {

@@ -28,16 +28,30 @@ import (
 )
 
 const (
-	order1  string = `{"data":{"orderId":"1"},"datacontenttype":"application/json","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	order2  string = `{"data":{"orderId":"2"},"datacontenttype":"application/json","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
-	order3  string = `{"data":{"orderId":"3"},"datacontenttype":"application/json","id":"6767010u-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	order4  string = `{"data":{"orderId":"4"},"datacontenttype":"application/json","id":"91011121-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
-	order5  string = `{"data":{"orderId":"5"},"datacontenttype":"application/json","id":"718271cd-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	order6  string = `{"data":{"orderId":"6"},"datacontenttype":"application/json","id":"7uw2233d-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
-	order7  string = `{"data":{"orderId":"7"},"datacontenttype":"application/json","id":"78sqs98s-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	order8  string = `{"data":{"orderId":"8"},"datacontenttype":"application/json","id":"45122j82-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
-	order9  string = `{"orderId":"9","type":"type1"}`
-	order10 string = `{"data":{"orderId":"10"},"datacontenttype":"application/json","id":"ded2rd44-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	data1     string = `{"orderId":"1"}`
+	data2     string = `{"orderId":"2"}`
+	data3     string = `{"orderId":"3"}`
+	data4     string = `{"orderId":"4"}`
+	data5     string = `{"orderId":"5"}`
+	data6     string = `{"orderId":"6"}`
+	data7     string = `{"orderId":"7"}`
+	data8     string = `{"orderId":"8"}`
+	data9     string = ``
+	data10    string = `{"orderId":"10"}`
+	ext1Key   string = "ext1Key"
+	ext1Value string = "ext1Value"
+	ext2Key   string = "ext2Key"
+	ext2Value string = "ext2Value"
+	order1    string = `{"data":` + data1 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
+	order2    string = `{"data":` + data2 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	order3    string = `{"data":` + data3 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"6767010u-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
+	order4    string = `{"data":` + data4 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"91011121-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	order5    string = `{"data":` + data5 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"718271cd-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
+	order6    string = `{"data":` + data6 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"7uw2233d-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	order7    string = `{"data":` + data7 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"78sqs98s-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
+	order8    string = `{"data":` + data8 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"45122j82-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
+	order9    string = `{"` + ext1Key + `":"` + ext1Value + `","orderId":"9","type":"type1"}`
+	order10   string = `{"data":` + data10 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"ded2rd44-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
 )
 
 func getBulkMessageEntries(len int) []pubsub.BulkMessageEntry {
@@ -55,6 +69,22 @@ func getBulkMessageEntries(len int) []pubsub.BulkMessageEntry {
 	bulkEntries[9] = pubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
 
 	return bulkEntries[:len]
+}
+
+type ExpectedExtension struct {
+	extKey   string
+	extValue string
+}
+
+func getExpectedBulkRequests() map[string][]string {
+	mapPathEntries := map[string][]string{"type1": {data1, data3, data5, data7, data8, data9},
+		"type2": {data2, data4, data6, data10}}
+	return mapPathEntries
+}
+
+func getExpectedExtension() map[string]ExpectedExtension {
+	return map[string]ExpectedExtension{"type1": {ext1Key, ext1Value},
+		"type2": {ext2Key, ext2Value}}
 }
 
 func TestBulkSubscribe(t *testing.T) {
@@ -837,7 +867,10 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 				{EntryId: "10101010j", IsError: false},
 			},
 		}
-
+		assert.True(t, verifyBulkSubscribeRequest(getExpectedBulkRequests()["type1"],
+			getExpectedExtension()["type1"], mockServer.RequestsReceived["orders1"]))
+		assert.True(t, verifyBulkSubscribeRequest(getExpectedBulkRequests()["type2"],
+			getExpectedExtension()["type2"], mockServer.RequestsReceived["orders2"]))
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
 
@@ -1153,6 +1186,17 @@ func verifyIfEventContainsStrings(event []byte, elems ...string) bool {
 func verifyIfEventNotContainsStrings(event []byte, elems ...string) bool {
 	for _, elem := range elems {
 		if strings.Contains(string(event), elem) {
+			return false
+		}
+	}
+	return true
+}
+
+func verifyBulkSubscribeRequest(expectedData []string, expectedExtension ExpectedExtension,
+	actual *runtimev1pb.TopicEventBulkRequest) bool {
+	for i, expectedEntryReq := range expectedData {
+		if expectedEntryReq != string(actual.Entries[i].GetCloudEvent().GetData()) ||
+			actual.Entries[i].GetCloudEvent().GetExtensions().GetFields()[expectedExtension.extKey].GetStringValue() != expectedExtension.extValue {
 			return false
 		}
 	}
