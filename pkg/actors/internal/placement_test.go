@@ -18,12 +18,12 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -337,7 +337,7 @@ func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStat
 			s.recvError = err
 			return err
 		}
-		s.recvCount.Inc()
+		s.recvCount.Add(1)
 		s.lastHost = req
 		s.lastTimestamp = time.Now()
 	}
