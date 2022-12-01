@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -165,39 +166,27 @@ func (d *directMessaging) invokeWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			retriesExhaustedPath := false // Used to track final error state.
-			nullifyResponsePath := false  // Used to track final response state.
-			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
-			var resp *invokev1.InvokeMethodResponse
-			err := policy(func(ctx context.Context) (rErr error) {
-				var teardown func(destroy bool)
-				retriesExhaustedPath = false
-				resp, teardown, rErr = fn(ctx, app.id, app.namespace, app.address, req)
+			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
+			)
+			attempts := atomic.Int32{}
+			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+				attempt := attempts.Add(1)
+				rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 				if rErr == nil {
 					teardown(false)
-					return nil
+					return rResp, nil
 				}
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
-					retriesExhaustedPath = true
-					return rErr
+					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 				}
 				teardown(false)
-				return backoff.Permanent(rErr)
+				return rResp, backoff.Permanent(rErr)
 			})
-			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
-			if retriesExhaustedPath {
-				return nil, fmt.Errorf("failed to invoke target %s after %v retries. Error: %s", app.id, numRetries, err.Error())
-			}
-
-			if nullifyResponsePath {
-				resp = nil
-			}
-
-			return resp, err
 		}
 
 		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)

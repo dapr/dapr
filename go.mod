@@ -7,9 +7,9 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
-	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.9.1-0.20221115192719-e8d070a44d4d
-	github.com/dapr/kit v0.0.3-0.20221102045011-c213121f0b4f
+	github.com/cenkalti/backoff/v4 v4.2.0
+	github.com/dapr/components-contrib v1.9.1-0.20221130202810-7d466c713020
+	github.com/dapr/kit v0.0.3-0.20221119212753-76dbc2afea63
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3
@@ -71,6 +71,8 @@ require (
 	sigs.k8s.io/controller-runtime v0.13.0
 )
 
+require github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.5.1 // indirect
+
 require (
 	cloud.google.com/go v0.105.0 // indirect
 	cloud.google.com/go/compute v1.10.0 // indirect
@@ -89,10 +91,10 @@ require (
 	github.com/Azure/azure-sdk-for-go v65.0.0+incompatible // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.4 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.3 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.5.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.10.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.1.1 // indirect
