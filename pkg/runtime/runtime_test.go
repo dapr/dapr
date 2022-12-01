@@ -27,13 +27,11 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/signal"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -5374,30 +5372,26 @@ func TestNamespacedPublisher(t *testing.T) {
 
 func TestGracefulShutdownPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	// setup pubsub
-	testGracefulShutdownPubSub := "shutdownPubsub"
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name: testGracefulShutdownPubSub,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: getFakeMetadataItems(),
-		},
-	}
+	mockPubSub := new(daprt.MockPubSub)
 	rt.pubSubRegistry.RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
-			return &mockSubscribePubSub{}
+			return mockPubSub
 		},
 		"mockPubSub",
 	)
+	mockPubSub.On("Init", mock.Anything).Return(nil)
+	mockPubSub.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
+	mockPubSub.On("Close").Return(nil)
+
+	cPubSub := componentsV1alpha1.Component{}
+	cPubSub.ObjectMeta.Name = "mockPubSub"
+	cPubSub.Spec.Type = "pubsub.mockPubSub"
 
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 	req.WithHTTPExtension(http.MethodGet, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 	subscriptionItems := []runtimePubsub.SubscriptionJSON{
-		{PubsubName: testGracefulShutdownPubSub, Topic: "topic0", Route: "shutdown"},
+		{PubsubName: "mockPubSub", Topic: "topic0", Route: "shutdown"},
 	}
 	sub, _ := json.Marshal(subscriptionItems)
 	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -5407,14 +5401,15 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	rt.appChannel = mockAppChannel
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
 
-	require.NoError(t, rt.initPubSub(pubsubComponent))
+	require.NoError(t, rt.initPubSub(cPubSub))
+	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.startSubscriptions()
+	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
 	assert.NotNil(t, rt.pubsubCtx)
 	assert.NotNil(t, rt.topicCtxCancels)
 	assert.NotNil(t, rt.topicRoutes)
-
 	sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second)
 	assert.Nil(t, rt.pubsubCtx)
 	assert.Nil(t, rt.topicCtxCancels)
 	assert.Nil(t, rt.topicRoutes)
@@ -5502,7 +5497,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	assert.Nil(t, rt.initActors())
 
 	sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second)
 
 	var activeActCount int
 	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
@@ -5537,17 +5532,5 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 
 func sendSigterm(rt *DaprRuntime) {
 	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-	}()
-	if p, err := os.FindProcess(os.Getpid()); err != nil {
-		rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-	} else {
-		if err := p.Signal(syscall.SIGTERM); err != nil { // SIGTERM cannot be sent on WINDOWS
-			rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
-		}
-	}
+	rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 }
