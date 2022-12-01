@@ -77,14 +77,18 @@ type ExpectedExtension struct {
 }
 
 func getExpectedBulkRequests() map[string][]string {
-	mapPathEntries := map[string][]string{"type1": {data1, data3, data5, data7, data8, data9},
-		"type2": {data2, data4, data6, data10}}
+	mapPathEntries := map[string][]string{
+		"type1": {data1, data3, data5, data7, data8, data9},
+		"type2": {data2, data4, data6, data10},
+	}
 	return mapPathEntries
 }
 
 func getExpectedExtension() map[string]ExpectedExtension {
-	return map[string]ExpectedExtension{"type1": {ext1Key, ext1Value},
-		"type2": {ext2Key, ext2Value}}
+	return map[string]ExpectedExtension{
+		"type1": {ext1Key, ext1Value},
+		"type2": {ext2Key, ext2Value},
+	}
 }
 
 func TestBulkSubscribe(t *testing.T) {
@@ -1193,7 +1197,8 @@ func verifyIfEventNotContainsStrings(event []byte, elems ...string) bool {
 }
 
 func verifyBulkSubscribeRequest(expectedData []string, expectedExtension ExpectedExtension,
-	actual *runtimev1pb.TopicEventBulkRequest) bool {
+	actual *runtimev1pb.TopicEventBulkRequest,
+) bool {
 	for i, expectedEntryReq := range expectedData {
 		if expectedEntryReq != string(actual.Entries[i].GetCloudEvent().GetData()) ||
 			actual.Entries[i].GetCloudEvent().GetExtensions().GetFields()[expectedExtension.extKey].GetStringValue() != expectedExtension.extValue {

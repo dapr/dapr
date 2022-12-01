@@ -253,7 +253,8 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRout
 func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm pubsubBulkSubscribedMessage, topic string, psName string,
 	msg *pubsub.BulkMessage, route TopicRouteElem, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
 	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner[any], bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
-	rawPayload bool) error {
+	rawPayload bool,
+) error {
 	var id string
 	idObj, err := uuid.NewRandom()
 	if err != nil {
@@ -500,7 +501,8 @@ func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
 func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBulkSubscribedMessage,
 	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIdIndexMap map[string]int, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
-	rawPayload bool) error {
+	rawPayload bool,
+) error {
 	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(msg.entries))
 	for i, entry := range msg.entries {
 		item, err := fetchEntry(rawPayload, entry, msg.cloudEvents[i])
