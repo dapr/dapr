@@ -14,14 +14,11 @@ limitations under the License.
 package internal
 
 import (
-	"errors"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -31,7 +28,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/dapr/pkg/runtime/security"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.internal.placement")
@@ -90,19 +86,6 @@ type ActorPlacement struct {
 	shutdownConnLoop sync.WaitGroup
 }
 
-func addDNSResolverPrefix(addr []string) []string {
-	resolvers := make([]string, 0, len(addr))
-	for _, a := range addr {
-		prefix := ""
-		host, _, err := net.SplitHostPort(a)
-		if err == nil && net.ParseIP(host) == nil {
-			prefix = "dns:///"
-		}
-		resolvers = append(resolvers, prefix+a)
-	}
-	return resolvers
-}
-
 // NewActorPlacement initializes ActorPlacement for the actor service.
 func NewActorPlacement(
 	serverAddr []string, clientCert *daprCredentials.CertChain,
@@ -117,7 +100,7 @@ func NewActorPlacement(
 		runtimeHostName: runtimeHostName,
 		serverAddr:      servers,
 
-		client: newPlacementClient(GetGrpcOptsGetter(servers, clientCert)),
+		client: newPlacementClient(getGrpcOptsGetter(servers, clientCert)),
 
 		placementTableLock: &sync.RWMutex{},
 		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
@@ -126,18 +109,6 @@ func NewActorPlacement(
 		tableIsBlocked:      &atomic.Bool{},
 		appHealthFn:         appHealthFn,
 		afterTableUpdateFn:  afterTableUpdateFn,
-	}
-}
-
-// onPlacementError closes the current placement stream and reestablish the connection again,
-// uses a different placement server depending on the error code
-func (p *ActorPlacement) onPlacementError(err error) {
-	s, ok := status.FromError(err)
-	// If the current server is not leader, then it will try to the next server.
-	if ok && s.Code() == codes.FailedPrecondition {
-		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-	} else {
-		log.Debugf("disconnected from placement: %v", err)
 	}
 }
 
@@ -150,12 +121,14 @@ func (p *ActorPlacement) Start() {
 	if established := p.establishStreamConn(); !established {
 		return
 	}
-	// establish connection loop
+
+	// establish connection loop, whenever a disconnect occurs it starts to run trying to connect to a new server.
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
 		for !p.shutdown.Load() {
-			p.client.waitWhile(func(streamConnAlive bool) bool {
+			// wait until disconnection occurs or shutdown is triggered
+			p.client.waitUntil(func(streamConnAlive bool) bool {
 				return !streamConnAlive || p.shutdown.Load()
 			})
 
@@ -172,7 +145,7 @@ func (p *ActorPlacement) Start() {
 		defer p.shutdownConnLoop.Done()
 		for !p.shutdown.Load() {
 			// Wait until stream is connected or shutdown is triggered.
-			p.client.waitWhile(func(streamAlive bool) bool {
+			p.client.waitUntil(func(streamAlive bool) bool {
 				return streamAlive || p.shutdown.Load()
 			})
 
@@ -183,8 +156,9 @@ func (p *ActorPlacement) Start() {
 
 			// TODO: we may need to handle specific errors later.
 			if err != nil {
-				p.client.disconnect()
-				p.onPlacementError(err)
+				p.client.disconnectFn(func() {
+					p.onPlacementError(err) // depending on the returned error a new server could be used
+				})
 			} else {
 				p.onPlacementOrder(resp)
 			}
@@ -198,7 +172,7 @@ func (p *ActorPlacement) Start() {
 		defer p.shutdownConnLoop.Done()
 		for !p.shutdown.Load() {
 			// Wait until stream is connected or shutdown is triggered.
-			p.client.waitWhile(func(streamAlive bool) bool {
+			p.client.waitUntil(func(streamAlive bool) bool {
 				return streamAlive || p.shutdown.Load()
 			})
 
@@ -249,53 +223,43 @@ func (p *ActorPlacement) Stop() {
 	p.shutdownConnLoop.Wait()
 }
 
-var errEstablishingTLSConn = errors.New("failed to establish TLS credentials for actor placement service")
-
-// GetGrpcOptsGetter returns a function that provides the grpc options and once defined, a cached version will be returned.
-func GetGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) func() ([]grpc.DialOption, error) {
-	mu := sync.RWMutex{}
-	var cached []grpc.DialOption
-	return func() ([]grpc.DialOption, error) {
-		mu.RLock()
-		if cached != nil {
-			mu.RUnlock()
-			return cached, nil
-		}
-		mu.RUnlock()
-		mu.Lock()
-		defer mu.Unlock()
-		opts, err := daprCredentials.GetClientOptions(clientCert, security.TLSServerName)
-		if err != nil {
-			log.Errorf("%s: %s", errEstablishingTLSConn, err)
-			return nil, errEstablishingTLSConn
-		}
-
-		if diag.DefaultGRPCMonitoring.IsEnabled() {
-			opts = append(
-				opts,
-				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
-		}
-
-		if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
-			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
-			// With round robin load balancer, Dapr can find the leader automatically.
-			opts = append(opts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
-		}
-		cached = opts
-		return cached, nil
+// WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.
+func (p *ActorPlacement) WaitUntilPlacementTableIsReady() {
+	if p.tableIsBlocked.Load() {
+		<-p.unblockSignal
 	}
+}
+
+// LookupActor resolves to actor service instance address using consistent hashing table.
+func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string) {
+	p.placementTableLock.RLock()
+	defer p.placementTableLock.RUnlock()
+
+	if p.placementTables == nil {
+		return "", ""
+	}
+
+	t := p.placementTables.Entries[actorType]
+	if t == nil {
+		return "", ""
+	}
+	host, err := t.GetHost(actorID)
+	if err != nil || host == nil {
+		return "", ""
+	}
+	return host.Name, host.AppID
 }
 
 //nolint:nosnakecase
 func (p *ActorPlacement) establishStreamConn() (established bool) {
 	for !p.shutdown.Load() {
-		serverAddr := p.serverAddr[p.serverIndex.Load()]
-
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthFn() {
 			time.Sleep(placementReconnectInterval)
 			continue
 		}
+
+		serverAddr := p.serverAddr[p.serverIndex.Load()]
 
 		log.Debugf("try to connect to placement service: %s", serverAddr)
 
@@ -316,6 +280,18 @@ func (p *ActorPlacement) establishStreamConn() (established bool) {
 	}
 
 	return false
+}
+
+// onPlacementError closes the current placement stream and reestablish the connection again,
+// uses a different placement server depending on the error code
+func (p *ActorPlacement) onPlacementError(err error) {
+	s, ok := status.FromError(err)
+	// If the current server is not leader, then it will try to the next server.
+	if ok && s.Code() == codes.FailedPrecondition {
+		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
+	} else {
+		log.Debugf("disconnected from placement: %v", err)
+	}
 }
 
 func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
@@ -393,29 +369,16 @@ func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	log.Infof("placement tables updated, version: %s", in.GetVersion())
 }
 
-// WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.
-func (p *ActorPlacement) WaitUntilPlacementTableIsReady() {
-	if p.tableIsBlocked.Load() {
-		<-p.unblockSignal
+// addDNSResolverPrefix add the `dns://` prefix to the given addresses
+func addDNSResolverPrefix(addr []string) []string {
+	resolvers := make([]string, 0, len(addr))
+	for _, a := range addr {
+		prefix := ""
+		host, _, err := net.SplitHostPort(a)
+		if err == nil && net.ParseIP(host) == nil {
+			prefix = "dns:///"
+		}
+		resolvers = append(resolvers, prefix+a)
 	}
-}
-
-// LookupActor resolves to actor service instance address using consistent hashing table.
-func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string) {
-	p.placementTableLock.RLock()
-	defer p.placementTableLock.RUnlock()
-
-	if p.placementTables == nil {
-		return "", ""
-	}
-
-	t := p.placementTables.Entries[actorType]
-	if t == nil {
-		return "", ""
-	}
-	host, err := t.GetHost(actorID)
-	if err != nil || host == nil {
-		return "", ""
-	}
-	return host.Name, host.AppID
+	return resolvers
 }

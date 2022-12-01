@@ -22,12 +22,18 @@ import (
 	"google.golang.org/grpc"
 )
 
+// placementClient implements the best practices when handling grpc streams
+// using exclusion locks to prevent concurrent Recv and Send from channels.
+// properly handle stream closing by draining the renamining events until receives an error.
+// and broadcasts connection results based on new connections and disconnects.
 type placementClient struct {
 	// getGrpcOpts are the options that should be used to connect to the placement service
 	getGrpcOpts func() ([]grpc.DialOption, error)
 
-	streamMu *sync.RWMutex
-	closeMu  *sync.RWMutex
+	// recvLock prevents concurrent access to the Recv() method.
+	recvLock *sync.Mutex
+	// sendLock prevents CloseSend and Send being used concurrently.
+	sendLock *sync.Mutex
 
 	// clientStream is the client side stream.
 	clientStream v1pb.Placement_ReportDaprStatusClient
@@ -70,54 +76,67 @@ func (c *placementClient) connectToServer(serverAddr string) error {
 	}
 
 	c.streamConnectedCond.L.Lock()
-	c.streamMu.Lock()
-	c.closeMu.Lock()
+	defer c.streamConnectedCond.L.Unlock()
 	c.ctx, c.cancel, c.clientStream, c.clientConn = ctx, cancel, stream, conn
-	c.closeMu.Unlock()
-	c.streamMu.Unlock()
 	c.streamConnAlive = true
 	c.streamConnectedCond.Broadcast()
-	c.streamConnectedCond.L.Unlock()
 	return nil
 }
 
 // drain the grpc stream as described in the documentation
 // https://github.com/grpc/grpc-go/blob/be1fb4f27549f736b9b4ec26104c7c6b29845ad0/stream.go#L109
-func (c *placementClient) drain(stream grpc.ClientStream, cancelFunc context.CancelFunc) {
-	stream.CloseSend()
+func (c *placementClient) drain(stream grpc.ClientStream, conn *grpc.ClientConn, cancelFunc context.CancelFunc) {
+	c.sendLock.Lock()
+	stream.CloseSend() // CloseSend cannot be invoked concurrently with Send()
+	c.sendLock.Unlock()
+	conn.Close()
 	cancelFunc()
 
+	c.recvLock.Lock()
+	defer c.recvLock.Unlock()
 	for {
-		if err := stream.RecvMsg(struct{}{}); err != nil {
+		if err := stream.RecvMsg(struct{}{}); err != nil { // recv cannot be invoked concurrently with other Recv.
 			break
 		}
 	}
 }
 
-func (c *placementClient) disconnect() {
-	c.closeMu.RLock()
-	c.clientConn.Close()
-	c.closeMu.RUnlock()
+var noop = func() {}
 
+// disconnect from the current server without any additional operation.
+func (c *placementClient) disconnect() {
+	c.disconnectFn(noop)
+}
+
+// disonnectFn disconnects from the current server providing a way to run a function inside the lock in case of new disconnection occurs.
+// the function will not be executed in case of the stream is already disconnected.
+func (c *placementClient) disconnectFn(insideLockFn func()) {
 	c.streamConnectedCond.L.Lock()
-	defer c.streamConnectedCond.L.Unlock()
 	if !c.streamConnAlive {
+		c.streamConnectedCond.Broadcast()
+		c.streamConnectedCond.L.Unlock()
 		return
 	}
 
-	c.drain(c.clientStream, c.cancel)
+	c.drain(c.clientStream, c.clientConn, c.cancel)
 
 	c.streamConnAlive = false
 	c.streamConnectedCond.Broadcast()
+
+	insideLockFn()
+
+	c.streamConnectedCond.L.Unlock()
 }
 
+// isConnected returns if the current instance is connected to any placement server.
 func (c *placementClient) isConnected() bool {
 	c.streamConnectedCond.L.Lock()
 	defer c.streamConnectedCond.L.Unlock()
 	return c.streamConnAlive
 }
 
-func (c *placementClient) waitWhile(predicate func(streamConnAlive bool) bool) {
+// waitUntil receives a predicate that given a current stream status returns a boolean that indicates if the stream reached the desired state.
+func (c *placementClient) waitUntil(predicate func(streamConnAlive bool) bool) {
 	c.streamConnectedCond.L.Lock()
 	for !predicate(c.streamConnAlive) {
 		c.streamConnectedCond.Wait()
@@ -125,24 +144,33 @@ func (c *placementClient) waitWhile(predicate func(streamConnAlive bool) bool) {
 	c.streamConnectedCond.L.Unlock()
 }
 
+// recv is a convenient way to call recv providing thread-safe guarantees with disconnections and draining operations.
 func (c *placementClient) recv() (*v1pb.PlacementOrder, error) {
 	c.streamConnectedCond.L.Lock()
-	defer c.streamConnectedCond.L.Unlock()
-	return c.clientStream.Recv() // cannot recv in parallel
+	stream := c.clientStream
+	c.streamConnectedCond.L.Unlock()
+	c.recvLock.Lock()
+	defer c.recvLock.Unlock()
+	return stream.Recv() // cannot recv in parallel
 }
 
+// sned is a convenient way of invoking send providing thread-safe guarantees with `CloseSend` operations.
 func (c *placementClient) send(host *v1pb.Host) error {
 	c.streamConnectedCond.L.Lock()
-	defer c.streamConnectedCond.L.Unlock()
-	return c.clientStream.Send(host) // cannot close send and send in parallel
+	stream := c.clientStream
+	c.streamConnectedCond.L.Unlock()
+	c.sendLock.Lock()
+	defer c.sendLock.Unlock()
+	return stream.Send(host) // cannot close send and send in parallel
 }
 
+// newPlacementClient creates a new placement client for the given dial opts.
 func newPlacementClient(optionGetter func() ([]grpc.DialOption, error)) *placementClient {
 	return &placementClient{
 		getGrpcOpts:         optionGetter,
 		streamConnAlive:     false,
 		streamConnectedCond: sync.NewCond(&sync.Mutex{}),
-		closeMu:             &sync.RWMutex{},
-		streamMu:            &sync.RWMutex{},
+		recvLock:            &sync.Mutex{},
+		sendLock:            &sync.Mutex{},
 	}
 }

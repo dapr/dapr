@@ -289,15 +289,24 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 	})
 }
 
-func newTestServer() (string, *testServer, func()) {
+func newTestServer() (conn string, srv *testServer, cleanup func()) {
+	srv = &testServer{}
+	conn, cleanup = newTestServerWithOpts(func(s *grpc.Server) {
+		srv.isGracefulShutdown.Store(false)
+		srv.setLeader(false)
+		placementv1pb.RegisterPlacementServer(s, srv)
+	})
+	return
+}
+
+func newTestServerWithOpts(useGrpcServer ...func(*grpc.Server)) (string, func()) {
 	port, _ := freeport.GetFreePort()
 	conn := fmt.Sprintf("127.0.0.1:%d", port)
 	listener, _ := net.Listen("tcp", conn)
 	server := grpc.NewServer()
-	srv := &testServer{}
-	srv.isGracefulShutdown.Store(false)
-	srv.setLeader(false)
-	placementv1pb.RegisterPlacementServer(server, srv)
+	for _, opt := range useGrpcServer {
+		opt(server)
+	}
 
 	go func() {
 		server.Serve(listener)
@@ -311,7 +320,7 @@ func newTestServer() (string, *testServer, func()) {
 		server.Stop()
 	}
 
-	return conn, srv, cleanup
+	return conn, cleanup
 }
 
 type testServer struct {
