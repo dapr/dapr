@@ -22,7 +22,6 @@ import (
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,21 +44,17 @@ func TestComponentsPatch(t *testing.T) {
 		Name: "app",
 	}
 	testCases := []struct {
-		name             string
-		appID            string
-		componentsClient componentsv1alpha1.ComponentInterface
-		pod              *corev1.Pod
-		expPatch         []sidecar.PatchOperation
-		expMount         *corev1.VolumeMount
+		name           string
+		appID          string
+		componentsList []componentsapi.Component
+		pod            *corev1.Pod
+		expPatch       []sidecar.PatchOperation
+		expMount       *corev1.VolumeMount
 	}{
 		{
 			"patch should return empty patch operations when none pluggable components are specified",
 			"",
-			&fakeComponentsClient{
-				componentList: &componentsapi.ComponentList{
-					Items: []componentsapi.Component{},
-				},
-			},
+			[]componentsapi.Component{},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{},
@@ -74,11 +69,7 @@ func TestComponentsPatch(t *testing.T) {
 		{
 			"patch should create pluggable component unix socket volume",
 			"",
-			&fakeComponentsClient{
-				componentList: &componentsapi.ComponentList{
-					Items: []componentsapi.Component{},
-				},
-			},
+			[]componentsapi.Component{},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -116,13 +107,9 @@ func TestComponentsPatch(t *testing.T) {
 		{
 			"patch should not create injectable containers operations when app is scopped but has no annotations",
 			appName,
-			&fakeComponentsClient{
-				componentList: &componentsapi.ComponentList{
-					Items: []componentsapi.Component{{
-						Scopes: []string{appName},
-					}},
-				},
-			},
+			[]componentsapi.Component{{
+				Scopes: []string{appName},
+			}},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -160,22 +147,18 @@ func TestComponentsPatch(t *testing.T) {
 		{
 			"patch should create injectable containers operations when app is scopped but and has annotations",
 			appName,
-			&fakeComponentsClient{
-				componentList: &componentsapi.ComponentList{
-					Items: []componentsapi.Component{{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: componentName,
-							Annotations: map[string]string{
-								annotations.KeyPluggableComponentContainerImage:                 componentImage,
-								annotations.KeyPluggableComponentContainerVolumeMountsReadOnly:  "readonly:/read-only",
-								annotations.KeyPluggableComponentContainerVolumeMountsReadWrite: "readwrite:/read-write",
-								annotations.KeyPluggableComponentContainerEnvironment:           "A=B",
-							},
-						},
-						Scopes: []string{appName},
-					}},
+			[]componentsapi.Component{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: componentName,
+					Annotations: map[string]string{
+						annotations.KeyPluggableComponentContainerImage:                 componentImage,
+						annotations.KeyPluggableComponentContainerVolumeMountsReadOnly:  "readonly:/read-only",
+						annotations.KeyPluggableComponentContainerVolumeMountsReadWrite: "readwrite:/read-write",
+						annotations.KeyPluggableComponentContainerEnvironment:           "A=B",
+					},
 				},
-			},
+				Scopes: []string{appName},
+			}},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -264,11 +247,7 @@ func TestComponentsPatch(t *testing.T) {
 		{
 			"patch should add pluggable component unix socket volume when pod already has volumes",
 			"",
-			&fakeComponentsClient{
-				componentList: &componentsapi.ComponentList{
-					Items: []componentsapi.Component{},
-				},
-			},
+			[]componentsapi.Component{},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -309,9 +288,7 @@ func TestComponentsPatch(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			_, componentContainers := SplitContainers(*test.pod)
-			injectable, err := Injectable(test.appID, test.componentsClient)
-			require.NoError(t, err)
-			patch, volumeMount := PatchOps(componentContainers, injectable, test.pod)
+			patch, volumeMount := PatchOps(componentContainers, Injectable(test.appID, test.componentsList), test.pod)
 			assert.Equal(t, patch, test.expPatch)
 			assert.Equal(t, volumeMount, test.expMount)
 		})
