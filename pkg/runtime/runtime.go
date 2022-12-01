@@ -2416,7 +2416,6 @@ func (a *DaprRuntime) cleanSocket() {
 
 func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
-	// time.Sleep(15 * time.Second)
 	defer a.cleanSocket()
 	log.Info("Dapr shutting down")
 	log.Info("Stopping PubSub subscribers and input bindings")
