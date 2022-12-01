@@ -254,6 +254,7 @@ type pubsubItem struct {
 	scopedSubscriptions []string
 	scopedPublishings   []string
 	allowedTopics       []string
+	namespaceScoped     bool
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
@@ -718,10 +719,15 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
+	policyRunner := resiliency.NewRunner[any](ctx,
+		a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub),
+	)
 	routeMetadata := route.metadata
+
+	namespaced := a.pubSubs[name].namespaceScoped
+
 	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
-		err := a.bulkSubscribeTopic(ctx, policy, name, topic, route)
+		err := a.bulkSubscribeTopic(ctx, policyRunner, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
 			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
@@ -729,8 +735,14 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		a.topicCtxCancels[subKey] = cancel
 		return nil
 	}
+
+	subscribeTopic := topic
+	if namespaced {
+		subscribeTopic = a.namespace + topic
+	}
+
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
-		Topic:    topic,
+		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 		if msg.Metadata == nil {
@@ -739,56 +751,61 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		msg.Metadata[pubsubName] = name
 
+		msgTopic := msg.Topic
+		if a.pubSubs[name].namespaceScoped {
+			msgTopic = strings.Replace(msgTopic, a.namespace, "", 1)
+		}
+
 		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if route.deadLetterTopic != "" {
 				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 					return nil
 				}
 			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
 			return err
 		}
 
 		var cloudEvent map[string]interface{}
 		data := msg.Data
 		if rawPayload {
-			cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
+			cloudEvent = pubsub.FromRawPayload(msg.Data, msgTopic, name)
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
-				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
 				if route.deadLetterTopic != "" {
 					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 						return nil
 					}
 				}
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
 				return err
 			}
 		} else {
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
-				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
 				if route.deadLetterTopic != "" {
 					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 						return nil
 					}
 				}
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
 				return err
 			}
 		}
 
 		if pubsub.HasExpired(cloudEvent) {
 			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 
 			if route.deadLetterTopic != "" {
 				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
@@ -798,44 +815,46 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
 		if err != nil {
-			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
+			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msgTopic, err)
 			if route.deadLetterTopic != "" {
 				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 					return nil
 				}
 			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
 			return err
 		}
 		if !shouldProcess {
 			// The event does not match any route specified so ignore it.
-			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msgTopic)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 			if route.deadLetterTopic != "" {
 				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
 			}
 			return nil
 		}
 
-		err = policy(func(ctx context.Context) error {
-			psm := &pubsubSubscribedMessage{
-				cloudEvent: cloudEvent,
-				data:       data,
-				topic:      msg.Topic,
-				metadata:   msg.Metadata,
-				path:       routePath,
-				pubsub:     name,
-			}
+		psm := &pubsubSubscribedMessage{
+			cloudEvent: cloudEvent,
+			data:       data,
+			topic:      msgTopic,
+			metadata:   msg.Metadata,
+			path:       routePath,
+			pubsub:     name,
+		}
+		_, err = policyRunner(func(ctx context.Context) (any, error) {
+			var pErr error
 			switch a.runtimeConfig.ApplicationProtocol {
 			case HTTPProtocol:
-				return a.publishMessageHTTP(ctx, psm)
+				pErr = a.publishMessageHTTP(ctx, psm)
 			case GRPCProtocol:
-				return a.publishMessageGRPC(ctx, psm)
+				pErr = a.publishMessageGRPC(ctx, psm)
 			default:
-				return backoff.Permanent(errors.New("invalid application protocol"))
+				pErr = backoff.Permanent(errors.New("invalid application protocol"))
 			}
+			return nil, pErr
 		})
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
@@ -1099,13 +1118,12 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		ops := binding.Operations()
 		for _, o := range ops {
 			if o == req.Operation {
-				var resp *bindings.InvokeResponse
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name, resiliency.Binding)
-				err := policy(func(ctx context.Context) (err error) {
-					resp, err = binding.Invoke(ctx, req)
-					return err
+				policyRunner := resiliency.NewRunner[*bindings.InvokeResponse](a.ctx,
+					a.resiliency.ComponentOutboundPolicy(name, resiliency.Binding),
+				)
+				return policyRunner(func(ctx context.Context) (*bindings.InvokeResponse, error) {
+					return binding.Invoke(ctx, req)
 				})
-				return resp, err
 			}
 		}
 		supported := make([]string, 0, len(ops))
@@ -1121,9 +1139,11 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName, resiliency.Statestore)
-				err := policy(func(ctx context.Context) (err error) {
-					return a.stateStores[response.StoreName].BulkSet(reqs)
+				policyRunner := resiliency.NewRunner[any](a.ctx,
+					a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
+				)
+				_, err := policyRunner(func(ctx context.Context) (any, error) {
+					return nil, a.stateStores[response.StoreName].BulkSet(reqs)
 				})
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
@@ -1210,11 +1230,11 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		start := time.Now()
 
-		var resp *runtimev1pb.BindingEventResponse
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		err = policy(func(ctx context.Context) (err error) {
-			resp, err = client.OnBindingEvent(ctx, req)
-			return err
+		policyRunner := resiliency.NewRunner[*runtimev1pb.BindingEventResponse](ctx,
+			a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding),
+		)
+		resp, err := policyRunner(func(ctx context.Context) (*runtimev1pb.BindingEventResponse, error) {
+			return client.OnBindingEvent(ctx, req)
 		})
 
 		if span != nil {
@@ -1233,11 +1253,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
-			var body []byte
-			if resp != nil {
-				body = resp.Data
-			}
-			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
+			return nil, fmt.Errorf("error invoking app: %w", err)
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
@@ -1269,22 +1285,26 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		req.WithMetadata(reqMetadata)
 
-		var resp *invokev1.InvokeMethodResponse
 		respErr := errors.New("error sending binding event to application")
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		err := policy(func(ctx context.Context) (err error) {
-			resp, err = a.appChannel.InvokeMethod(ctx, req)
-			if err != nil {
-				return err
+		policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+			a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding),
+		)
+		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+			rResp, rErr := a.appChannel.InvokeMethod(ctx, req)
+			if rErr != nil {
+				return rResp, rErr
 			}
-
-			if resp != nil && resp.Status().Code != nethttp.StatusOK {
-				return fmt.Errorf("%w, status %d", respErr, resp.Status().Code)
+			if rResp != nil && rResp.Status().Code != nethttp.StatusOK {
+				return rResp, fmt.Errorf("%w, status %d", respErr, rResp.Status().Code)
 			}
-			return nil
+			return rResp, nil
 		})
 		if err != nil && !errors.Is(err, respErr) {
-			return nil, errors.Wrap(err, "error invoking app")
+			return nil, fmt.Errorf("error invoking app: %w", err)
+		}
+
+		if resp == nil {
+			return nil, errors.New("error invoking app: response object is nil")
 		}
 
 		if span != nil {
@@ -1299,7 +1319,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code < 200 || resp.Status().Code > 299 {
 			_, body := resp.RawData()
-			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
 
 		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
@@ -1850,6 +1870,7 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 		scopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties),
 		scopedPublishings:   scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties),
 		allowedTopics:       scopes.GetAllowedTopics(properties),
+		namespaceScoped:     metadataContainsNamespace(c.Spec.Metadata),
 	}
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 
@@ -1872,10 +1893,17 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName, resiliency.Pubsub)
-	return policy(func(ctx context.Context) (err error) {
-		return ps.component.Publish(req)
+	if ps.namespaceScoped {
+		req.Topic = a.namespace + req.Topic
+	}
+
+	policyRunner := resiliency.NewRunner[any](a.ctx,
+		a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
+	)
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
+		return nil, ps.component.Publish(req)
 	})
+	return err
 }
 
 func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
@@ -1892,6 +1920,16 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	}
 	log.Debugf("pubsub %s does not implement the bulkPublish API, defaulting to normal publish", req.PubsubName)
 	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
+}
+
+func metadataContainsNamespace(items []componentsV1alpha1.MetadataItem) bool {
+	for _, c := range items {
+		val := c.Value.String()
+		if strings.Contains(val, "{namespace}") {
+			return true
+		}
+	}
+	return false
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
@@ -2548,7 +2586,7 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 }
 
 func closeComponent(component any, logmsg string, merr *error) {
-	if closer, ok := component.(io.Closer); ok {
+	if closer, ok := component.(io.Closer); ok && closer != nil {
 		if err := closer.Close(); err != nil {
 			err = fmt.Errorf("error closing %s: %w", logmsg, err)
 			*merr = multierror.Append(*merr, err)
