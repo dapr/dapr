@@ -719,13 +719,15 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
+	policyRunner := resiliency.NewRunner[any](ctx,
+		a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub),
+	)
 	routeMetadata := route.metadata
 
 	namespaced := a.pubSubs[name].namespaceScoped
 
 	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
-		err := a.bulkSubscribeTopic(ctx, policy, name, topic, route, namespaced)
+		err := a.bulkSubscribeTopic(ctx, policyRunner, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
 			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
@@ -834,23 +836,25 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			return nil
 		}
 
-		err = policy(func(ctx context.Context) error {
-			psm := &pubsubSubscribedMessage{
-				cloudEvent: cloudEvent,
-				data:       data,
-				topic:      msgTopic,
-				metadata:   msg.Metadata,
-				path:       routePath,
-				pubsub:     name,
-			}
+		psm := &pubsubSubscribedMessage{
+			cloudEvent: cloudEvent,
+			data:       data,
+			topic:      msgTopic,
+			metadata:   msg.Metadata,
+			path:       routePath,
+			pubsub:     name,
+		}
+		_, err = policyRunner(func(ctx context.Context) (any, error) {
+			var pErr error
 			switch a.runtimeConfig.ApplicationProtocol {
 			case HTTPProtocol:
-				return a.publishMessageHTTP(ctx, psm)
+				pErr = a.publishMessageHTTP(ctx, psm)
 			case GRPCProtocol:
-				return a.publishMessageGRPC(ctx, psm)
+				pErr = a.publishMessageGRPC(ctx, psm)
 			default:
-				return backoff.Permanent(errors.New("invalid application protocol"))
+				pErr = backoff.Permanent(errors.New("invalid application protocol"))
 			}
+			return nil, pErr
 		})
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
@@ -1114,13 +1118,12 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		ops := binding.Operations()
 		for _, o := range ops {
 			if o == req.Operation {
-				var resp *bindings.InvokeResponse
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name, resiliency.Binding)
-				err := policy(func(ctx context.Context) (err error) {
-					resp, err = binding.Invoke(ctx, req)
-					return err
+				policyRunner := resiliency.NewRunner[*bindings.InvokeResponse](a.ctx,
+					a.resiliency.ComponentOutboundPolicy(name, resiliency.Binding),
+				)
+				return policyRunner(func(ctx context.Context) (*bindings.InvokeResponse, error) {
+					return binding.Invoke(ctx, req)
 				})
-				return resp, err
 			}
 		}
 		supported := make([]string, 0, len(ops))
@@ -1136,9 +1139,11 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName, resiliency.Statestore)
-				err := policy(func(ctx context.Context) (err error) {
-					return a.stateStores[response.StoreName].BulkSet(reqs)
+				policyRunner := resiliency.NewRunner[any](a.ctx,
+					a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
+				)
+				_, err := policyRunner(func(ctx context.Context) (any, error) {
+					return nil, a.stateStores[response.StoreName].BulkSet(reqs)
 				})
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
@@ -1225,11 +1230,11 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		start := time.Now()
 
-		var resp *runtimev1pb.BindingEventResponse
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		err = policy(func(ctx context.Context) (err error) {
-			resp, err = client.OnBindingEvent(ctx, req)
-			return err
+		policyRunner := resiliency.NewRunner[*runtimev1pb.BindingEventResponse](ctx,
+			a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding),
+		)
+		resp, err := policyRunner(func(ctx context.Context) (*runtimev1pb.BindingEventResponse, error) {
+			return client.OnBindingEvent(ctx, req)
 		})
 
 		if span != nil {
@@ -1248,11 +1253,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
-			var body []byte
-			if resp != nil {
-				body = resp.Data
-			}
-			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
+			return nil, fmt.Errorf("error invoking app: %w", err)
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
@@ -1284,22 +1285,26 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		req.WithMetadata(reqMetadata)
 
-		var resp *invokev1.InvokeMethodResponse
 		respErr := errors.New("error sending binding event to application")
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
-		err := policy(func(ctx context.Context) (err error) {
-			resp, err = a.appChannel.InvokeMethod(ctx, req)
-			if err != nil {
-				return err
+		policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+			a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding),
+		)
+		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+			rResp, rErr := a.appChannel.InvokeMethod(ctx, req)
+			if rErr != nil {
+				return rResp, rErr
 			}
-
-			if resp != nil && resp.Status().Code != nethttp.StatusOK {
-				return fmt.Errorf("%w, status %d", respErr, resp.Status().Code)
+			if rResp != nil && rResp.Status().Code != nethttp.StatusOK {
+				return rResp, fmt.Errorf("%w, status %d", respErr, rResp.Status().Code)
 			}
-			return nil
+			return rResp, nil
 		})
 		if err != nil && !errors.Is(err, respErr) {
-			return nil, errors.Wrap(err, "error invoking app")
+			return nil, fmt.Errorf("error invoking app: %w", err)
+		}
+
+		if resp == nil {
+			return nil, errors.New("error invoking app: response object is nil")
 		}
 
 		if span != nil {
@@ -1314,7 +1319,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code < 200 || resp.Status().Code > 299 {
 			_, body := resp.RawData()
-			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
 
 		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
@@ -1888,15 +1893,17 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName, resiliency.Pubsub)
-
 	if ps.namespaceScoped {
 		req.Topic = a.namespace + req.Topic
 	}
 
-	return policy(func(ctx context.Context) (err error) {
-		return ps.component.Publish(req)
+	policyRunner := resiliency.NewRunner[any](a.ctx,
+		a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
+	)
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
+		return nil, ps.component.Publish(req)
 	})
+	return err
 }
 
 func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {

@@ -27,29 +27,36 @@ import (
 )
 
 func TestCircuitBreaker(t *testing.T) {
-	log := logger.NewLogger("test")
 	t.Parallel()
+	log := logger.NewLogger("test")
+
 	var trip expr.Expr
 	err := trip.DecodeString("consecutiveFailures > 2")
 	require.NoError(t, err)
-	cb := breaker.CircuitBreaker{ //nolint:exhaustivestruct
+
+	cb := breaker.CircuitBreaker{
 		Name:    "test",
 		Trip:    &trip,
 		Timeout: 100 * time.Millisecond,
 	}
 	cb.Initialize(log)
+
 	for i := 0; i < 3; i++ {
-		cb.Execute(func() error {
-			return errors.New("test")
+		cb.Execute(func() (any, error) {
+			return nil, errors.New("test")
 		})
 	}
-	err = cb.Execute(func() error {
-		return nil
+
+	res, err := cb.Execute(func() (any, error) {
+		return "❌", nil
 	})
 	assert.EqualError(t, err, "circuit breaker is open")
+	assert.Nil(t, res)
+
 	time.Sleep(500 * time.Millisecond)
-	err = cb.Execute(func() error {
-		return nil
+	res, err = cb.Execute(func() (any, error) {
+		return 42, nil
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, 42, res)
 }
