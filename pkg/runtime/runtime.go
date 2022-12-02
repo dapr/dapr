@@ -2220,11 +2220,6 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 		}
 
 		secretStoreName := a.authSecretStoreOrDefault(component)
-		secretStore := a.getSecretStore(secretStoreName)
-		if secretStore == nil {
-			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
-			return component, secretStoreName
-		}
 
 		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
@@ -2252,6 +2247,12 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 
 			component.Spec.Metadata[i] = m
 			continue
+		}
+
+		secretStore := a.getSecretStore(secretStoreName)
+		if secretStore == nil {
+			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
+			return component, secretStoreName
 		}
 
 		resp, ok := cache[m.SecretKeyRef.Name]
