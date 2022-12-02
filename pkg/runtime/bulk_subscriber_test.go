@@ -28,30 +28,31 @@ import (
 )
 
 const (
-	data1     string = `{"orderId":"1"}`
-	data2     string = `{"orderId":"2"}`
-	data3     string = `{"orderId":"3"}`
-	data4     string = `{"orderId":"4"}`
-	data5     string = `{"orderId":"5"}`
-	data6     string = `{"orderId":"6"}`
-	data7     string = `{"orderId":"7"}`
-	data8     string = `{"orderId":"8"}`
-	data9     string = ``
-	data10    string = `{"orderId":"10"}`
-	ext1Key   string = "ext1Key"
-	ext1Value string = "ext1Value"
-	ext2Key   string = "ext2Key"
-	ext2Value string = "ext2Value"
-	order1    string = `{"data":` + data1 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	order2    string = `{"data":` + data2 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
-	order3    string = `{"data":` + data3 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"6767010u-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	order4    string = `{"data":` + data4 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"91011121-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
-	order5    string = `{"data":` + data5 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"718271cd-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	order6    string = `{"data":` + data6 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"7uw2233d-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
-	order7    string = `{"data":` + data7 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"78sqs98s-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	order8    string = `{"data":` + data8 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"45122j82-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
-	order9    string = `{"` + ext1Key + `":"` + ext1Value + `","orderId":"9","type":"type1"}`
-	order10   string = `{"data":` + data10 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"ded2rd44-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	data1      string = `{"orderId":"1"}`
+	data2      string = `{"orderId":"2"}`
+	data3      string = `{"orderId":"3"}`
+	data4      string = `{"orderId":"4"}`
+	data5      string = `{"orderId":"5"}`
+	data6      string = `{"orderId":"6"}`
+	data7      string = `{"orderId":"7"}`
+	data8      string = `{"orderId":"8"}`
+	data9      string = ``
+	data10     string = `{"orderId":"10"}`
+	ext1Key    string = "ext1Key"
+	ext1Value  string = "ext1Value"
+	ext2Key    string = "ext2Key"
+	ext2Value  string = "ext2Value"
+	order1     string = `{"data":` + data1 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
+	order2     string = `{"data":` + data2 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	order3     string = `{"data":` + data3 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"6767010u-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
+	order4     string = `{"data":` + data4 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"91011121-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	order5     string = `{"data":` + data5 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"718271cd-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
+	order6     string = `{"data":` + data6 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"7uw2233d-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	order7     string = `{"data":` + data7 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"78sqs98s-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
+	order8     string = `{"data":` + data8 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"45122j82-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
+	order9     string = `{"` + ext1Key + `":"` + ext1Value + `","orderId":"9","type":"type1"}`
+	order10    string = `{"data":` + data10 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"ded2rd44-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	wrongOrder string = `{"data":` + data2 + `,"datacontenttype":"application/xml;wwwwwww","` + ext2Key + `":"` + ext2Value + `","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
 )
 
 func getBulkMessageEntries(len int) []pubsub.BulkMessageEntry {
@@ -69,6 +70,12 @@ func getBulkMessageEntries(len int) []pubsub.BulkMessageEntry {
 	bulkEntries[9] = pubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
 
 	return bulkEntries[:len]
+}
+
+func getBulkMessageEntriesWithWrongData() []pubsub.BulkMessageEntry {
+	bulkEntries := make([]pubsub.BulkMessageEntry, 1)
+	bulkEntries[0] = pubsub.BulkMessageEntry{EntryId: "1", Event: []byte(wrongOrder)}
+	return bulkEntries
 }
 
 type ExpectedExtension struct {
@@ -1129,6 +1136,73 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
+
+	t.Run("GRPC - verify bulk Subscribe Response when error while fetching Entry due to wrong dataContentType", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		defer stopRuntime(t, rt)
+
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+
+		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
+			Subscriptions: []*runtimev1pb.TopicSubscription{
+				{
+					PubsubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Routes: &runtimev1pb.TopicRoutes{
+						Default: "orders",
+					},
+					Metadata: map[string]string{"bulkSubscribe": "true"},
+				},
+			},
+		}
+		msgArr := getBulkMessageEntriesWithWrongData()
+		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
+		for k, msg := range msgArr {
+			responseEntries[k] = &runtimev1pb.TopicEventBulkResponseEntry{
+				EntryId: msg.EntryId,
+			}
+		}
+		// create mock application server first
+		mockServer := &channelt.MockServer{
+			ListTopicSubscriptionsResponse: &subscriptionItems,
+			BulkResponsePerPath:            nil,
+			Error:                          nil,
+		}
+		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
+		if grpcServer != nil {
+			// properly stop the gRPC server
+			defer grpcServer.Stop()
+		}
+
+		rt.createAppChannel()
+		defer rt.grpc.CloseAppClient()
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+
+		expectedResponse := BulkResponseExpectation{
+			Responses: []BulkResponseEntryExpectation{
+				{EntryId: "1", IsError: true},
+			},
+		}
+
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+	})
+
 }
 
 func startTestAppCallbackAlphaGRPCServer(t *testing.T, port int, mockServer *channelt.MockServer) *grpc.Server {
