@@ -72,7 +72,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.13.0
 )
 
-require github.com/PaesslerAG/gval v1.0.0 // indirect
+require (
+	github.com/PaesslerAG/gval v1.0.0 // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
+)
 
 require (
 	cloud.google.com/go v0.105.0 // indirect
@@ -99,7 +102,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.10.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.1.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.5.1 // indirect
 	github.com/Azure/azure-storage-blob-go v0.10.0 // indirect
 	github.com/Azure/azure-storage-queue-go v0.0.0-20191125232315-636801874cdd // indirect
 	github.com/Azure/go-amqp v0.17.5 // indirect
@@ -416,3 +418,6 @@ replace (
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
+
+// temporary replace for struct change
+replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221114115438-c791f3c6bcc1

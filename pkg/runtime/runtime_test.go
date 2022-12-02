@@ -3748,10 +3748,6 @@ func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPub
 				Topic: req.Topic,
 			}
 			handler(context.Background(), pubsubMsg)
-			res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-				EntryId: entry.EntryId,
-				Status:  pubsub.PublishSucceeded,
-			})
 		}
 	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
 		nbm := &pubsub.BulkMessage{
