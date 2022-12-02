@@ -5095,46 +5095,6 @@ func matchContextInterface(v any) bool {
 	return ok
 }
 
-func TestMetadataContainsNamespace(t *testing.T) {
-	t.Run("namespace field present", func(t *testing.T) {
-		r := metadataContainsNamespace(
-			[]componentsV1alpha1.MetadataItem{
-				{
-					Value: componentsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("{namespace}")},
-					},
-				},
-			},
-		)
-
-		assert.True(t, r)
-	})
-
-	t.Run("namespace field not present", func(t *testing.T) {
-		r := metadataContainsNamespace(
-			[]componentsV1alpha1.MetadataItem{
-				{},
-			},
-		)
-
-		assert.False(t, r)
-	})
-}
-
-func TestNamespacedPublisher(t *testing.T) {
-	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	rt.namespace = "ns1"
-	defer stopRuntime(t, rt)
-
-	rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}, namespaceScoped: true}
-	rt.Publish(&pubsub.PublishRequest{
-		PubsubName: TestPubsubName,
-		Topic:      "topic0",
-	})
-
-	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Topic)
-}
-
 func TestGracefulShutdownPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	mockPubSub := new(daprt.MockPubSub)
