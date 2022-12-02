@@ -238,3 +238,27 @@ func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
 		assert.Equal(t, "22s", resMeta["ttl"], "expected val to be equal")
 	})
 }
+
+func TestFilter(t *testing.T) {
+	t.Run("should filter out empty values", func(t *testing.T) {
+		in := []string{"", "a", "", "b", "", "c"}
+		out := Filter(in, func(s string) bool {
+			return s != ""
+		}, false)
+		assert.Equal(t, []string{"a", "b", "c"}, out)
+	})
+	t.Run("should not filter if isFilterNotApplicable set to true", func(t *testing.T) {
+		in := []string{"", "a", "", "b", "", "c"}
+		out := Filter(in, func(s string) bool {
+			return s != ""
+		}, true)
+		assert.Equal(t, []string{"", "a", "", "b", "", "c"}, out)
+	})
+	t.Run("should filter out empty values and return empty collection if all values are filtered out", func(t *testing.T) {
+		in := []string{"", "", ""}
+		out := Filter(in, func(s string) bool {
+			return s != ""
+		}, false)
+		assert.Equal(t, []string{}, out)
+	})
+}
