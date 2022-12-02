@@ -429,8 +429,16 @@ setup-test-env-mongodb:
 delete-test-env-mongodb:
 	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
 
+# install zipkin to the cluster
+setup-test-env-zipkin:
+	$(KUBECTL) create deployment dapr-zipkin -n $(DAPR_TEST_NAMESPACE) --image ghcr.io/dapr/3rdparty/zipkin:latest
+	$(KUBECTL) expose deployment dapr-zipkin -n $(DAPR_TEST_NAMESPACE) --type ClusterIP --port 9411
+delete-test-env-zipkin:
+	$(KUBECTL) delete service dapr-zipkin -n ${DAPR_TEST_NAMESPACE}
+	$(KUBECTL) delete deployment dapr-zipkin -n ${DAPR_TEST_NAMESPACE}
+
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
