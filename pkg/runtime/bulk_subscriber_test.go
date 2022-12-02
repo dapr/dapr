@@ -1202,7 +1202,6 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
-
 }
 
 func startTestAppCallbackAlphaGRPCServer(t *testing.T, port int, mockServer *channelt.MockServer) *grpc.Server {
