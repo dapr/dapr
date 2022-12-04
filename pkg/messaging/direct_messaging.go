@@ -15,12 +15,14 @@ package messaging
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -136,13 +138,17 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
 func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, string, error) {
+	if targetAppID == "" {
+		return "", "", errors.New("app id is empty")
+	}
 	items := strings.Split(targetAppID, ".")
-	if len(items) == 1 {
+	switch len(items) {
+	case 1:
 		return targetAppID, d.namespace, nil
-	} else if len(items) == 2 {
+	case 2:
 		return items[0], items[1], nil
-	} else {
-		return "", "", errors.Errorf("invalid app id %s", targetAppID)
+	default:
+		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
 	}
 }
 
@@ -160,39 +166,27 @@ func (d *directMessaging) invokeWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			retriesExhaustedPath := false // Used to track final error state.
-			nullifyResponsePath := false  // Used to track final response state.
-			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
-			var resp *invokev1.InvokeMethodResponse
-			err := policy(func(ctx context.Context) (rErr error) {
-				var teardown func(destroy bool)
-				retriesExhaustedPath = false
-				resp, teardown, rErr = fn(ctx, app.id, app.namespace, app.address, req)
+			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
+			)
+			attempts := atomic.Int32{}
+			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+				attempt := attempts.Add(1)
+				rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 				if rErr == nil {
 					teardown(false)
-					return nil
+					return rResp, nil
 				}
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
-					retriesExhaustedPath = true
-					return rErr
+					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 				}
 				teardown(false)
-				return backoff.Permanent(rErr)
+				return rResp, backoff.Permanent(rErr)
 			})
-			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
-			if retriesExhaustedPath {
-				return nil, errors.Errorf("failed to invoke target %s after %v retries. Error: %s", app.id, numRetries, err.Error())
-			}
-
-			if nullifyResponsePath {
-				resp = nil
-			}
-
-			return resp, err
 		}
 
 		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
@@ -218,7 +212,7 @@ func (d *directMessaging) invokeWithRetry(
 		teardown(false)
 		return resp, err
 	}
-	return nil, errors.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
@@ -331,6 +325,10 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 	id, namespace, err := d.requestAppIDAndNamespace(appID)
 	if err != nil {
 		return remoteApp{}, err
+	}
+
+	if d.resolver == nil {
+		return remoteApp{}, errors.New("name resolver not initialized")
 	}
 
 	request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}

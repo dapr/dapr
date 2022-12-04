@@ -47,11 +47,10 @@ func ValidateSelfHostedAppID(appID string) error {
 	if appID == "" {
 		return errors.New("parameter app-id cannot be empty")
 	}
-	r := isDNS1123Label(serviceName(appID))
-	if len(r) == 0 {
-		return nil
+	if strings.Contains(appID, ".") {
+		return errors.New("parameter app-id cannot contain a period (.)")
 	}
-	return fmt.Errorf("parameter app-id is invalid: %s", strings.Join(r, ", "))
+	return nil
 }
 
 func serviceName(appID string) string {

@@ -63,29 +63,20 @@ func TestValidateKubernetesAppID(t *testing.T) {
 }
 
 func TestValidateSelfHostedAppID(t *testing.T) {
-	t.Run("invalid length", func(t *testing.T) {
-		id := ""
-		for i := 0; i < 64; i++ {
-			id += "a"
-		}
-		err := ValidateSelfHostedAppID(id)
-		assert.Error(t, err)
-	})
-
 	t.Run("valid id", func(t *testing.T) {
 		id := "my-app-id"
 		err := ValidateSelfHostedAppID(id)
 		assert.NoError(t, err)
 	})
 
-	t.Run("invalid char: .", func(t *testing.T) {
+	t.Run("contains a dot", func(t *testing.T) {
 		id := "my-app-id.app"
 		err := ValidateSelfHostedAppID(id)
 		assert.Error(t, err)
 	})
 
-	t.Run("invalid chars space", func(t *testing.T) {
-		id := "my-app-id app"
+	t.Run("contains multiple dots", func(t *testing.T) {
+		id := "foo.bar.baz"
 		err := ValidateSelfHostedAppID(id)
 		assert.Error(t, err)
 	})
