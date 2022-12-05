@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
@@ -26,16 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-type fakeComponentsClient struct {
-	componentsv1alpha1.ComponentInterface
-	componentList *componentsapi.ComponentList
-	err           error
-}
-
-func (f *fakeComponentsClient) List(opts metav1.ListOptions) (*componentsapi.ComponentList, error) {
-	return f.componentList, f.err
-}
 
 func TestComponentsPatch(t *testing.T) {
 	const appName, componentImage, componentName = "my-app", "my-image", "my-component"
