@@ -116,17 +116,17 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	defer cancelTimeout()
 	if err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			wfLogger.Warnf("%s: execution timed-out and will be retried later")
+			wfLogger.Warnf("%s: execution timed-out and will be retried later", actorID)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		} else if _, ok := err.(recoverableError); ok {
-			wfLogger.Errorf("%s: execution failed with a recoverable error and will be retried later: %v", err)
+			wfLogger.Errorf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		} else {
-			wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", err)
+			wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", actorID, err)
 		}
 	}
 

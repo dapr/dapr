@@ -29,7 +29,7 @@ require (
 	github.com/hashicorp/raft-boltdb v0.0.0-20220329195025-15018e9b97e0
 	github.com/jhump/protoreflect v1.13.0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/microsoft/durabletask-go v0.1.1-0.20221108194024-959ace8a17f8
+	github.com/microsoft/durabletask-go v0.1.1-0.20221203015532-96b02a2601d8
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5

@@ -24,7 +24,7 @@ DEBUG=1 make build
 After building, the following command can be run from the project root to test the code:
 
 ```bash
-./dist/linux_amd64/debug/daprd --app-id foo --dapr-grpc-port 4001 --placement-host-address :50005 --components-path ~/.dapr/components/
+./dist/linux_amd64/debug/daprd --app-id foo --dapr-grpc-port 4001 --placement-host-address :50005 --components-path ~/.dapr/components/ --config ~/.dapr/config.yaml
 ```
 * The gRPC port is set to `4001` since that's what the Durable Task test clients default to.
 * This assumes a placement service running locally on port `50005` (the default).
