@@ -38,24 +38,44 @@ func NewDaprComponent(client *KubeClient, ns string, comp ComponentDescription) 
 	}
 }
 
-func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
-	client := do.kubeClient.DaprComponents(DaprTestNamespace)
-
+// toComponentSpec builds the componentSpec for the given ComponentDescription
+func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 	metadata := []v1alpha1.MetadataItem{}
 
 	for k, v := range do.component.MetaData {
-		metadata = append(metadata, v1alpha1.MetadataItem{
-			Name: k,
-			Value: v1alpha1.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte(v),
+		var item v1alpha1.MetadataItem
+
+		if v.FromSecretRef == nil {
+			item = v1alpha1.MetadataItem{
+				Name: k,
+				Value: v1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte(v.Raw),
+					},
 				},
-			},
-		})
+			}
+		} else {
+			item = v1alpha1.MetadataItem{
+				Name: k,
+				SecretKeyRef: v1alpha1.SecretKeyRef{
+					Name: v.FromSecretRef.Name,
+					Key:  v.FromSecretRef.Key,
+				},
+			}
+		}
+		metadata = append(metadata, item)
 	}
 
-	obj := buildDaprComponentObject(do.component.Name, do.component.TypeName, metadata)
-	return client.Create(obj)
+	annotations := make(map[string]string)
+	if do.component.ContainerImage != "" {
+		annotations["dapr.io/component-container-image"] = do.component.ContainerImage
+	}
+
+	return buildDaprComponentObject(do.component.Name, do.component.TypeName, do.component.Scopes, annotations, metadata)
+}
+
+func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
+	return do.kubeClient.DaprComponents(DaprTestNamespace).Create(do.toComponentSpec())
 }
 
 func (do *DaprComponent) deleteComponent() error {
