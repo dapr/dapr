@@ -65,17 +65,9 @@ type (
 )
 
 func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
-	var (
-		subscriptions     []Subscription
-		subscriptionItems []SubscriptionJSON
-	)
-
-	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-	req.WithHTTPExtension(http.MethodGet, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
-
-	// TODO Propagate Context
-	ctx := context.Background()
+	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+		WithHTTPExtension(http.MethodGet, "").
+		WithRawData(nil, invokev1.JSONContentType)
 
 	var (
 		resp *invokev1.InvokeMethodResponse
@@ -84,16 +76,16 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
-		policy := r.BuiltInPolicy(ctx, resiliency.BuiltInInitializationRetries)
-		err = policy(func(ctx context.Context) (rErr error) {
-			resp, rErr = channel.InvokeMethod(ctx, req)
-			return rErr
+		policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
+			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+		)
+		resp, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+			return channel.InvokeMethod(ctx, req)
 		})
 	} else {
 		backoff := getSubscriptionsBackoff()
-		retry.NotifyRecover(func() error {
-			resp, err = channel.InvokeMethod(ctx, req)
-			return err
+		resp, err = retry.NotifyRecoverWithData(func() (*invokev1.InvokeMethodResponse, error) {
+			return channel.InvokeMethod(context.TODO(), req)
 		}, backoff, func(err error, d time.Duration) {
 			log.Debug("failed getting http subscriptions, starting retry")
 		}, func() {})
@@ -102,6 +94,11 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	if err != nil {
 		return nil, err
 	}
+
+	var (
+		subscriptions     []Subscription
+		subscriptionItems []SubscriptionJSON
+	)
 
 	switch resp.Status().Code {
 	case http.StatusOK:
@@ -186,39 +183,42 @@ func getSubscriptionsBackoff() backoff.BackOff {
 
 func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
 	var (
-		subscriptions []Subscription
-		err           error
-		resp          *runtimev1pb.ListTopicSubscriptionsResponse
+		err  error
+		resp *runtimev1pb.ListTopicSubscriptionsResponse
 	)
 
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
-		policy := r.BuiltInPolicy(context.Background(), resiliency.BuiltInInitializationRetries)
-		err = policy(func(ctx context.Context) (rErr error) {
-			resp, rErr = channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
+		policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
+			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+		)
+		resp, err = policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+			rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
 
 			if rErr != nil {
-				if s, ok := status.FromError(rErr); ok && s != nil {
+				s, ok := status.FromError(rErr)
+				if ok && s != nil {
 					if s.Code() == codes.Unimplemented {
-						return nil
+						return rResp, backoff.Permanent(rErr)
 					}
 				}
 			}
-			return rErr
+			return rResp, rErr
 		})
 	} else {
-		backoff := getSubscriptionsBackoff()
+		bo := getSubscriptionsBackoff()
 
-		retry.NotifyRecover(func() error {
-			resp, err = channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
+		resp, err = retry.NotifyRecoverWithData(func() (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+			rResp, rErr := channel.ListTopicSubscriptions(context.TODO(), &emptypb.Empty{})
 
-			if err != nil {
-				if s, ok := status.FromError(err); ok && s != nil && s.Code() == codes.Unimplemented {
-					return nil
+			if rErr != nil {
+				s, ok := status.FromError(rErr)
+				if ok && s != nil && s.Code() == codes.Unimplemented {
+					return rResp, backoff.Permanent(rErr)
 				}
 			}
-			return err
-		}, backoff, func(err error, d time.Duration) {
+			return rResp, rErr
+		}, bo, func(err error, d time.Duration) {
 			log.Debug("failed getting gRPC subscriptions, starting retry")
 		}, func() {})
 	}
@@ -229,21 +229,23 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 		return nil, err
 	}
 
-	if resp == nil || resp.Subscriptions == nil || len(resp.Subscriptions) == 0 {
+	var subscriptions []Subscription
+	if resp == nil || len(resp.Subscriptions) == 0 {
 		log.Debug(noSubscriptionsError)
 	} else {
-		for _, s := range resp.Subscriptions {
+		subscriptions = make([]Subscription, len(resp.Subscriptions))
+		for i, s := range resp.Subscriptions {
 			rules, err := parseRoutingRulesGRPC(s.Routes)
 			if err != nil {
 				return nil, err
 			}
-			subscriptions = append(subscriptions, Subscription{
+			subscriptions[i] = Subscription{
 				PubsubName:      s.PubsubName,
 				Topic:           s.GetTopic(),
 				Metadata:        s.GetMetadata(),
 				DeadLetterTopic: s.DeadLetterTopic,
 				Rules:           rules,
-			})
+			}
 		}
 	}
 
@@ -258,7 +260,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Sub
 
 	files, err := os.ReadDir(componentsPath)
 	if err != nil {
-		log.Errorf("failed to read subscriptions from path %s: %s", err)
+		log.Errorf("failed to read subscriptions from path %s: %s", componentsPath, err)
 		return subs
 	}
 

@@ -67,7 +67,7 @@ type bulkSubIngressDiagnostics struct {
 //     3.B. Send the envelope to app by invoking http endpoint
 //  4. Check if any error has occurred so far in processing for any of the message and invoke DLQ, if configured.
 //  5. Send back responses array to broker interface.
-func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.Runner,
+func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.Runner[any],
 	psName string, topic string, route TopicRouteElem, namespacedConsumer bool,
 ) error {
 	ps, ok := a.pubSubs[psName]
@@ -252,7 +252,7 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRout
 // createEnvelopeAndInvokeSubscriber creates the envelope and invokes the subscriber.
 func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm pubsubBulkSubscribedMessage, topic string, psName string,
 	msg *pubsub.BulkMessage, route TopicRouteElem, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
-	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner[any], bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
 ) error {
 	var id string
 	idObj, err := uuid.NewRandom()
@@ -301,16 +301,19 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 	}
 	psm.data = da
 	psm.path = path
-	return policy(func(ctx context.Context) error {
+	_, err = policy(func(ctx context.Context) (any, error) {
+		var pErr error
 		switch a.runtimeConfig.ApplicationProtocol {
 		case HTTPProtocol:
-			return a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
+			pErr = a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
 		case GRPCProtocol:
-			return a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
+			pErr = a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
 		default:
-			return backoff.Permanent(errors.New("invalid application protocol"))
+			pErr = backoff.Permanent(errors.New("invalid application protocol"))
 		}
+		return nil, pErr
 	})
+	return err
 }
 
 // publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding responses.
