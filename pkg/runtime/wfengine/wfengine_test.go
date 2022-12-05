@@ -139,6 +139,10 @@ func (f *fakeStateStore) Set(req *state.SetRequest) error {
 	return nil
 }
 
+func (f *fakeStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 	return nil
 }
