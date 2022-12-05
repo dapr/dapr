@@ -230,7 +230,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-temporal
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -395,15 +395,9 @@ delete-test-env-k6:
 # install redis to the cluster without password
 setup-test-env-redis:
 	$(HELM) upgrade --install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
-	$(HELM) install --set server.replicaCount=1 \
-					--set cassandra.config.cluster_size=1 \
-					--set prometheus.enabled=false \
-					--set grafana.enabled=false \
-					--set elasticsearch.enabled=false \
-					dapr-temporal wener/temporal -f ./tests/config/temporal_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 15m0s
+
 delete-test-env-redis:
 	${HELM} del dapr-redis --namespace ${DAPR_TEST_NAMESPACE}
-	$(HELM) del dapr-temporal --namespace $(DAPR_TEST_NAMESPACE) 
 
 # install kafka to the cluster
 setup-test-env-kafka:
@@ -436,7 +430,7 @@ delete-test-env-mongodb:
 	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
 
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-temporal setup-test-env-k6
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
