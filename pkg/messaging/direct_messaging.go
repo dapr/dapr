@@ -15,12 +15,14 @@ package messaging
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -45,7 +47,7 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 // DirectMessaging is the API interface for invoking a remote app.
 type DirectMessaging interface {
@@ -53,20 +55,20 @@ type DirectMessaging interface {
 }
 
 type directMessaging struct {
-	appChannel          channel.AppChannel
-	connectionCreatorFn messageClientConnection
-	appID               string
-	mode                modes.DaprMode
-	grpcPort            int
-	namespace           string
-	resolver            nr.Resolver
-	hostAddress         string
-	hostName            string
-	maxRequestBodySize  int
-	proxy               Proxy
-	readBufferSize      int
-	resiliency          resiliency.Provider
-	isResiliencyEnabled bool
+	appChannel           channel.AppChannel
+	connectionCreatorFn  messageClientConnection
+	appID                string
+	mode                 modes.DaprMode
+	grpcPort             int
+	namespace            string
+	resolver             nr.Resolver
+	hostAddress          string
+	hostName             string
+	maxRequestBodySizeMB int
+	proxy                Proxy
+	readBufferSize       int
+	resiliency           resiliency.Provider
+	isResiliencyEnabled  bool
 }
 
 type remoteApp struct {
@@ -97,20 +99,20 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:               opts.AppID,
-		namespace:           opts.Namespace,
-		grpcPort:            opts.Port,
-		mode:                opts.Mode,
-		appChannel:          opts.AppChannel,
-		connectionCreatorFn: opts.ClientConnFn,
-		resolver:            opts.Resolver,
-		maxRequestBodySize:  opts.MaxRequestBodySize,
-		proxy:               opts.Proxy,
-		readBufferSize:      opts.ReadBufferSize,
-		resiliency:          opts.Resiliency,
-		isResiliencyEnabled: opts.IsResiliencyEnabled,
-		hostAddress:         hAddr,
-		hostName:            hName,
+		appID:                opts.AppID,
+		namespace:            opts.Namespace,
+		grpcPort:             opts.Port,
+		mode:                 opts.Mode,
+		appChannel:           opts.AppChannel,
+		connectionCreatorFn:  opts.ClientConnFn,
+		resolver:             opts.Resolver,
+		maxRequestBodySizeMB: opts.MaxRequestBodySize,
+		proxy:                opts.Proxy,
+		readBufferSize:       opts.ReadBufferSize,
+		resiliency:           opts.Resiliency,
+		isResiliencyEnabled:  opts.IsResiliencyEnabled,
+		hostAddress:          hAddr,
+		hostName:             hName,
 	}
 
 	if dm.proxy != nil {
@@ -136,13 +138,17 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
 func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, string, error) {
+	if targetAppID == "" {
+		return "", "", errors.New("app id is empty")
+	}
 	items := strings.Split(targetAppID, ".")
-	if len(items) == 1 {
+	switch len(items) {
+	case 1:
 		return targetAppID, d.namespace, nil
-	} else if len(items) == 2 {
+	case 2:
 		return items[0], items[1], nil
-	} else {
-		return "", "", errors.Errorf("invalid app id %s", targetAppID)
+	default:
+		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
 	}
 }
 
@@ -154,52 +160,43 @@ func (d *directMessaging) invokeWithRetry(
 	numRetries int,
 	backoffInterval time.Duration,
 	app remoteApp,
-	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
+	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			retriesExhaustedPath := false // Used to track final error state.
-			nullifyResponsePath := false  // Used to track final response state.
-			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
-			var resp *invokev1.InvokeMethodResponse
-			err := policy(func(ctx context.Context) (rErr error) {
-				retriesExhaustedPath = false
-				resp, rErr = fn(ctx, app.id, app.namespace, app.address, req)
+			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
+			)
+			attempts := atomic.Int32{}
+			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+				attempt := attempts.Add(1)
+				rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 				if rErr == nil {
-					return nil
+					teardown(false)
+					return rResp, nil
 				}
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
-					_, teardown, connerr := d.connectionCreatorFn(ctx, app.address, app.id, app.namespace, false, true, false)
-					defer teardown()
-					if connerr != nil {
-						nullifyResponsePath = true
-						return backoff.Permanent(connerr)
-					}
-					retriesExhaustedPath = true
-					return rErr
+					// Destroy the connection and force a re-connection on the next attempt
+					teardown(true)
+					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 				}
-				return backoff.Permanent(rErr)
+				teardown(false)
+				return rResp, backoff.Permanent(rErr)
 			})
-			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
-			if retriesExhaustedPath {
-				return nil, errors.Errorf("failed to invoke target %s after %v retries. Error: %s", app.id, numRetries, err.Error())
-			}
-
-			if nullifyResponsePath {
-				resp = nil
-			}
-
-			return resp, err
 		}
-		return fn(ctx, app.id, app.namespace, app.address, req)
+
+		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
+		teardown(false)
+		return resp, err
 	}
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, app.id, app.namespace, app.address, req)
+		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
+			teardown(false)
 			return resp, nil
 		}
 		log.Debugf("retry count: %d, grpc call failed, ns: %s, addr: %s, appid: %s, err: %s",
@@ -208,16 +205,14 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, teardown, connerr := d.connectionCreatorFn(context.TODO(), app.address, app.id, app.namespace, false, true, false)
-			defer teardown()
-			if connerr != nil {
-				return nil, connerr
-			}
+			// Destroy the connection and force a re-connection on the next attempt
+			teardown(true)
 			continue
 		}
+		teardown(false)
 		return resp, err
 	}
-	return nil, errors.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
@@ -235,11 +230,10 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
-	defer teardown()
+func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
+	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ctx = d.setContextSpan(ctx)
@@ -251,14 +245,32 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
 	var opts []grpc.CallOption
-	opts = append(opts, grpc.MaxCallRecvMsgSize(d.maxRequestBodySize*1024*1024), grpc.MaxCallSendMsgSize(d.maxRequestBodySize*1024*1024))
+	opts = append(
+		opts,
+		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB<<20),
+		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB<<20),
+	)
 
-	resp, err := clientV1.CallLocal(ctx, req.Proto(), opts...)
+	start := time.Now()
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+
+	var resp *internalv1pb.InternalInvokeResponse
+	defer func() {
+		if resp != nil {
+			diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, resp.Status.Code, start)
+		}
+	}()
+
+	resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
 	if err != nil {
-		return nil, err
+		return nil, teardown, err
 	}
 
-	return invokev1.InternalInvokeResponse(resp)
+	imr, err := invokev1.InternalInvokeResponse(resp)
+	if err != nil {
+		return nil, nil, err
+	}
+	return imr, teardown, err
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
@@ -313,6 +325,10 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 	id, namespace, err := d.requestAppIDAndNamespace(appID)
 	if err != nil {
 		return remoteApp{}, err
+	}
+
+	if d.resolver == nil {
+		return remoteApp{}, errors.New("name resolver not initialized")
 	}
 
 	request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}

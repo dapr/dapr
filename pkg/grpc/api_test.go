@@ -37,7 +37,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -57,6 +57,8 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -84,13 +86,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  10,
+					MaxRetries:  ptr.Of(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -246,7 +248,9 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	server := grpc.NewServer()
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(metadata.SetMetadataInContextUnary),
+	)
 	go func() {
 		runtimev1pb.RegisterDaprServer(server, srv)
 		if err := server.Serve(lis); err != nil {
@@ -280,11 +284,17 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	opts := []grpc.ServerOption{}
+	interceptors := []grpc.UnaryServerInterceptor{
+		metadata.SetMetadataInContextUnary,
+	}
 	if token != "" {
-		opts = append(opts,
-			grpc.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token")),
+		interceptors = append(interceptors,
+			setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token"),
 		)
+	}
+	opts := []grpc.ServerOption{
+		grpc.ChainUnaryInterceptor(interceptors...),
+		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
 	}
 
 	server := grpc.NewServer(opts...)
@@ -458,8 +468,8 @@ func TestAPIToken(t *testing.T) {
 				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
-		md := metadata.Pairs("dapr-api-token", token)
-		ctx := metadata.NewOutgoingContext(context.Background(), md)
+		md := grpcMetadata.Pairs("dapr-api-token", token)
+		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
 		_, err := client.InvokeService(ctx, req)
 
 		// assert
@@ -506,8 +516,8 @@ func TestAPIToken(t *testing.T) {
 				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
-		md := metadata.Pairs("dapr-api-token", "4567")
-		ctx := metadata.NewOutgoingContext(context.Background(), md)
+		md := grpcMetadata.Pairs("dapr-api-token", "4567")
+		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
 		_, err := client.InvokeService(ctx, req)
 
 		// assert
@@ -640,7 +650,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 					Data:   &anypb.Any{Value: []byte("testData")},
 				},
 			}
-			var header metadata.MD
+			var header grpcMetadata.MD
 			_, err := client.InvokeService(context.Background(), req, grpc.Header(&header))
 
 			// assert
@@ -1955,6 +1965,92 @@ func TestPublishTopic(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+func TestBulkPublish(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	srv := &api{
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
+			},
+			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+				entries := []pubsub.BulkPublishResponseEntry{}
+
+				// Construct sample response from the broker.
+				for i, e := range req.Entries {
+					entry := pubsub.BulkPublishResponseEntry{
+						EntryId: e.EntryId,
+					}
+					if req.Topic == "error-topic" {
+						entry.Error = errors.New("error when publish")
+						entry.Status = pubsub.PublishFailed
+					} else if req.Topic == "even-error-topic" {
+						if i%2 == 0 {
+							entry.Error = errors.New("error when publish")
+							entry.Status = pubsub.PublishFailed
+						} else {
+							entry.Status = pubsub.PublishSucceeded
+						}
+					} else {
+						entry.Status = pubsub.PublishSucceeded
+					}
+
+					entries = append(entries, entry)
+				}
+
+				return pubsub.BulkPublishResponse{Statuses: entries}, nil
+			},
+		},
+	}
+
+	server := startTestServerAPI(port, srv)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	sampleEntries := []*runtimev1pb.BulkPublishRequestEntry{
+		{EntryId: "1", Event: []byte("data1")},
+		{EntryId: "2", Event: []byte("data2")},
+		{EntryId: "3", Event: []byte("data3")},
+		{EntryId: "4", Event: []byte("data4")},
+	}
+
+	res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Empty(t, res.Statuses)
+
+	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "error-topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 4, len(res.Statuses))
+	for _, s := range res.Statuses {
+		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
+	}
+
+	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "even-error-topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(res.Statuses))
+	for _, s := range res.Statuses {
+		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
+	}
+}
+
 func TestShutdownEndpoints(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
@@ -2010,7 +2106,7 @@ func TestInvokeBinding(t *testing.T) {
 	_, err = client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	ctx := metadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
+	ctx := grpcMetadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
 	assert.Nil(t, err)
 	assert.NotNil(t, resp)
@@ -2186,6 +2282,22 @@ func TestGetMetadata(t *testing.T) {
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
+		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+			return []runtimePubsub.Subscription{
+				{
+					PubsubName:      "test",
+					Topic:           "topic",
+					DeadLetterTopic: "dead",
+					Metadata:        map[string]string{},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Match: &expr.Expr{},
+							Path:  "path",
+						},
+					},
+				},
+			}, nil
+		},
 	}
 	fakeAPI.extendedMetadata.Store("testKey", "testValue")
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -2206,6 +2318,14 @@ func TestGetMetadata(t *testing.T) {
 	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
 	assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
 	assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
+	assert.Len(t, response.Subscriptions, 1)
+	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
+	assert.Equal(t, response.Subscriptions[0].Topic, "topic")
+	assert.Equal(t, response.Subscriptions[0].DeadLetterTopic, "dead")
+	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
+	assert.Len(t, response.Subscriptions[0].Rules.Rules, 1)
+	assert.Equal(t, fmt.Sprintf("%s", response.Subscriptions[0].Rules.Rules[0].Match), "")
+	assert.Equal(t, response.Subscriptions[0].Rules.Rules[0].Path, "path")
 }
 
 func TestSetMetadata(t *testing.T) {
@@ -2636,14 +2756,15 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				"failingQueryKey":      1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":        time.Second * 10,
-				"timeoutSetKey":        time.Second * 10,
-				"timeoutDeleteKey":     time.Second * 10,
-				"timeoutBulkGetKey":    time.Second * 10,
-				"timeoutBulkSetKey":    time.Second * 10,
-				"timeoutBulkDeleteKey": time.Second * 10,
-				"timeoutMultiKey":      time.Second * 10,
-				"timeoutQueryKey":      time.Second * 10,
+				"timeoutGetKey":         time.Second * 10,
+				"timeoutSetKey":         time.Second * 10,
+				"timeoutDeleteKey":      time.Second * 10,
+				"timeoutBulkGetKey":     time.Second * 10,
+				"timeoutBulkGetKeyBulk": time.Second * 10,
+				"timeoutBulkSetKey":     time.Second * 10,
+				"timeoutBulkDeleteKey":  time.Second * 10,
+				"timeoutMultiKey":       time.Second * 10,
+				"timeoutQueryKey":       time.Second * 10,
 			},
 			map[string]int{},
 		),
@@ -2743,6 +2864,12 @@ func TestStateAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
+		// Adding this will make the bulk operation fail with a timeout, and Dapr should be able to recover nicely
+		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
+		t.Cleanup(func() {
+			failingStore.BulkFailKey = ""
+		})
+
 		_, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: "failStore",
 			Keys:      []string{"failingBulkGetKey", "goodBulkGetKey"},
@@ -2757,22 +2884,29 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		start := time.Now()
 		resp, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: "failStore",
-			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey"},
+			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey", "nilGetKey"},
 		})
 		end := time.Now()
 
 		assert.NoError(t, err)
-		assert.Len(t, resp.Items, 2)
+		assert.Len(t, resp.Items, 3)
 		for _, item := range resp.Items {
-			if item.Key == "timeoutBulkGetKey" {
+			switch item.Key {
+			case "timeoutBulkGetKey":
 				assert.NotEmpty(t, item.Error)
 				assert.Contains(t, item.Error, "context deadline exceeded")
-			} else {
+			case "goodTimeoutBulkGetKey":
 				assert.Empty(t, item.Error)
+			case "nilGetKey":
+				assert.Empty(t, item.Error)
+				assert.Empty(t, item.Data)
+			default:
+				t.Fatalf("unexpected key: %s", item.Key)
 			}
 		}
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
 		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("nilGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2940,8 +3074,8 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 		_, err = resp.Recv()
 		assert.NoError(t, err)
-		// Subscribe now calls Get first so we have an extra call.
-		assert.Equal(t, 3, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
+
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
 	})
 
 	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {

@@ -17,6 +17,7 @@ package dapr.proto.runtime.v1;
 
 import "google/protobuf/empty.proto";
 import "dapr/proto/common/v1/common.proto";
+import "google/protobuf/struct.proto";
 
 option csharp_namespace = "Dapr.AppCallback.Autogen.Grpc.v1";
 option java_outer_classname = "DaprAppCallbackProtos";
@@ -96,6 +97,9 @@ message TopicEventRequest {
   // The matching path from TopicSubscription/routes (if specified) for this event.
   // This value is used by OnTopicEvent to "switch" inside the handler.
   string path = 9;
+
+  // The map of additional custom properties to be sent to the app. These are considered to be cloud event extensions.
+  google.protobuf.Struct extensions = 10;
 }
 
 // TopicEventResponse is response from app on published message

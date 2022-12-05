@@ -114,6 +114,10 @@ func (_m *MockStateStore) Ping() error {
 	return nil
 }
 
+func (f *MockStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 // Set provides a mock function with given fields: req
 func (_m *MockStateStore) Set(req *state.SetRequest) error {
 	ret := _m.Called(req)
@@ -139,6 +143,11 @@ func (_m *MockStateStore) Close() error {
 
 type FailingStatestore struct {
 	Failure Failure
+	BulkFailKey string
+}
+
+func (f *FailingStatestore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (f *FailingStatestore) BulkDelete(req []state.DeleteRequest) error {
@@ -170,10 +179,23 @@ func (f *FailingStatestore) Get(req *state.GetRequest) (*state.GetResponse, erro
 	if err != nil {
 		return nil, err
 	}
-	return &state.GetResponse{}, nil
+
+	var res *state.GetResponse
+	if req.Key != "nilGetKey" {
+		res = &state.GetResponse{}
+	}
+
+	return res, nil
 }
 
 func (f *FailingStatestore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+	if f.BulkFailKey != "" {
+		err := f.Failure.PerformFailure(f.BulkFailKey)
+		if err != nil {
+			return true, nil, err
+		}
+	}
+	
 	// This makes the code fall back to individual gets, which is basically what we'd mimic here anyway.
 	return false, nil, nil
 }

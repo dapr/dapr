@@ -21,6 +21,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
+	"github.com/dapr/dapr/utils/fasthttpadaptor"
 	"github.com/dapr/kit/logger"
 )
 
@@ -70,12 +71,18 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 		ctx := r.Context()
 		reqCtx, ok := ctx.(*fasthttp.RequestCtx)
 		if ok {
-			reqCtx.VisitUserValues(func(k []byte, v interface{}) {
-				c.SetUserValueBytes(k, v)
+			reqCtx.VisitUserValuesAll(func(k any, v any) {
+				c.SetUserValue(k, v)
 			})
 		}
 
 		h(&c)
+
+		if faw, ok := w.(*fasthttpadaptor.NetHTTPResponseWriter); ok {
+			c.VisitUserValuesAll(func(k any, v any) {
+				faw.SetUserValue(k, v)
+			})
+		}
 
 		c.Response.Header.VisitAll(func(k []byte, v []byte) {
 			w.Header().Add(string(k), string(v))

@@ -99,11 +99,17 @@ func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethod
 
 // Status gets Response status.
 func (imr *InvokeMethodResponse) Status() *internalv1pb.Status {
+	if imr.r == nil {
+		return nil
+	}
 	return imr.r.Status
 }
 
 // IsHTTPResponse returns true if response status code is http response status.
 func (imr *InvokeMethodResponse) IsHTTPResponse() bool {
+	if imr.r == nil {
+		return false
+	}
 	// gRPC status code <= 15 - https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 	// HTTP status code >= 100 - https://tools.ietf.org/html/rfc2616#section-10
 	return imr.r.Status.Code >= 100
@@ -116,22 +122,31 @@ func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 
 // Headers gets Headers metadata.
 func (imr *InvokeMethodResponse) Headers() DaprInternalMetadata {
+	if imr.r == nil {
+		return nil
+	}
 	return imr.r.Headers
 }
 
 // Trailers gets Trailers metadata.
 func (imr *InvokeMethodResponse) Trailers() DaprInternalMetadata {
+	if imr.r == nil {
+		return nil
+	}
 	return imr.r.Trailers
 }
 
 // Message returns message field in InvokeMethodResponse.
 func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
+	if imr.r == nil {
+		return nil
+	}
 	return imr.r.Message
 }
 
 // RawData returns content_type and byte array body.
 func (imr *InvokeMethodResponse) RawData() (string, []byte) {
-	m := imr.r.Message
+	m := imr.Message()
 	if m == nil || m.Data == nil {
 		return "", nil
 	}

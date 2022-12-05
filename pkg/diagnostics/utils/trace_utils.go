@@ -80,6 +80,11 @@ func SpanFromContext(ctx context.Context) trace.Span {
 		if val != nil {
 			return val.(trace.Span)
 		}
+	} else {
+		val := ctx.Value(daprFastHTTPContextKey)
+		if val != nil {
+			return val.(trace.Span)
+		}
 	}
 
 	span := trace.SpanFromContext(ctx)

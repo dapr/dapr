@@ -27,19 +27,18 @@ import (
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/metadata"
-
-	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messaging"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -203,9 +202,10 @@ func (s *server) generateWorkloadCert() error {
 }
 
 func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
-	opts := []grpcGo.ServerOption{}
-	intr := []grpcGo.UnaryServerInterceptor{}
-	intrStream := []grpcGo.StreamServerInterceptor{}
+	intr := make([]grpcGo.UnaryServerInterceptor, 0, 6)
+	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 3)
+
+	intr = append(intr, metadata.SetMetadataInContextUnary)
 
 	if len(s.apiSpec.Allowed) > 0 {
 		s.logger.Info("enabled API access list on gRPC server")
@@ -234,26 +234,15 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		}
 	}
 
-	enableAPILogging := s.config.EnableAPILogging
-	if enableAPILogging {
+	if s.config.EnableAPILogging && s.infoLogger != nil {
 		intr = append(intr, s.getGRPCAPILoggingInfo())
 	}
 
-	chain := grpcMiddleware.ChainUnaryServer(
-		intr...,
-	)
-	opts = append(
-		opts,
-		grpcGo.UnaryInterceptor(chain),
-	)
-
-	chainStream := grpcMiddleware.ChainStreamServer(
-		intrStream...,
-	)
-
-	opts = append(opts, grpcGo.StreamInterceptor(chainStream))
-
-	return opts
+	return []grpcGo.ServerOption{
+		grpcGo.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(intr...)),
+		grpcGo.StreamInterceptor(grpcMiddleware.ChainStreamServer(intrStream...)),
+		grpcGo.InTapHandle(metadata.SetMetadataInTapHandle),
+	}
 }
 
 func (s *server) getGRPCServer() (*grpcGo.Server, error) {
@@ -319,7 +308,7 @@ func (s *server) startWorkloadCertRotation() {
 }
 
 func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool {
-	expiresIn := certExpiryDate.Sub(time.Now().UTC())
+	expiresIn := certExpiryDate.Sub(time.Now())
 	expiresInSeconds := expiresIn.Seconds()
 	certDurationSeconds := certDuration.Seconds()
 

@@ -11,21 +11,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package components
 
-import "net"
+import (
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings/kubemq"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	"github.com/dapr/kit/logger"
+)
 
-// GetFreePort returns a free port from the OS.
-func GetFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		return 0, err
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+func init() {
+	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
+		return kubemq.NewKubeMQ(l)
+	}, "kubemq")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
+		return kubemq.NewKubeMQ(l)
+	}, "kubemq")
 }

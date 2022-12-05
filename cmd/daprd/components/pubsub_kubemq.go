@@ -11,16 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package components
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"github.com/dapr/components-contrib/pubsub/kubemq"
+	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 )
 
-func TestGetFreePort(t *testing.T) {
-	p, err := GetFreePort()
-	assert.NoError(t, err)
-	assert.NotZero(t, p)
+func init() {
+	pubsubLoader.DefaultRegistry.RegisterComponent(kubemq.NewKubeMQ, "kubemq")
 }
