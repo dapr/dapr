@@ -5412,11 +5412,15 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	assert.NotNil(t, rt.pubsubCtx)
 	assert.NotNil(t, rt.topicCtxCancels)
 	assert.NotNil(t, rt.topicRoutes)
-	sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second)
-	assert.Nil(t, rt.pubsubCtx)
-	assert.Nil(t, rt.topicCtxCancels)
-	assert.Nil(t, rt.topicRoutes)
+	go sendSigterm(rt)
+	select {
+	case <-rt.pubsubCtx.Done():
+		assert.Nil(t, rt.pubsubCtx)
+		assert.Nil(t, rt.topicCtxCancels)
+		assert.Nil(t, rt.topicRoutes)
+	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
+		assert.Fail(t, "pubsub shutdown timed out")
+	}
 }
 
 func TestGracefulShutdownBindings(t *testing.T) {
@@ -5447,7 +5451,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	assert.Equal(t, len(rt.inputBindings), 1)
 	assert.Equal(t, len(rt.outputBindings), 1)
 
-	sendSigterm(rt)
+	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
 	assert.Nil(t, rt.inputBindingsCancel)
 	assert.Nil(t, rt.inputBindingsCtx)
@@ -5500,7 +5504,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	rt.runtimeConfig.mtlsEnabled = true
 	assert.Nil(t, rt.initActors())
 
-	sendSigterm(rt)
+	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second)
 
 	var activeActCount int
