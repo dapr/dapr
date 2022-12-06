@@ -11,21 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package components
 
-import "net"
+import (
+	"github.com/dapr/components-contrib/pubsub/azure/servicebus/topics"
+	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+)
 
-// GetFreePort returns a free port from the OS.
-func GetFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		return 0, err
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+func init() {
+	// "azure.servicebus" is the old name of the component and maintained for backwards-compatibility
+	pubsubLoader.DefaultRegistry.RegisterComponent(topics.NewAzureServiceBusTopics, "azure.servicebus.topics", "azure.servicebus")
 }

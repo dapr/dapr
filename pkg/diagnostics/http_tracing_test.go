@@ -88,7 +88,7 @@ func TestSpanContextFromRequest(t *testing.T) {
 
 			gotSc, _ := SpanContextFromRequest(req)
 			wantSc := trace.NewSpanContext(tt.wantSc)
-			assert.Equalf(t, gotSc, wantSc, "SpanContextFromRequest gotSc = %v, want %v", gotSc, wantSc)
+			assert.Equalf(t, wantSc, gotSc, "SpanContextFromRequest gotSc = %v, want %v", gotSc, wantSc)
 		})
 	}
 }

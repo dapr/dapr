@@ -11,29 +11,15 @@
 # limitations under the License.
 #
 
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: pluggable-messagebus
-spec:
-  type: pubsub.redis-pubsub-pluggable
-  initTimeout: 1m
-  version: v1
-  metadata:
-    - name: redisHost
-      secretKeyRef:
-        name: redissecret
-        key: host
-    - name: redisPassword
-      value: ""
-    - name: processingTimeout
-      value: 1s
-    - name: redeliverInterval
-      value: 1s
-    - name: idleCheckFrequency
-      value: 1s
-    - name: readTimeout
-      value: 1s
-scopes:
-  - pubsub-publisher-pluggable
-  - pubsub-subscriber-pluggable
+FROM golang:1.19 as build_env
+
+ENV CGO_ENABLED=0
+WORKDIR /app
+COPY . .
+RUN go get -d -v
+RUN go build -o app .
+
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=build_env /app/app /
+CMD ["/app"]

@@ -11,16 +11,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package components
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings/kubemq"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	"github.com/dapr/kit/logger"
 )
 
-func TestGetFreePort(t *testing.T) {
-	p, err := GetFreePort()
-	assert.NoError(t, err)
-	assert.NotZero(t, p)
+func init() {
+	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
+		return kubemq.NewKubeMQ(l)
+	}, "kubemq")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
+		return kubemq.NewKubeMQ(l)
+	}, "kubemq")
 }

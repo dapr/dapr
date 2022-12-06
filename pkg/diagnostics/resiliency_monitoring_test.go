@@ -1,7 +1,6 @@
 package diagnostics_test
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -40,7 +40,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.EndpointPolicy(context.TODO(), "fakeApp", "fakeEndpoint")
+				_ = r.EndpointPolicy("fakeApp", "fakeEndpoint")
 			},
 			wantNumberOfRows: 3,
 			wantTags: []tag.Tag{
@@ -57,7 +57,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.ActorPreLockPolicy(context.TODO(), "fakeActor", "fakeActorId")
+				_ = r.ActorPreLockPolicy("fakeActor", "fakeActorId")
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -73,7 +73,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.ActorPostLockPolicy(context.TODO(), "fakeActor", "fakeActorId")
+				_ = r.ActorPostLockPolicy("fakeActor", "fakeActorId")
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -88,7 +88,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, testStateStoreName)
-				_ = r.ComponentOutboundPolicy(context.TODO(), testStateStoreName, resiliency.Statestore)
+				_ = r.ComponentOutboundPolicy(testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -105,7 +105,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, testStateStoreName)
-				_ = r.ComponentInboundPolicy(context.TODO(), testStateStoreName, resiliency.Statestore)
+				_ = r.ComponentInboundPolicy(testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -206,7 +206,7 @@ func newTestResiliencyConfig(resiliencyName, resiliencyNamespace, appName, actor
 					"testRetry": {
 						Policy:     "constant",
 						Duration:   "5s",
-						MaxRetries: 10,
+						MaxRetries: ptr.Of(10),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{

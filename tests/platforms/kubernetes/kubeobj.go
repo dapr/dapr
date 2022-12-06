@@ -54,6 +54,9 @@ const (
 
 	// Environmental variable to disable API logging
 	DisableAPILoggingEnvVar = "NO_API_LOGGING"
+
+	// Environmental variable to enable debug logging
+	DebugLoggingEnvVar = "DEBUG_LOGGING"
 )
 
 var (
@@ -68,6 +71,9 @@ var (
 
 	// Controls whether API logging is enabled
 	EnableAPILogging = true
+
+	// Controls whether debug logging is enabled
+	EnableDebugLogging = false
 )
 
 // buildDaprAnnotations creates the Kubernetes Annotations object for dapr test app.
@@ -87,6 +93,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
 			"dapr.io/enable-api-logging":                strconv.FormatBool(EnableAPILogging),
 			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
+		}
+		if EnableDebugLogging {
+			annotationObject["dapr.io/log-level"] = "debug"
 		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = strconv.Itoa(appDesc.AppPort)
@@ -125,8 +134,19 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.AppHealthThreshold != 0 {
 		annotationObject["dapr.io/app-health-threshold"] = strconv.Itoa(appDesc.AppHealthThreshold)
 	}
+	if len(appDesc.PluggableComponents) != 0 {
+		componentNames := make([]string, len(appDesc.PluggableComponents))
+		for idx, component := range appDesc.PluggableComponents {
+			componentNames[idx] = component.Name
+		}
+		annotationObject["dapr.io/pluggable-components"] = strings.Join(componentNames, ",")
+	}
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
+	}
+
+	if appDesc.InjectPluggableComponents {
+		annotationObject["dapr.io/inject-pluggable-components"] = "true"
 	}
 	return annotationObject
 }
@@ -178,9 +198,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		VolumeMounts: appDesc.AppVolumeMounts,
 	}}
 
-	if len(appDesc.PluggableComponents) != 0 {
-		containers = append(containers, adaptAndBuildPluggableComponents(&appDesc)...)
-	}
+	containers = append(containers, appDesc.PluggableComponents...)
 
 	nodeSelectorRequirements := appDesc.NodeSelectors
 	if nodeSelectorRequirements == nil {
@@ -311,18 +329,20 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 }
 
 // buildDaprComponentObject creates dapr component object.
-func buildDaprComponentObject(componentName string, typeName string, metaData []v1alpha1.MetadataItem) *v1alpha1.Component {
+func buildDaprComponentObject(componentName string, typeName string, scopes []string, annotations map[string]string, metaData []v1alpha1.MetadataItem) *v1alpha1.Component {
 	return &v1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind: DaprComponentsKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: componentName,
+			Name:        componentName,
+			Annotations: annotations,
 		},
 		Spec: v1alpha1.ComponentSpec{
 			Type:     typeName,
 			Metadata: metaData,
 		},
+		Scopes: scopes,
 	}
 }
 
@@ -349,4 +369,5 @@ func init() {
 		v, _ := os.LookupEnv(DisableAPILoggingEnvVar)
 		EnableAPILogging = !utils.IsTruthy(v)
 	}
+	EnableDebugLogging = utils.IsTruthy(os.Getenv(DebugLoggingEnvVar))
 }

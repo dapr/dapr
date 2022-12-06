@@ -35,7 +35,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       GOVER: "^1.19.2"
-      GOLANGCILINT_VER: v1.48.0
+      GOLANGCILINT_VER: v1.50.1
       PROTOC_VERSION: "21.1"
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
@@ -43,6 +43,7 @@ jobs:
       ARCHIVE_OUTDIR: dist/archives
       TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-2019, macOS-latest]
         target_arch: [arm, arm64, amd64]

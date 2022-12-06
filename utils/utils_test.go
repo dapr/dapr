@@ -114,6 +114,48 @@ func TestIsYaml(t *testing.T) {
 	}
 }
 
+func TestGetIntOrDefault(t *testing.T) {
+	testMap := map[string]string{"key1": "1", "key2": "2", "key3": "3"}
+	tcs := []struct {
+		name     string
+		m        map[string]string
+		key      string
+		def      int
+		expected int
+	}{
+		{
+			name:     "key exists in the map",
+			m:        testMap,
+			key:      "key2",
+			def:      0,
+			expected: 2,
+		},
+		{
+			name:     "key does not exist in the map, default value is used",
+			m:        testMap,
+			key:      "key4",
+			def:      4,
+			expected: 4,
+		},
+		{
+			name:     "empty map, default value is used",
+			m:        map[string]string{},
+			key:      "key1",
+			def:      100,
+			expected: 100,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := GetIntOrDefault(tc.m, tc.key, tc.def)
+			if actual != tc.expected {
+				t.Errorf("expected %d, actual %d", tc.expected, actual)
+			}
+		})
+	}
+}
+
 func TestEnvOrElse(t *testing.T) {
 	t.Run("envOrElse should return else value when env var is not present", func(t *testing.T) {
 		const elseValue, fakeEnVar = "fakeValue", "envVarThatDoesntExists"
@@ -122,7 +164,7 @@ func TestEnvOrElse(t *testing.T) {
 		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), elseValue)
 	})
 
-	t.Run("envOrElse should return env var value value when env var is present", func(t *testing.T) {
+	t.Run("envOrElse should return env var value when env var is present", func(t *testing.T) {
 		const elseValue, fakeEnVar, fakeEnvVarValue = "fakeValue", "envVarThatExists", "envVarValue"
 		defer os.Unsetenv(fakeEnVar)
 
@@ -156,5 +198,43 @@ func TestSocketExists(t *testing.T) {
 		defer listener.Close()
 
 		assert.True(t, SocketExists(fileName))
+	})
+}
+
+func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
+	entryMeta := map[string]string{
+		"key1": "val1",
+		"ttl":  "22s",
+	}
+
+	t.Run("req Meta does not contain any key present in entryMeta", func(t *testing.T) {
+		reqMeta := map[string]string{
+			"rawPayload": "true",
+			"key2":       "val2",
+		}
+		resMeta := PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta)
+		assert.Equal(t, 4, len(resMeta), "expected length to match")
+		assert.Contains(t, resMeta, "key1", "expected key to be present")
+		assert.Equal(t, "val1", resMeta["key1"], "expected val to be equal")
+		assert.Contains(t, resMeta, "key2", "expected key to be present")
+		assert.Equal(t, "val2", resMeta["key2"], "expected val to be equal")
+		assert.Contains(t, resMeta, "ttl", "expected key to be present")
+		assert.Equal(t, "22s", resMeta["ttl"], "expected val to be equal")
+		assert.Contains(t, resMeta, "rawPayload", "expected key to be present")
+		assert.Equal(t, "true", resMeta["rawPayload"], "expected val to be equal")
+	})
+	t.Run("req Meta contains key present in entryMeta", func(t *testing.T) {
+		reqMeta := map[string]string{
+			"ttl":  "1m",
+			"key2": "val2",
+		}
+		resMeta := PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta)
+		assert.Equal(t, 3, len(resMeta), "expected length to match")
+		assert.Contains(t, resMeta, "key1", "expected key to be present")
+		assert.Equal(t, "val1", resMeta["key1"], "expected val to be equal")
+		assert.Contains(t, resMeta, "key2", "expected key to be present")
+		assert.Equal(t, "val2", resMeta["key2"], "expected val to be equal")
+		assert.Contains(t, resMeta, "ttl", "expected key to be present")
+		assert.Equal(t, "22s", resMeta["ttl"], "expected val to be equal")
 	})
 }

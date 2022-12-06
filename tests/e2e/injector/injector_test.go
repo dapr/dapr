@@ -53,15 +53,15 @@ func TestMain(m *testing.M) {
 		{
 			Name:     "local-secret-store",
 			TypeName: "secretstores.local.file",
-			MetaData: map[string]string{
-				"secretsFile": `"/tmp/testdata/secrets.json"`,
+			MetaData: map[string]kube.MetadataValue{
+				"secretsFile": {Raw: `"/tmp/testdata/secrets.json"`},
 			},
 		},
 		{
 			Name:     "secured-binding",
 			TypeName: "bindings.http",
-			MetaData: map[string]string{
-				"url": `"https://localhost:3001"`,
+			MetaData: map[string]kube.MetadataValue{
+				"url": {Raw: `"https://localhost:3001"`},
 			},
 		},
 	}
