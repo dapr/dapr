@@ -25,6 +25,7 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -202,68 +203,69 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
-	testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+	t.Run("already unlocked", func(t *testing.T) {
+		require.False(t, testPlacement.tableIsBlocked.Load())
 
-	readyCh := make(chan struct{})
-	go func() {
 		err := testPlacement.WaitUntilPlacementTableIsReady(context.Background())
-		if assert.NoError(t, err) {
-			readyCh <- struct{}{}
+		assert.NoError(t, err)
+	})
+
+	t.Run("wait until ready", func(t *testing.T) {
+		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+
+		testSuccessCh := make(chan struct{})
+		go func() {
+			err := testPlacement.WaitUntilPlacementTableIsReady(context.Background())
+			if assert.NoError(t, err) {
+				testSuccessCh <- struct{}{}
+			}
+		}()
+
+		time.Sleep(50 * time.Millisecond)
+		require.True(t, testPlacement.tableIsBlocked.Load())
+
+		// unlock
+		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
+
+		// ensure that it is unlocked
+		select {
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("placement table not unlocked in 500ms")
+		case <-testSuccessCh:
+			// all good
 		}
-	}()
 
-	time.Sleep(50 * time.Millisecond)
-	assert.True(t, testPlacement.tableIsBlocked.Load())
+		assert.False(t, testPlacement.tableIsBlocked.Load())
+	})
 
-	// unlock
-	testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
+	t.Run("abort on context canceled", func(t *testing.T) {
+		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
 
-	// ensure that it is unlocked
-	select {
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("placement table not unlocked in 500ms")
-	case <-readyCh:
-		// all good
-	}
+		testSuccessCh := make(chan struct{})
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			err := testPlacement.WaitUntilPlacementTableIsReady(ctx)
+			if assert.ErrorIs(t, err, context.Canceled) {
+				testSuccessCh <- struct{}{}
+			}
+		}()
 
-	assert.False(t, testPlacement.tableIsBlocked.Load())
-}
+		time.Sleep(50 * time.Millisecond)
+		require.True(t, testPlacement.tableIsBlocked.Load())
 
-func TestWaitUntilPlacementTableIsReadyContextCanceled(t *testing.T) {
-	appHealthFunc := func() bool { return true }
-	tableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		// cancel context
+		cancel()
 
-	testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
-
-	readyCh := make(chan struct{})
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		err := testPlacement.WaitUntilPlacementTableIsReady(ctx)
-		if assert.ErrorIs(t, err, context.Canceled) {
-			readyCh <- struct{}{}
+		// ensure that it is still locked
+		select {
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("did not return in 500ms")
+		case <-testSuccessCh:
+			// all good
 		}
-	}()
 
-	time.Sleep(50 * time.Millisecond)
-	assert.True(t, testPlacement.tableIsBlocked.Load())
-
-	// cancel context
-	cancel()
-
-	// ensure that it is still locked
-	select {
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("did not return in 500ms")
-	case <-readyCh:
-		// all good
-	}
-
-	assert.True(t, testPlacement.tableIsBlocked.Load())
+		assert.True(t, testPlacement.tableIsBlocked.Load())
+	})
 }
 
 func TestLookupActor(t *testing.T) {

@@ -41,7 +41,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
 
-	err = a.callLocalACL(ctx, req)
+	err = a.callLocalValidateACL(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -95,12 +95,12 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list
-func (a *api) callLocalACL(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
+func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
 		operation := req.Message().Method
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
-		// Get the http verb in case the application protocol is http
+		// Get the HTTP verb in case the application protocol is "http"
 		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
