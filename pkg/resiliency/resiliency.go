@@ -827,18 +827,21 @@ func (r *Resiliency) GetPolicy(target string, policyType PolicyType) *PolicyDesc
 		componentPolicy, exists = r.components[target]
 		if exists {
 			policy, _ := policyType.(*ComponentPolicy)
-			if policy.componentDirection == "Inbound" {
+			switch policy.componentDirection {
+			case "Inbound":
 				policyName = PolicyNames{
 					Retry:          componentPolicy.Inbound.Retry,
 					CircuitBreaker: componentPolicy.Inbound.CircuitBreaker,
 					Timeout:        componentPolicy.Inbound.Timeout,
 				}
-			} else {
+			case "Outbound":
 				policyName = PolicyNames{
 					Retry:          componentPolicy.Outbound.Retry,
 					CircuitBreaker: componentPolicy.Outbound.CircuitBreaker,
 					Timeout:        componentPolicy.Outbound.Timeout,
 				}
+			default:
+				panic(fmt.Errorf("invalid component policy direction: '%s'", policy.componentDirection))
 			}
 		}
 	case Actor:
