@@ -1818,8 +1818,6 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	subscribeKeys := make([]string, 0)
 
 	// TODO(@halspang) provide a switch to use just resiliency or this.
-	newCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	if len(request.Keys) > 0 {
 		subscribeKeys = append(subscribeKeys, request.Keys...)
@@ -1838,7 +1836,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[string](newCtx,
+	policyRunner := resiliency.NewRunner[string](configurationServer.Context(),
 		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
 	)
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
@@ -1917,4 +1915,16 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
+}
+
+func (a *api) Close() error {
+	a.configurationSubscribeLock.Lock()
+	defer a.configurationSubscribeLock.Unlock()
+
+	for k, stop := range a.configurationSubscribe {
+		close(stop)
+		delete(a.configurationSubscribe, k)
+	}
+
+	return nil
 }
