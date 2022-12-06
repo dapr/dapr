@@ -407,8 +407,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 
 	tpStore.RegisterSampler(daprTraceSampler)
 
-	tpStore.RegisterTracerProvider()
-
+	a.tracerProvider = tpStore.RegisterTracerProvider()
 	return nil
 }
 
@@ -2613,6 +2612,22 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	log.Info("Initiating actor shutdown")
 	a.stopActor()
 
+	// Flush and shutdown the tracing provider.
+	shutdownCtx, shutdownCancel := context.WithCancel(a.ctx)
+	defer shutdownCancel()
+	go func() {
+		if a.tracerProvider != nil {
+			if err := a.tracerProvider.ForceFlush(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warnf("error flushing tracing provider: %v", err)
+			}
+			if err := a.tracerProvider.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warnf("error shutting down tracing provider: %v", err)
+			} else {
+				a.tracerProvider = nil
+			}
+		}
+	}()
+
 	log.Infof("Holding shutdown for %s to allow graceful stop of outstanding operations", duration.String())
 	<-time.After(duration)
 
@@ -2623,15 +2638,6 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 		}
 	}
 
-	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
-	go func() {
-		if a.tracerProvider != nil {
-			a.tracerProvider.Shutdown(shutdownCtx)
-		}
-	}()
-
-	log.Info("Initiating shut down of tracing provider")
-	shutdownCancel()
 	a.shutdownOutputComponents()
 	a.cancel()
 	a.shutdownC <- nil

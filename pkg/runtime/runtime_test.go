@@ -5505,7 +5505,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	assert.Nil(t, rt.initActors())
 
 	go sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 300*time.Second)
 
 	var activeActCount int
 	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
@@ -5538,7 +5538,26 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 	return mockStateStore
 }
 
+func TestTraceShutdown(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
+		Otel: config.OtelSpec{
+			EndpointAddress: "foo.bar",
+			IsSecure:        false,
+			Protocol:        "http",
+		},
+	}
+	rt.hostAddress = "localhost:3000"
+	tpStore := newOpentelemetryTracerProviderStore()
+	require.NoError(t, rt.setupTracing(rt.hostAddress, tpStore))
+	assert.NotNil(t, rt.tracerProvider)
+
+	go sendSigterm(rt)
+	<-rt.ctx.Done()
+	assert.Nil(t, rt.tracerProvider)
+}
+
 func sendSigterm(rt *DaprRuntime) {
-	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 }
