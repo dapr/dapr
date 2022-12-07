@@ -17,6 +17,7 @@ package dapr.proto.runtime.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
@@ -109,6 +110,15 @@ service Dapr {
 
   // Sets value in extended metadata of the sidecar
   rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
+
+  // Start Workflow
+  rpc StartWorkflowAlpha1 (StartWorkflowRequest) returns (WorkflowReference) {}
+
+  // Get Workflow details
+  rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
+
+  // Terminate Workflow
+  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
 
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
@@ -672,4 +682,36 @@ message UnlockResponse {
   }
 
   Status status = 1;
+}
+
+message WorkflowReference {
+  string instance_id = 1;
+}
+
+message GetWorkflowRequest {
+  string instance_id  = 1;
+  string workflow_type = 2;
+  string workflow_component = 3; 
+}
+
+message GetWorkflowResponse {
+  string instance_id = 1;
+  int64 start_time = 2;
+  map<string, string> metadata = 3;
+}
+
+message StartWorkflowRequest {
+  string instance_id = 1;
+  string workflow_component = 2;
+  string workflow_name = 3;
+  map<string, string> options = 4;
+  google.protobuf.Any input = 5;   
+}
+
+message TerminateWorkflowRequest {
+  string instance_id = 1;
+  string workflow_component = 2;
+}
+
+message TerminateWorkflowResponse {
 }

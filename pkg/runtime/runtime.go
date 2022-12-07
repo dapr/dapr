@@ -79,6 +79,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
+	wfs "github.com/dapr/components-contrib/workflows"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
@@ -88,6 +89,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -132,6 +134,7 @@ var componentCategoriesNeedProcess = []components.Category{
 	components.CategoryMiddleware,
 	components.CategoryConfiguration,
 	components.CategoryLock,
+	components.CategoryWorkflow,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -156,55 +159,57 @@ type ComponentAuthorizer func(component componentsV1alpha1.Component) bool
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
-	ctx                    context.Context
-	cancel                 context.CancelFunc
-	runtimeConfig          *Config
-	globalConfig           *config.Configuration
-	accessControlList      *config.AccessControlList
-	componentsLock         *sync.RWMutex
-	components             []componentsV1alpha1.Component
-	grpc                   *grpc.Manager
-	appChannel             channel.AppChannel
-	appConfig              config.ApplicationConfig
-	directMessaging        messaging.DirectMessaging
-	stateStoreRegistry     *stateLoader.Registry
-	secretStoresRegistry   *secretstoresLoader.Registry
-	nameResolutionRegistry *nrLoader.Registry
-	stateStores            map[string]state.Store
-	actor                  actors.Actors
-	bindingsRegistry       *bindingsLoader.Registry
-	subscribeBindingList   []string
-	inputBindings          map[string]bindings.InputBinding
-	outputBindings         map[string]bindings.OutputBinding
-	inputBindingsCtx       context.Context
-	inputBindingsCancel    context.CancelFunc
-	secretStores           map[string]secretstores.SecretStore
-	pubSubRegistry         *pubsubLoader.Registry
-	pubSubs                map[string]pubsubItem // Key is "componentName"
-	nameResolver           nr.Resolver
-	httpMiddlewareRegistry *httpMiddlewareLoader.Registry
-	hostAddress            string
-	actorStateStoreName    string
-	actorStateStoreLock    *sync.RWMutex
-	authenticator          security.Authenticator
-	namespace              string
-	podName                string
-	daprHTTPAPI            http.API
-	daprGRPCAPI            grpc.API
-	operatorClient         operatorv1pb.OperatorClient
-	pubsubCtx              context.Context
-	pubsubCancel           context.CancelFunc
-	topicsLock             *sync.RWMutex
-	topicRoutes            map[string]TopicRoutes        // Key is "componentName"
-	topicCtxCancels        map[string]context.CancelFunc // Key is "componentName||topicName"
-	subscriptions          []runtimePubsub.Subscription
-	inputBindingRoutes     map[string]string
-	shutdownC              chan error
-	apiClosers             []io.Closer
-	componentAuthorizers   []ComponentAuthorizer
-	appHealth              *apphealth.AppHealth
-	appHealthReady         func() // Invoked the first time the app health becomes ready
-	appHealthLock          *sync.Mutex
+	ctx                       context.Context
+	cancel                    context.CancelFunc
+	runtimeConfig             *Config
+	globalConfig              *config.Configuration
+	accessControlList         *config.AccessControlList
+	componentsLock            *sync.RWMutex
+	components                []componentsV1alpha1.Component
+	grpc                      *grpc.Manager
+	appChannel                channel.AppChannel
+	appConfig                 config.ApplicationConfig
+	directMessaging           messaging.DirectMessaging
+	stateStoreRegistry        *stateLoader.Registry
+	secretStoresRegistry      *secretstoresLoader.Registry
+	nameResolutionRegistry    *nrLoader.Registry
+	workflowComponentRegistry *workflowsLoader.Registry
+	stateStores               map[string]state.Store
+	actor                     actors.Actors
+	bindingsRegistry          *bindingsLoader.Registry
+	subscribeBindingList      []string
+	inputBindings             map[string]bindings.InputBinding
+	outputBindings            map[string]bindings.OutputBinding
+	inputBindingsCtx          context.Context
+	inputBindingsCancel       context.CancelFunc
+	secretStores              map[string]secretstores.SecretStore
+	pubSubRegistry            *pubsubLoader.Registry
+	pubSubs                   map[string]pubsubItem // Key is "componentName"
+	workflowComponents        map[string]wfs.Workflow
+	nameResolver              nr.Resolver
+	httpMiddlewareRegistry    *httpMiddlewareLoader.Registry
+	hostAddress               string
+	actorStateStoreName       string
+	actorStateStoreLock       *sync.RWMutex
+	authenticator             security.Authenticator
+	namespace                 string
+	podName                   string
+	daprHTTPAPI               http.API
+	daprGRPCAPI               grpc.API
+	operatorClient            operatorv1pb.OperatorClient
+	pubsubCtx                 context.Context
+	pubsubCancel              context.CancelFunc
+	topicsLock                *sync.RWMutex
+	topicRoutes               map[string]TopicRoutes        // Key is "componentName"
+	topicCtxCancels           map[string]context.CancelFunc // Key is "componentName||topicName"
+	subscriptions             []runtimePubsub.Subscription
+	inputBindingRoutes        map[string]string
+	shutdownC                 chan error
+	apiClosers                []io.Closer
+	componentAuthorizers      []ComponentAuthorizer
+	appHealth                 *apphealth.AppHealth
+	appHealthReady            func() // Invoked the first time the app health becomes ready
+	appHealthLock             *sync.Mutex
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -234,6 +239,7 @@ type ComponentRegistry struct {
 	OutputBindings  map[string]bindings.OutputBinding
 	SecretStores    map[string]secretstores.SecretStore
 	PubSubs         map[string]pubsub.PubSub
+	Workflows       map[string]wfs.Workflow
 }
 
 type componentPreprocessRes struct {
@@ -281,6 +287,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretsConfiguration:       map[string]config.SecretsScope{},
 		configurationStores:        map[string]configuration.Store{},
 		lockStores:                 map[string]lock.Store{},
+		workflowComponents:         map[string]wfs.Workflow{},
 		pendingComponents:          make(chan componentsV1alpha1.Component),
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
@@ -452,6 +459,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry = opts.bindingRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
+	a.workflowComponentRegistry = opts.workflowComponentRegistry
 
 	a.initPluggableComponents()
 
@@ -585,6 +593,7 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 			OutputBindings:  a.outputBindings,
 			SecretStores:    a.secretStores,
 			PubSubs:         pubsubs,
+			Workflows:       a.workflowComponents,
 		}); err != nil {
 			log.Fatalf("failed to register components with callback: %s", err)
 		}
@@ -1365,6 +1374,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		GetSubscriptionsFn:          a.getSubscriptions,
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
+		WorkflowsComponents:         a.workflowComponents,
 		LockStores:                  a.lockStores,
 		SecretStores:                a.secretStores,
 		SecretsConfiguration:        a.secretsConfiguration,
@@ -1461,6 +1471,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
 		SecretStores:                a.secretStores,
+		WorkflowComponents:          a.workflowComponents,
 		SecretsConfiguration:        a.secretsConfiguration,
 		ConfigurationStores:         a.configurationStores,
 		LockStores:                  a.lockStores,
@@ -1635,6 +1646,34 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
 		return NewInitError(InitComponentFailure, fName, wrapError)
 	}
+	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+
+	return nil
+}
+
+func (a *DaprRuntime) initWorkflowComponent(s componentsV1alpha1.Component) error {
+	// create the component
+	workflowComp, err := a.workflowComponentRegistry.Create(s.Spec.Type, s.Spec.Version)
+	if err != nil {
+		log.Warnf("error creating workflow component %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+		return err
+	}
+
+	if workflowComp == nil {
+		return nil
+	}
+
+	// initialization
+	baseMetadata := a.toBaseMetadata(s)
+	err = workflowComp.Init(wfs.Metadata{Base: baseMetadata})
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
+	}
+	// save workflow related configuration
+	a.workflowComponents[s.ObjectMeta.Name] = workflowComp
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 
 	return nil
@@ -2519,6 +2558,8 @@ func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp c
 		return a.initConfiguration(comp)
 	case components.CategoryLock:
 		return a.initLock(comp)
+	case components.CategoryWorkflow:
+		return a.initWorkflowComponent(comp)
 	}
 	return nil
 }
@@ -2559,6 +2600,9 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	}
 	for name, component := range a.configurationStores {
 		closeComponent(component, "configuration store "+name, &merr)
+	}
+	for name, component := range a.workflowComponents {
+		closeComponent(component, "workflow "+name, &merr)
 	}
 	// Close output bindings
 	// Input bindings are closed when a.ctx is canceled
