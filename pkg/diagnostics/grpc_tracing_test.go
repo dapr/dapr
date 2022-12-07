@@ -304,6 +304,64 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 		})
 	})
 
+	t.Run("internal calls", func(t *testing.T) {
+		t.Run("base test", func(t *testing.T) {
+			fakeInfo := &grpc.StreamServerInfo{
+				FullMethod: "/dapr.proto.internals.v1.ServiceInvocation/CallLocal",
+			}
+
+			h := func(srv any, stream grpc.ServerStream) error {
+				return nil
+			}
+
+			err := interceptor(nil, &fakeStream{}, fakeInfo, h)
+			assert.NoError(t, err)
+		})
+
+		t.Run("grpc-trace-bin is given", func(t *testing.T) {
+			fakeInfo := &grpc.StreamServerInfo{
+				FullMethod: "/dapr.proto.internals.v1.ServiceInvocation/CallLocal",
+			}
+
+			ctx := grpcMetadata.NewIncomingContext(context.Background(), grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
+			ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
+
+			var span trace.Span
+			assertHandler := func(srv any, stream grpc.ServerStream) error {
+				span = diagUtils.SpanFromContext(stream.Context())
+				return errors.New("fake error")
+			}
+
+			interceptor(nil, &fakeStream{ctx}, fakeInfo, assertHandler)
+
+			sc := span.SpanContext()
+			traceID := sc.TraceID()
+			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
+			spanID := sc.SpanID()
+			assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
+		})
+
+		t.Run("grpc-trace-bin is not given", func(t *testing.T) {
+			fakeInfo := &grpc.StreamServerInfo{
+				FullMethod: "/dapr.proto.internals.v1.ServiceInvocation/CallLocal",
+			}
+
+			var span trace.Span
+			assertHandler := func(srv any, stream grpc.ServerStream) error {
+				span = diagUtils.SpanFromContext(stream.Context())
+				return errors.New("fake error")
+			}
+
+			interceptor(nil, &fakeStream{}, fakeInfo, assertHandler)
+
+			sc := span.SpanContext()
+			traceID := sc.TraceID()
+			spanID := sc.SpanID()
+			assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
+			assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+		})
+	})
+
 	t.Run("proxy requests", func(t *testing.T) {
 		t.Run("proxy request without app id, return error", func(t *testing.T) {
 			fakeInfo := &grpc.StreamServerInfo{

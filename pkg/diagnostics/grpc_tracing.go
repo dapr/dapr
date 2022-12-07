@@ -268,8 +268,10 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 }
 
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.
+// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md .
 func spanAttributesMapFromGRPC(appID string, req any, rpcMethod string) map[string]string {
-	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
+	// Allocating this map with an initial capacity of 8 which seems to be the "worst case" scenario due to possible unique keys below (note this is an initial capacity and not a hard limit).
+	// Using an explicit capacity reduces the risk the map will need to be re-allocated multiple times.
 	m := make(map[string]string, 8)
 
 	var dbType string
