@@ -22,14 +22,12 @@ import (
 	"net"
 	nethttp "net/http"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/benbjohnson/clock"
 	clocklib "github.com/benbjohnson/clock"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
@@ -65,10 +63,7 @@ const (
 	metadataZeroID       = "00000000-0000-0000-0000-000000000000"
 )
 
-var (
-	log     = logger.NewLogger("dapr.runtime.actor")
-	pattern = regexp.MustCompile(`^(R(?P<repetition>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
-)
+var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management.
 //
@@ -166,7 +161,7 @@ type ActorsOpts struct {
 
 // NewActors create a new actors runtime with given config.
 func NewActors(opts ActorsOpts) Actors {
-	return newActorsWithClock(opts, clock.New())
+	return newActorsWithClock(opts, clocklib.New())
 }
 
 func newActorsWithClock(opts ActorsOpts, clock clocklib.Clock) Actors {

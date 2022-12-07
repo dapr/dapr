@@ -2163,13 +2163,13 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 	// Sleep on the wall clock to allow the background goroutines to get in sync
 	runtime.Gosched()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	clock.Add(2 * time.Second)
 
 	// Sleep on the wall clock to allow the background goroutines to get in sync
 	runtime.Gosched()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	assert.False(t, testActorsRuntime.appHealthy.Load())
 }
 
@@ -2188,13 +2188,13 @@ func TestHostedActorsWithoutStateStore(t *testing.T) {
 
 	// Sleep on the wall clock to allow the background goroutines to get in sync
 	runtime.Gosched()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	clock.Add(2 * time.Second)
 
 	// Sleep on the wall clock to allow the background goroutines to get in sync
 	runtime.Gosched()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	assert.False(t, testActorsRuntime.appHealthy.Load())
 }
 
@@ -2213,13 +2213,13 @@ func TestNoHostedActorsWithoutStateStore(t *testing.T) {
 
 	// Sleep on the wall clock to allow the background goroutines to get in sync
 	runtime.Gosched()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	clock.Add(2 * time.Second)
 
 	// Sleep on the wall clock to allow the background goroutines to get in sync
 	runtime.Gosched()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	assert.True(t, testActorsRuntime.appHealthy.Load())
 }
 
