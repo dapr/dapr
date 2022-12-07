@@ -9,7 +9,7 @@ require (
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/dapr/components-contrib v1.9.1-0.20221111215803-c92827c3defc
-	github.com/dapr/kit v0.0.3-0.20221119212753-76dbc2afea63
+	github.com/dapr/kit v0.0.4-0.20221207191014-b2486486ce50
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3

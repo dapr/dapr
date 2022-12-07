@@ -525,11 +525,12 @@ func assertTestSignal(t *testing.T, ch <-chan struct{}) {
 	t.Helper()
 
 	// The signal is sent in a background goroutine, so we need to use a wall clock here
+	runtime.Gosched()
 	select {
 	case <-ch:
 		// all good
-	case <-time.After(1500 * time.Millisecond):
-		t.Fatal("did not receive signal in 1.5 seconds")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("did not receive signal in 500ms")
 	}
 }
 
@@ -537,10 +538,11 @@ func assertNoTestSignal(t *testing.T, ch <-chan struct{}) {
 	t.Helper()
 
 	// The signal is sent in a background goroutine, so we need to use a wall clock here
+	runtime.Gosched()
 	select {
 	case <-ch:
 		t.Fatal("received unexpected signal")
-	case <-time.After(1500 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 		// all good
 	}
 }
@@ -550,8 +552,14 @@ func assertNoTestSignal(t *testing.T, ch <-chan struct{}) {
 func advanceTickers(rt *actorsRuntime, step time.Duration, count int) {
 	clock := rt.clock.(*clocklib.Mock)
 	clock.Add(100 * time.Millisecond)
+	// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync (especially when testing with -race)
+	runtime.Gosched()
+	time.Sleep(50 * time.Millisecond)
 	for i := 0; i < count; i++ {
 		clock.Add(step)
+		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync (especially when testing with -race)
+		runtime.Gosched()
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
@@ -1056,6 +1064,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		go testActorsRuntime.CreateReminder(ctx, &reminder3)
 
 		// Sleep on the wall clock because we used a background goroutine
+		runtime.Gosched()
 		time.Sleep(100 * time.Millisecond)
 
 		// due time for reminders is 4s, advance less
@@ -1070,6 +1079,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		assert.Equal(t, "4s", reminders[0].reminder.DueTime)
 
 		// Sleep on the wall clock because we used a background goroutine
+		runtime.Gosched()
 		time.Sleep(100 * time.Millisecond)
 
 		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "", "d")
@@ -1494,6 +1504,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 		go testActorsRuntime.CreateTimer(ctx, &timer3)
 
 		// Sleep on the wall clock due to background goroutines
+		runtime.Gosched()
 		time.Sleep(100 * time.Millisecond)
 
 		// due time for timer2/timer3 is 4s, advance less
@@ -1721,6 +1732,7 @@ func TestReminderFires(t *testing.T) {
 	clock.Add(100 * time.Millisecond)
 
 	// Sleep on the wall clock to allow background goroutines to complete
+	runtime.Gosched()
 	time.Sleep(100 * time.Millisecond)
 
 	actorKey := constructCompositeKey(actorType, actorID)
@@ -1751,6 +1763,7 @@ func TestReminderDueDate(t *testing.T) {
 	clock.Add(500 * time.Millisecond)
 
 	// Sleep on the wall clock to allow background goroutines to complete
+	runtime.Gosched()
 	time.Sleep(100 * time.Millisecond)
 
 	track, err = testActorsRuntime.getReminderTrack(actorKey, "reminder1")
@@ -1775,6 +1788,7 @@ func TestReminderPeriod(t *testing.T) {
 	clock.Add(250 * time.Millisecond)
 
 	// Sleep on the wall clock to allow background goroutines to complete
+	runtime.Gosched()
 	time.Sleep(100 * time.Millisecond)
 
 	track, _ := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
@@ -1783,6 +1797,7 @@ func TestReminderPeriod(t *testing.T) {
 	clock.Add(3 * time.Second)
 
 	// Sleep on the wall clock to allow background goroutines to complete
+	runtime.Gosched()
 	time.Sleep(100 * time.Millisecond)
 
 	track2, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
@@ -1809,6 +1824,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	clock.Add(100 * time.Millisecond)
 
 	// Sleep on the wall clock to allow background goroutines to complete
+	runtime.Gosched()
 	time.Sleep(100 * time.Millisecond)
 
 	track, _ := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
