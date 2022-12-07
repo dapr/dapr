@@ -14,6 +14,7 @@ limitations under the License.
 package health
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -26,7 +27,9 @@ import (
 func TestHealthCheck(t *testing.T) {
 	t.Run("unhealthy endpoint custom interval 1, failure threshold 2s", func(t *testing.T) {
 		start := time.Now()
-		ch := StartEndpointHealthCheck("invalid", WithInterval(time.Second*1), WithFailureThreshold(2))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ch := StartEndpointHealthCheck(ctx, "invalid", WithInterval(time.Second*1), WithFailureThreshold(2))
 		for {
 			healthy := <-ch
 			assert.False(t, healthy)
@@ -39,7 +42,9 @@ func TestHealthCheck(t *testing.T) {
 
 	t.Run("unhealthy endpoint custom interval 1s, failure threshold 1, initial delay 2s", func(t *testing.T) {
 		start := time.Now()
-		ch := StartEndpointHealthCheck("invalid", WithInterval(time.Second*1), WithFailureThreshold(1), WithInitialDelay(time.Second*2))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ch := StartEndpointHealthCheck(ctx, "invalid", WithInterval(time.Second*1), WithFailureThreshold(1), WithInitialDelay(time.Second*2))
 		for {
 			healthy := <-ch
 			assert.False(t, healthy)
@@ -52,7 +57,9 @@ func TestHealthCheck(t *testing.T) {
 
 	t.Run("unhealthy endpoint custom interval 1s, failure threshold 2, initial delay 2s", func(t *testing.T) {
 		start := time.Now()
-		ch := StartEndpointHealthCheck("invalid", WithInterval(time.Second*1), WithFailureThreshold(2), WithInitialDelay(time.Second*2))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ch := StartEndpointHealthCheck(ctx, "invalid", WithInterval(time.Second*1), WithFailureThreshold(2), WithInitialDelay(time.Second*2))
 		for {
 			healthy := <-ch
 			assert.False(t, healthy)
@@ -69,7 +76,7 @@ func TestApplyOptions(t *testing.T) {
 		opts := healthCheckOptions{}
 		applyDefaults(&opts)
 
-		assert.Equal(t, opts.failureThreshold, failureThreshold)
+		assert.Equal(t, opts.failureThreshold, int32(failureThreshold))
 		assert.Equal(t, opts.initialDelay, initialDelay)
 		assert.Equal(t, opts.interval, interval)
 		assert.Equal(t, opts.requestTimeout, requestTimeout)
@@ -90,7 +97,7 @@ func TestApplyOptions(t *testing.T) {
 		for _, o := range customOpts {
 			o(&opts)
 		}
-		assert.Equal(t, opts.failureThreshold, 10)
+		assert.Equal(t, opts.failureThreshold, int32(10))
 		assert.Equal(t, opts.initialDelay, time.Second*11)
 		assert.Equal(t, opts.interval, time.Second*12)
 		assert.Equal(t, opts.requestTimeout, time.Second*13)
@@ -117,7 +124,9 @@ func TestResponses(t *testing.T) {
 		defer server.Close()
 
 		ticker := make(chan time.Time)
-		ch := StartEndpointHealthCheck(server.URL, WithTicker(ticker), WithFailureThreshold(1))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ch := StartEndpointHealthCheck(ctx, server.URL, WithTicker(ticker), WithFailureThreshold(1))
 		for {
 			ticker <- time.Now()
 			healthy := <-ch
@@ -133,7 +142,9 @@ func TestResponses(t *testing.T) {
 		defer server.Close()
 
 		ticker := make(chan time.Time)
-		ch := StartEndpointHealthCheck(server.URL, WithTicker(ticker), WithFailureThreshold(1), WithSuccessStatusCode(201))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ch := StartEndpointHealthCheck(ctx, server.URL, WithTicker(ticker), WithFailureThreshold(1), WithSuccessStatusCode(201))
 		for {
 			ticker <- time.Now()
 			healthy := <-ch
@@ -149,7 +160,9 @@ func TestResponses(t *testing.T) {
 		defer server.Close()
 
 		ticker := make(chan time.Time)
-		ch := StartEndpointHealthCheck(server.URL, WithTicker(ticker), WithFailureThreshold(1))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ch := StartEndpointHealthCheck(ctx, server.URL, WithTicker(ticker), WithFailureThreshold(1))
 		for {
 			ticker <- time.Now()
 			healthy := <-ch
@@ -166,7 +179,9 @@ func TestResponses(t *testing.T) {
 		defer server.Close()
 
 		ticker := make(chan time.Time)
-		ch := StartEndpointHealthCheck(server.URL, WithTicker(ticker), WithFailureThreshold(1))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ch := StartEndpointHealthCheck(ctx, server.URL, WithTicker(ticker), WithFailureThreshold(1))
 		count := 0
 		for {
 			ticker <- time.Now()
@@ -177,7 +192,6 @@ func TestResponses(t *testing.T) {
 				test.statusCode = 200
 			} else {
 				assert.True(t, healthy)
-
 				return
 			}
 		}

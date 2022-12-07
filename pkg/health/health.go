@@ -15,6 +15,7 @@ package health
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -34,7 +35,7 @@ type Option func(o *healthCheckOptions)
 type healthCheckOptions struct {
 	initialDelay      time.Duration
 	requestTimeout    time.Duration
-	failureThreshold  int
+	failureThreshold  int32
 	interval          time.Duration
 	successStatusCode int
 	ticker            <-chan time.Time
@@ -57,7 +58,7 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 		if ticker == nil {
 			ticker = time.NewTicker(options.interval).C
 		}
-		failureCount := 0
+		failureCount := &atomic.Int32{}
 		time.Sleep(options.initialDelay)
 
 		client := &fasthttp.Client{
@@ -77,14 +78,23 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 				resp := fasthttp.AcquireResponse()
 				err := client.DoTimeout(req, resp, options.requestTimeout)
 				if err != nil || resp.StatusCode() != options.successStatusCode {
-					failureCount++
-					if failureCount == options.failureThreshold {
-						failureCount--
-						ch <- false
+					if failureCount.Add(1) == options.failureThreshold {
+						failureCount.Add(-1)
+						select {
+						case ch <- false:
+							// nop
+						default:
+							// nop
+						}
 					}
 				} else {
-					ch <- true
-					failureCount = 0
+					select {
+					case ch <- true:
+						// nop
+					default:
+						// nop
+					}
+					failureCount.Store(0)
 				}
 				fasthttp.ReleaseResponse(resp)
 			case <-ctx.Done():
@@ -111,7 +121,7 @@ func WithInitialDelay(delay time.Duration) Option {
 }
 
 // WithFailureThreshold sets the failure threshold for the health check.
-func WithFailureThreshold(threshold int) Option {
+func WithFailureThreshold(threshold int32) Option {
 	return func(o *healthCheckOptions) {
 		o.failureThreshold = threshold
 	}
