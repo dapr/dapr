@@ -43,9 +43,15 @@ func TestHealthCheck(t *testing.T) {
 		)
 		runtime.Gosched()
 
+		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
+		time.Sleep(50 * time.Millisecond)
+
 		// Nothing happens for the first second
 		clock.Add(time.Second)
 		assertNoHealthSignal(t, ch)
+
+		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
+		time.Sleep(50 * time.Millisecond)
 
 		// Get a signal after the next tick
 		clock.Add(time.Second)
@@ -66,9 +72,14 @@ func TestHealthCheck(t *testing.T) {
 
 		// Nothing happens for the first 2s
 		for i := 0; i < 2; i++ {
+			// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
+			time.Sleep(50 * time.Millisecond)
 			clock.Add(time.Second)
 			assertNoHealthSignal(t, ch)
 		}
+
+		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
+		time.Sleep(50 * time.Millisecond)
 
 		// Get a signal after the next tick
 		clock.Add(time.Second)
@@ -87,11 +98,17 @@ func TestHealthCheck(t *testing.T) {
 		)
 		runtime.Gosched()
 
+		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
+		time.Sleep(50 * time.Millisecond)
+
 		// Nothing happens for the first 3s
 		for i := 0; i < 3; i++ {
 			clock.Add(time.Second)
 			assertNoHealthSignal(t, ch)
 		}
+
+		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
+		time.Sleep(50 * time.Millisecond)
 
 		// Get a signal after the next tick
 		clock.Add(time.Second)
@@ -250,7 +267,13 @@ func TestResponses(t *testing.T) {
 func assertHealthSignal(t *testing.T, ch <-chan bool) bool {
 	t.Helper()
 	runtime.Gosched()
-	return <-ch
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("did not receive a signal in 200ms")
+	}
+	return false
 }
 
 func assertNoHealthSignal(t *testing.T, ch <-chan bool) {
@@ -261,7 +284,7 @@ func assertNoHealthSignal(t *testing.T, ch <-chan bool) {
 	select {
 	case <-ch:
 		t.Fatal("received unexpected signal")
-	case <-time.After(150 * time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 		// all good
 	}
 }
