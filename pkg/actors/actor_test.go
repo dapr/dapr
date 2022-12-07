@@ -24,7 +24,7 @@ import (
 var reentrancyStackDepth = 32
 
 func TestIsBusy(t *testing.T) {
-	testActor := newActor("testType", "testID", &reentrancyStackDepth)
+	testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 	testActor.lock(nil)
 	assert.Equal(t, true, testActor.isBusy())
@@ -32,7 +32,7 @@ func TestIsBusy(t *testing.T) {
 }
 
 func TestTurnBasedConcurrencyLocks(t *testing.T) {
-	testActor := newActor("testType", "testID", &reentrancyStackDepth)
+	testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 	// first lock
 	testActor.lock(nil)
@@ -72,7 +72,7 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 
 func TestDisposedActor(t *testing.T) {
 	t.Run("not disposed", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth)
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 		testActor.lock(nil)
 		testActor.unlock()
@@ -83,7 +83,7 @@ func TestDisposedActor(t *testing.T) {
 	})
 
 	t.Run("disposed", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth)
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 		testActor.lock(nil)
 		ch := testActor.channel()
@@ -99,7 +99,7 @@ func TestDisposedActor(t *testing.T) {
 
 func TestPendingActorCalls(t *testing.T) {
 	t.Run("no pending actor call with new actor object", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth)
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 		channelClosed := false
 
 		select {
@@ -114,7 +114,7 @@ func TestPendingActorCalls(t *testing.T) {
 	})
 
 	t.Run("close channel before timeout", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth)
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 		testActor.lock(nil)
 
 		channelClosed := atomic.NewBool(false)
@@ -135,7 +135,7 @@ func TestPendingActorCalls(t *testing.T) {
 	})
 
 	t.Run("multiple listeners", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth)
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 		testActor.lock(nil)
 
 		nListeners := 10

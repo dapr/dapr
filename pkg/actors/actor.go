@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/kit/ptr"
 )
 
 // ErrActorDisposed is the error when runtime tries to hold the lock of the disposed actor.
@@ -56,7 +57,10 @@ type actor struct {
 	once sync.Once
 }
 
-func newActor(actorType, actorID string, maxReentrancyDepth *int) *actor {
+func newActor(actorType, actorID string, maxReentrancyDepth *int, now *time.Time) *actor {
+	if now == nil {
+		now = ptr.Of(time.Now())
+	}
 	return &actor{
 		actorType:    actorType,
 		actorID:      actorID,
@@ -64,7 +68,7 @@ func newActor(actorType, actorID string, maxReentrancyDepth *int) *actor {
 		disposeLock:  &sync.RWMutex{},
 		disposeCh:    nil,
 		disposed:     false,
-		lastUsedTime: time.Now().UTC(),
+		lastUsedTime: *now,
 	}
 }
 

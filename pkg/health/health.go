@@ -14,6 +14,7 @@ limitations under the License.
 package health
 
 import (
+	"context"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -42,7 +43,7 @@ type healthCheckOptions struct {
 // StartEndpointHealthCheck starts a health check on the specified address with the given options.
 // It returns a channel that will emit true if the endpoint is healthy and false if the failure conditions
 // Have been met.
-func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool {
+func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts ...Option) chan bool {
 	options := &healthCheckOptions{}
 	applyDefaults(options)
 
@@ -70,20 +71,25 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 		req.Header.SetMethod(fasthttp.MethodGet)
 		defer fasthttp.ReleaseRequest(req)
 
-		for range ticker {
-			resp := fasthttp.AcquireResponse()
-			err := client.DoTimeout(req, resp, options.requestTimeout)
-			if err != nil || resp.StatusCode() != options.successStatusCode {
-				failureCount++
-				if failureCount == options.failureThreshold {
-					failureCount--
-					ch <- false
+		for {
+			select {
+			case <-ticker:
+				resp := fasthttp.AcquireResponse()
+				err := client.DoTimeout(req, resp, options.requestTimeout)
+				if err != nil || resp.StatusCode() != options.successStatusCode {
+					failureCount++
+					if failureCount == options.failureThreshold {
+						failureCount--
+						ch <- false
+					}
+				} else {
+					ch <- true
+					failureCount = 0
 				}
-			} else {
-				ch <- true
-				failureCount = 0
+				fasthttp.ReleaseResponse(resp)
+			case <-ctx.Done():
+				return
 			}
-			fasthttp.ReleaseResponse(resp)
 		}
 	}(signalChan, endpointAddress, options)
 	return signalChan
