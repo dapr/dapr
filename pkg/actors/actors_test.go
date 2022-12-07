@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -292,6 +293,7 @@ type runtimeBuilder struct {
 	featureSpec    []config.FeatureSpec
 	actorStore     state.Store
 	actorStoreName string
+	clock          clocklib.Clock
 }
 
 func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
@@ -323,8 +325,12 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		storeName = b.actorStoreName
 	}
 
-	clock := clocklib.NewMock()
-	clock.Set(startOfTime)
+	clock := b.clock
+	if clock == nil {
+		mc := clocklib.NewMock()
+		mc.Set(startOfTime)
+		clock = mc
+	}
 
 	a := newActorsWithClock(ActorsOpts{
 		StateStore:     store,
@@ -2126,49 +2132,78 @@ func TestActiveActorsCount(t *testing.T) {
 	})
 }
 
-//
-// UPDATE FROM DOWN BELOW
-//
-
 func TestActorsAppHealthCheck(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
+	clock := testActorsRuntime.clock.(*clocklib.Mock)
 
 	testActorsRuntime.config.HostedActorTypes = []string{"actor1"}
 	go testActorsRuntime.startAppHealthCheck(
+		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),
-		health.WithRequestTimeout(100*time.Millisecond))
+		health.WithRequestTimeout(100*time.Millisecond),
+	)
 
-	time.Sleep(time.Second * 2)
+	// Sleep on the wall clock to allow the background goroutines to get in sync
+	runtime.Gosched()
+	time.Sleep(50 * time.Millisecond)
+
+	clock.Add(2 * time.Second)
+
+	// Sleep on the wall clock to allow the background goroutines to get in sync
+	runtime.Gosched()
+	time.Sleep(50 * time.Millisecond)
 	assert.False(t, testActorsRuntime.appHealthy.Load())
 }
 
 func TestHostedActorsWithoutStateStore(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntimeWithoutStore()
 	defer testActorsRuntime.Stop()
+	clock := testActorsRuntime.clock.(*clocklib.Mock)
 
 	testActorsRuntime.config.HostedActorTypes = []string{"actor1"}
 	go testActorsRuntime.startAppHealthCheck(
+		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),
-		health.WithRequestTimeout(100*time.Millisecond))
+		health.WithRequestTimeout(100*time.Millisecond),
+	)
 
-	time.Sleep(time.Second * 2)
+	// Sleep on the wall clock to allow the background goroutines to get in sync
+	runtime.Gosched()
+	time.Sleep(50 * time.Millisecond)
+
+	clock.Add(2 * time.Second)
+
+	// Sleep on the wall clock to allow the background goroutines to get in sync
+	runtime.Gosched()
+	time.Sleep(50 * time.Millisecond)
 	assert.False(t, testActorsRuntime.appHealthy.Load())
 }
 
 func TestNoHostedActorsWithoutStateStore(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntimeWithoutStore()
 	defer testActorsRuntime.Stop()
+	clock := testActorsRuntime.clock.(*clocklib.Mock)
 
 	testActorsRuntime.config.HostedActorTypes = []string{}
 	go testActorsRuntime.startAppHealthCheck(
+		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),
-		health.WithRequestTimeout(100*time.Millisecond))
+		health.WithRequestTimeout(100*time.Millisecond),
+	)
 
-	time.Sleep(time.Second * 2)
+	// Sleep on the wall clock to allow the background goroutines to get in sync
+	runtime.Gosched()
+	time.Sleep(50 * time.Millisecond)
+
+	clock.Add(2 * time.Second)
+
+	// Sleep on the wall clock to allow the background goroutines to get in sync
+	runtime.Gosched()
+	time.Sleep(50 * time.Millisecond)
 	assert.True(t, testActorsRuntime.appHealthy.Load())
 }
 
@@ -2521,6 +2556,8 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		appChannel:     failingAppChannel,
 		actorStore:     failingState,
 		actorStoreName: "failStore",
+		// This test is using a real wall clock
+		clock: clocklib.New(),
 	}
 	runtime := builder.buildActorRuntime()
 

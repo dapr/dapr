@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	clocklib "github.com/benbjohnson/clock"
 	"github.com/valyala/fasthttp"
 )
 
@@ -38,13 +39,13 @@ type healthCheckOptions struct {
 	failureThreshold  int32
 	interval          time.Duration
 	successStatusCode int
-	ticker            <-chan time.Time
+	clock             clocklib.Clock
 }
 
 // StartEndpointHealthCheck starts a health check on the specified address with the given options.
 // It returns a channel that will emit true if the endpoint is healthy and false if the failure conditions
 // Have been met.
-func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts ...Option) chan bool {
+func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts ...Option) <-chan bool {
 	options := &healthCheckOptions{}
 	applyDefaults(options)
 
@@ -53,13 +54,11 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 	}
 	signalChan := make(chan bool, 1)
 
-	go func(ch chan<- bool, endpointAddress string, options *healthCheckOptions) {
-		ticker := options.ticker
-		if ticker == nil {
-			ticker = time.NewTicker(options.interval).C
-		}
+	go func() {
 		failureCount := &atomic.Int32{}
-		time.Sleep(options.initialDelay)
+		if options.initialDelay > 0 {
+			options.clock.Sleep(options.initialDelay)
+		}
 
 		client := &fasthttp.Client{
 			MaxConnsPerHost:           5, // Limit Keep-Alive connections
@@ -67,42 +66,39 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 			MaxIdemponentCallAttempts: 1,
 		}
 
-		req := fasthttp.AcquireRequest()
-		req.SetRequestURI(endpointAddress)
-		req.Header.SetMethod(fasthttp.MethodGet)
-		defer fasthttp.ReleaseRequest(req)
+		ticker := options.clock.Ticker(options.interval)
 
 		for {
 			select {
-			case <-ticker:
-				resp := fasthttp.AcquireResponse()
-				err := client.DoTimeout(req, resp, options.requestTimeout)
-				if err != nil || resp.StatusCode() != options.successStatusCode {
-					if failureCount.Add(1) == options.failureThreshold {
-						failureCount.Add(-1)
-						select {
-						case ch <- false:
-							// nop
-						default:
-							// nop
-						}
-					}
-				} else {
-					select {
-					case ch <- true:
-						// nop
-					default:
-						// nop
-					}
-					failureCount.Store(0)
-				}
-				fasthttp.ReleaseResponse(resp)
+			case <-ticker.C:
+				go doHealthCheck(client, endpointAddress, signalChan, failureCount, options)
 			case <-ctx.Done():
 				return
 			}
 		}
-	}(signalChan, endpointAddress, options)
+	}()
 	return signalChan
+}
+
+func doHealthCheck(client *fasthttp.Client, endpointAddress string, signalChan chan bool, failureCount *atomic.Int32, options *healthCheckOptions) {
+	req := fasthttp.AcquireRequest()
+	req.SetRequestURI(endpointAddress)
+	req.Header.SetMethod(fasthttp.MethodGet)
+	defer fasthttp.ReleaseRequest(req)
+
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(resp)
+
+	err := client.DoTimeout(req, resp, options.requestTimeout)
+	if err != nil || resp.StatusCode() != options.successStatusCode {
+		if failureCount.Add(1) >= options.failureThreshold {
+			failureCount.Store(options.failureThreshold - 1)
+			signalChan <- false
+		}
+	} else {
+		signalChan <- true
+		failureCount.Store(0)
+	}
 }
 
 func applyDefaults(o *healthCheckOptions) {
@@ -111,6 +107,7 @@ func applyDefaults(o *healthCheckOptions) {
 	o.requestTimeout = requestTimeout
 	o.successStatusCode = successStatusCode
 	o.interval = interval
+	o.clock = clocklib.New()
 }
 
 // WithInitialDelay sets the initial delay for the health check.
@@ -148,8 +145,9 @@ func WithInterval(interval time.Duration) Option {
 	}
 }
 
-func WithTicker(ticker <-chan time.Time) Option {
+// WithClock sets a custom clock (for mocking time).
+func WithClock(clock clocklib.Clock) Option {
 	return func(o *healthCheckOptions) {
-		o.ticker = ticker
+		o.clock = clock
 	}
 }
