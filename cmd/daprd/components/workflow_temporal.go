@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Dapr Authors
+Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -13,17 +13,11 @@ limitations under the License.
 
 package components
 
-type Category string
-
-// supported components category
-const (
-	CategoryBindings       Category = "bindings"
-	CategoryPubSub         Category = "pubsub"
-	CategorySecretStore    Category = "secretstores"
-	CategoryStateStore     Category = "state"
-	CategoryWorkflow       Category = "workflow"
-	CategoryMiddleware     Category = "middleware"
-	CategoryConfiguration  Category = "configuration"
-	CategoryLock           Category = "lock"
-	CategoryNameResolution Category = "nameresolution"
+import (
+	"github.com/dapr/components-contrib/workflows/temporal"
+	workflowLoader "github.com/dapr/dapr/pkg/components/workflows"
 )
+
+func init() {
+	workflowLoader.DefaultRegistry.RegisterComponent(temporal.NewTemporalWorkflow, "temporal")
+}
