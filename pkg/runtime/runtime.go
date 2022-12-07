@@ -2231,28 +2231,12 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		}
 	}
 
-	// Assemble Cloud Event Extensions:
-	// Create copy of the cloud event with duplicated data removed
-
-	extensions := map[string]interface{}{}
-	for key, value := range cloudEvent {
-		if !cloudEventDuplicateKeys.Has(key) {
-			extensions[key] = value
-		}
-	}
-	extensionsStruct := &structpb.Struct{}
-	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
-	if jsonMarshalErr != nil {
+	extensions, extensionsErr := extractCloudEventExtensions(cloudEvent)
+	if extensionsErr != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-		return fmt.Errorf("Error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
+		return extensionsErr
 	}
-
-	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, extensionsStruct)
-	if protoUnmarshalErr != nil {
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-		return fmt.Errorf("Error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", jsonMarshalErr)
-	}
-	envelope.Extensions = extensionsStruct
+	envelope.Extensions = extensions
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
@@ -2310,6 +2294,29 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	// Consider unknown status field as error and retry
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 	return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], res.GetStatus())
+}
+
+func extractCloudEventExtensions(cloudEvent map[string]interface{}) (*structpb.Struct, error) {
+	// Assemble Cloud Event Extensions:
+	// Create copy of the cloud event with duplicated data removed
+
+	extensions := map[string]interface{}{}
+	for key, value := range cloudEvent {
+		if !cloudEventDuplicateKeys.Has(key) {
+			extensions[key] = value
+		}
+	}
+	extensionsStruct := structpb.Struct{}
+	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
+	if jsonMarshalErr != nil {
+		return &extensionsStruct, fmt.Errorf("Error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
+	}
+
+	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, &extensionsStruct)
+	if protoUnmarshalErr != nil {
+		return &extensionsStruct, fmt.Errorf("Error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", protoUnmarshalErr)
+	}
+	return &extensionsStruct, nil
 }
 
 func extractCloudEventProperty(cloudEvent map[string]interface{}, property string) string {
