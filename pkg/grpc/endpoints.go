@@ -84,6 +84,7 @@ var endpoints = map[string][]string{
 		"/dapr.proto.runtime.v1.Dapr/SubtleVerify",
 		"/dapr.proto.runtime.v1.Dapr/SubtleWrapKey",
 		"/dapr.proto.runtime.v1.Dapr/SubtleUnwrapKey",
+	},
 	"workflows.v1alpha1": {
 		"/dapr.proto.runtime.v1.Dapr/StartWorkflowAlpha1",
 		"/dapr.proto.runtime.v1.Dapr/GetWorkflowAlpha1",
