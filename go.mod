@@ -38,8 +38,10 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.1
+	github.com/taction/daprwasmactor v0.0.0-20221208120536-dfe9d89823ff
 	github.com/tidwall/transform v0.0.0-20201103190739-32f242e2dbde
 	github.com/valyala/fasthttp v1.41.0
+	github.com/wapc/tinygo-msgpack v0.1.5
 	go.opencensus.io v0.23.0
 	go.opentelemetry.io/otel v1.11.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.11.1
@@ -77,7 +79,7 @@ require (
 	cloud.google.com/go/pubsub v1.26.0 // indirect
 	cloud.google.com/go/secretmanager v1.8.0 // indirect
 	cloud.google.com/go/storage v1.27.0 // indirect
-	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537 // indirect
+	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.1 // indirect
 	github.com/AthenZ/athenz v1.10.39 // indirect
@@ -328,7 +330,7 @@ require (
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.527 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.0.527 // indirect
-	github.com/tetratelabs/wazero v1.0.0-pre.3 // indirect
+	github.com/tetratelabs/wazero v1.0.0-pre.3
 	github.com/tidwall/gjson v1.13.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect

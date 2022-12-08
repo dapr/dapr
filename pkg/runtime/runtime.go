@@ -52,11 +52,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/channel/wasm"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -74,7 +77,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -2317,11 +2319,18 @@ func (a *DaprRuntime) initActors() error {
 		StateStoreName:   a.actorStateStoreName,
 	})
 	err = act.Init()
-	if err == nil {
-		a.actor = act
-		return nil
+	if err != nil {
+		return NewInitError(InitFailure, "actors", err)
 	}
-	return NewInitError(InitFailure, "actors", err)
+	a.actor = act
+	if a.runtimeConfig.ApplicationProtocol == WASMProtocol {
+		ch := a.appChannel.(*wasm.Channel)
+		err = ch.InitWithActor(act)
+		if err != nil {
+			return NewInitError(InitFailure, "actors", err)
+		}
+	}
+	return nil
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []componentsV1alpha1.Component) []componentsV1alpha1.Component {
@@ -2769,7 +2778,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 }
 
 func (a *DaprRuntime) createAppChannel() (err error) {
-	if a.runtimeConfig.ApplicationPort == 0 {
+	if a.runtimeConfig.ApplicationPort == 0 && a.runtimeConfig.ApplicationProtocol != WASMProtocol {
 		log.Warn("App channel is not initialized. Did you configure an app-port?")
 		return nil
 	}
@@ -2791,6 +2800,11 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 			return err
 		}
 		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
+	case WASMProtocol:
+		ch, err = wasm.CreateWASMChannel(a.runtimeConfig.MaxConcurrency, "./pkg/channel/testing/main.wasm") // todo
+		if err != nil {
+			return err
+		}
 	default:
 		return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 	}

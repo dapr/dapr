@@ -1431,6 +1431,8 @@ github.com/subosito/gotenv v1.2.0 h1:Slr1R9HxAlEKefgq5jn9U+DnETlIUa6HfgEzj0g5d7s
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
 github.com/supplyon/gremcos v0.1.38 h1:TSv2NTtPLmpVliTDEnPmkvjoZ+kAZcTOTcCurSLAIik=
 github.com/supplyon/gremcos v0.1.38/go.mod h1:bNLIt63atqB9stCOaPBjQKT2ozVORkXYSNfchkjHS0w=
+github.com/taction/daprwasmactor v0.0.0-20221208120536-dfe9d89823ff h1:RxeKXJdA90qhzjsQouh6XoFE/mn0bId+vANq/u4W6G0=
+github.com/taction/daprwasmactor v0.0.0-20221208120536-dfe9d89823ff/go.mod h1:Y2lWgBQg5hJclr2y3n7unFs+nEDJOGALE4yJeI3B78c=
 github.com/tchap/go-patricia/v2 v2.3.1 h1:6rQp39lgIYZ+MHmdEq4xzuk1t7OdC35z/xm0BGhTkes=
 github.com/tchap/go-patricia/v2 v2.3.1/go.mod h1:VZRHKAb53DLaG+nA9EaYYiaEx6YztwDlLElMsnSHD4k=
 github.com/tebeka/strftime v0.1.3/go.mod h1:7wJm3dZlpr4l/oVK0t1HYIc4rMzQ2XJlOMIUJUJH6XQ=
@@ -1483,6 +1485,8 @@ github.com/valyala/fasttemplate v1.2.1/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+
 github.com/valyala/tcplisten v1.0.0/go.mod h1:T0xQ8SeCZGxckz9qRXTfG43PvQ/mcWh7FwZEA7Ioqkc=
 github.com/vmware/vmware-go-kcl v1.5.0 h1:lTptJptznhVOHS7CSuhd/2yDJa7deTBRHaj3zAvhJt8=
 github.com/vmware/vmware-go-kcl v1.5.0/go.mod h1:P92YfaWfQyudNf62BNx+E2rJn9pd165MhHsRt8ajkpM=
+github.com/wapc/tinygo-msgpack v0.1.5 h1:qdIKaWyjwwzElfbPBroV2nkyS5ahzuvIr6fVJJ7U0wc=
+github.com/wapc/tinygo-msgpack v0.1.5/go.mod h1:2P4rQimy/6oQAkytwC2LdtVjLJ2D1dYkQHejfCtZXZQ=
 github.com/xdg-go/pbkdf2 v1.0.0 h1:Su7DPu48wXMwC3bs7MCNG+z4FhcyEuz5dlvchbq0B0c=
 github.com/xdg-go/pbkdf2 v1.0.0/go.mod h1:jrpuAogTd400dnrH08LKmI/xc1MbPOebTwRqcT5RDeI=
 github.com/xdg-go/scram v1.1.1 h1:VOMT+81stJgXW3CpHyqHN3AXDYIMsx56mEFrB37Mb/E=

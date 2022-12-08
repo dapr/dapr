@@ -30,6 +30,8 @@ const (
 	GRPCProtocol Protocol = "grpc"
 	// HTTPProtocol is a HTTP communication protocol.
 	HTTPProtocol Protocol = "http"
+	// WASMProtocol is a WASM communication protocol.
+	WASMProtocol Protocol = "wasm"
 	// DefaultDaprHTTPPort is the default http port for Dapr.
 	DefaultDaprHTTPPort = 3500
 	// DefaultDaprPublicPort is the default http port for Dapr.
