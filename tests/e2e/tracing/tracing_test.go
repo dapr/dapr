@@ -2,7 +2,7 @@
 // +build e2e
 
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package hellodapr_e2e
+package tracing_e2e
 
 import (
 	"encoding/json"
@@ -28,14 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testCommandRequest struct {
-	Message string `json:"message,omitempty"`
-}
-
 type appResponse struct {
-	Message   string `json:"message,omitempty"`
-	StartTime int    `json:"start_time,omitempty"`
-	EndTime   int    `json:"end_time,omitempty"`
+	Message  string `json:"message,omitempty"`
+	SpanName string `json:"spanName,omitempty"`
 }
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
@@ -43,19 +38,14 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
-	utils.SetupLogs("hellodapr")
+	utils.SetupLogs("tracing")
 	utils.InitHTTPClient(true)
 
-	// This test shows how to deploy the multiple test apps, validate the side-car injection
-	// and validate the response by using test app's service endpoint
-
-	// These apps will be deployed for hellodapr test before starting actual test
-	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:           "hellobluedapr",
+			AppName:           "tracingapp-a",
 			DaprEnabled:       true,
-			ImageName:         "e2e-hellodapr",
+			ImageName:         "e2e-tracingapp",
 			Replicas:          1,
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
@@ -65,21 +55,9 @@ func TestMain(m *testing.M) {
 			AppMemoryRequest:  "100Mi",
 		},
 		{
-			AppName:           "hellogreendapr",
+			AppName:           "tracingapp-b",
 			DaprEnabled:       true,
-			ImageName:         "e2e-hellodapr",
-			Replicas:          1,
-			IngressEnabled:    true,
-			MetricsEnabled:    true,
-			DaprMemoryLimit:   "200Mi",
-			DaprMemoryRequest: "100Mi",
-			AppMemoryLimit:    "200Mi",
-			AppMemoryRequest:  "100Mi",
-		},
-		{
-			AppName:           "helloenvtestdapr",
-			DaprEnabled:       true,
-			ImageName:         "e2e-hellodapr",
+			ImageName:         "e2e-tracingapp",
 			Replicas:          1,
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
@@ -90,73 +68,55 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
+	tr = runner.NewTestRunner("tracing", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
-var helloAppTests = []struct {
-	in               string
-	app              string
-	testCommand      string
-	expectedResponse string
-}{
-	{
-		"green dapr",
-		"hellogreendapr",
-		"green",
-		"Hello green dapr!",
-	},
-	{
-		"blue dapr",
-		"hellobluedapr",
-		"blue",
-		"Hello blue dapr!",
-	},
-	{
-		"envTest dapr",
-		"helloenvtestdapr",
-		"envTest",
-		"3500 50001",
-	},
-}
-
 func TestHelloDapr(t *testing.T) {
-	for _, tt := range helloAppTests {
-		t.Run(tt.in, func(t *testing.T) {
-			// Get the ingress external url of test app
-			externalURL := tr.Platform.AcquireAppExternalURL(tt.app)
-			require.NotEmpty(t, externalURL, "external URL must not be empty")
+	t.Run("Simple HTTP invoke with tracing", func(t *testing.T) {
+		// Get the ingress external url of test app
+		externalURL := tr.Platform.AcquireAppExternalURL("tracingapp-a")
+		require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-			// Check if test app endpoint is available
-			_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-			require.NoError(t, err)
+		// Check if test app endpoint is available
+		_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+		require.NoError(t, err)
 
-			// Trigger test
-			body, err := json.Marshal(testCommandRequest{
-				Message: "Hello Dapr.",
-			})
-			require.NoError(t, err)
+		// Get the ingress external url of test app 2
+		externalURL2 := tr.Platform.AcquireAppExternalURL("tracingapp-b")
+		require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-			resp, err := utils.HTTPPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
-			require.NoError(t, err)
+		// Check if test app 2 endpoint is available
+		_, err := utils.HTTPGetNTimes(externalURL2, numHealthChecks)
+		require.NoError(t, err)
 
-			var appResp appResponse
-			err = json.Unmarshal(resp, &appResp)
-			require.NoError(t, err)
-			require.Equal(t, tt.expectedResponse, appResp.Message)
-		})
-	}
-}
+		// Trigger test
+		resp, err := utils.HTTPPost(externalURL+"/triggerInvoke?appId=tracingapp-b", nil)
+		require.NoError(t, err)
 
-func TestScaleReplicas(t *testing.T) {
-	err := tr.Platform.Scale("hellobluedapr", 3)
-	require.NoError(t, err, "fails to scale hellobluedapr app to 3 replicas")
-}
+		var appResp appResponse
+		err = json.Unmarshal(resp, &appResp)
+		require.NoError(t, err)
+		require.Equal(t, "OK", appResp.Message)
 
-func TestScaleAndRestartInstances(t *testing.T) {
-	err := tr.Platform.Scale("hellobluedapr", 3)
-	require.NoError(t, err, "fails to scale hellobluedapr app to 3 replicas")
+		// Validate tracers
+		spanName := appResp.SpanName
+		err = backoff.Retry(func() error {
+			respV, errV := utils.HTTPPost(externalURL+"/validate?spanName="+spanName, nil)
+			if errV != nil {
+				return errV
+			}
 
-	err = tr.Platform.Restart("hellobluedapr")
-	require.NoError(t, err, "fails to restart hellobluedapr pods")
+			var appRespV appResponse
+			errV = json.Unmarshal(respV, &appRespV)
+			if errV != nil {
+				return errV
+			}
+
+			if appRespV.Message != "OK" {
+				return fmt.Errorf("tracers validation failed")
+			}
+		}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
+		require.NoError(t, err)
+	})
 }

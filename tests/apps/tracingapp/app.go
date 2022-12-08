@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,11 +16,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/PaesslerAG/jsonpath"
 	"github.com/google/uuid"
@@ -28,6 +30,11 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdk_trace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/tests/apps/utils"
 )
@@ -39,11 +46,20 @@ var (
 	httpClient = utils.NewHTTPClient()
 
 	httpMethods []string
+
+	zipkinEndpoint = "http://dapr-zipkin:9411"
+	serviceName    = "tracingapp"
+
+	tracer      trace.Tracer
+	propagators propagation.TextMapPropagator
 )
 
 const (
-	zipkinEndpoint  = "http://dapr-zipkin:9411/api/v2/spans"
 	jsonContentType = "application/json"
+	zipkinSpans     = "/api/v2/spans"
+	zipkinTraces    = "/api/v2/traces"
+
+	expectedDaprChildSpanNameTemplate = "calllocal/%s/invoke/something"
 )
 
 func init() {
@@ -54,6 +70,14 @@ func init() {
 	p = os.Getenv("PORT")
 	if p != "" && p != "0" {
 		appPort, _ = strconv.Atoi(p)
+	}
+	p = os.Getenv("ZIPKIN_ENDPOINT")
+	if p != "" {
+		zipkinEndpoint = p
+	}
+	p = os.Getenv("SERVICE_NAME")
+	if p != "" {
+		serviceName = p
 	}
 }
 
@@ -74,35 +98,58 @@ func triggerInvoke(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s %s", r.Method, r.URL.RequestURI())
 	uuidObj, _ := uuid.NewRandom()
 	uuid := uuidObj.String()
-	newCtx, span := otel.Tracer(uuid).Start(context.TODO(), "triggerInvoke")
+	ctx := propagators.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+	newCtx, span := tracer.Start(ctx, uuid)
 	defer span.End()
 
-	appId := mux.Vars(r)["appId"]
-	url := fmt.Sprintf("http://localhost:%s/v1.0/invoke/%s/method/invoke/something", strconv.Itoa(daprHTTPPort), appId)
-	fmt.Printf("invoke url is %s\n", url)
+	query := r.URL.Query()
+	appId := query.Get("appId")
 
+	url := fmt.Sprintf("http://127.0.0.1:%d/v1.0/invoke/%s/method/invoke/something", daprHTTPPort, appId)
 	/* #nosec */
 	req, _ := http.NewRequest(http.MethodPost, url, nil)
 	req = req.WithContext(newCtx)
+	hc := propagation.HeaderCarrier(req.Header)
+	propagators.Inject(newCtx, hc)
 	req.Header.Add("Content-Type", jsonContentType)
-	_, err := httpClient.Do(req)
+
+	fmt.Printf("span's name is %s and invoke url is %s\n", uuid, url)
+
+	res, err := httpClient.Do(req)
 	if err != nil {
 		log.Println(err)
 
-		w.WriteHeader(http.StatusExpectationFailed)
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(appResponse{
 			SpanName: &uuid,
 			Message:  err.Error(),
 		})
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
+	if res.StatusCode != http.StatusOK {
+		w.WriteHeader(http.StatusExpectationFailed)
+		json.NewEncoder(w).Encode(appResponse{
+			SpanName: &uuid,
+			Message:  fmt.Sprintf("expected status code %d, got %d", http.StatusOK, res.StatusCode),
+		})
+	}
+
+	json.NewEncoder(w).Encode(appResponse{
+		SpanName: &uuid,
+		Message:  "OK",
+	})
 }
 
 // invoke is the handler for end-to-end to invoke
 func invoke(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s %s", r.Method, r.URL.RequestURI())
+	ctx := propagators.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+	_, span := tracer.Start(ctx, "invokedMethod")
+	defer span.End()
+
+	// Pretend to do work
+	time.Sleep(time.Second)
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
 }
@@ -117,12 +164,13 @@ func validate(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(appResponse{Message: err.Error()})
 	}
 
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
 }
 
 func doValidate(w http.ResponseWriter, r *http.Request) error {
-	resp, err := http.Get(zipkinEndpoint)
+	query := r.URL.Query()
+	mainSpanName := query.Get("spanName")
+	resp, err := http.Get(zipkinEndpoint + zipkinTraces)
 	if err != nil {
 		return err
 	}
@@ -130,16 +178,51 @@ func doValidate(w http.ResponseWriter, r *http.Request) error {
 
 	v := interface{}(nil)
 
-	json.NewDecoder(resp.Body).Decode(v)
+	json.NewDecoder(resp.Body).Decode(&v)
 
-	mainSpanId, err := jsonpath.Get("$..[?(@.name == \"example's main\")]['id'][0]", v)
+	mainSpanIdStr, err := findUniqueValueFromJsonPath("$..[?(@.name==\""+mainSpanName+"\")].id", v)
+	if mainSpanIdStr == "" {
+		return errors.New("empty span id found for span name " + mainSpanName)
+	}
+	log.Printf("Found main span with name %s and id=%s", mainSpanName, mainSpanIdStr)
+
+	childSpanName, err := findUniqueValueFromJsonPath("$..[?(@.parentId==\""+mainSpanIdStr+"\")].name", v)
 	if err != nil {
 		return err
 	}
 
-	mainSpanIdStr := fmt.Sprintf("%v", mainSpanId)
-	_, err = jsonpath.Get("$..[?(@.parentId=='"+mainSpanIdStr+"' && @.name=='calllocal/invoke/something')]['id']", v)
+	remoteServiceName, err := findUniqueValueFromJsonPath("$..[?(@.parentId==\""+mainSpanIdStr+"\")].remoteEndpoint.serviceName", v)
+	if err != nil {
+		return err
+	}
+
+	expectedDaprChildSpanName := fmt.Sprintf(expectedDaprChildSpanNameTemplate, remoteServiceName)
+	if childSpanName != expectedDaprChildSpanName {
+		return errors.New("child span name is not correct, expected " + expectedDaprChildSpanName + ", actual " + childSpanName)
+	}
+
+	log.Printf("Tracing is correct for span with name=%s", mainSpanName)
 	return nil
+}
+
+func findUniqueValueFromJsonPath(jsonPath string, v interface{}) (string, error) {
+	values, err := jsonpath.Get(jsonPath, v)
+	if err != nil {
+		return "", err
+	}
+
+	arrValues := values.([]interface{})
+	log.Printf("%v", arrValues)
+
+	if len(arrValues) == 0 {
+		return "", errors.New("no value found for json path " + jsonPath)
+	}
+
+	if len(arrValues) > 1 {
+		return "", errors.New("more than one value found for json path " + jsonPath)
+	}
+
+	return fmt.Sprintf("%v", arrValues[0]), nil
 }
 
 // appRouter initializes restful api router
@@ -151,8 +234,8 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/triggerInvoke", triggerInvoke).Methods("POST")
-	router.HandleFunc("/invoke/something", invoke).Methods("POST", "GET")
-	router.HandleFunc("/validate", validate).Methods("POST")
+	router.HandleFunc("/invoke/something", invoke).Methods("POST")
+	router.HandleFunc("/validate", validate).Methods("POST", "GET")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
@@ -160,12 +243,33 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Tracing App - listening on http://localhost:%d", appPort)
-
-	exporter, err := zipkin.New(zipkinEndpoint)
+	exporter, err := zipkin.New(zipkinEndpoint + zipkinSpans)
 	if err != nil {
 		log.Fatalf("failed to create exporter: %v", err)
 	}
 
+	res := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(serviceName),
+	)
+
+	tp := sdk_trace.NewTracerProvider(
+		sdk_trace.WithBatcher(exporter),
+		sdk_trace.WithResource(res),
+	)
+
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	propagators = otel.GetTextMapPropagator()
+	tracer = otel.Tracer(serviceName)
+
+	log.Printf("Tracing App - listening on http://localhost:%d", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }
