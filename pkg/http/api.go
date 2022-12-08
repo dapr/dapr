@@ -34,6 +34,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -86,6 +87,7 @@ type api struct {
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
+	cryptoProviders            map[string]contribCrypto.SubtleCrypto
 	actor                      actors.Actors
 	pubsubAdapter              runtimePubsub.Adapter
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -165,6 +167,7 @@ type APIOpts struct {
 	SecretStores                map[string]secretstores.SecretStore
 	SecretsConfiguration        map[string]config.SecretsScope
 	ConfigurationStores         map[string]configuration.Store
+	CryptoProviders             map[string]contribCrypto.SubtleCrypto
 	PubsubAdapter               runtimePubsub.Adapter
 	Actor                       actors.Actors
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -194,6 +197,7 @@ func NewAPI(opts APIOpts) API {
 		secretStores:               opts.SecretStores,
 		secretsConfiguration:       opts.SecretsConfiguration,
 		configurationStores:        opts.ConfigurationStores,
+		cryptoProviders:            opts.CryptoProviders,
 		pubsubAdapter:              opts.PubsubAdapter,
 		actor:                      opts.Actor,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
