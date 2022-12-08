@@ -19,8 +19,9 @@ import (
 	"os"
 	"sync"
 
-	"github.com/dapr/kit/logger"
 	"github.com/taction/daprwasmactor/sdk"
+
+	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -41,7 +42,6 @@ var log = logger.NewLogger("dapr.channel.wasm")
 
 // Channel is an WASM implementation of an AppChannel.
 type Channel struct {
-	lock           sync.RWMutex
 	pools          sync.Pool
 	maxConcurrency int
 	actor          actors.Actors
@@ -65,7 +65,8 @@ type WasmInstance interface {
 }
 
 // CreateWASMChannel creates an WASM AppChannel
-// nolint:gosec
+//
+//nolint:gosec
 func CreateWASMChannel(maxConcurrency int, wasmPath string) (channel.AppChannel, error) {
 	c := &Channel{maxConcurrency: 10, wasmPath: wasmPath}
 	if maxConcurrency > 0 {

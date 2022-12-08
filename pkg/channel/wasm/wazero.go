@@ -31,8 +31,10 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
-const i32 = api.ValueTypeI32
-const functionActorCall = "__actor_call"
+const (
+	i32               = api.ValueTypeI32
+	functionActorCall = "__actor_call"
+)
 
 type Module struct {
 	instanceCounter uint64
@@ -178,7 +180,6 @@ func (w *wasmHost) SetActorState(ctx context.Context, m api.Module, stack []uint
 		logger.Errorf("failed to read memory")
 		return []uint64{uint64(0)}
 	}
-	//req := &sdk.TransactionalRequest{}
 	de := msgpack.NewDecoder(reqByte)
 	req, err := sdk.DecodeTransactionalRequest(&de)
 	if err != nil {
@@ -208,6 +209,7 @@ func (w *wasmHost) ActorRequest(ctx context.Context, m api.Module, stack []uint6
 	m.Memory().Write(ctx, ptr, info.req)
 	return
 }
+
 func (w *wasmHost) ActorResponse(ctx context.Context, m api.Module, stack []uint64) (res []uint64) {
 	var success bool
 	ptr := uint32(stack[0])
@@ -219,6 +221,7 @@ func (w *wasmHost) ActorResponse(ctx context.Context, m api.Module, stack []uint
 	}
 	return
 }
+
 func (w *wasmHost) ActorErr(ctx context.Context, m api.Module, stack []uint64) (res []uint64) {
 	ptr := uint32(stack[0])
 	size := uint32(stack[1])
@@ -262,16 +265,12 @@ type Instance struct {
 }
 
 type ActorCallCtxKey struct{}
+
 type ActorCallInfo struct {
 	req []byte
 	res []byte
 	err string
 }
-
-//type ActorCallRes struct {
-//	data  []byte
-//	isErr bool
-//}
 
 func (i *Instance) ActorCalled(ctx context.Context, req *sdk.InvokeActorRequest) (data *sdk.InvokeActorResponse) {
 	data = &sdk.InvokeActorResponse{StatusCode: 500}

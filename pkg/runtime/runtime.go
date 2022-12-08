@@ -2791,6 +2791,7 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 			return err
 		}
 	case HTTPProtocol:
+		//nolint:govet
 		pipeline, err := a.buildAppHTTPPipeline()
 		if err != nil {
 			return err
