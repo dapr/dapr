@@ -53,7 +53,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 	timeutils "github.com/dapr/kit/time"
 )
 
@@ -463,7 +462,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.GetReentrancyForType(actorType).MaxStackDepth, ptr.Of(a.clock.Now())))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.GetReentrancyForType(actorType).MaxStackDepth, a.clock))
 	}
 
 	return val.(*actor)

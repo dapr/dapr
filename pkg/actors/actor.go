@@ -14,15 +14,14 @@ limitations under the License.
 package actors
 
 import (
+	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"go.uber.org/atomic"
-
-	"github.com/pkg/errors"
+	clocklib "github.com/benbjohnson/clock"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/kit/ptr"
 )
 
 // ErrActorDisposed is the error when runtime tries to hold the lock of the disposed actor.
@@ -38,7 +37,7 @@ type actor struct {
 	// actorLock is the lock to maintain actor's turn-based concurrency with allowance for reentrancy if configured.
 	actorLock ActorLock
 	// pendingActorCalls is the number of the current pending actor calls by turn-based concurrency.
-	pendingActorCalls atomic.Int32
+	pendingActorCalls *atomic.Int32
 
 	// When consistent hashing tables are updated, actor runtime drains actor to rebalance actors
 	// across actor hosts after drainOngoingCallTimeout or until all pending actor calls are completed.
@@ -54,21 +53,24 @@ type actor struct {
 	// is used when runtime drains actor.
 	disposeCh chan struct{}
 
-	once sync.Once
+	once  sync.Once
+	clock clocklib.Clock
 }
 
-func newActor(actorType, actorID string, maxReentrancyDepth *int, now *time.Time) *actor {
-	if now == nil {
-		now = ptr.Of(time.Now())
+func newActor(actorType, actorID string, maxReentrancyDepth *int, clock clocklib.Clock) *actor {
+	if clock == nil {
+		clock = clocklib.New()
 	}
 	return &actor{
-		actorType:    actorType,
-		actorID:      actorID,
-		actorLock:    NewActorLock(int32(*maxReentrancyDepth)),
-		disposeLock:  &sync.RWMutex{},
-		disposeCh:    nil,
-		disposed:     false,
-		lastUsedTime: *now,
+		actorType:         actorType,
+		actorID:           actorID,
+		actorLock:         NewActorLock(int32(*maxReentrancyDepth)),
+		pendingActorCalls: &atomic.Int32{},
+		disposeLock:       &sync.RWMutex{},
+		disposeCh:         nil,
+		disposed:          false,
+		clock:             clock,
+		lastUsedTime:      clock.Now(),
 	}
 }
 
@@ -95,7 +97,7 @@ func (a *actor) channel() chan struct{} {
 
 // lock holds the lock for turn-based concurrency.
 func (a *actor) lock(reentrancyID *string) error {
-	pending := a.pendingActorCalls.Inc()
+	pending := a.pendingActorCalls.Add(1)
 	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
 
 	err := a.actorLock.Lock(reentrancyID)
@@ -110,14 +112,14 @@ func (a *actor) lock(reentrancyID *string) error {
 		a.unlock()
 		return ErrActorDisposed
 	}
-	a.lastUsedTime = time.Now().UTC()
+	a.lastUsedTime = a.clock.Now().UTC()
 	return nil
 }
 
 // unlock releases the lock for turn-based concurrency. If disposeCh is available,
 // it will close the channel to notify runtime to dispose actor.
 func (a *actor) unlock() {
-	pending := a.pendingActorCalls.Dec()
+	pending := a.pendingActorCalls.Add(-1)
 	if pending == 0 {
 		func() {
 			a.disposeLock.Lock()

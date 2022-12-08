@@ -26,7 +26,6 @@ import (
 
 	clocklib "github.com/benbjohnson/clock"
 	"github.com/google/uuid"
-	"github.com/prometheus/statsd_exporter/pkg/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -479,13 +478,13 @@ func fakeStore() state.Store {
 	}
 }
 
-func fakeCallAndActivateActor(actors *actorsRuntime, actorType, actorID string, now time.Time) {
+func fakeCallAndActivateActor(actors *actorsRuntime, actorType, actorID string, clock clocklib.Clock) {
 	actorKey := constructCompositeKey(actorType, actorID)
-	actors.actorsTable.LoadOrStore(actorKey, newActor(actorType, actorID, &reentrancyStackDepth, &now))
+	actors.actorsTable.LoadOrStore(actorKey, newActor(actorType, actorID, &reentrancyStackDepth, clock))
 }
 
 func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, actorID string) <-chan struct{} {
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	ch := make(chan struct{}, 1)
 	go testActorsRuntime.deactivationTicker(testActorsRuntime.config, func(actorType, actorID string) error {
@@ -679,7 +678,7 @@ func TestTimerExecution(t *testing.T) {
 	defer testActorsRuntime.Stop()
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	err := testActorsRuntime.executeTimer(actorType, actorID, "timer1", "2s", "2s", "callback", "data")
 	assert.NoError(t, err)
@@ -690,7 +689,7 @@ func TestTimerExecutionZeroDuration(t *testing.T) {
 	defer testActorsRuntime.Stop()
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	err := testActorsRuntime.executeTimer(actorType, actorID, "timer1", "0ms", "0ms", "callback", "data")
 	assert.NoError(t, err)
@@ -701,7 +700,7 @@ func TestReminderExecution(t *testing.T) {
 	defer testActorsRuntime.Stop()
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 	reminder := &Reminder{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -719,7 +718,7 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 	defer testActorsRuntime.Stop()
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 	reminder := &Reminder{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -1153,7 +1152,7 @@ func reminderRepeats(ctx context.Context, t *testing.T, dueTimeAny any, period s
 	clock := testActorsRuntime.clock.(*clocklib.Mock)
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, clock)
 
 	var dueTime string
 	switch x := dueTimeAny.(type) {
@@ -1261,7 +1260,7 @@ func reminderTTL(ctx context.Context, t *testing.T, dueTime string, period strin
 	clock := testActorsRuntime.clock.(*clocklib.Mock)
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, clock)
 
 	var ttl string
 	switch x := ttlAny.(type) {
@@ -1323,7 +1322,7 @@ func reminderValidation(ctx context.Context, t *testing.T, dueTime, period, ttl,
 	defer testActorsRuntime.Stop()
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	reminder := createReminderData(actorID, actorType, "reminder4", period, dueTime, ttl, "data")
 	err := testActorsRuntime.CreateReminder(ctx, &reminder)
@@ -1393,7 +1392,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	defer testActorsRuntime.Stop()
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 	t.Run("test create timer with positive DueTime", func(t *testing.T) {
 		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "2s", "", "callback", "testTimer")
 		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
@@ -1420,7 +1419,7 @@ func TestDeleteTimer(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
 	actorKey := constructCompositeKey(actorType, actorID)
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	timer := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "", "callback", "")
 	err := testActorsRuntime.CreateTimer(ctx, &timer)
@@ -1453,7 +1452,7 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 		defer testActorsRuntime.Stop()
 
 		actorType, actorID := getTestActorTypeAndID()
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 		timerName := "timer1"
 
 		timer := createTimerData(actorID, actorType, timerName, "10s", "1s", "0s", "callback1", "a")
@@ -1492,7 +1491,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 
 		actorType, actorID := getTestActorTypeAndID()
 		timerName := "timer1"
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		timer := createTimerData(actorID, actorType, timerName, "10s", "3s", "", "callback1", "a")
 		err := testActorsRuntime.CreateTimer(ctx, &timer)
@@ -1537,7 +1536,7 @@ func timerRepeats(ctx context.Context, t *testing.T, dueTime, period, ttl string
 	clock := testActorsRuntime.clock.(*clocklib.Mock)
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	timer := createTimerData(actorID, actorType, "timer", period, dueTime, ttl, "callback", "data")
 	err := testActorsRuntime.CreateTimer(ctx, &timer)
@@ -1626,7 +1625,7 @@ func timerTTL(ctx context.Context, t *testing.T, iso bool) {
 	clock := testActorsRuntime.clock.(*clocklib.Mock)
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	ttl := "7s"
 	if iso {
@@ -1675,7 +1674,7 @@ func timerValidation(ctx context.Context, t *testing.T, dueTime, period, ttl, ms
 	defer testActorsRuntime.Stop()
 
 	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	timer := createTimerData(actorID, actorType, "timer", period, dueTime, ttl, "callback", "data")
 	err := testActorsRuntime.CreateTimer(ctx, &timer)
@@ -1865,7 +1864,7 @@ func TestGetState(t *testing.T) {
 	var val any
 	json.Unmarshal([]byte(fakeData), &val)
 
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 		ActorType: actorType,
@@ -1904,7 +1903,7 @@ func TestDeleteState(t *testing.T) {
 	var val any
 	json.Unmarshal([]byte(fakeData), &val)
 
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	// insert state
 	testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
@@ -1982,7 +1981,7 @@ func TestCallLocalActor(t *testing.T) {
 		defer testActorsRuntime.Stop()
 
 		actorKey := constructCompositeKey(testActorType, testActorID)
-		act := newActor(testActorType, testActorID, &reentrancyStackDepth, ptr.Of(testActorsRuntime.clock.Now()))
+		act := newActor(testActorType, testActorID, &reentrancyStackDepth, testActorsRuntime.clock)
 
 		// add test actor
 		testActorsRuntime.actorsTable.LoadOrStore(actorKey, act)
@@ -2014,7 +2013,7 @@ func TestTransactionalState(t *testing.T) {
 
 		actorType, actorID := getTestActorTypeAndID()
 
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		err := testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 			ActorType: actorType,
@@ -2038,7 +2037,7 @@ func TestTransactionalState(t *testing.T) {
 
 		actorType, actorID := getTestActorTypeAndID()
 
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		err := testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 			ActorType: actorType,
@@ -2068,7 +2067,7 @@ func TestTransactionalState(t *testing.T) {
 
 		actorType, actorID := getTestActorTypeAndID()
 
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		err := testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 			ActorType: actorType,
@@ -2087,7 +2086,7 @@ func TestTransactionalState(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock.Now())
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		err := testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 			ActorType: actorType,
@@ -2129,9 +2128,9 @@ func TestActiveActorsCount(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 
-		fakeCallAndActivateActor(testActorsRuntime, "cat", "abcd", testActorsRuntime.clock.Now())
-		fakeCallAndActivateActor(testActorsRuntime, "cat", "xyz", testActorsRuntime.clock.Now())
-		fakeCallAndActivateActor(testActorsRuntime, "dog", "xyz", testActorsRuntime.clock.Now())
+		fakeCallAndActivateActor(testActorsRuntime, "cat", "abcd", testActorsRuntime.clock)
+		fakeCallAndActivateActor(testActorsRuntime, "cat", "xyz", testActorsRuntime.clock)
+		fakeCallAndActivateActor(testActorsRuntime, "dog", "xyz", testActorsRuntime.clock)
 
 		actualCounts := testActorsRuntime.GetActiveActorsCount(ctx)
 		assert.ElementsMatch(t, expectedCounts, actualCounts)
