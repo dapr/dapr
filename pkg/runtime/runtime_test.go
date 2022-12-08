@@ -214,6 +214,11 @@ func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{}
 }
 
+// GetComponentMetadata returns the metadata options for the secret store.
+func (m *MockKubernetesStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func NewMockKubernetesStore() secretstores.SecretStore {
 	return &MockKubernetesStateStore{}
 }
