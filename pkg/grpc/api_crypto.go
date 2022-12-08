@@ -27,12 +27,12 @@ func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequ
 	}
 
 	// Get the key
+	policyRunner := resiliency.NewRunner[jwk.Key](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
+	)
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
-	var res jwk.Key
-	err = policy(func(ctx context.Context) (rErr error) {
-		res, rErr = component.GetKey(ctx, in.Name)
-		return rErr
+	res, err := policyRunner(func(ctx context.Context) (jwk.Key, error) {
+		return component.GetKey(ctx, in.Name)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -95,6 +95,11 @@ func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequ
 	}, nil
 }
 
+type subtleEncryptRes struct {
+	ciphertext []byte
+	tag        []byte
+}
+
 // SubtleEncrypt encrypts a small message using a key stored in the vault.
 func (a *api) SubtleEncrypt(ctx context.Context, in *runtimev1pb.SubtleEncryptRequest) (*runtimev1pb.SubtleEncryptResponse, error) {
 	component, err := a.cryptoValidateRequest(in.ComponentName)
@@ -102,15 +107,19 @@ func (a *api) SubtleEncrypt(ctx context.Context, in *runtimev1pb.SubtleEncryptRe
 		return &runtimev1pb.SubtleEncryptResponse{}, err
 	}
 
-	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
-	var (
-		ciphertext []byte
-		tag        []byte
+	policyRunner := resiliency.NewRunner[*subtleEncryptRes](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
 	)
-	err = policy(func(ctx context.Context) (rErr error) {
-		ciphertext, tag, rErr = component.Encrypt(ctx, in.Plaintext, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
-		return rErr
+	start := time.Now()
+	ser, err := policyRunner(func(ctx context.Context) (*subtleEncryptRes, error) {
+		ciphertext, tag, rErr := component.Encrypt(ctx, in.Plaintext, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
+		if rErr != nil {
+			return nil, rErr
+		}
+		return &subtleEncryptRes{
+			ciphertext: ciphertext,
+			tag:        tag,
+		}, nil
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -122,9 +131,12 @@ func (a *api) SubtleEncrypt(ctx context.Context, in *runtimev1pb.SubtleEncryptRe
 		return &runtimev1pb.SubtleEncryptResponse{}, err
 	}
 
+	if ser == nil {
+		ser = &subtleEncryptRes{}
+	}
 	return &runtimev1pb.SubtleEncryptResponse{
-		Ciphertext: ciphertext,
-		Tag:        tag,
+		Ciphertext: ser.ciphertext,
+		Tag:        ser.tag,
 	}, nil
 }
 
@@ -135,12 +147,12 @@ func (a *api) SubtleDecrypt(ctx context.Context, in *runtimev1pb.SubtleDecryptRe
 		return &runtimev1pb.SubtleDecryptResponse{}, err
 	}
 
+	policyRunner := resiliency.NewRunner[[]byte](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
+	)
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
-	var plaintext []byte
-	err = policy(func(ctx context.Context) (rErr error) {
-		plaintext, rErr = component.Decrypt(ctx, in.Ciphertext, in.Algorithm, in.Key, in.Nonce, in.Tag, in.AssociatedData)
-		return rErr
+	plaintext, err := policyRunner(func(ctx context.Context) ([]byte, error) {
+		return component.Decrypt(ctx, in.Ciphertext, in.Algorithm, in.Key, in.Nonce, in.Tag, in.AssociatedData)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -155,6 +167,11 @@ func (a *api) SubtleDecrypt(ctx context.Context, in *runtimev1pb.SubtleDecryptRe
 	return &runtimev1pb.SubtleDecryptResponse{
 		Plaintext: plaintext,
 	}, nil
+}
+
+type subtleWrapKeyRes struct {
+	wrappedKey []byte
+	tag        []byte
 }
 
 // SubtleWrapKey wraps a key using a key stored in the vault.
@@ -172,15 +189,19 @@ func (a *api) SubtleWrapKey(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRe
 		return &runtimev1pb.SubtleWrapKeyResponse{}, err
 	}
 
-	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
-	var (
-		wrappedKey []byte
-		tag        []byte
+	policyRunner := resiliency.NewRunner[*subtleWrapKeyRes](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
 	)
-	err = policy(func(ctx context.Context) (rErr error) {
-		wrappedKey, tag, rErr = component.WrapKey(ctx, pk, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
-		return rErr
+	start := time.Now()
+	swkr, err := policyRunner(func(ctx context.Context) (*subtleWrapKeyRes, error) {
+		wrappedKey, tag, rErr := component.WrapKey(ctx, pk, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
+		if rErr != nil {
+			return nil, rErr
+		}
+		return &subtleWrapKeyRes{
+			wrappedKey: wrappedKey,
+			tag:        tag,
+		}, nil
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -192,9 +213,12 @@ func (a *api) SubtleWrapKey(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRe
 		return &runtimev1pb.SubtleWrapKeyResponse{}, err
 	}
 
+	if swkr == nil {
+		swkr = &subtleWrapKeyRes{}
+	}
 	return &runtimev1pb.SubtleWrapKeyResponse{
-		WrappedKey: wrappedKey,
-		Tag:        tag,
+		WrappedKey: swkr.wrappedKey,
+		Tag:        swkr.tag,
 	}, nil
 }
 
@@ -205,12 +229,12 @@ func (a *api) SubtleUnwrapKey(ctx context.Context, in *runtimev1pb.SubtleUnwrapK
 		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
 	}
 
+	policyRunner := resiliency.NewRunner[jwk.Key](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
+	)
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
-	var plaintextText jwk.Key
-	err = policy(func(ctx context.Context) (rErr error) {
-		plaintextText, rErr = component.UnwrapKey(ctx, in.WrappedKey, in.Algorithm, in.Key, in.Nonce, in.Tag, in.AssociatedData)
-		return rErr
+	plaintextText, err := policyRunner(func(ctx context.Context) (jwk.Key, error) {
+		return component.UnwrapKey(ctx, in.WrappedKey, in.Algorithm, in.Key, in.Nonce, in.Tag, in.AssociatedData)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -242,12 +266,12 @@ func (a *api) SubtleSign(ctx context.Context, in *runtimev1pb.SubtleSignRequest)
 		return &runtimev1pb.SubtleSignResponse{}, err
 	}
 
+	policyRunner := resiliency.NewRunner[[]byte](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
+	)
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
-	var sig []byte
-	err = policy(func(ctx context.Context) (rErr error) {
-		sig, rErr = component.Sign(ctx, in.Digest, in.Algorithm, in.Key)
-		return rErr
+	sig, err := policyRunner(func(ctx context.Context) ([]byte, error) {
+		return component.Sign(ctx, in.Digest, in.Algorithm, in.Key)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -271,12 +295,12 @@ func (a *api) SubtleVerify(ctx context.Context, in *runtimev1pb.SubtleVerifyRequ
 		return &runtimev1pb.SubtleVerifyResponse{}, err
 	}
 
+	policyRunner := resiliency.NewRunner[bool](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
+	)
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.ComponentName, resiliency.Crypto)
-	var valid bool
-	err = policy(func(ctx context.Context) (rErr error) {
-		valid, rErr = component.Verify(ctx, in.Digest, in.Signature, in.Algorithm, in.Key)
-		return rErr
+	valid, err := policyRunner(func(ctx context.Context) (bool, error) {
+		return component.Verify(ctx, in.Digest, in.Signature, in.Algorithm, in.Key)
 	})
 	elapsed := diag.ElapsedSince(start)
 
