@@ -1047,8 +1047,8 @@ func TestNegativeCases(t *testing.T) {
 		// Valid errors are:
 		// - `rpc error: code = Internal desc = fail to invoke, id: serviceinvocation-callee-0, err: rpc error: code = Internal desc = error invoking app channel: Post \"http://127.0.0.1:3000/timeouterror\": context deadline exceeded``
 		// - `rpc error: code = DeadlineExceeded desc = context deadline exceeded`
-		assert.Contains(t, testResults.RawError, "rpc error")
-		assert.Contains(t, testResults.RawError, "desc = context deadline exceeded")
+		assert.Contains(t, testResults.RawError, "rpc error:")
+		assert.Contains(t, testResults.RawError, "context deadline exceeded")
 		assert.NotContains(t, testResults.RawError, "Client waited longer than it should have.")
 	})
 
