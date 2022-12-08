@@ -19,11 +19,11 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
-// SubtleGetKey returns the public part of an asymmetric key stored in the vault.
-func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequest) (*runtimev1pb.SubtleGetKeyResponse, error) {
+// SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
+func (a *api) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleGetKeyAlpha1Request) (*runtimev1pb.SubtleGetKeyAlpha1Response, error) {
 	component, err := a.cryptoValidateRequest(in.ComponentName)
 	if err != nil {
-		return &runtimev1pb.SubtleGetKeyResponse{}, err
+		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
 
 	// Get the key
@@ -41,7 +41,7 @@ func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequ
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrCryptoGetKey, in.Name, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleGetKeyResponse{}, err
+		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
 
 	// Get the key ID if present
@@ -53,7 +53,7 @@ func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequ
 	// Format the response
 	var pk []byte
 	switch in.Format {
-	case runtimev1pb.SubtleGetKeyRequest_PEM: //nolint:nosnakecase
+	case runtimev1pb.SubtleGetKeyAlpha1Request_PEM: //nolint:nosnakecase
 		var (
 			v   crypto.PublicKey
 			der []byte
@@ -62,34 +62,34 @@ func (a *api) SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequ
 		if err != nil {
 			err = status.Errorf(codes.Internal, "failed to marshal public key %s as PKIX: %s", in.Name, err.Error())
 			apiServerLogger.Debug(err)
-			return &runtimev1pb.SubtleGetKeyResponse{}, err
+			return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 		}
 		der, err = x509.MarshalPKIXPublicKey(v)
 		if err != nil {
 			err = status.Errorf(codes.Internal, "failed to marshal public key %s as PKIX: %s", in.Name, err.Error())
 			apiServerLogger.Debug(err)
-			return &runtimev1pb.SubtleGetKeyResponse{}, err
+			return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 		}
 		pk = pem.EncodeToMemory(&pem.Block{
 			Type:  "PUBLIC KEY",
 			Bytes: der,
 		})
 
-	case runtimev1pb.SubtleGetKeyRequest_JSON: //nolint:nosnakecase
+	case runtimev1pb.SubtleGetKeyAlpha1Request_JSON: //nolint:nosnakecase
 		pk, err = json.Marshal(res)
 		if err != nil {
 			err = status.Errorf(codes.Internal, "failed to marshal public key %s as JSON: %s", in.Name, err.Error())
 			apiServerLogger.Debug(err)
-			return &runtimev1pb.SubtleGetKeyResponse{}, err
+			return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 		}
 
 	default:
 		err = status.Errorf(codes.InvalidArgument, "invalid key format")
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleGetKeyResponse{}, err
+		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
 
-	return &runtimev1pb.SubtleGetKeyResponse{
+	return &runtimev1pb.SubtleGetKeyAlpha1Response{
 		Name:      kid,
 		PublicKey: string(pk),
 	}, nil
@@ -100,11 +100,11 @@ type subtleEncryptRes struct {
 	tag        []byte
 }
 
-// SubtleEncrypt encrypts a small message using a key stored in the vault.
-func (a *api) SubtleEncrypt(ctx context.Context, in *runtimev1pb.SubtleEncryptRequest) (*runtimev1pb.SubtleEncryptResponse, error) {
+// SubtleEncryptAlpha1 encrypts a small message using a key stored in the vault.
+func (a *api) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleEncryptAlpha1Request) (*runtimev1pb.SubtleEncryptAlpha1Response, error) {
 	component, err := a.cryptoValidateRequest(in.ComponentName)
 	if err != nil {
-		return &runtimev1pb.SubtleEncryptResponse{}, err
+		return &runtimev1pb.SubtleEncryptAlpha1Response{}, err
 	}
 
 	policyRunner := resiliency.NewRunner[*subtleEncryptRes](ctx,
@@ -128,23 +128,23 @@ func (a *api) SubtleEncrypt(ctx context.Context, in *runtimev1pb.SubtleEncryptRe
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleEncryptResponse{}, err
+		return &runtimev1pb.SubtleEncryptAlpha1Response{}, err
 	}
 
 	if ser == nil {
 		ser = &subtleEncryptRes{}
 	}
-	return &runtimev1pb.SubtleEncryptResponse{
+	return &runtimev1pb.SubtleEncryptAlpha1Response{
 		Ciphertext: ser.ciphertext,
 		Tag:        ser.tag,
 	}, nil
 }
 
-// SubtleDecrypt decrypts a small message using a key stored in the vault.
-func (a *api) SubtleDecrypt(ctx context.Context, in *runtimev1pb.SubtleDecryptRequest) (*runtimev1pb.SubtleDecryptResponse, error) {
+// SubtleDecryptAlpha1 decrypts a small message using a key stored in the vault.
+func (a *api) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleDecryptAlpha1Request) (*runtimev1pb.SubtleDecryptAlpha1Response, error) {
 	component, err := a.cryptoValidateRequest(in.ComponentName)
 	if err != nil {
-		return &runtimev1pb.SubtleDecryptResponse{}, err
+		return &runtimev1pb.SubtleDecryptAlpha1Response{}, err
 	}
 
 	policyRunner := resiliency.NewRunner[[]byte](ctx,
@@ -161,10 +161,10 @@ func (a *api) SubtleDecrypt(ctx context.Context, in *runtimev1pb.SubtleDecryptRe
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleDecryptResponse{}, err
+		return &runtimev1pb.SubtleDecryptAlpha1Response{}, err
 	}
 
-	return &runtimev1pb.SubtleDecryptResponse{
+	return &runtimev1pb.SubtleDecryptAlpha1Response{
 		Plaintext: plaintext,
 	}, nil
 }
@@ -174,11 +174,11 @@ type subtleWrapKeyRes struct {
 	tag        []byte
 }
 
-// SubtleWrapKey wraps a key using a key stored in the vault.
-func (a *api) SubtleWrapKey(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRequest) (*runtimev1pb.SubtleWrapKeyResponse, error) {
+// SubtleWrapKeyAlpha1 wraps a key using a key stored in the vault.
+func (a *api) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleWrapKeyAlpha1Request) (*runtimev1pb.SubtleWrapKeyAlpha1Response, error) {
 	component, err := a.cryptoValidateRequest(in.ComponentName)
 	if err != nil {
-		return &runtimev1pb.SubtleWrapKeyResponse{}, err
+		return &runtimev1pb.SubtleWrapKeyAlpha1Response{}, err
 	}
 
 	// Parse the plaintext key
@@ -186,7 +186,7 @@ func (a *api) SubtleWrapKey(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRe
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, "error while parsing plaintext key: %s", err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleWrapKeyResponse{}, err
+		return &runtimev1pb.SubtleWrapKeyAlpha1Response{}, err
 	}
 
 	policyRunner := resiliency.NewRunner[*subtleWrapKeyRes](ctx,
@@ -210,23 +210,23 @@ func (a *api) SubtleWrapKey(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRe
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleWrapKeyResponse{}, err
+		return &runtimev1pb.SubtleWrapKeyAlpha1Response{}, err
 	}
 
 	if swkr == nil {
 		swkr = &subtleWrapKeyRes{}
 	}
-	return &runtimev1pb.SubtleWrapKeyResponse{
+	return &runtimev1pb.SubtleWrapKeyAlpha1Response{
 		WrappedKey: swkr.wrappedKey,
 		Tag:        swkr.tag,
 	}, nil
 }
 
-// SubtleUnwrapKey unwraps a key using a key stored in the vault.
-func (a *api) SubtleUnwrapKey(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyRequest) (*runtimev1pb.SubtleUnwrapKeyResponse, error) {
+// SubtleUnwrapKeyAlpha1 unwraps a key using a key stored in the vault.
+func (a *api) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyAlpha1Request) (*runtimev1pb.SubtleUnwrapKeyAlpha1Response, error) {
 	component, err := a.cryptoValidateRequest(in.ComponentName)
 	if err != nil {
-		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
+		return &runtimev1pb.SubtleUnwrapKeyAlpha1Response{}, err
 	}
 
 	policyRunner := resiliency.NewRunner[jwk.Key](ctx,
@@ -243,7 +243,7 @@ func (a *api) SubtleUnwrapKey(ctx context.Context, in *runtimev1pb.SubtleUnwrapK
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
+		return &runtimev1pb.SubtleUnwrapKeyAlpha1Response{}, err
 	}
 
 	// Serialize the key
@@ -251,19 +251,19 @@ func (a *api) SubtleUnwrapKey(ctx context.Context, in *runtimev1pb.SubtleUnwrapK
 	if err != nil {
 		err = status.Errorf(codes.Internal, "failed to serialize unwrapped key: %s", err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
+		return &runtimev1pb.SubtleUnwrapKeyAlpha1Response{}, err
 	}
 
-	return &runtimev1pb.SubtleUnwrapKeyResponse{
+	return &runtimev1pb.SubtleUnwrapKeyAlpha1Response{
 		PlaintextKey: enc,
 	}, nil
 }
 
-// SubtleSign signs a message using a key stored in the vault.
-func (a *api) SubtleSign(ctx context.Context, in *runtimev1pb.SubtleSignRequest) (*runtimev1pb.SubtleSignResponse, error) {
+// SubtleSignAlpha1 signs a message using a key stored in the vault.
+func (a *api) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.SubtleSignAlpha1Request) (*runtimev1pb.SubtleSignAlpha1Response, error) {
 	component, err := a.cryptoValidateRequest(in.ComponentName)
 	if err != nil {
-		return &runtimev1pb.SubtleSignResponse{}, err
+		return &runtimev1pb.SubtleSignAlpha1Response{}, err
 	}
 
 	policyRunner := resiliency.NewRunner[[]byte](ctx,
@@ -280,19 +280,19 @@ func (a *api) SubtleSign(ctx context.Context, in *runtimev1pb.SubtleSignRequest)
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleSignResponse{}, err
+		return &runtimev1pb.SubtleSignAlpha1Response{}, err
 	}
 
-	return &runtimev1pb.SubtleSignResponse{
+	return &runtimev1pb.SubtleSignAlpha1Response{
 		Signature: sig,
 	}, nil
 }
 
-// SubtleVerify verifies the signature of a message using a key stored in the vault.
-func (a *api) SubtleVerify(ctx context.Context, in *runtimev1pb.SubtleVerifyRequest) (*runtimev1pb.SubtleVerifyResponse, error) {
+// SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
+func (a *api) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.SubtleVerifyAlpha1Request) (*runtimev1pb.SubtleVerifyAlpha1Response, error) {
 	component, err := a.cryptoValidateRequest(in.ComponentName)
 	if err != nil {
-		return &runtimev1pb.SubtleVerifyResponse{}, err
+		return &runtimev1pb.SubtleVerifyAlpha1Response{}, err
 	}
 
 	policyRunner := resiliency.NewRunner[bool](ctx,
@@ -309,10 +309,10 @@ func (a *api) SubtleVerify(ctx context.Context, in *runtimev1pb.SubtleVerifyRequ
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.SubtleVerifyResponse{}, err
+		return &runtimev1pb.SubtleVerifyAlpha1Response{}, err
 	}
 
-	return &runtimev1pb.SubtleVerifyResponse{
+	return &runtimev1pb.SubtleVerifyAlpha1Response{
 		Valid: valid,
 	}, nil
 }

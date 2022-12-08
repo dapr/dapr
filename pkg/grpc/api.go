@@ -111,20 +111,20 @@ type API interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
-	// SubtleGetKey returns the public part of an asymmetric key stored in the vault.
-	SubtleGetKey(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequest) (*runtimev1pb.SubtleGetKeyResponse, error)
-	// SubtleEncrypt encrypts a small message using a key stored in the vault.
-	SubtleEncrypt(ctx context.Context, in *runtimev1pb.SubtleEncryptRequest) (*runtimev1pb.SubtleEncryptResponse, error)
-	// SubtleDecrypt decrypts a small message using a key stored in the vault.
-	SubtleDecrypt(ctx context.Context, in *runtimev1pb.SubtleDecryptRequest) (*runtimev1pb.SubtleDecryptResponse, error)
-	// SubtleWrapKey wraps a key using a key stored in the vault.
-	SubtleWrapKey(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRequest) (*runtimev1pb.SubtleWrapKeyResponse, error)
-	// SubtleUnwrapKey unwraps a key using a key stored in the vault.
-	SubtleUnwrapKey(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyRequest) (*runtimev1pb.SubtleUnwrapKeyResponse, error)
-	// SubtleSign signs a message using a key stored in the vault.
-	SubtleSign(ctx context.Context, in *runtimev1pb.SubtleSignRequest) (*runtimev1pb.SubtleSignResponse, error)
-	// SubtleVerify verifies the signature of a message using a key stored in the vault.
-	SubtleVerify(ctx context.Context, in *runtimev1pb.SubtleVerifyRequest) (*runtimev1pb.SubtleVerifyResponse, error)
+	// SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
+	SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleGetKeyAlpha1Request) (*runtimev1pb.SubtleGetKeyAlpha1Response, error)
+	// SubtleEncryptAlpha1 encrypts a small message using a key stored in the vault.
+	SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleEncryptAlpha1Request) (*runtimev1pb.SubtleEncryptAlpha1Response, error)
+	// SubtleDecryptAlpha1 decrypts a small message using a key stored in the vault.
+	SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleDecryptAlpha1Request) (*runtimev1pb.SubtleDecryptAlpha1Response, error)
+	// SubtleWrapKeyAlpha1 wraps a key using a key stored in the vault.
+	SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleWrapKeyAlpha1Request) (*runtimev1pb.SubtleWrapKeyAlpha1Response, error)
+	// SubtleUnwrapKeyAlpha1 unwraps a key using a key stored in the vault.
+	SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyAlpha1Request) (*runtimev1pb.SubtleUnwrapKeyAlpha1Response, error)
+	// SubtleSignAlpha1 signs a message using a key stored in the vault.
+	SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.SubtleSignAlpha1Request) (*runtimev1pb.SubtleSignAlpha1Response, error)
+	// SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
+	SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.SubtleVerifyAlpha1Request) (*runtimev1pb.SubtleVerifyAlpha1Response, error)
 	GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error)
 	StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error)
 	TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error)
