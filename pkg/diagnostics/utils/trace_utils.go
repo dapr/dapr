@@ -68,11 +68,6 @@ func GetTraceSamplingRate(rate string) float64 {
 	return f
 }
 
-// TraceSampler returns Probability Sampler option.
-func TraceSampler(samplingRate string) sdktrace.Sampler {
-	return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(GetTraceSamplingRate(samplingRate)))
-}
-
 // IsTracingEnabled parses the given rate and returns false if sampling rate is explicitly set 0.
 func IsTracingEnabled(rate string) bool {
 	return GetTraceSamplingRate(rate) != 0
@@ -82,6 +77,11 @@ func IsTracingEnabled(rate string) bool {
 func SpanFromContext(ctx context.Context) trace.Span {
 	if reqCtx, ok := ctx.(*fasthttp.RequestCtx); ok {
 		val := reqCtx.UserValue(daprFastHTTPContextKey)
+		if val != nil {
+			return val.(trace.Span)
+		}
+	} else {
+		val := ctx.Value(daprFastHTTPContextKey)
 		if val != nil {
 			return val.(trace.Span)
 		}

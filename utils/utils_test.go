@@ -164,7 +164,7 @@ func TestEnvOrElse(t *testing.T) {
 		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), elseValue)
 	})
 
-	t.Run("envOrElse should return env var value value when env var is present", func(t *testing.T) {
+	t.Run("envOrElse should return env var value when env var is present", func(t *testing.T) {
 		const elseValue, fakeEnVar, fakeEnvVarValue = "fakeValue", "envVarThatExists", "envVarValue"
 		defer os.Unsetenv(fakeEnVar)
 

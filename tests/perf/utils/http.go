@@ -1,6 +1,3 @@
-//go:build perf
-// +build perf
-
 /*
 Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -89,7 +86,7 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 
 // HTTPDelete calls a given URL with the HTTP DELETE method.
 func HTTPDelete(url string) ([]byte, error) {
-	req, err := http.NewRequest("DELETE", sanitizeHTTPURL(url), nil)
+	req, err := http.NewRequest(http.MethodDelete, sanitizeHTTPURL(url), nil)
 	if err != nil {
 		return nil, err
 	}

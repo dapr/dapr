@@ -121,7 +121,7 @@ func (s *sentry) run(certAuth ca.CertificateAuthority, v identity.Validator) {
 	}()
 
 	// Start the server; this is a blocking call
-	log.Infof("sentry certificate authority is running, protecting ya'll")
+	log.Infof("sentry certificate authority is running, protecting y'all")
 	serverRunErr := s.server.Run(s.conf.Port, certAuth.GetCACertBundle())
 	if serverRunErr != nil {
 		log.Fatalf("error starting gRPC server: %s", serverRunErr)
@@ -180,7 +180,11 @@ func (s *sentry) createValidator() (identity.Validator, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create kubernetes client")
 		}
-		return kubernetes.NewValidator(kubeClient, s.conf.TokenAudience), nil
+
+		// TODO: Remove once the NoDefaultTokenAudience feature is finalized
+		noDefaultTokenAudience := false
+
+		return kubernetes.NewValidator(kubeClient, s.conf.GetTokenAudiences(), noDefaultTokenAudience), nil
 	}
 	return selfhosted.NewValidator(), nil
 }

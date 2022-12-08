@@ -76,6 +76,11 @@ var endpoints = map[string][]string{
 	"unlock.v1alpha1": {
 		"/dapr.proto.runtime.v1.Dapr/UnlockAlpha1",
 	},
+	"workflows.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/StartWorkflowAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/GetWorkflowAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/TerminateWorkflowAlpha1",
+	},
 	"shutdown.v1": {
 		"/dapr.proto.runtime.v1.Dapr/Shutdown",
 	},

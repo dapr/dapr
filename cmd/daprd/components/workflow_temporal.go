@@ -14,17 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/middleware"
-	wasmBasic "github.com/dapr/components-contrib/middleware/http/wasm/basic"
-	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	"github.com/dapr/kit/logger"
+	"github.com/dapr/components-contrib/workflows/temporal"
+	workflowLoader "github.com/dapr/dapr/pkg/components/workflows"
 )
 
 func init() {
-	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return wasmBasic.NewMiddleware(log).GetHandler(metadata)
-		}
-	}, "wasm.basic")
+	workflowLoader.DefaultRegistry.RegisterComponent(temporal.NewTemporalWorkflow, "temporal")
 }

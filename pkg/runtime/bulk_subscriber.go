@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -66,16 +67,21 @@ type bulkSubIngressDiagnostics struct {
 //     3.B. Send the envelope to app by invoking http endpoint
 //  4. Check if any error has occurred so far in processing for any of the message and invoke DLQ, if configured.
 //  5. Send back responses array to broker interface.
-func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.Runner,
-	psName string, topic string, route TopicRouteElem,
+func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.Runner[any],
+	psName string, topic string, route TopicRouteElem, namespacedConsumer bool,
 ) error {
 	ps, ok := a.pubSubs[psName]
 	if !ok {
 		return runtimePubsub.NotFoundError{PubsubName: psName}
 	}
 
+	subscribeTopic := topic
+	if namespacedConsumer {
+		subscribeTopic = a.namespace + topic
+	}
+
 	req := pubsub.SubscribeRequest{
-		Topic:    topic,
+		Topic:    subscribeTopic,
 		Metadata: route.metadata,
 	}
 
@@ -125,12 +131,12 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 				} else {
 					contenttype = "application/octet-stream"
 				}
-				populateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, contenttype)
+				populateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, contenttype, namespacedConsumer, a.namespace)
 			} else {
 				var cloudEvent map[string]interface{}
 				err = json.Unmarshal(message.Event, &cloudEvent)
 				if err != nil {
-					log.Errorf("error deserializing one of the messages in bulk cloud event in pubsub %s and topic %s: %s", psName, msg.Topic, err)
+					log.Errorf("error deserializing one of the messages in bulk cloud event in pubsub %s and topic %s: %s", psName, topic, err)
 					bulkResponses[i].Error = err
 					bulkResponses[i].EntryId = message.EntryId
 					hasAnyError = true
@@ -160,12 +166,12 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 				if rPath == "" && a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 					continue
 				}
-				populateBulkSubcribedMessage(&(msg.Entries[i]), cloudEvent, &routePathBulkMessageMap, rPath, i, msg, true, psName, message.ContentType)
+				populateBulkSubcribedMessage(&(msg.Entries[i]), cloudEvent, &routePathBulkMessageMap, rPath, i, msg, true, psName, message.ContentType, namespacedConsumer, a.namespace)
 			}
 		}
 		var overallInvokeErr error
 		for path, psm := range routePathBulkMessageMap {
-			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, psm, topic, psName, msg, route, &bulkResponses, &entryIdIndexMap, path, policy, &bulkSubDiag)
+			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, psm, topic, psName, msg, route, &bulkResponses, &entryIdIndexMap, path, policy, &bulkSubDiag, rawPayload)
 			if invokeErr != nil {
 				hasAnyError = true
 				err = invokeErr
@@ -246,7 +252,8 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRout
 // createEnvelopeAndInvokeSubscriber creates the envelope and invokes the subscriber.
 func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm pubsubBulkSubscribedMessage, topic string, psName string,
 	msg *pubsub.BulkMessage, route TopicRouteElem, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
-	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner[any], bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+	rawPayload bool,
 ) error {
 	var id string
 	idObj, err := uuid.NewRandom()
@@ -295,16 +302,19 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 	}
 	psm.data = da
 	psm.path = path
-	return policy(func(ctx context.Context) error {
+	_, err = policy(func(ctx context.Context) (any, error) {
+		var pErr error
 		switch a.runtimeConfig.ApplicationProtocol {
 		case HTTPProtocol:
-			return a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
+			pErr = a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
 		case GRPCProtocol:
-			return a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
+			pErr = a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag, rawPayload)
 		default:
-			return backoff.Permanent(errors.New("invalid application protocol"))
+			pErr = backoff.Permanent(errors.New("invalid application protocol"))
 		}
+		return nil, pErr
 	})
+	return err
 }
 
 // publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding responses.
@@ -433,20 +443,77 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 	return errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", msg.topic, statusCode)
 }
 
+func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
+	envelope := &runtimev1pb.TopicEventCERequest{
+		Id:              extractCloudEventProperty(event, pubsub.IDField),
+		Source:          extractCloudEventProperty(event, pubsub.SourceField),
+		DataContentType: extractCloudEventProperty(event, pubsub.DataContentTypeField),
+		Type:            extractCloudEventProperty(event, pubsub.TypeField),
+		SpecVersion:     extractCloudEventProperty(event, pubsub.SpecVersionField),
+	}
+
+	if data, ok := event[pubsub.DataField]; ok && data != nil {
+		envelope.Data = nil
+
+		if contenttype.IsStringContentType(envelope.DataContentType) {
+			switch v := data.(type) {
+			case string:
+				envelope.Data = []byte(v)
+			case []byte:
+				envelope.Data = v
+			default:
+				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, ErrUnexpectedEnvelopeData //nolint:nosnakecase
+			}
+		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
+			envelope.Data, _ = json.Marshal(data)
+		}
+	}
+	extensions, extensionsErr := extractCloudEventExtensions(event)
+	if extensionsErr != nil {
+		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
+	}
+	envelope.Extensions = extensions
+	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
+}
+
+func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
+	if rawPayload {
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &runtimev1pb.TopicEventBulkRequestEntry_Bytes{Bytes: entry.Event}, //nolint:nosnakecase
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	} else {
+		eventLocal, err := extractCloudEvent(cloudEvent)
+		if err != nil {
+			return nil, err
+		}
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &eventLocal,
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	}
+}
+
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
 func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBulkSubscribedMessage,
 	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIdIndexMap map[string]int, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+	rawPayload bool,
 ) error {
 	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(msg.entries))
 	for i, entry := range msg.entries {
-		item := &runtimev1pb.TopicEventBulkRequestEntry{
-			EntryId:     entry.EntryId,
-			Event:       entry.Event,
-			ContentType: entry.ContentType,
-			Metadata:    entry.Metadata,
+		item, err := fetchEntry(rawPayload, entry, msg.cloudEvents[i])
+		if err != nil {
+			bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
+			setBulkResponseEntry(bulkResponses, i, entry.EntryId, err)
+			continue
 		}
 		items[i] = item
 	}
+
 	envelope := &runtimev1pb.TopicEventBulkRequest{
 		Id:         uuid.New().String(),
 		Entries:    items,
@@ -480,7 +547,11 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 	defer endSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
-	clientV1 := runtimev1pb.NewAppCallbackAlphaClient(a.grpc.AppClient)
+	conn, err := a.grpc.GetAppClient()
+	if err != nil {
+		return fmt.Errorf("error while getting app client: %w", err)
+	}
+	clientV1 := runtimev1pb.NewAppCallbackAlphaClient(conn)
 
 	start := time.Now()
 	res, err := clientV1.OnBulkTopicEventAlpha1(ctx, envelope)
@@ -618,7 +689,7 @@ func validateEntryId(entryId string, i int) error { //nolint:stylecheck
 
 func populateBulkSubcribedMessage(message *pubsub.BulkMessageEntry, event interface{},
 	routePathBulkMessageMap *map[string]pubsubBulkSubscribedMessage,
-	rPath string, i int, msg *pubsub.BulkMessage, isCloudEvent bool, psName string, contentType string,
+	rPath string, i int, msg *pubsub.BulkMessage, isCloudEvent bool, psName string, contentType string, namespacedConsumer bool, namespace string,
 ) {
 	childMessage := runtimePubsub.BulkSubscribeMessageItem{
 		Event:       event,
@@ -648,11 +719,17 @@ func populateBulkSubcribedMessage(message *pubsub.BulkMessageEntry, event interf
 		if isCloudEvent {
 			cloudEvents[0] = cloudEvent
 		}
+
+		msgTopic := msg.Topic
+		if namespacedConsumer {
+			msgTopic = strings.Replace(msgTopic, namespace, "", 1)
+		}
+
 		psm := pubsubBulkSubscribedMessage{
 			cloudEvents: cloudEvents,
 			rawData:     rawDataItems,
 			entries:     entries,
-			topic:       msg.Topic,
+			topic:       msgTopic,
 			metadata:    msg.Metadata,
 			pubsub:      psName,
 			length:      1,
