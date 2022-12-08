@@ -21,6 +21,7 @@ const (
 	CategoryPubSub         Category = "pubsub"
 	CategorySecretStore    Category = "secretstores"
 	CategoryStateStore     Category = "state"
+	CategoryWorkflow       Category = "workflow"
 	CategoryMiddleware     Category = "middleware"
 	CategoryConfiguration  Category = "configuration"
 	CategoryCryptoProvider Category = "crypto"

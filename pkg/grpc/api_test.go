@@ -2756,14 +2756,15 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				"failingQueryKey":      1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":        time.Second * 10,
-				"timeoutSetKey":        time.Second * 10,
-				"timeoutDeleteKey":     time.Second * 10,
-				"timeoutBulkGetKey":    time.Second * 10,
-				"timeoutBulkSetKey":    time.Second * 10,
-				"timeoutBulkDeleteKey": time.Second * 10,
-				"timeoutMultiKey":      time.Second * 10,
-				"timeoutQueryKey":      time.Second * 10,
+				"timeoutGetKey":         time.Second * 10,
+				"timeoutSetKey":         time.Second * 10,
+				"timeoutDeleteKey":      time.Second * 10,
+				"timeoutBulkGetKey":     time.Second * 10,
+				"timeoutBulkGetKeyBulk": time.Second * 10,
+				"timeoutBulkSetKey":     time.Second * 10,
+				"timeoutBulkDeleteKey":  time.Second * 10,
+				"timeoutMultiKey":       time.Second * 10,
+				"timeoutQueryKey":       time.Second * 10,
 			},
 			map[string]int{},
 		),
@@ -2863,6 +2864,12 @@ func TestStateAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
+		// Adding this will make the bulk operation fail with a timeout, and Dapr should be able to recover nicely
+		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
+		t.Cleanup(func() {
+			failingStore.BulkFailKey = ""
+		})
+
 		_, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: "failStore",
 			Keys:      []string{"failingBulkGetKey", "goodBulkGetKey"},
@@ -2877,22 +2884,29 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		start := time.Now()
 		resp, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: "failStore",
-			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey"},
+			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey", "nilGetKey"},
 		})
 		end := time.Now()
 
 		assert.NoError(t, err)
-		assert.Len(t, resp.Items, 2)
+		assert.Len(t, resp.Items, 3)
 		for _, item := range resp.Items {
-			if item.Key == "timeoutBulkGetKey" {
+			switch item.Key {
+			case "timeoutBulkGetKey":
 				assert.NotEmpty(t, item.Error)
 				assert.Contains(t, item.Error, "context deadline exceeded")
-			} else {
+			case "goodTimeoutBulkGetKey":
 				assert.Empty(t, item.Error)
+			case "nilGetKey":
+				assert.Empty(t, item.Error)
+				assert.Empty(t, item.Data)
+			default:
+				t.Fatalf("unexpected key: %s", item.Key)
 			}
 		}
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
 		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("nilGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 

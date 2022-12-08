@@ -10,21 +10,23 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 )
 
 type (
 	// runtimeOpts encapsulates the components to include in the runtime.
 	runtimeOpts struct {
-		secretStoreRegistry    *secretstoresLoader.Registry
-		stateRegistry          *stateLoader.Registry
-		configurationRegistry  *configurationLoader.Registry
-		lockRegistry           *lockLoader.Registry
-		pubsubRegistry         *pubsubLoader.Registry
-		nameResolutionRegistry *nrLoader.Registry
-		bindingRegistry        *bindingsLoader.Registry
-		httpMiddlewareRegistry *httpMiddlewareLoader.Registry
-		cryptoProviderRegistry *cryptoLoader.Registry
-		componentsCallback     ComponentsCallback
+		secretStoreRegistry       *secretstoresLoader.Registry
+		stateRegistry             *stateLoader.Registry
+		configurationRegistry     *configurationLoader.Registry
+		lockRegistry              *lockLoader.Registry
+		pubsubRegistry            *pubsubLoader.Registry
+		nameResolutionRegistry    *nrLoader.Registry
+		bindingRegistry           *bindingsLoader.Registry
+		httpMiddlewareRegistry    *httpMiddlewareLoader.Registry
+		workflowComponentRegistry *workflowsLoader.Registry
+		cryptoProviderRegistry    *cryptoLoader.Registry
+		componentsCallback        ComponentsCallback
 	}
 
 	// Option is a function that customizes the runtime.
@@ -91,6 +93,13 @@ func WithBindings(registry *bindingsLoader.Registry) Option {
 func WithHTTPMiddlewares(registry *httpMiddlewareLoader.Registry) Option {
 	return func(o *runtimeOpts) {
 		o.httpMiddlewareRegistry = registry
+	}
+}
+
+// WithWorkflowComponents adds workflow components to the runtime.
+func WithWorkflowComponents(registry *workflowsLoader.Registry) Option {
+	return func(o *runtimeOpts) {
+		o.workflowComponentRegistry = registry
 	}
 }
 

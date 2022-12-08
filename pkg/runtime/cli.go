@@ -125,8 +125,10 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
-		return nil, err
+	if *mode == string(modes.StandaloneMode) {
+		if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply options to all loggers
@@ -328,9 +330,9 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	// Config and resiliency need the operator client, only initiate once and only if we will actually use it.
+	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
-	if *mode == string(modes.KubernetesMode) && *config != "" {
+	if *mode == string(modes.KubernetesMode) {
 		log.Infof("Initializing the operator client (config: %s)", *config)
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
