@@ -37,8 +37,6 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-
-	apiv1 "k8s.io/api/core/v1"
 )
 
 var tr *runner.TestRunner
@@ -186,7 +184,7 @@ func sendToPublisherBulk(t *testing.T, publisherExternalURL string, topic string
 
 	statusCode, err := postSingleMessage(url, jsonValue)
 	// return on an unsuccessful publish
-	if statusCode != http.StatusOK {
+	if statusCode != http.StatusNoContent {
 		return nil, err
 	}
 
@@ -618,6 +616,8 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("pubsub")
 	utils.InitHTTPClient(true)
 
+	components := []kube.ComponentDescription{}
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -644,37 +644,51 @@ func TestMain(m *testing.M) {
 	}
 
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
-		redisPubsubPluggableComponent := []apiv1.Container{
-			{
-				Name:  "redis-pubsub-pluggable",
-				Image: runner.BuildTestImageName(redisPubSubPluggableApp),
+		components = append(components, kube.ComponentDescription{
+			Name:      PubSubPluggableName,
+			Namespace: &kube.DaprTestNamespace,
+			TypeName:  "pubsub.redis-pluggable",
+			MetaData: map[string]kube.MetadataValue{
+				"redisHost": {
+					FromSecretRef: &kube.SecretRef{
+						Name: "redissecret",
+						Key:  "host",
+					},
+				},
+				"redisPassword":      {Raw: `""`},
+				"processingTimeout":  {Raw: `"1s"`},
+				"redeliverInterval":  {Raw: `"1s"`},
+				"idleCheckFrequency": {Raw: `"1s"`},
+				"readTimeout":        {Raw: `"1s"`},
 			},
-		}
+			Scopes:         []string{publisherPluggableAppName, subscriberPluggableAppName},
+			ContainerImage: runner.BuildTestImageName(redisPubSubPluggableApp),
+		})
 		pluggableTestApps := []kube.AppDescription{
 			{
-				AppName:             publisherPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           "e2e-pubsub-publisher",
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				AppMemoryLimit:      "200Mi",
-				AppMemoryRequest:    "100Mi",
-				PluggableComponents: redisPubsubPluggableComponent,
+				AppName:                   publisherPluggableAppName,
+				DaprEnabled:               true,
+				ImageName:                 "e2e-pubsub-publisher",
+				Replicas:                  1,
+				IngressEnabled:            true,
+				MetricsEnabled:            true,
+				AppMemoryLimit:            "200Mi",
+				AppMemoryRequest:          "100Mi",
+				InjectPluggableComponents: true,
 				AppEnv: map[string]string{
 					PubSubEnvVar: PubSubPluggableName,
 				},
 			},
 			{
-				AppName:             subscriberPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           "e2e-pubsub-subscriber",
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				AppMemoryLimit:      "200Mi",
-				AppMemoryRequest:    "100Mi",
-				PluggableComponents: redisPubsubPluggableComponent,
+				AppName:                   subscriberPluggableAppName,
+				DaprEnabled:               true,
+				ImageName:                 "e2e-pubsub-subscriber",
+				Replicas:                  1,
+				IngressEnabled:            true,
+				MetricsEnabled:            true,
+				AppMemoryLimit:            "200Mi",
+				AppMemoryRequest:          "100Mi",
+				InjectPluggableComponents: true,
 				AppEnv: map[string]string{
 					PubSubEnvVar: PubSubPluggableName,
 				},
@@ -693,7 +707,7 @@ func TestMain(m *testing.M) {
 	}
 
 	log.Printf("Creating TestRunner\n")
-	tr = runner.NewTestRunner("pubsubtest", testApps, nil, nil)
+	tr = runner.NewTestRunner("pubsubtest", testApps, components, nil)
 	log.Printf("Starting TestRunner\n")
 	os.Exit(tr.Start(m))
 }

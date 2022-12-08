@@ -444,8 +444,6 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 	bulkResponses := make([]*runtimev1pb.TopicEventBulkResponseEntry, len(in.Entries))
 
 	for i, entry := range in.Entries {
-		log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.Event))
-
 		if entry.Event == nil {
 			log.Printf("(%s) Responding with DROP in bulk subscribe for entryId: %s. entry.Event is nil", reqID, entry.EntryId)
 			// Return success with DROP status to drop message
@@ -456,8 +454,8 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 		}
 		var msg string
 		if strings.HasPrefix(in.Topic, pubsubCEBulkSubTopic) {
-			var ceMsg map[string]interface{}
-			err := json.Unmarshal(entry.Event, &ceMsg)
+			log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.GetCloudEvent().Data))
+			err := json.Unmarshal(entry.GetCloudEvent().Data, &msg)
 			if err != nil {
 				log.Printf("(%s) Error extracing ce event in bulk subscribe for entryId: %s: %v", reqID, entry.EntryId, err)
 				bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
@@ -466,11 +464,10 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 				}
 				continue
 			}
-			msg = ceMsg["data"].(string)
 			log.Printf("(%s) Value of ce event in bulk subscribe for entryId: %s: %s", reqID, entry.EntryId, msg)
 		} else {
-			// var rawMsg
-			err := json.Unmarshal(entry.Event, &msg)
+			log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.GetBytes()))
+			err := json.Unmarshal(entry.GetBytes(), &msg)
 			if err != nil {
 				log.Printf("(%s) Error extracing raw event in bulk subscribe for entryId: %s: %v", reqID, entry.EntryId, err)
 				// Return success with DROP status to drop message

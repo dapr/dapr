@@ -21,6 +21,7 @@ healthapp \
 hellodapr \
 stateapp \
 secretapp \
+workflowsapp \
 service_invocation \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
@@ -53,7 +54,7 @@ pluggable_redis-pubsub \
 pluggable_kafka-bindings \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -70,6 +71,8 @@ service_invocation_grpc \
 state_get_grpc \
 state_get_http \
 pubsub_publish_grpc \
+pubsub_bulk_publish_grpc \
+actor_double_activation \
 
 KUBECTL=kubectl
 
@@ -184,6 +187,8 @@ build-perf-app-$(1): check-e2e-env
 		--appdir "../$(E2E_TESTAPP_DIR)" \
 		--dest-registry "$(DAPR_TEST_REGISTRY)" \
 		--dest-tag "$(DAPR_TEST_TAG)" \
+		--target-os "$(TARGET_OS)" \
+		--target-arch "$(TARGET_ARCH)" \
 		--cache-registry "$(DAPR_CACHE_REGISTRY)"
 endef
 
@@ -369,6 +374,7 @@ setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
 	$(HELM) repo add stable https://charts.helm.sh/stable
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
+	$(HELM) repo add wener https://wenerme.github.io/charts
 	$(HELM) repo update
 
 # setup tailscale
@@ -380,30 +386,51 @@ else
 	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) TAILSCALE_AUTH_KEY=$(TAILSCALE_AUTH_KEY) ./tests/setup_tailscale.sh
 endif
 
+# install k6 loadtesting to the cluster
+setup-test-env-k6:
+	rm -rf /tmp/.k6-operator >/dev/null && git clone https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
+delete-test-env-k6:
+	rm -rf /tmp/.k6-operator >/dev/null && git clone https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make delete && cd - && rm -rf /tmp/.k6-operator
+
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
+	$(HELM) upgrade --install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
+
 delete-test-env-redis:
 	${HELM} del dapr-redis --namespace ${DAPR_TEST_NAMESPACE}
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade --install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
 # delete kafka from cluster
 delete-test-env-kafka:
-	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) 
+	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
+
+# install temporal to the cluster
+setup-test-env-temporal:
+	$(HELM) install --set server.replicaCount=1 \
+					--set cassandra.config.cluster_size=1 \
+					--set prometheus.enabled=false \
+					--set grafana.enabled=false \
+					--set elasticsearch.enabled=false \
+					dapr-temporal wener/temporal -f ./tests/config/temporal_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 15m0s
+
+# delete temporal from cluster
+delete-test-env-temporal:
+	$(HELM) del dapr-temporal --namespace $(DAPR_TEST_NAMESPACE) 
+
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
-	$(HELM) install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
+	$(HELM) upgrade --install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
 
 # delete mongodb from cluster
 delete-test-env-mongodb:
 	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
 
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -421,18 +448,18 @@ setup-disable-mtls:
 setup-app-configurations:
 	$(KUBECTL) apply -f ./tests/config/dapr_observability_test_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
-# Apply component yaml for state, secrets, pubsub, and bindings
+# Apply component yaml for state, secrets, pubsub, workflows, and bindings
 setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_host_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pubsub_no_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -455,7 +482,6 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_pubsub_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)

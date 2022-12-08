@@ -201,8 +201,9 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing dapr %s request for %s", r.Method, r.URL.RequestURI())
 	log.Printf("Processing dapr %s request for %s\n", r.Method, r.URL.RequestURI())
-	if r.Method == "DELETE" {
+	if r.Method == http.MethodDelete {
 		resetLogs()
 	}
 
@@ -347,7 +348,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	case "timers":
 		fallthrough
 	case "reminders":
-		if r.Method == "GET" {
+		if r.Method == http.MethodGet {
 			expectedHTTPCode = 200
 		} else {
 			expectedHTTPCode = 204
@@ -432,14 +433,14 @@ func testEnvHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s\n", r.Method, r.URL.RequestURI())
 
 	envName := mux.Vars(r)["envName"]
-	if r.Method == "GET" {
+	if r.Method == http.MethodGet {
 		envValue := getEnv(envName)
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte(envValue))
 	}
 
-	if r.Method == "POST" {
+	if r.Method == http.MethodPost {
 		body, err := io.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
