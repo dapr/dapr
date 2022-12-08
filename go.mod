@@ -54,7 +54,7 @@ require (
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/ratelimit v0.2.0
 	golang.org/x/exp v0.0.0-20221028150844-83b7d23a625f
-	golang.org/x/net v0.1.0
+	golang.org/x/net v0.3.1-0.20221206200815-1e63c2f08a10
 	golang.org/x/sync v0.1.0
 	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c
 	google.golang.org/grpc v1.51.0
@@ -62,7 +62,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.25.3
 	k8s.io/apiextensions-apiserver v0.25.3
-	k8s.io/apimachinery v0.25.3
+	k8s.io/apimachinery v0.25.5
 	k8s.io/cli-runtime v0.25.3
 	k8s.io/client-go v0.25.3
 	k8s.io/code-generator v0.25.3
@@ -363,9 +363,9 @@ require (
 	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/mod v0.6.0 // indirect
 	golang.org/x/oauth2 v0.1.0 // indirect
-	golang.org/x/sys v0.1.0 // indirect
-	golang.org/x/term v0.1.0 // indirect
-	golang.org/x/text v0.4.0 // indirect
+	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/term v0.3.0 // indirect
+	golang.org/x/text v0.5.0 // indirect
 	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
 	golang.org/x/tools v0.2.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
