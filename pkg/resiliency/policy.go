@@ -15,6 +15,7 @@ package resiliency
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -26,65 +27,101 @@ import (
 
 type (
 	// Operation represents a function to invoke with resiliency policies applied.
-	Operation func(ctx context.Context) error
+	Operation[T any] func(ctx context.Context) (T, error)
 
 	// Runner represents a function to invoke `oper` with resiliency policies applied.
-	Runner func(oper Operation) error
+	Runner[T any] func(oper Operation[T]) (T, error)
 )
 
-// Policy returns a policy runner that encapsulates the configured
-// resiliency policies in a simple execution wrapper.
-func Policy(ctx context.Context, log logger.Logger, operationName string, t time.Duration, r *retry.Config, cb *breaker.CircuitBreaker) Runner {
-	return func(oper Operation) error {
+type doneCh[T any] struct {
+	res T
+	err error
+}
+
+// PolicyDefinition contains a definition for a policy, used to create a Runner.
+type PolicyDefinition struct {
+	log  logger.Logger
+	name string
+	t    time.Duration
+	r    *retry.Config
+	cb   *breaker.CircuitBreaker
+}
+
+// NewRunner returns a policy runner that encapsulates the configured resiliency policies in a simple execution wrapper.
+// We can't implement this as a method of the Resiliency struct because we can't yet use generic methods in structs.
+func NewRunner[T any](ctx context.Context, def *PolicyDefinition) Runner[T] {
+	if def == nil {
+		return func(oper Operation[T]) (T, error) {
+			return oper(ctx)
+		}
+	}
+
+	var zero T
+	return func(oper Operation[T]) (T, error) {
 		operation := oper
-		if t > 0 {
-			// Handle timeout.
-			// TODO: This should ideally be handled by the underlying service/component. Revisit once those understand contexts.
+		if def.t > 0 {
+			// Handle timeout
+			// TODO: This should ideally be handled by the underlying service/component. Revisit once those understand contexts
 			operCopy := operation
-			operation = func(ctx context.Context) error {
-				ctx, cancel := context.WithTimeout(ctx, t)
+			operation = func(ctx context.Context) (T, error) {
+				ctx, cancel := context.WithTimeout(ctx, def.t)
 				defer cancel()
 
-				done := make(chan error)
+				done := make(chan doneCh[T])
 				go func() {
-					done <- operCopy(ctx)
+					rRes, rErr := operCopy(ctx)
+					done <- doneCh[T]{rRes, rErr}
 				}()
 
 				select {
-				case err := <-done:
-					return err
+				case v := <-done:
+					return v.res, v.err
 				case <-ctx.Done():
-					return ctx.Err()
+					return zero, ctx.Err()
 				}
 			}
 		}
 
-		if cb != nil {
+		if def.cb != nil {
 			operCopy := operation
-			operation = func(ctx context.Context) error {
-				err := cb.Execute(func() error {
+			operation = func(ctx context.Context) (T, error) {
+				resAny, err := def.cb.Execute(func() (any, error) {
 					return operCopy(ctx)
 				})
-				if r != nil && breaker.IsErrorPermanent(err) {
-					// Break out of retry.
+				if def.r != nil && breaker.IsErrorPermanent(err) {
+					// Break out of retry
 					err = backoff.Permanent(err)
 				}
-				return err
+				res, ok := resAny.(T)
+				if !ok && resAny != nil {
+					err = errors.New("cannot cast response to specific type")
+					if def.r != nil {
+						// Break out of retry
+						err = backoff.Permanent(err)
+					}
+				}
+				return res, err
 			}
 		}
 
-		if r == nil {
+		if def.r == nil {
 			return operation(ctx)
 		}
 
-		// Use retry/back off.
-		b := r.NewBackOffWithContext(ctx)
-		return retry.NotifyRecover(func() error {
-			return operation(ctx)
-		}, b, func(_ error, _ time.Duration) {
-			log.Infof("Error processing operation %s. Retrying...", operationName)
-		}, func() {
-			log.Infof("Recovered processing operation %s.", operationName)
-		})
+		// Use retry/back off
+		b := def.r.NewBackOffWithContext(ctx)
+		return retry.NotifyRecoverWithData(
+			func() (T, error) {
+				return operation(ctx)
+			},
+			b,
+			func(opErr error, _ time.Duration) {
+				def.log.Infof("Error processing operation %s. Retrying…", def.name)
+				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
+			},
+			func() {
+				def.log.Infof("Recovered processing operation %s.", def.name)
+			},
+		)
 	}
 }

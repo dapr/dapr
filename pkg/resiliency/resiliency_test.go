@@ -179,30 +179,30 @@ func TestPoliciesForTargets(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		create func(r *Resiliency) Runner
+		create func(r *Resiliency) Runner[any]
 	}{
 		{
 			name: "component",
-			create: func(r *Resiliency) Runner {
-				return r.ComponentOutboundPolicy(ctx, "statestore1", "Statestore")
+			create: func(r *Resiliency) Runner[any] {
+				return NewRunner[any](ctx, r.ComponentOutboundPolicy("statestore1", "Statestore"))
 			},
 		},
 		{
 			name: "endpoint",
-			create: func(r *Resiliency) Runner {
-				return r.EndpointPolicy(ctx, "appB", "127.0.0.1:3500")
+			create: func(r *Resiliency) Runner[any] {
+				return NewRunner[any](ctx, r.EndpointPolicy("appB", "127.0.0.1:3500"))
 			},
 		},
 		{
 			name: "actor",
-			create: func(r *Resiliency) Runner {
-				return r.ActorPreLockPolicy(ctx, "myActorType", "id")
+			create: func(r *Resiliency) Runner[any] {
+				return NewRunner[any](ctx, r.ActorPreLockPolicy("myActorType", "id"))
 			},
 		},
 		{
 			name: "actor post lock",
-			create: func(r *Resiliency) Runner {
-				return r.ActorPostLockPolicy(ctx, "myActorType", "id")
+			create: func(r *Resiliency) Runner[any] {
+				return NewRunner[any](ctx, r.ActorPostLockPolicy("myActorType", "id"))
 			},
 		},
 	}
@@ -210,13 +210,13 @@ func TestPoliciesForTargets(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := tt.create(r)
-			called := false
-			err := p(func(ctx context.Context) error {
-				called = true
-				return nil
+			called := atomic.Bool{}
+			_, err := p(func(ctx context.Context) (any, error) {
+				called.Store(true)
+				return nil, nil
 			})
 			assert.NoError(t, err)
-			assert.True(t, called)
+			assert.True(t, called.Load())
 		})
 	}
 }
@@ -449,10 +449,18 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 func TestResiliencyHasBuiltInPolicy(t *testing.T) {
 	r := FromConfigurations(log)
 	assert.NotNil(t, r)
-	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInServiceRetries))
-	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInActorRetries))
-	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInActorReminderRetries))
-	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInInitializationRetries))
+
+	builtins := []BuiltInPolicyName{
+		BuiltInServiceRetries,
+		BuiltInActorRetries,
+		BuiltInActorReminderRetries,
+		BuiltInInitializationRetries,
+	}
+	for _, n := range builtins {
+		p := r.BuiltInPolicy(n)
+		_ = assert.NotNil(t, p) &&
+			assert.NotNil(t, p.r)
+	}
 }
 
 func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
@@ -651,40 +659,48 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	r := FromConfigurations(log, config)
 
 	// Targeted App
-	policy := r.EndpointPolicy(context.Background(), "testApp", "localhost")
+	policy := NewRunner[any](context.Background(),
+		r.EndpointPolicy("testApp", "localhost"),
+	)
 	count := atomic.Int64{}
-	policy(func(ctx context.Context) error {
+	policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
-		return errors.New("Forced failure")
+		return nil, errors.New("Forced failure")
 	})
 	assert.Equal(t, int64(6), count.Load())
 
 	// Generic App
-	policy = r.EndpointPolicy(context.Background(), "noMatchingTarget", "localhost")
+	policy = NewRunner[any](context.Background(),
+		r.EndpointPolicy("noMatchingTarget", "localhost"),
+	)
 	count.Store(0)
-	policy(func(ctx context.Context) error {
+	policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
-		return errors.New("Forced failure")
+		return nil, errors.New("Forced failure")
 	})
 	assert.Equal(t, int64(11), count.Load())
 
 	// Not defined
-	policy = r.ActorPreLockPolicy(context.Background(), "actorType", "actorID")
+	policy = NewRunner[any](context.Background(),
+		r.ActorPreLockPolicy("actorType", "actorID"),
+	)
 	count.Store(0)
-	policy(func(ctx context.Context) error {
+	policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
-		return errors.New("Forced failure")
+		return nil, errors.New("Forced failure")
 	})
 	assert.Equal(t, int64(4), count.Load())
 
 	// One last one for ActorPostLock which just includes timeouts.
-	policy = r.ActorPostLockPolicy(context.Background(), "actorType", "actorID")
+	policy = NewRunner[any](context.Background(),
+		r.ActorPostLockPolicy("actorType", "actorID"),
+	)
 	count.Store(0)
 	start := time.Now()
-	err := policy(func(ctx context.Context) error {
+	_, err := policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
 		time.Sleep(time.Second * 5)
-		return errors.New("Forced failure")
+		return nil, errors.New("Forced failure")
 	})
 	assert.Less(t, time.Since(start), time.Second*5)
 	assert.Equal(t, int64(1), count.Load())           // Post lock policies don't have a retry, only pre lock do.

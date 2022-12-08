@@ -16,6 +16,7 @@ package resiliency
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,84 +28,84 @@ func TestNoOp(t *testing.T) {
 
 	tests := []struct {
 		name string
-		fn   func(ctx context.Context) Runner
+		fn   func(ctx context.Context) Runner[any]
 		err  error
 	}{
 		{
 			name: "route",
-			fn: func(ctx context.Context) Runner {
-				return policy.RoutePolicy(ctx, "test")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.RoutePolicy("test"))
 			},
 		},
 		{
 			name: "route error",
-			fn: func(ctx context.Context) Runner {
-				return policy.RoutePolicy(ctx, "test")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.RoutePolicy("test"))
 			},
 			err: errors.New("route error"),
 		},
 		{
 			name: "endpoint",
-			fn: func(ctx context.Context) Runner {
-				return policy.EndpointPolicy(ctx, "test", "test")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.EndpointPolicy("test", "test"))
 			},
 		},
 		{
 			name: "endpoint error",
-			fn: func(ctx context.Context) Runner {
-				return policy.EndpointPolicy(ctx, "test", "test")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.EndpointPolicy("test", "test"))
 			},
 			err: errors.New("endpoint error"),
 		},
 		{
 			name: "actor",
-			fn: func(ctx context.Context) Runner {
-				return policy.ActorPreLockPolicy(ctx, "test", "test")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.ActorPreLockPolicy("test", "test"))
 			},
 		},
 		{
 			name: "actor error",
-			fn: func(ctx context.Context) Runner {
-				return policy.ActorPreLockPolicy(ctx, "test", "test")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.ActorPreLockPolicy("test", "test"))
 			},
 			err: errors.New("actor error"),
 		},
 		{
 			name: "component output",
-			fn: func(ctx context.Context) Runner {
-				return policy.ComponentOutboundPolicy(ctx, "test", "Statestore")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.ComponentOutboundPolicy("test", "Statestore"))
 			},
 		},
 		{
 			name: "component outbound error",
-			fn: func(ctx context.Context) Runner {
-				return policy.ComponentOutboundPolicy(ctx, "test", "Statestore")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.ComponentOutboundPolicy("test", "Statestore"))
 			},
 			err: errors.New("component outbound error"),
 		},
 		{
 			name: "component inbound",
-			fn: func(ctx context.Context) Runner {
-				return policy.ComponentInboundPolicy(ctx, "test", "Statestore")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.ComponentInboundPolicy("test", "Statestore"))
 			},
 		},
 		{
 			name: "component inbound error",
-			fn: func(ctx context.Context) Runner {
-				return policy.ComponentInboundPolicy(ctx, "test", "Statestore")
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.ComponentInboundPolicy("test", "Statestore"))
 			},
 			err: errors.New("component inbound error"),
 		},
 		{
 			name: "built-in",
-			fn: func(ctx context.Context) Runner {
-				return policy.BuiltInPolicy(ctx, BuiltInServiceRetries)
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.BuiltInPolicy(BuiltInServiceRetries))
 			},
 		},
 		{
 			name: "built-in error",
-			fn: func(ctx context.Context) Runner {
-				return policy.BuiltInPolicy(ctx, BuiltInServiceRetries)
+			fn: func(ctx context.Context) Runner[any] {
+				return NewRunner[any](ctx, policy.BuiltInPolicy(BuiltInServiceRetries))
 			},
 			err: errors.New("built-in error"),
 		},
@@ -113,14 +114,14 @@ func TestNoOp(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runner := tt.fn(ctx)
-			called := false
-			err := runner(func(passedCtx context.Context) error {
+			called := atomic.Bool{}
+			_, err := runner(func(passedCtx context.Context) (any, error) {
 				assert.Equal(t, ctx, passedCtx)
-				called = true
-				return tt.err
+				called.Store(true)
+				return nil, tt.err
 			})
 			assert.Equal(t, tt.err, err)
-			assert.True(t, called)
+			assert.True(t, called.Load())
 		})
 	}
 }

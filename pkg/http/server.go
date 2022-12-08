@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -25,7 +26,6 @@ import (
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	routing "github.com/fasthttp/router"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 
@@ -115,7 +115,7 @@ func (s *server) StartNonBlocking() error {
 		}
 	}
 	if len(listeners) == 0 {
-		return errors.Errorf("could not listen on any endpoint")
+		return errors.New("could not listen on any endpoint")
 	}
 
 	for _, listener := range listeners {
@@ -165,7 +165,7 @@ func (s *server) StartNonBlocking() error {
 		}
 
 		if len(profilingListeners) == 0 {
-			return errors.Errorf("could not listen on any endpoint for profiling API")
+			return errors.New("could not listen on any endpoint for profiling API")
 		}
 
 		s.profilingListeners = profilingListeners
