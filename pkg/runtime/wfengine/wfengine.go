@@ -40,7 +40,10 @@ type WorkflowEngine struct {
 	activityActor *activityActor
 }
 
-var wfLogger = logger.NewLogger("dapr.runtime.wfengine")
+var (
+	wfLogger            = logger.NewLogger("dapr.runtime.wfengine")
+	errExecutionAborted = errors.New("execution aborted")
+)
 
 func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)

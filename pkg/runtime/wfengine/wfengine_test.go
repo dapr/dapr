@@ -131,7 +131,7 @@ func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetR
 }
 
 func (f *fakeStateStore) Set(req *state.SetRequest) error {
-	b, _ := json.Marshal(&req.Value)
+	b, _ := marshal(&req.Value, json.Marshal)
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.items[req.Key] = f.newItem(b)
@@ -176,7 +176,7 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	for _, o := range request.Operations {
 		if o.Operation == state.Upsert {
 			req := o.Request.(state.SetRequest)
-			b, _ := json.Marshal(req.Value)
+			b, _ := marshal(req.Value, json.Marshal)
 			f.items[req.Key] = f.newItem(b)
 		} else if o.Operation == state.Delete {
 			req := o.Request.(state.DeleteRequest)
@@ -185,6 +185,17 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	}
 
 	return nil
+}
+
+// Copied from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16
+func marshal(val interface{}, marshaler func(interface{}) ([]byte, error)) ([]byte, error) {
+	var err error = nil
+	bt, ok := val.([]byte)
+	if !ok {
+		bt, err = marshaler(val)
+	}
+
+	return bt, err
 }
 
 type mockPlacement struct{}

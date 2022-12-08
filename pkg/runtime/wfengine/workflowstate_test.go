@@ -103,7 +103,7 @@ func TestLoadSavedState(t *testing.T) {
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
-		if err := runtimeState.AddEvent(&backend.HistoryEvent{}); !assert.NoError(t, err) {
+		if err := runtimeState.AddEvent(&backend.HistoryEvent{EventId: int32(i)}); !assert.NoError(t, err) {
 			return
 		}
 	}
@@ -111,7 +111,7 @@ func TestLoadSavedState(t *testing.T) {
 	wfstate.CustomStatus = "my custom status"
 
 	for i := 0; i < 5; i++ {
-		wfstate.AddToInbox(&backend.HistoryEvent{})
+		wfstate.AddToInbox(&backend.HistoryEvent{EventId: int32(i)})
 	}
 
 	req, err := wfstate.GetSaveRequest("wf1")
@@ -132,8 +132,16 @@ func TestLoadSavedState(t *testing.T) {
 	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
 		assert.Equal(t, "my custom status", wfstate.CustomStatus)
 		assert.Equal(t, uint64(1), wfstate.Generation)
-		assert.Equal(t, 10, len(wfstate.History))
-		assert.Equal(t, 5, len(wfstate.Inbox))
+		if assert.Equal(t, 10, len(wfstate.History)) {
+			for i, e := range wfstate.History {
+				assert.Equal(t, int32(i), e.EventId)
+			}
+		}
+		if assert.Equal(t, 5, len(wfstate.Inbox)) {
+			for i, e := range wfstate.Inbox {
+				assert.Equal(t, int32(i), e.EventId)
+			}
+		}
 	}
 }
 

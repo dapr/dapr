@@ -42,9 +42,15 @@ type invokeMethodCallInfo struct {
 type reminder struct {
 	ActorID string
 	Name    string
-	Data    any
+	Data    []byte
 	DueTime string
 	Period  string
+}
+
+type testReminderData struct {
+	SomeBytes  []byte `json:"someBytes"`
+	SomeInt    int64  `json:"someInt"`
+	SomeString string `json:"someString"`
 }
 
 // DeactivateActor implements InternalActor
@@ -65,7 +71,7 @@ func (ia *mockInternalActor) InvokeMethod(ctx context.Context, actorID string, m
 }
 
 // InvokeReminder implements InternalActor
-func (ia *mockInternalActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data any, dueTime string, period string) error {
+func (ia *mockInternalActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
 	r := &reminder{
 		Name:    reminderName,
 		ActorID: actorID,
@@ -167,7 +173,11 @@ func TestInternalActorReminder(t *testing.T) {
 		DueTime:   "2s",
 		Period:    "2s",
 		Name:      "reminder1",
-		Data:      []byte("こんにちは！"),
+		Data: testReminderData{
+			SomeBytes:  []byte("こんにちは！"),
+			SomeInt:    42,
+			SomeString: "Hello!",
+		},
 	}
 	if err = testActorRuntime.executeReminder(testReminder); !assert.NoError(t, err) {
 		return
@@ -178,9 +188,13 @@ func TestInternalActorReminder(t *testing.T) {
 	invokedReminder := ia.InvokedReminders[0]
 	assert.Equal(t, testReminder.ActorID, invokedReminder.ActorID)
 	assert.Equal(t, testReminder.Name, invokedReminder.Name)
-	assert.Equal(t, testReminder.Data, invokedReminder.Data)
 	assert.Equal(t, testReminder.DueTime, invokedReminder.DueTime)
 	assert.Equal(t, testReminder.Period, invokedReminder.Period)
+
+	// Reminder data gets marshaled to JSON and unmarshaled back to map[string]interface{}
+	var actualData testReminderData
+	DecodeInternalActorReminderData(invokedReminder.Data, &actualData)
+	assert.Equal(t, testReminder.Data, actualData)
 }
 
 func TestInternalActorDeactivation(t *testing.T) {

@@ -1064,25 +1064,16 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder.Name))
 	req.WithActor(reminder.ActorType, reminder.ActorID)
 
-	if isInternalActor(reminder.ActorType) {
-		// Use a binary encoding (instead of JSON) for internal reminders to help preserve type information
-		b, err := EncodeInternalActorData(r)
-		if err != nil {
-			return err
-		}
-		req.WithRawData(b, invokev1.OctetStreamContentType)
-	} else {
-		b, err := json.Marshal(&r)
-		if err != nil {
-			return err
-		}
-		req.WithRawData(b, invokev1.JSONContentType)
+	b, err := json.Marshal(&r)
+	if err != nil {
+		return err
 	}
+	req.WithRawData(b, invokev1.JSONContentType)
 
 	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
 		a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID),
 	)
-	_, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+	_, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
 	return err

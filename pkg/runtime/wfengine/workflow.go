@@ -16,7 +16,6 @@ package wfengine
 
 import (
 	"context"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"strings"
@@ -49,17 +48,12 @@ type workflowActor struct {
 }
 
 type durableTimer struct {
-	Bytes      []byte
-	Generation uint64
+	Bytes      []byte `json:"bytes"`
+	Generation uint64 `json:"generation"`
 }
 
 type recoverableError struct {
 	cause error
-}
-
-func init() {
-	// gob is used to serialize internal actor reminder data
-	gob.Register(durableTimer{})
 }
 
 func NewDurableTimer(bytes []byte, generation uint64) durableTimer {
@@ -108,7 +102,7 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 }
 
 // InvokeReminder implements actors.InternalActor
-func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data any, dueTime string, period string) error {
+func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
 	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
 
 	// Workflow executions should never take longer than a few seconds at the most
@@ -120,8 +114,13 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
+		} else if errors.Is(err, context.Canceled) {
+			wfLogger.Warnf("%s: execution was canceled (process shutdown?) and will be retried later", actorID)
+
+			// Returning nil signals that we want the execution to be retried in the next period interval
+			return nil
 		} else if _, ok := err.(recoverableError); ok {
-			wfLogger.Errorf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, err)
+			wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
@@ -234,7 +233,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
-func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData any) error {
+func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData []byte) error {
 	state, exists, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
@@ -244,10 +243,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	}
 
 	if strings.HasPrefix(reminderName, "timer-") {
-		timerData, ok := reminderData.(durableTimer)
-		if !ok {
+		var timerData durableTimer
+		if err = actors.DecodeInternalActorReminderData(reminderData, &timerData); err != nil {
 			// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
-			return fmt.Errorf("unrecognized reminder payload: %v", reminderData)
+			return err
 		}
 		if timerData.Generation < state.Generation {
 			wfLogger.Infof("%s: ignoring durable timer from previous generation '%v'", actorID, timerData.Generation)
@@ -289,7 +288,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
 		return ctx.Err()
-	case <-callback:
+	case completed := <-callback:
+		if !completed {
+			return newRecoverableError(errExecutionAborted)
+		}
 	}
 
 	if !runtimeState.IsCompleted() {

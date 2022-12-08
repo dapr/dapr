@@ -182,12 +182,8 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		if err != nil {
 			return workflowState{}, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
 		}
-		var historyBytes []byte
-		if err = json.Unmarshal(res.Data, &historyBytes); err != nil {
-			return workflowState{}, fmt.Errorf("failed to unmarshal JSON from inbox state key entry: %w", err)
-		}
 		var e *backend.HistoryEvent
-		e, err = backend.UnmarshalHistoryEvent(historyBytes)
+		e, err = backend.UnmarshalHistoryEvent(res.Data)
 		if err != nil {
 			return workflowState{}, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
 		}
@@ -198,14 +194,10 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		res, err = actorRuntime.GetState(ctx, &req)
 		loadedRecords++
 		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
-		}
-		var historyBytes []byte
-		if err = json.Unmarshal(res.Data, &historyBytes); err != nil {
-			return workflowState{}, fmt.Errorf("failed to unmarshal JSON from inbox state key entry: %w", err)
+			return workflowState{}, fmt.Errorf("failed to load workflow history state key '%s': %w", req.Key, err)
 		}
 		var e *backend.HistoryEvent
-		e, err = backend.UnmarshalHistoryEvent(historyBytes)
+		e, err = backend.UnmarshalHistoryEvent(res.Data)
 		if err != nil {
 			return workflowState{}, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
 		}
@@ -220,7 +212,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		return workflowState{}, fmt.Errorf("failed to load workflow custom status key '%s': %w", req.Key, err)
 	}
 	if err = json.Unmarshal(res.Data, &state.CustomStatus); err != nil {
-		return workflowState{}, fmt.Errorf("failed to unmarshal JSON from inbox state key entry: %w", err)
+		return workflowState{}, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
 	}
 
 	wfLogger.Infof("%s: loaded %d state records in %v", actorID, loadedRecords, time.Since(loadStartTime))

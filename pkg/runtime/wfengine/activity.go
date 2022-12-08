@@ -99,10 +99,14 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 }
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
-func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data any, dueTime string, period string) error {
+func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
 	wfLogger.Debugf("invoking reminder '%s' on activity actor '%s'", reminderName, actorID)
 
-	generation := data.(uint64)
+	var generation uint64
+	if err := actors.DecodeInternalActorReminderData(data, &generation); err != nil {
+		// Likely the result of an incompatible activity reminder format change. This is non-recoverable.
+		return err
+	}
 	state, _ := a.loadActivityState(ctx, actorID, generation)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
@@ -116,7 +120,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		} else if _, ok := err.(recoverableError); ok {
-			wfLogger.Errorf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, err)
+			wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
@@ -173,8 +177,12 @@ loop:
 			} else {
 				wfLogger.Warnf("%s: '%s' is still running - will keep waiting indefinitely", actorID, name)
 			}
-		case <-callback:
-			break loop
+		case completed := <-callback:
+			if completed {
+				break loop
+			} else {
+				return newRecoverableError(errExecutionAborted)
+			}
 		}
 	}
 
