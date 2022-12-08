@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20221130202810-7d466c713020
+	github.com/dapr/components-contrib v1.9.1-0.20221203215942-a4b27ae49b7c
 	github.com/dapr/kit v0.0.3
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
@@ -71,8 +71,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.13.0
 )
 
-require github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.5.1 // indirect
-
 require (
 	cloud.google.com/go v0.105.0 // indirect
 	cloud.google.com/go/compute v1.10.0 // indirect
@@ -98,6 +96,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.10.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.1.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.5.1 // indirect
 	github.com/Azure/azure-storage-blob-go v0.10.0 // indirect
 	github.com/Azure/azure-storage-queue-go v0.0.0-20191125232315-636801874cdd // indirect
 	github.com/Azure/go-amqp v0.17.5 // indirect

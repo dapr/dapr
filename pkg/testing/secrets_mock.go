@@ -57,9 +57,8 @@ func (c FakeSecretStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{secretstores.FeatureMultipleKeyValuesPerSecret}
 }
 
-// GetComponentMetadata returns the metadata options for the secret store.
 func (c FakeSecretStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
+	return nil
 }
 
 type FailingSecretStore struct {
@@ -101,7 +100,6 @@ func (c FailingSecretStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{}
 }
 
-// GetComponentMetadata returns the metadata options for the secret store.
 func (c FailingSecretStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
+	return nil
 }
