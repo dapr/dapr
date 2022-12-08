@@ -377,16 +377,16 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
 	}()
 
+	// stausCode will be read by the deferred method above
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		statusCode = int32(codes.Internal)
-		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
-		return nil, err
+		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	} else {
 		statusCode = resp.Status().Code
 	}
 
-	return resp.Proto(), err
+	return resp.Proto(), nil
 }
 
 // CallActor invokes a virtual actor.
