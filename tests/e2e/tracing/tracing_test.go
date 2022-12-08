@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -87,7 +90,7 @@ func TestHelloDapr(t *testing.T) {
 		require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 		// Check if test app 2 endpoint is available
-		_, err := utils.HTTPGetNTimes(externalURL2, numHealthChecks)
+		_, err = utils.HTTPGetNTimes(externalURL2, numHealthChecks)
 		require.NoError(t, err)
 
 		// Trigger test
@@ -116,6 +119,8 @@ func TestHelloDapr(t *testing.T) {
 			if appRespV.Message != "OK" {
 				return fmt.Errorf("tracers validation failed")
 			}
+
+			return nil
 		}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
 		require.NoError(t, err)
 	})
