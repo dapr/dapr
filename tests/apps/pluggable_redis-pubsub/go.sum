@@ -2,8 +2,8 @@ github.com/cespare/xxhash/v2 v2.1.2 h1:YRXhKfTDauu4ajMg1TPgFO5jnlC2HCbmLXMcTG5cb
 github.com/cespare/xxhash/v2 v2.1.2/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8 h1:YbYOmbbmti6SpitqozFzfD0HwN3yFH3uOXxLZIZNe5w=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8/go.mod h1:7CpOwUfY7KlADHWTCmOtf0nRjvLt/62lHJKrgueVE1I=
-github.com/dapr/components-contrib v1.9.1-0.20221130202810-7d466c713020 h1:S6H6LCE62vA26uurEXMIhuF34YXzMl5EZzTWkIwXeXw=
-github.com/dapr/components-contrib v1.9.1-0.20221130202810-7d466c713020/go.mod h1:B44pPMU2zSwqXg0JVywRFkD6Y6CryMJ8Q60ipDHSVGk=
+github.com/dapr/components-contrib v1.9.1-0.20221203215942-a4b27ae49b7c h1:l1nmRBjbn2cLxc4PjZ75kvEpvOL0NK6LB76kzhWCxAE=
+github.com/dapr/components-contrib v1.9.1-0.20221203215942-a4b27ae49b7c/go.mod h1:wL2jtSJCkRuBQgBEBWAd7hvfvfEaiFYbAGR1u6gq9B0=
 github.com/dapr/kit v0.0.4-0.20221207191014-b2486486ce50 h1:dO8KE8eKXKKmp9hIO45czryyXp01Varsca3WtEKoU8o=
 github.com/dapr/kit v0.0.4-0.20221207191014-b2486486ce50/go.mod h1:+vh2UIRT0KzFm5YJWfj7az4XVSdodys1OCz1WzNe1Eo=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
