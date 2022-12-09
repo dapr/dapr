@@ -70,6 +70,7 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
 			AppPort:           3001,
+			AppProtocol:       "grpc",
 			DaprCPULimit:      "4.0",
 			DaprCPURequest:    "0.1",
 			DaprMemoryLimit:   "512Mi",

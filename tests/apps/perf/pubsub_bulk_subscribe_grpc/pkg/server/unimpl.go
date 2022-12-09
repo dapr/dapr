@@ -23,15 +23,15 @@ import (
 
 // ListInputBindings implements runtime.AppCallbackServer
 func (*Server) ListInputBindings(context.Context, *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
-	panic("unimplemented")
+	return &runtimev1pb.ListInputBindingsResponse{}, nil
 }
 
 // OnBindingEvent implements runtime.AppCallbackServer
 func (*Server) OnBindingEvent(context.Context, *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
-	panic("unimplemented")
+	return &runtimev1pb.BindingEventResponse{}, nil
 }
 
 // OnInvoke implements runtime.AppCallbackServer
 func (*Server) OnInvoke(context.Context, *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	panic("unimplemented")
+	return &commonv1pb.InvokeResponse{}, nil
 }

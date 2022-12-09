@@ -16,4 +16,4 @@ require (
 	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c // indirect
 )
 
-replace github.com/dapr/dapr => ../../../../
+replace github.com/dapr/dapr => github.com/shubham1172/dapr v1.0.0-rc.1.0.20221208111310-a35de07f70f7
