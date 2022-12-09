@@ -5505,7 +5505,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	assert.Nil(t, rt.initActors())
 
 	go sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 300*time.Second)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 3*time.Second)
 
 	var activeActCount int
 	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
