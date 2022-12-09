@@ -113,7 +113,7 @@ func triggerInvoke(w http.ResponseWriter, r *http.Request) {
 	propagators.Inject(newCtx, hc)
 	req.Header.Add("Content-Type", jsonContentType)
 
-	fmt.Printf("span's name is %s and invoke url is %s\n", uuid, url)
+	log.Printf("span's name is %s and invoke url is %s\n", uuid, url)
 
 	res, err := httpClient.Do(req)
 	if err != nil {

@@ -117,7 +117,7 @@ func TestHelloDapr(t *testing.T) {
 			var appRespV appResponse
 			errV = json.Unmarshal(respV, &appRespV)
 			if errV != nil {
-				return errV
+				return fmt.Errorf("error parsing appResponse: %v", errV)
 			}
 
 			if appRespV.Message != "OK" {
