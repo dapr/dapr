@@ -131,12 +131,16 @@ func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetR
 }
 
 func (f *fakeStateStore) Set(req *state.SetRequest) error {
-	b, _ := json.Marshal(&req.Value)
+	b, _ := marshal(&req.Value, json.Marshal)
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.items[req.Key] = f.newItem(b)
 
 	return nil
+}
+
+func (f *fakeStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
@@ -172,7 +176,7 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	for _, o := range request.Operations {
 		if o.Operation == state.Upsert {
 			req := o.Request.(state.SetRequest)
-			b, _ := json.Marshal(req.Value)
+			b, _ := marshal(req.Value, json.Marshal)
 			f.items[req.Key] = f.newItem(b)
 		} else if o.Operation == state.Delete {
 			req := o.Request.(state.DeleteRequest)
@@ -181,6 +185,17 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	}
 
 	return nil
+}
+
+// Copied from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16
+func marshal(val interface{}, marshaler func(interface{}) ([]byte, error)) ([]byte, error) {
+	var err error = nil
+	bt, ok := val.([]byte)
+	if !ok {
+		bt, err = marshaler(val)
+	}
+
+	return bt, err
 }
 
 type mockPlacement struct{}
@@ -229,7 +244,7 @@ func GetTestOptions() []func(wfe *wfengine.WorkflowEngine) string {
 		},
 		func(wfe *wfengine.WorkflowEngine) string {
 			// disable caching to test recovery from failure
-			wfe.DisableWorkflowCaching(true)
+			wfe.DisableActorCaching(true)
 			return "caching disabled"
 		},
 	}
@@ -512,6 +527,104 @@ func TestRecreateRunningWorkflowFails(t *testing.T) {
 			if assert.Error(t, err) {
 				// We expect that the workflow instance ID is included in the error message
 				assert.Contains(t, err.Error(), id)
+			}
+		})
+	}
+}
+
+// TestRetryWorkflowOnTimeout verifies that workflow operations are retried when they fail to complete.
+func TestRetryWorkflowOnTimeout(t *testing.T) {
+	const expectedCallCount = 3
+	actualCallCount := 0
+
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("FlakyWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		// update this global counter each time the workflow gets invoked
+		actualCallCount++
+		if actualCallCount < expectedCallCount {
+			// simulate a hang for the first two calls
+			time.Sleep(5 * time.Minute)
+		}
+		return actualCallCount, nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+
+	// Set a really short timeout to override the default workflow timeout so that we can exercise the timeout
+	// handling codepath in a short period of time.
+	engine.SetWorkflowTimeout(1 * time.Second)
+
+	// Set a really short reminder interval to retry workflows immediately after they time out.
+	engine.SetActorReminderInterval(1 * time.Millisecond)
+
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			actualCallCount = 0
+
+			id, err := client.ScheduleNewOrchestration(ctx, "FlakyWorkflow")
+			if assert.NoError(t, err) {
+				// Add a 5 second timeout so that the test doesn't take forever if something isn't working
+				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+
+				metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
+				}
+			}
+		})
+	}
+}
+
+// TestRetryActivityOnTimeout verifies that activity operations are retried when they fail to complete.
+func TestRetryActivityOnTimeout(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("FlakyWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		var output int
+		err := ctx.CallActivity("FlakyActivity", nil).Await(&output)
+		return output, err
+	})
+
+	const expectedCallCount = 3
+	actualCallCount := 0
+
+	r.AddActivityN("FlakyActivity", func(ctx task.ActivityContext) (any, error) {
+		// update this global counter each time the activity gets invoked
+		actualCallCount++
+		if actualCallCount < expectedCallCount {
+			// simulate a hang for the first two calls
+			time.Sleep(5 * time.Minute)
+		}
+		return actualCallCount, nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+
+	// Set a really short timeout to override the default activity timeout (1 hour at the time of writing)
+	// so that we can exercise the timeout handling codepath in a short period of time.
+	engine.SetActivityTimeout(1 * time.Second)
+
+	// Set a really short reminder interval to retry activities immediately after they time out.
+	engine.SetActorReminderInterval(1 * time.Millisecond)
+
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			actualCallCount = 0
+
+			id, err := client.ScheduleNewOrchestration(ctx, "FlakyWorkflow")
+			if assert.NoError(t, err) {
+				// Add a 5 second timeout so that the test doesn't take forever if something isn't working
+				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+
+				metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
+				}
 			}
 		})
 	}

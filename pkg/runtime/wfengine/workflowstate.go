@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -37,7 +36,7 @@ type workflowState struct {
 	Inbox        []*backend.HistoryEvent
 	History      []*backend.HistoryEvent
 	CustomStatus string
-	Generation   uuid.UUID
+	Generation   uint64
 
 	// change tracking
 	inboxAddedCount     int
@@ -49,12 +48,12 @@ type workflowState struct {
 type workflowStateMetadata struct {
 	InboxLength   int
 	HistoryLength int
-	Generation    uuid.UUID
+	Generation    uint64
 }
 
-func NewWorkflowState(generation uuid.UUID) *workflowState {
-	return &workflowState{
-		Generation: generation,
+func NewWorkflowState() workflowState {
+	return workflowState{
+		Generation: 1,
 	}
 }
 
@@ -66,7 +65,7 @@ func (s *workflowState) Reset() {
 	s.historyRemovedCount += len(s.History)
 	s.History = nil
 	s.CustomStatus = ""
-	s.Generation = uuid.New()
+	s.Generation++
 }
 
 func (s *workflowState) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
@@ -151,7 +150,7 @@ func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, even
 	return nil
 }
 
-func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string) (*workflowState, error) {
+func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string) (workflowState, error) {
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
@@ -163,33 +162,30 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	res, err := actorRuntime.GetState(ctx, &req)
 	loadedRecords++
 	if err != nil {
-		return nil, fmt.Errorf("failed to load workflow metadata: %w", err)
+		return workflowState{}, fmt.Errorf("failed to load workflow metadata: %w", err)
 	}
 	if len(res.Data) == 0 {
 		// no state found
-		return nil, nil
+		return workflowState{}, nil
 	}
 	var metadata workflowStateMetadata
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
+		return workflowState{}, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
-	state := NewWorkflowState(metadata.Generation)
+	state := NewWorkflowState()
+	state.Generation = metadata.Generation
 	// CONSIDER: Do some of these loads in parallel
 	for i := 0; i < metadata.InboxLength; i++ {
 		req.Key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		res, err = actorRuntime.GetState(ctx, &req)
 		loadedRecords++
 		if err != nil {
-			return nil, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
-		}
-		var historyBytes []byte
-		if err = json.Unmarshal(res.Data, &historyBytes); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal JSON from inbox state key entry: %w", err)
+			return workflowState{}, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
 		}
 		var e *backend.HistoryEvent
-		e, err = backend.UnmarshalHistoryEvent(historyBytes)
+		e, err = backend.UnmarshalHistoryEvent(res.Data)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
+			return workflowState{}, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
 		}
 		state.Inbox = append(state.Inbox, e)
 	}
@@ -198,16 +194,12 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		res, err = actorRuntime.GetState(ctx, &req)
 		loadedRecords++
 		if err != nil {
-			return nil, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
-		}
-		var historyBytes []byte
-		if err = json.Unmarshal(res.Data, &historyBytes); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal JSON from inbox state key entry: %w", err)
+			return workflowState{}, fmt.Errorf("failed to load workflow history state key '%s': %w", req.Key, err)
 		}
 		var e *backend.HistoryEvent
-		e, err = backend.UnmarshalHistoryEvent(historyBytes)
+		e, err = backend.UnmarshalHistoryEvent(res.Data)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
+			return workflowState{}, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
 		}
 
 		state.History = append(state.History, e)
@@ -217,10 +209,10 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	res, err = actorRuntime.GetState(ctx, &req)
 	loadedRecords++
 	if err != nil {
-		return nil, fmt.Errorf("failed to load workflow custom status key '%s': %w", req.Key, err)
+		return workflowState{}, fmt.Errorf("failed to load workflow custom status key '%s': %w", req.Key, err)
 	}
 	if err = json.Unmarshal(res.Data, &state.CustomStatus); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON from inbox state key entry: %w", err)
+		return workflowState{}, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
 	}
 
 	wfLogger.Infof("%s: loaded %d state records in %v", actorID, loadedRecords, time.Since(loadStartTime))

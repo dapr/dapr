@@ -127,14 +127,28 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	}
 }
 
-// AbandonActivityWorkItem implements backend.Backend
-func (*actorBackend) AbandonActivityWorkItem(context.Context, *backend.ActivityWorkItem) error {
-	panic("unimplemented")
+// AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
+// an unexpected failure in the workflow activity execution pipeline.
+func (*actorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+	wfLogger.Warnf("%s: aborting activity execution (#%d)", wi.InstanceID, wi.NewEvent.EventId)
+
+	// Sending false signals the waiting activity actor to abort the activity execution.
+	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
+		channel.(chan bool) <- false
+	}
+	return nil
 }
 
-// AbandonOrchestrationWorkItem implements backend.Backend
-func (*actorBackend) AbandonOrchestrationWorkItem(context.Context, *backend.OrchestrationWorkItem) error {
-	panic("unimplemented")
+// AbandonOrchestrationWorkItem implements backend.Backend. It gets called by durabletask-go when there is
+// an unexpected failure in the workflow orchestration execution pipeline.
+func (*actorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+	wfLogger.Warnf("%s: aborting workflow execution", wi.InstanceID)
+
+	// Sending false signals the waiting workflow actor to abort the workflow execution.
+	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
+		channel.(chan bool) <- false
+	}
+	return nil
 }
 
 // AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
@@ -157,14 +171,14 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 
 // CompleteActivityWorkItem implements backend.Backend
 func (*actorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	// Resumes workflow execution code path in the actor
+	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[CallbackChannelProperty].(chan bool) <- true
 	return nil
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
 func (*actorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
-	// Resumes workflow execution code path in the actor
+	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[CallbackChannelProperty].(chan bool) <- true
 	return nil
 }

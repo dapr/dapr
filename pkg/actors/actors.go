@@ -154,6 +154,8 @@ const (
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
 
+var ErrReminderCanceled = errors.New("reminder has been canceled")
+
 // ActorsOpts contains options for NewActors.
 type ActorsOpts struct {
 	StateStore       state.Store
@@ -999,8 +1001,14 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				break L
 			}
 			if err = a.executeReminder(reminder); err != nil {
-				log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
-					reminder.Name, reminder.ActorType, reminder.ActorID, err)
+				if errors.Is(err, ErrReminderCanceled) {
+					// The handler is explicitly canceling the timer
+					log.Infof("reminder %q was canceled by the actor", reminder.Name)
+					break L
+				} else {
+					log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
+						reminder.Name, reminder.ActorType, reminder.ActorID, err)
+				}
 			}
 			if repetitionsLeft > 0 {
 				repetitionsLeft--
@@ -1056,25 +1064,16 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder.Name))
 	req.WithActor(reminder.ActorType, reminder.ActorID)
 
-	if isInternalActor(reminder.ActorType) {
-		// Use a binary encoding (instead of JSON) for internal reminders to help preserve type information
-		b, err := EncodeInternalActorData(r)
-		if err != nil {
-			return err
-		}
-		req.WithRawData(b, invokev1.OctetStreamContentType)
-	} else {
-		b, err := json.Marshal(&r)
-		if err != nil {
-			return err
-		}
-		req.WithRawData(b, invokev1.JSONContentType)
+	b, err := json.Marshal(&r)
+	if err != nil {
+		return err
 	}
+	req.WithRawData(b, invokev1.JSONContentType)
 
 	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
 		a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID),
 	)
-	_, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+	_, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
 	return err
