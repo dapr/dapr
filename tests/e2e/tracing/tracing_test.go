@@ -19,6 +19,7 @@ package tracing_e2e
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"testing"
 	"time"
@@ -56,6 +57,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
+			Config:            "tracingconfig",
 		},
 		{
 			AppName:           "tracingapp-b",
@@ -68,6 +70,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
+			Config:            "tracingconfig",
 		},
 	}
 
@@ -110,6 +113,7 @@ func TestHelloDapr(t *testing.T) {
 				return errV
 			}
 
+			log.Printf("Response from validate: %s", string(respV))
 			var appRespV appResponse
 			errV = json.Unmarshal(respV, &appRespV)
 			if errV != nil {
