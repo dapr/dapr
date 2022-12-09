@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package tracing_e2e
+package tracing_zipkin_e2e
 
 import (
 	"encoding/json"
@@ -57,7 +57,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			Config:            "tracingconfig",
+			Config:            "tracingconfig-zipkin",
 		},
 		{
 			AppName:           "tracingapp-b",
@@ -70,7 +70,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			Config:            "tracingconfig",
+			Config:            "tracingconfig-zipkin",
 		},
 	}
 
@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestHelloDapr(t *testing.T) {
+func TestInvoke(t *testing.T) {
 	t.Run("Simple HTTP invoke with tracing", func(t *testing.T) {
 		// Get the ingress external url of test app
 		externalURL := tr.Platform.AcquireAppExternalURL("tracingapp-a")

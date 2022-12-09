@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: tracingconfig
+  name: tracingconfig-zipkin
 spec:
   tracing:
     samplingRate: "1"

@@ -45,8 +45,6 @@ var (
 
 	httpClient = utils.NewHTTPClient()
 
-	httpMethods []string
-
 	zipkinEndpoint = "http://dapr-zipkin:9411"
 	serviceName    = "tracingapp"
 
@@ -103,9 +101,9 @@ func triggerInvoke(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	query := r.URL.Query()
-	appId := query.Get("appId")
+	appID := query.Get("appId")
 
-	url := fmt.Sprintf("http://127.0.0.1:%d/v1.0/invoke/%s/method/invoke/something", daprHTTPPort, appId)
+	url := fmt.Sprintf("http://127.0.0.1:%d/v1.0/invoke/%s/method/invoke/something", daprHTTPPort, appID)
 	/* #nosec */
 	req, _ := http.NewRequest(http.MethodPost, url, nil)
 	req = req.WithContext(newCtx)
@@ -116,6 +114,10 @@ func triggerInvoke(w http.ResponseWriter, r *http.Request) {
 	log.Printf("span's name is %s and invoke url is %s\n", uuid, url)
 
 	res, err := httpClient.Do(req)
+	if res != nil {
+		defer res.Body.Close()
+	}
+
 	if err != nil {
 		log.Println(err)
 
@@ -124,6 +126,7 @@ func triggerInvoke(w http.ResponseWriter, r *http.Request) {
 			SpanName: &uuid,
 			Message:  err.Error(),
 		})
+		return
 	}
 
 	if res.StatusCode != http.StatusOK {
@@ -174,24 +177,29 @@ func doValidate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
 	defer resp.Body.Close()
 
 	v := interface{}(nil)
 
 	json.NewDecoder(resp.Body).Decode(&v)
 
-	mainSpanIdStr, err := findUniqueValueFromJsonPath("$..[?(@.name==\""+mainSpanName+"\")].id", v)
-	if mainSpanIdStr == "" {
-		return errors.New("empty span id found for span name " + mainSpanName)
-	}
-	log.Printf("Found main span with name %s and id=%s", mainSpanName, mainSpanIdStr)
-
-	childSpanName, err := findUniqueValueFromJsonPath("$..[?(@.parentId==\""+mainSpanIdStr+"\")].name", v)
+	mainSpanID, err := findUniqueValueFromJSONPath("$..[?(@.name==\""+mainSpanName+"\")].id", v)
 	if err != nil {
 		return err
 	}
 
-	remoteServiceName, err := findUniqueValueFromJsonPath("$..[?(@.parentId==\""+mainSpanIdStr+"\")].remoteEndpoint.serviceName", v)
+	if mainSpanID == "" {
+		return errors.New("empty span id found for span name " + mainSpanName)
+	}
+	log.Printf("Found main span with name %s and id=%s", mainSpanName, mainSpanID)
+
+	childSpanName, err := findUniqueValueFromJSONPath("$..[?(@.parentId==\""+mainSpanID+"\")].name", v)
+	if err != nil {
+		return err
+	}
+
+	remoteServiceName, err := findUniqueValueFromJSONPath("$..[?(@.parentId==\""+mainSpanID+"\")].remoteEndpoint.serviceName", v)
 	if err != nil {
 		return err
 	}
@@ -205,7 +213,7 @@ func doValidate(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func findUniqueValueFromJsonPath(jsonPath string, v interface{}) (string, error) {
+func findUniqueValueFromJSONPath(jsonPath string, v interface{}) (string, error) {
 	values, err := jsonpath.Get(jsonPath, v)
 	if err != nil {
 		return "", err
