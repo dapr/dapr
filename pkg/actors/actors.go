@@ -83,6 +83,7 @@ type Actors interface {
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
+	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
 }
 
 // PlacementService allows for interacting with the actor placement service.
@@ -91,6 +92,7 @@ type PlacementService interface {
 	Stop()
 	WaitUntilPlacementTableIsReady(ctx context.Context) error
 	LookupActor(actorType, actorID string) (host string, appID string)
+	AddHostedActorType(actorType string) error
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
@@ -148,7 +150,7 @@ type actorReminderReference struct {
 }
 
 const (
-	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
+	incompatibleStateStore = "actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
@@ -165,7 +167,6 @@ type ActorsOpts struct {
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
-	InternalActors   map[string]InternalActor
 
 	// MockPlacement is a placement service implementation used for testing
 	MockPlacement PlacementService
@@ -205,9 +206,19 @@ func NewActors(opts ActorsOpts) Actors {
 		evaluationLock:         &sync.RWMutex{},
 		evaluationChan:         make(chan struct{}, 1),
 		appHealthy:             appHealthy,
-		internalActors:         opts.InternalActors,
+		internalActors:         map[string]InternalActor{},
 		internalActorChannel:   newInternalActorChannel(),
 	}
+}
+
+func (a *actorsRuntime) haveCompatibleStorage() bool {
+	if a.store == nil {
+		// If we have hosted actors and no store, we can't initialize the actor runtime
+		return false
+	}
+
+	features := a.store.Features()
+	return state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features)
 }
 
 func (a *actorsRuntime) Init() error {
@@ -215,25 +226,8 @@ func (a *actorsRuntime) Init() error {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	// Configure the internal app channel with the provided internal actors and add
-	// them to the list of hosted actor types.
-	for actorType, actorImpl := range a.internalActors {
-		if err := a.internalActorChannel.AddInternalActor(actorType, actorImpl); err != nil {
-			return err
-		}
-		log.Debugf("registering internal actor type: %s", actorType)
-		actorImpl.SetActorRuntime(a)
-		a.config.HostedActorTypes = append(a.config.HostedActorTypes, actorType)
-	}
-
 	if len(a.config.HostedActorTypes) > 0 {
-		if a.store == nil {
-			// If we have hosted actors and no store, we can't initialize the actor runtime
-			return fmt.Errorf("hosted actors: state store must be present to initialize the actor runtime")
-		}
-
-		features := a.store.Features()
-		if !state.FeatureETag.IsPresent(features) || !state.FeatureTransactional.IsPresent(features) {
+		if !a.haveCompatibleStorage() {
 			return errors.New(incompatibleStateStore)
 		}
 	}
@@ -2008,6 +2002,31 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 		a.activeTimers.Delete(timerKey)
 	}
 
+	return nil
+}
+
+func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+	if !a.haveCompatibleStorage() {
+		return fmt.Errorf("unable to register internal actor '%s': %s", actorType, incompatibleStateStore)
+	}
+
+	if _, exists := a.internalActors[actorType]; exists {
+		return fmt.Errorf("actor type %s already registered", actorType)
+	} else {
+		if err := a.internalActorChannel.AddInternalActor(actorType, actor); err != nil {
+			return err
+		}
+		a.internalActors[actorType] = actor
+
+		log.Debugf("registering internal actor type: %s", actorType)
+		actor.SetActorRuntime(a)
+		a.config.HostedActorTypes = append(a.config.HostedActorTypes, actorType)
+		if a.placement != nil {
+			if err := a.placement.AddHostedActorType(actorType); err != nil {
+				return fmt.Errorf("error updating hosted actor types: %s", err)
+			}
+		}
+	}
 	return nil
 }
 

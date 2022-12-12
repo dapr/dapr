@@ -200,6 +200,10 @@ func marshal(val interface{}, marshaler func(interface{}) ([]byte, error)) ([]by
 
 type mockPlacement struct{}
 
+func (p *mockPlacement) AddHostedActorType(actorType string) error {
+	return nil
+}
+
 func NewMockPlacement() actors.PlacementService {
 	return &mockPlacement{}
 }
@@ -655,7 +659,6 @@ func getEngine() *wfengine.WorkflowEngine {
 		StateStore:     store,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
-		InternalActors: engine.InternalActors(),
 		MockPlacement:  NewMockPlacement(),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
