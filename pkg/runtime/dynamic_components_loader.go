@@ -115,11 +115,15 @@ func (a *DaprRuntime) initDynamicComponent(comp componentsV1alpha1.Component) er
 			if a.appChannel == nil {
 				return errors.New("app channel not initialized")
 			}
-			if !a.isAppSubscribedToBinding(comp.Name) {
+			sub, err := a.isAppSubscribedToBinding(comp.Name)
+			if err != nil {
+				return err
+			}
+			if !sub {
 				log.Infof("app has not subscribed to binding %s.", comp.Name)
 				return nil
 			}
-			err := a.readFromBinding(a.inputBindingsCtx, comp.Name, a.inputBindings[comp.Name])
+			err = a.readFromBinding(a.inputBindingsCtx, comp.Name, a.inputBindings[comp.Name])
 			if err != nil {
 				return err
 			}

@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/pkg/errors"
 
 	"github.com/dapr/kit/logger"
@@ -33,13 +34,13 @@ import (
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
-	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 )
@@ -124,8 +125,10 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	if *appID == "" {
-		return nil, errors.New("app-id parameter cannot be empty")
+	if *mode == string(modes.StandaloneMode) {
+		if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply options to all loggers
@@ -164,7 +167,7 @@ func FromFlags() (*DaprRuntime, error) {
 			return nil, errors.Wrap(err, "error parsing dapr-internal-grpc-port")
 		}
 	} else {
-		daprInternalGRPC, err = grpc.GetFreePort()
+		daprInternalGRPC, err = freeport.GetFreePort()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get free port for internal grpc server")
 		}
@@ -327,9 +330,9 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	// Config and resiliency need the operator client, only initiate once and only if we will actually use it.
+	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
-	if *mode == string(modes.KubernetesMode) && *config != "" {
+	if *mode == string(modes.KubernetesMode) {
 		log.Infof("Initializing the operator client (config: %s)", *config)
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {

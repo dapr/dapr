@@ -118,6 +118,10 @@ func (f *FailingConfigurationStore) Init(metadata configuration.Metadata) error 
 }
 
 func (f *FailingConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
+	if err := f.Failure.PerformFailure(req.Metadata["key"]); err != nil {
+		return "", err
+	}
+
 	handler(ctx, &configuration.UpdateEvent{
 		Items: map[string]*configuration.Item{
 			req.Metadata["key"]: {
@@ -125,9 +129,7 @@ func (f *FailingConfigurationStore) Subscribe(ctx context.Context, req *configur
 			},
 		},
 	})
-	if err := f.Failure.PerformFailure(req.Metadata["key"]); err != nil {
-		return "", err
-	}
+	
 	return "subscribeID", nil
 }
 

@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -134,7 +135,7 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -212,6 +213,10 @@ func (m *MockKubernetesStateStore) Close() error {
 
 func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{}
+}
+
+func (m MockKubernetesStateStore) GetComponentMetadata() map[string]string {
+	return nil
 }
 
 func NewMockKubernetesStore() secretstores.SecretStore {
@@ -1385,6 +1390,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
+		rt.subscriptions = nil
 		rt.pubSubs = make(map[string]pubsubItem)
 
 		return mockPubSub, mockPubSub2
@@ -2794,7 +2800,9 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 					return nil
 				},
 			}
-			rt.grpc.AppClient = &mockClientConn
+			rt.grpc.SetLocalConnCreateFn(func() (grpc.ClientConnInterface, error) {
+				return &mockClientConn, nil
+			})
 
 			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
 			if tc.ExpectError {
@@ -3236,7 +3244,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer rt.grpc.CloseAppClient()
 
 			// act
 			err = rt.publishMessageGRPC(context.Background(), tc.message)
@@ -3921,10 +3929,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer rt.grpc.CloseAppClient()
 
 			// act
-			resp := rt.getSubscribedBindingsGRPC()
+			resp, _ := rt.getSubscribedBindingsGRPC()
 
 			// assert
 			assert.Equal(t, tc.expectedResponse, resp, "expected response to match")
@@ -4504,7 +4512,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 }
 
-type mockPublishPubSub struct{}
+type mockPublishPubSub struct {
+	PublishedRequest atomic.Pointer[pubsub.PublishRequest]
+}
 
 // Init is a mock initialization method.
 func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
@@ -4513,6 +4523,7 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 
 // Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
+	m.PublishedRequest.Store(req)
 	return nil
 }
 
@@ -5405,4 +5416,47 @@ func TestDynamicLoading(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestMetadataContainsNamespace(t *testing.T) {
+	t.Run("namespace field present", func(t *testing.T) {
+		r := metadataContainsNamespace(
+			[]componentsV1alpha1.MetadataItem{
+				{
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("{namespace}")},
+					},
+				},
+			},
+		)
+
+		assert.True(t, r)
+	})
+
+	t.Run("namespace field not present", func(t *testing.T) {
+		r := metadataContainsNamespace(
+			[]componentsV1alpha1.MetadataItem{
+				{},
+			},
+		)
+
+		assert.False(t, r)
+	})
+}
+
+func TestNamespacedPublisher(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.namespace = "ns1"
+	defer stopRuntime(t, rt)
+
+	rt.pubSubs[TestPubsubName] = pubsubItem{
+		component:       &mockPublishPubSub{},
+		namespaceScoped: true,
+	}
+	rt.Publish(&pubsub.PublishRequest{
+		PubsubName: TestPubsubName,
+		Topic:      "topic0",
+	})
+
+	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Load().Topic)
 }

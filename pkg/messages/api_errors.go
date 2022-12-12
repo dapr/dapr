@@ -33,6 +33,7 @@ const (
 	ErrPubsubCloudEventCreation = "cannot create cloudevent: %s"
 	ErrPubsubUnmarshal          = "error when unmarshaling the request for topic %s pubsub %s: %s"
 	ErrPubsubMarshal            = "error marshaling events to bytes for topic %s pubsub %s: %s"
+	ErrPubsubGetSubscriptions   = "unable to get app subscriptions %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
@@ -87,4 +88,15 @@ const (
 	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
 	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
 	ErrLockStoreNotFound          = "lock store %s not found"
+
+	// Workflow
+	ErrWorkflowNameMissing           = "workflow name is not configured"
+	ErrMissingOrEmptyInstance        = "no instance or empty instance was provided"
+	ErrMissingWorkflowType           = "missing workflow type"
+	ErrNoOrMissingWorkflowComponent  = "no component or empty component was provided"
+	ErWorkflowrComponentDoesNotExist = "provided component does not exist %s"
+	ErrWorkflowGetResponse           = "error while getting workflow info %s"
+	ErrStartWorkflow                 = "error starting workflow %s"
+	ErrTerminateWorkflow             = "error terminating workflow %s"
+	ErrTimerParse                    = "error parsing time - %s"
 )

@@ -25,7 +25,7 @@ name: dapr-perf
 on:
   # Run every 2 hours
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: "0 */2 * * *"
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
@@ -187,7 +187,7 @@ jobs:
             Please check the logs for details on the failure.
 
   build:
-    name: Build 
+    name: Build
     runs-on: ubuntu-latest
     env:
       GOOS: linux
@@ -476,6 +476,14 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD_SIZE: 0
         run: make test-perf-pubsub_publish_grpc
+      - name: Run Perf test pubsub_bulk_publish_grpc
+        if: env.TEST_PREFIX != ''
+        env:
+          DAPR_PERF_QPS: 200
+          DAPR_PERF_CONNECTIONS: 16
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD_SIZE: 1024
+        run: make test-perf-pubsub_bulk_publish_grpc
       - name: Run Perf test actor_timer in Java
         if: env.TEST_PREFIX != ''
         env:
@@ -500,6 +508,9 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD: "{}"
         run: make test-perf-actor_reminder
+      - name: Run stress test actor double activation with SDK
+        if: env.TEST_PREFIX != ''
+        run: make test-perf-actor_double_activation
       - name: Save control plane logs
         if: always() && env.TEST_PREFIX != ''
         run: |

@@ -374,7 +374,12 @@ func containsKey(s []string, key string) bool {
 	return index < len(s) && s[index] == key
 }
 
+// IsFeatureEnabled returns true if a Feature (such as a preview) is enabled.
 func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
+	// TODO @ItalyPaleAle: Temporary change to validate Resiliency
+	if target == Resiliency {
+		return true
+	}
 	for _, feature := range features {
 		if feature.Name == target {
 			return feature.Enabled
