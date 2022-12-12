@@ -70,6 +70,8 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.1
 )
 
+require github.com/PaesslerAG/gval v1.0.0 // indirect
+
 require (
 	cloud.google.com/go v0.105.0 // indirect
 	cloud.google.com/go/compute v1.13.0 // indirect
