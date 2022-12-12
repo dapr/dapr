@@ -170,7 +170,7 @@ type DaprRuntime struct {
 	accessControlList         *config.AccessControlList
 	componentsLock            *sync.RWMutex
 	components                []componentsV1alpha1.Component
-		dynamicComponents      map[DynamicComponentsManifest][]componentsV1alpha1.Component
+	dynamicComponents         map[DynamicComponentsManifest][]componentsV1alpha1.Component
 	grpc                      *grpc.Manager
 	appChannel                channel.AppChannel
 	appConfig                 config.ApplicationConfig
