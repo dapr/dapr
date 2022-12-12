@@ -83,6 +83,7 @@ type Config struct {
 	DisableBuiltinK8sSecretStore bool
 	AppHealthCheck               *apphealth.Config
 	AppHealthCheckHTTPPath       string
+	workflowEngineEnabled        bool
 }
 
 // NewRuntimeConfigOpts contains options for NewRuntimeConfig.
@@ -118,6 +119,7 @@ type NewRuntimeConfigOpts struct {
 	AppHealthProbeInterval       time.Duration
 	AppHealthProbeTimeout        time.Duration
 	AppHealthThreshold           int32
+	WorkflowEngineEnabled        bool
 }
 
 // NewRuntimeConfig returns a new runtime config.
@@ -165,5 +167,6 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
 		AppHealthCheck:               appHealthCheck,
 		AppHealthCheckHTTPPath:       opts.AppHealthCheckPath,
+		workflowEngineEnabled:        opts.WorkflowEngineEnabled,
 	}
 }

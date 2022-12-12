@@ -581,9 +581,27 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			a.daprGRPCAPI.SetActorRuntime(a.actor)
-			a.workflowEngine.SetActorRuntime(a.actor)
-			if err = a.workflowEngine.Start(a.ctx); err != nil {
-				log.Errorf("failed to start workflow engine: %v", err)
+			if a.runtimeConfig.workflowEngineEnabled {
+
+				workflowActors := a.workflowEngine.InternalActors()
+				actorsRegistered := true
+				for actorType, actor := range workflowActors {
+					if err := a.actor.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
+						log.Errorf("failed to register workflow actor: %v", err)
+						actorsRegistered = false
+					}
+				}
+
+				if actorsRegistered {
+					log.Infof("workflow actors registered, workflow engine is ready")
+					a.workflowEngine.SetActorRuntime(a.actor)
+
+					if err = a.workflowEngine.Start(a.ctx); err != nil {
+						log.Errorf("failed to start workflow engine: %v", err)
+					} else {
+						log.Infof("workflow engine started")
+					}
+				}
 			}
 		}
 	}
@@ -2360,9 +2378,6 @@ func (a *DaprRuntime) initActors() error {
 		AppConfig:          a.appConfig,
 	})
 
-	// The workflow engine registers internal actors that drive workflow execution.
-	internalActors := a.workflowEngine.InternalActors()
-
 	act := actors.NewActors(actors.ActorsOpts{
 		StateStore:       a.stateStores[a.actorStateStoreName],
 		AppChannel:       a.appChannel,
@@ -2373,7 +2388,6 @@ func (a *DaprRuntime) initActors() error {
 		Features:         a.globalConfig.Spec.Features,
 		Resiliency:       a.resiliency,
 		StateStoreName:   a.actorStateStoreName,
-		InternalActors:   internalActors,
 	})
 	err = act.Init()
 	if err == nil {
