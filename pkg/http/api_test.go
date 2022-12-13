@@ -311,7 +311,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					for _, entry := range req.Entries {
 						_, shouldErr := entry.Metadata["shouldErr"]
 						if shouldErr {
-							res.FailedEntries = append(res.FailedEntries, pubsub.BulkPublishResponseEntry{
+							res.FailedEntries = append(res.FailedEntries, pubsub.BulkPublishResponseFailedEntry{
 								EntryId: entry.EntryId,
 								Error:   err,
 							})
@@ -407,7 +407,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 
 		errBulkResponse := pubsub.BulkPublishResponse{
-			FailedEntries: []pubsub.BulkPublishResponseEntry{
+			FailedEntries: []pubsub.BulkPublishResponseFailedEntry{
 				{
 					EntryId: "1",
 					Error:   errors.New("Error from pubsub errorpubsub"),
@@ -434,8 +434,8 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 			bulkResp := BulkPublishResponse{}
 			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
-			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.Statuses))
-			for i, entry := range bulkResp.Statuses {
+			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
+			for i, entry := range bulkResp.FailedEntries {
 				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
 				assert.Equal(t, errBulkResponse.FailedEntries[i].Error.Error(), entry.Error)
 			}
@@ -459,7 +459,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 
 		errBulkResponse := pubsub.BulkPublishResponse{
-			FailedEntries: []pubsub.BulkPublishResponseEntry{
+			FailedEntries: []pubsub.BulkPublishResponseFailedEntry{
 				{
 					EntryId: "2",
 					Error:   errors.New("Error from pubsub errorpubsub"),
@@ -482,8 +482,8 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 			bulkResp := BulkPublishResponse{}
 			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
-			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.Statuses))
-			for i, entry := range bulkResp.Statuses {
+			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
+			for i, entry := range bulkResp.FailedEntries {
 				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
 				assert.Equal(t, errBulkResponse.FailedEntries[i].Error.Error(), entry.Error)
 			}

@@ -1968,7 +1968,7 @@ func TestPublishTopic(t *testing.T) {
 func TestBulkPublish(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	srv := &api{
+	fakeAPI := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
 				mock := daprt.MockPubSub{}
@@ -1976,11 +1976,11 @@ func TestBulkPublish(t *testing.T) {
 				return &mock
 			},
 			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-				entries := []pubsub.BulkPublishResponseEntry{}
+				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
 				if req.Topic == "error-topic" {
 					for _, e := range req.Entries {
-						entry := pubsub.BulkPublishResponseEntry{
+						entry := pubsub.BulkPublishResponseFailedEntry{
 							EntryId: e.EntryId,
 						}
 						entry.Error = errors.New("error on publish")
@@ -1989,7 +1989,7 @@ func TestBulkPublish(t *testing.T) {
 				} else if req.Topic == "even-error-topic" {
 					for i, e := range req.Entries {
 						if i%2 == 0 {
-							entry := pubsub.BulkPublishResponseEntry{
+							entry := pubsub.BulkPublishResponseFailedEntry{
 								EntryId: e.EntryId,
 							}
 							entry.Error = errors.New("error on publish")
@@ -1997,12 +1997,13 @@ func TestBulkPublish(t *testing.T) {
 						}
 					}
 				}
+				// Mock simulates only partial failures or total success, so error is always nil.
 				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
 	}
 
-	server := startTestServerAPI(port, srv)
+	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -2023,29 +2024,27 @@ func TestBulkPublish(t *testing.T) {
 		Entries:    sampleEntries,
 	})
 	assert.Nil(t, err)
-	assert.Empty(t, res.Statuses)
+	assert.Empty(t, res.FailedEntries)
 
 	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 		PubsubName: "pubsub",
 		Topic:      "error-topic",
 		Entries:    sampleEntries,
 	})
+	t.Log(res)
+	// Partial failure, so expecting no error
 	assert.Nil(t, err)
-	assert.Equal(t, 4, len(res.Statuses))
-	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
-	}
-
+	assert.NotNil(t, res)
+	assert.Equal(t, 4, len(res.FailedEntries))
 	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 		PubsubName: "pubsub",
 		Topic:      "even-error-topic",
 		Entries:    sampleEntries,
 	})
+	// Partial failure, so expecting no error
 	assert.Nil(t, err)
-	assert.Equal(t, 2, len(res.Statuses))
-	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
-	}
+	assert.NotNil(t, res)
+	assert.Equal(t, 2, len(res.FailedEntries))
 }
 
 func TestShutdownEndpoints(t *testing.T) {

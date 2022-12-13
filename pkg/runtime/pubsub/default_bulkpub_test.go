@@ -54,20 +54,24 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 	}
 
 	tcs := []struct {
-		name                      string
-		bulkPublishMaxConcurrency int
-		publishErrors             []error
-		expectError               bool
+		name          string
+		publishErrors []error
+		nErrors       int
 	}{
 		{
 			name:          "default bulk publish without publish errors",
 			publishErrors: []error{nil, nil, nil},
-			expectError:   false,
+			nErrors:       0,
 		},
 		{
-			name:          "default bulk publish with publish errors",
-			publishErrors: []error{nil, errors.New("publish error"), nil},
-			expectError:   true,
+			name:          "default bulk publish with all publish errors",
+			publishErrors: []error{errors.New("publish error"), errors.New("publish error"), errors.New("publish error")},
+			nErrors:       3,
+		},
+		{
+			name:          "default bulk publish with partial publish errors",
+			publishErrors: []error{nil, nil, errors.New("publish error")},
+			nErrors:       1,
 		},
 	}
 
@@ -96,12 +100,13 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			res, err := bulkPublisher.BulkPublish(context.Background(), req)
 
 			// Check if the bulk publish method returns an error.
-			if tc.expectError {
+			if tc.nErrors > 0 {
 				assert.Error(t, err)
 				// Response should contain an entry for each message in the bulk request.
-				assert.Len(t, res.FailedEntries, len(req.Entries))
+				assert.Equal(t, tc.nErrors, len(res.FailedEntries))
 			} else {
 				assert.NoError(t, err)
+				assert.Empty(t, res.FailedEntries)
 			}
 
 			var pubInvocationArgs []*contribPubsub.PublishRequest
@@ -122,17 +127,6 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			// Assert that a Publish request should be there for the message that was in the bulk publish request.
 			for _, pubReq := range pubReqs {
 				assert.Contains(t, pubInvocationArgs, pubReq)
-			}
-
-			if tc.expectError {
-				var responseEntryIds []string
-				for _, status := range res.FailedEntries {
-					responseEntryIds = append(responseEntryIds, status.EntryId)
-				}
-				// Assert that response contains all entry IDs from the request.
-				for _, entry := range req.Entries {
-					assert.Contains(t, responseEntryIds, entry.EntryId)
-				}
 			}
 		})
 	}

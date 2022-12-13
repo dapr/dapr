@@ -44,21 +44,22 @@ func NewDefaultBulkPublisher(p contribPubsub.PubSub) *defaultBulkPublisher {
 // BulkPublish publishes a list of messages as parallel Publish requests to the topic in the incoming request.
 // There is no guarantee that messages sent to the broker are in the same order as specified in the request.
 func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
-	failedEntries := make([]contribPubsub.BulkPublishResponseEntry, 0, len(req.Entries))
+	failedEntries := make([]contribPubsub.BulkPublishResponseFailedEntry, 0, len(req.Entries))
 
 	var eg errgroup.Group
 	eg.SetLimit(defaultBulkPublishMaxConcurrency)
 
-	faileEntryChan := make(chan contribPubsub.BulkPublishResponseEntry, len(req.Entries))
+	faileEntryChan := make(chan contribPubsub.BulkPublishResponseFailedEntry, len(req.Entries))
 
 	for i := range req.Entries {
 		entry := req.Entries[i]
 		eg.Go(func() error {
-			status := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
-			if status != nil {
-				faileEntryChan <- *status
+			failedEntry := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
+			if failedEntry != nil {
+				faileEntryChan <- *failedEntry
+				return failedEntry.Error
 			}
-			return status.Error
+			return nil
 		})
 	}
 
@@ -73,7 +74,7 @@ func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub
 }
 
 // bulkPublishSingleEntry sends a single message to the broker as a Publish request.
-func (p *defaultBulkPublisher) bulkPublishSingleEntry(pubsubName, topic string, entry contribPubsub.BulkMessageEntry) *contribPubsub.BulkPublishResponseEntry {
+func (p *defaultBulkPublisher) bulkPublishSingleEntry(pubsubName, topic string, entry contribPubsub.BulkMessageEntry) *contribPubsub.BulkPublishResponseFailedEntry {
 	pr := contribPubsub.PublishRequest{
 		Data:        entry.Event,
 		PubsubName:  pubsubName,
@@ -83,7 +84,7 @@ func (p *defaultBulkPublisher) bulkPublishSingleEntry(pubsubName, topic string, 
 	}
 
 	if err := p.p.Publish(&pr); err != nil {
-		return &contribPubsub.BulkPublishResponseEntry{
+		return &contribPubsub.BulkPublishResponseFailedEntry{
 			EntryId: entry.EntryId,
 			Error:   err,
 		}

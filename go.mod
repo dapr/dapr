@@ -73,11 +73,6 @@ require (
 )
 
 require (
-	github.com/PaesslerAG/gval v1.0.0 // indirect
-	github.com/robfig/cron/v3 v3.0.1 // indirect
-)
-
-require (
 	cloud.google.com/go v0.105.0 // indirect
 	cloud.google.com/go/compute v1.10.0 // indirect
 	cloud.google.com/go/datastore v1.8.0 // indirect
@@ -102,6 +97,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.10.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.1.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.5.1 // indirect
 	github.com/Azure/azure-storage-blob-go v0.10.0 // indirect
 	github.com/Azure/azure-storage-queue-go v0.0.0-20191125232315-636801874cdd // indirect
 	github.com/Azure/go-amqp v0.17.5 // indirect
@@ -118,6 +114,7 @@ require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
 	github.com/DataDog/zstd v1.5.0 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
+	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
 	github.com/Shopify/sarama v1.37.2 // indirect
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
@@ -420,4 +417,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // temporary replace for struct change
-replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221114115438-c791f3c6bcc1
+replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221213105245-ace0d1a03c24
