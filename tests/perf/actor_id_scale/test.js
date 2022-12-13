@@ -11,27 +11,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-
 import http from "k6/http";
 import { check } from "k6";
-import { Counter } from 'k6/metrics';
+import exec from "k6/execution";
 
-const DoubleActivations = new Counter('double_activations');
+const defaultMethod = "default"
+const actorType = __ENV.ACTOR_TYPE
 
-const singleId = "SINGLE_ID"
 export const options = {
   discardResponseBodies: true,
   thresholds: {
-    double_activations: ["count==0"],
+    checks: ['rate==1'],
+    http_req_duration: ['p(95)<200'], // 95% of requests should be below 200ms
   },
   scenarios: {
-    doubleActivation: {
+    idStress: {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "5s", target: 1000 },
-        { duration: "5s", target: 3000 },
-        { duration: "5s", target: 5000 },
+        { duration: "2s", target: 100 },
+        { duration: "2s", target: 300 },
+        { duration: "4s", target: 500 },
       ],
       gracefulRampDown: "0s",
     },
@@ -41,16 +41,16 @@ export const options = {
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}/v1.0`;
 
 function callActorMethod(id, method) {
-  return http.post(
-    `${DAPR_ADDRESS}/actors/fake-actor-type/${id}/method/${method}`,
+  return http.put(
+    `${DAPR_ADDRESS}/actors/${actorType}/${id}/method/${method}`,
     JSON.stringify({})
   );
 }
 export default function () {
-  const result = callActorMethod(singleId, "Lock");
-  if (result.status >= 400) {
-    DoubleActivations.add(1);
-  }
+  const result = callActorMethod(exec.scenario.iterationInTest, defaultMethod);
+  check(result, {
+    "response code was 2xx": (result) => result.status >= 200 && result.status < 300,
+  })
 }
 
 export function teardown(_) {
