@@ -5,10 +5,11 @@ go 1.19
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
+	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20221203215942-a4b27ae49b7c
+	github.com/dapr/components-contrib v1.9.1-0.20221213185150-c5c985a68514
 	github.com/dapr/kit v0.0.3
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
@@ -72,8 +73,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.13.0
 )
 
-require github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.8.1 // indirect
-
 require (
 	cloud.google.com/go v0.105.0 // indirect
 	cloud.google.com/go/compute v1.10.0 // indirect
@@ -96,6 +95,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.8.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.10.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.1.1 // indirect
@@ -116,6 +116,7 @@ require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
 	github.com/DataDog/zstd v1.5.0 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
+	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
 	github.com/Shopify/sarama v1.37.2 // indirect
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
@@ -425,4 +426,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // TEMP until https://github.com/dapr/components-contrib/pull/2237 is merged
-replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221208221207-03b7d5aa806d
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221213212450-95da1eda2c7f

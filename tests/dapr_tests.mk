@@ -52,6 +52,7 @@ metadata \
 pluggable_redis-statestore \
 pluggable_redis-pubsub \
 pluggable_kafka-bindings \
+tracingapp \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom
@@ -73,6 +74,8 @@ state_get_http \
 pubsub_publish_grpc \
 pubsub_bulk_publish_grpc \
 actor_double_activation \
+actor_id_scale \
+actor_type_scale \
 
 KUBECTL=kubectl
 
@@ -230,7 +233,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -429,8 +432,14 @@ setup-test-env-mongodb:
 delete-test-env-mongodb:
 	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
 
+# install zipkin to the cluster
+setup-test-env-zipkin:
+	$(KUBECTL) apply -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
+delete-test-env-zipkin:
+	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
+
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -488,6 +497,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/resiliency_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_tracing_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	# TODO: Remove once AppHealthCheck feature is finalized
 	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
