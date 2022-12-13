@@ -237,7 +237,7 @@ func TestComponentCalls(t *testing.T) {
 		stStore, cleanup, err := getStateStore(svc)
 		require.NoError(t, err)
 		defer cleanup()
-		err = stStore.Delete(&state.DeleteRequest{
+		err = stStore.Delete(context.Background(), &state.DeleteRequest{
 			Key: fakeKey,
 		})
 
@@ -258,7 +258,7 @@ func TestComponentCalls(t *testing.T) {
 		stStore, cleanup, err := getStateStore(svc)
 		require.NoError(t, err)
 		defer cleanup()
-		err = stStore.Delete(&state.DeleteRequest{
+		err = stStore.Delete(context.Background(), &state.DeleteRequest{
 			Key: fakeKey,
 		})
 
@@ -279,7 +279,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		resp, err := stStore.Get(&state.GetRequest{
+		resp, err := stStore.Get(context.Background(), &state.GetRequest{
 			Key: fakeKey,
 		})
 
@@ -300,7 +300,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		resp, err := stStore.Get(&state.GetRequest{
+		resp, err := stStore.Get(context.Background(), &state.GetRequest{
 			Key: fakeKey,
 		})
 
@@ -325,7 +325,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		resp, err := stStore.Get(&state.GetRequest{
+		resp, err := stStore.Get(context.Background(), &state.GetRequest{
 			Key: fakeKey,
 		})
 
@@ -348,7 +348,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.Set(&state.SetRequest{
+		err = stStore.Set(context.Background(), &state.SetRequest{
 			Key:   fakeKey,
 			Value: fakeData,
 		})
@@ -370,7 +370,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.Set(&state.SetRequest{
+		err = stStore.Set(context.Background(), &state.SetRequest{
 			Key:   fakeKey,
 			Value: fakeData,
 		})
@@ -413,7 +413,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkSet([]state.SetRequest{})
+		err = stStore.BulkSet(context.Background(), []state.SetRequest{})
 
 		assert.NotNil(t, err)
 		assert.Equal(t, int64(1), svc.bulkSetCalled.Load())
@@ -434,7 +434,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkSet(requests)
+		err = stStore.BulkSet(context.Background(), requests)
 
 		assert.ErrorIs(t, ErrNilSetValue, err)
 		assert.Equal(t, int64(0), svc.bulkSetCalled.Load())
@@ -461,7 +461,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkSet(requests)
+		err = stStore.BulkSet(context.Background(), requests)
 
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.bulkSetCalled.Load())
@@ -486,7 +486,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkDelete(requests)
+		err = stStore.BulkDelete(context.Background(), requests)
 
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
@@ -508,7 +508,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkDelete(requests)
+		err = stStore.BulkDelete(context.Background(), requests)
 
 		assert.NotNil(t, err)
 		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
@@ -527,7 +527,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		got, resp, err := stStore.BulkGet(requests)
+		got, resp, err := stStore.BulkGet(context.Background(), requests)
 
 		assert.NotNil(t, err)
 		assert.False(t, got)
@@ -563,7 +563,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		got, resp, err := stStore.BulkGet(requests)
+		got, resp, err := stStore.BulkGet(context.Background(), requests)
 
 		require.NoError(t, err)
 		assert.Equal(t, got, gotValue)
@@ -580,7 +580,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.Multi(&state.TransactionalStateRequest{
+		err = stStore.Multi(context.Background(), &state.TransactionalStateRequest{
 			Operations: []state.TransactionalStateOperation{},
 			Metadata:   map[string]string{},
 		})
@@ -610,7 +610,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.Multi(&state.TransactionalStateRequest{
+		err = stStore.Multi(context.Background(), &state.TransactionalStateRequest{
 			Operations: []state.TransactionalStateOperation{
 				{
 					Request: operations[0],
@@ -633,7 +633,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		resp, err := stStore.Query(&state.QueryRequest{})
+		resp, err := stStore.Query(context.Background(), &state.QueryRequest{})
 
 		assert.NotNil(t, err)
 		assert.Nil(t, resp)
@@ -673,7 +673,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		resp, err := stStore.Query(request)
+		resp, err := stStore.Query(context.Background(), request)
 
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
