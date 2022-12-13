@@ -5,15 +5,15 @@ go 1.19
 replace github.com/dapr/dapr => ../../../
 
 require (
-	github.com/dapr-sandbox/components-go-sdk v0.0.0-20221025155417-d8c054a9caa8
+	github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff
 	github.com/dapr/components-contrib v1.9.1-0.20221213185150-c5c985a68514
-	github.com/dapr/kit v0.0.3
+	github.com/dapr/kit v0.0.4-0.20221211173611-bcf6ee09314e
 )
 
 require (
 	github.com/Shopify/sarama v1.37.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.0 // indirect
-	github.com/dapr/dapr v1.9.0 // indirect
+	github.com/dapr/dapr v1.9.4-0.20221212235750-ac9256f214e0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/eapache/go-resiliency v1.3.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
@@ -39,12 +39,12 @@ require (
 	github.com/xdg-go/scram v1.1.1 // indirect
 	github.com/xdg-go/stringprep v1.0.3 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/net v0.1.0 // indirect
+	golang.org/x/net v0.4.0 // indirect
 	golang.org/x/oauth2 v0.1.0 // indirect
-	golang.org/x/sys v0.1.0 // indirect
-	golang.org/x/text v0.4.0 // indirect
+	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/text v0.5.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c // indirect
+	google.golang.org/genproto v0.0.0-20221207170731-23e4bf6bdc37 // indirect
 	google.golang.org/grpc v1.51.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
