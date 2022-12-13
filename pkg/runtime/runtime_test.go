@@ -739,32 +739,9 @@ func TestInitState(t *testing.T) {
 		},
 	}
 
-	initMockStateStoreForRuntime := func(rt *DaprRuntime, e error) *daprt.MockStateStore {
-		mockStateStore := new(daprt.MockStateStore)
-
-		rt.stateStoreRegistry.RegisterComponent(
-			func(_ logger.Logger) state.Store {
-				return mockStateStore
-			},
-			"mockState",
-		)
-
-		expectedMetadata := state.Metadata{Base: mdata.Base{
-			Name: TestPubsubName,
-			Properties: map[string]string{
-				actorStateStore:        "true",
-				"primaryEncryptionKey": primaryKey,
-			},
-		}}
-
-		mockStateStore.On("Init", expectedMetadata).Return(e)
-
-		return mockStateStore
-	}
-
 	t.Run("test init state store", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRuntime(rt, nil)
+		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
 		// act
 		err := rt.initState(mockStateComponent)
@@ -775,7 +752,7 @@ func TestInitState(t *testing.T) {
 
 	t.Run("test init state store error", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRuntime(rt, assert.AnError)
+		initMockStateStoreForRuntime(rt, primaryKey, assert.AnError)
 
 		// act
 		err := rt.initState(mockStateComponent)
@@ -787,7 +764,7 @@ func TestInitState(t *testing.T) {
 
 	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRuntime(rt, nil)
+		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
 		// act
 		err := rt.initState(mockStateComponent)
@@ -800,7 +777,7 @@ func TestInitState(t *testing.T) {
 
 	t.Run("test init state store, encryption enabled", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRuntime(rt, nil)
+		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
 		rt.secretStores["mockSecretStore"] = &mockSecretStore{}
 
@@ -5403,4 +5380,192 @@ func TestNamespacedPublisher(t *testing.T) {
 	})
 
 	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Load().Topic)
+}
+
+func TestGracefulShutdownPubSub(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	mockPubSub := new(daprt.MockPubSub)
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
+			return mockPubSub
+		},
+		"mockPubSub",
+	)
+	mockPubSub.On("Init", mock.Anything).Return(nil)
+	mockPubSub.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
+	mockPubSub.On("Close").Return(nil)
+
+	cPubSub := componentsV1alpha1.Component{}
+	cPubSub.ObjectMeta.Name = "mockPubSub"
+	cPubSub.Spec.Type = "pubsub.mockPubSub"
+
+	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+	req.WithHTTPExtension(http.MethodGet, "")
+	req.WithRawData(nil, invokev1.JSONContentType)
+	subscriptionItems := []runtimePubsub.SubscriptionJSON{
+		{PubsubName: "mockPubSub", Topic: "topic0", Route: "shutdown"},
+	}
+	sub, _ := json.Marshal(subscriptionItems)
+	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+	fakeResp.WithRawData(sub, "application/json")
+
+	mockAppChannel := new(channelt.MockAppChannel)
+	rt.appChannel = mockAppChannel
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
+
+	require.NoError(t, rt.initPubSub(cPubSub))
+	mockPubSub.AssertCalled(t, "Init", mock.Anything)
+	rt.startSubscriptions()
+	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
+	assert.NotNil(t, rt.pubsubCtx)
+	assert.NotNil(t, rt.topicCtxCancels)
+	assert.NotNil(t, rt.topicRoutes)
+	go sendSigterm(rt)
+	select {
+	case <-rt.pubsubCtx.Done():
+		assert.Nil(t, rt.pubsubCtx)
+		assert.Nil(t, rt.topicCtxCancels)
+		assert.Nil(t, rt.topicRoutes)
+	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
+		assert.Fail(t, "pubsub shutdown timed out")
+	}
+}
+
+func TestGracefulShutdownBindings(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	rt.bindingsRegistry.RegisterInputBinding(
+		func(_ logger.Logger) bindings.InputBinding {
+			return &daprt.MockBinding{}
+		},
+		"testInputBinding",
+	)
+	cin := componentsV1alpha1.Component{}
+	cin.ObjectMeta.Name = "testInputBinding"
+	cin.Spec.Type = "bindings.testInputBinding"
+
+	rt.bindingsRegistry.RegisterOutputBinding(
+		func(_ logger.Logger) bindings.OutputBinding {
+			return &daprt.MockBinding{}
+		},
+		"testOutputBinding",
+	)
+	cout := componentsV1alpha1.Component{}
+	cout.ObjectMeta.Name = "testOutputBinding"
+	cout.Spec.Type = "bindings.testOutputBinding"
+	require.NoError(t, rt.initInputBinding(cin))
+	require.NoError(t, rt.initOutputBinding(cout))
+
+	assert.Equal(t, len(rt.inputBindings), 1)
+	assert.Equal(t, len(rt.outputBindings), 1)
+
+	go sendSigterm(rt)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
+	assert.Nil(t, rt.inputBindingsCancel)
+	assert.Nil(t, rt.inputBindingsCtx)
+}
+
+func TestGracefulShutdownActors(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	encryptKey := hex.EncodeToString(bytes)
+
+	mockStateComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "state.mockState",
+			Version: "v1",
+			Metadata: []componentsV1alpha1.MetadataItem{
+				{
+					Name: "actorStateStore",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("true")},
+					},
+				},
+				{
+					Name: "primaryEncryptionKey",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte(encryptKey)},
+					},
+				},
+			},
+		},
+		Auth: componentsV1alpha1.Auth{
+			SecretStore: "mockSecretStore",
+		},
+	}
+
+	// setup
+	initMockStateStoreForRuntime(rt, encryptKey, nil)
+
+	// act
+	err := rt.initState(mockStateComponent)
+
+	// assert
+	assert.NoError(t, err, "expected no error")
+
+	rt.namespace = "test"
+	rt.runtimeConfig.mtlsEnabled = true
+	assert.Nil(t, rt.initActors())
+
+	go sendSigterm(rt)
+	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 3*time.Second)
+
+	var activeActCount int
+	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
+	for _, v := range activeActors {
+		activeActCount += v.Count
+	}
+	assert.Equal(t, activeActCount, 0)
+}
+
+func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *daprt.MockStateStore {
+	mockStateStore := new(daprt.MockStateStore)
+
+	rt.stateStoreRegistry.RegisterComponent(
+		func(_ logger.Logger) state.Store {
+			return mockStateStore
+		},
+		"mockState",
+	)
+
+	expectedMetadata := state.Metadata{Base: mdata.Base{
+		Name: TestPubsubName,
+		Properties: map[string]string{
+			actorStateStore:        "true",
+			"primaryEncryptionKey": encryptKey,
+		},
+	}}
+
+	mockStateStore.On("Init", expectedMetadata).Return(e)
+
+	return mockStateStore
+}
+
+func TestTraceShutdown(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
+		Otel: config.OtelSpec{
+			EndpointAddress: "foo.bar",
+			IsSecure:        false,
+			Protocol:        "http",
+		},
+	}
+	rt.hostAddress = "localhost:3000"
+	tpStore := newOpentelemetryTracerProviderStore()
+	require.NoError(t, rt.setupTracing(rt.hostAddress, tpStore))
+	assert.NotNil(t, rt.tracerProvider)
+
+	go sendSigterm(rt)
+	<-rt.ctx.Done()
+	assert.Nil(t, rt.tracerProvider)
+}
+
+func sendSigterm(rt *DaprRuntime) {
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
+	rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 }
