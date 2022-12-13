@@ -132,6 +132,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 			if len(vals) == 0 {
 				return fmt.Errorf("cannot proxy request: missing %s metadata", GRPCProxyAppIDKey)
 			}
+			// vals[0] is the target app ID
 			if appID == vals[0] {
 				spanKind = trace.WithSpanKind(trace.SpanKindServer)
 			} else {
