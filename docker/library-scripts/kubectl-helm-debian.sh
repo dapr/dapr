@@ -26,7 +26,7 @@
 # Docs: https://github.com/microsoft/vscode-dev-containers/blob/main/script-library/docs/kubectl-helm.md
 # Maintainer: The VS Code and Codespaces Teams
 #
-# Syntax: ./kubectl-helm-debian.sh [kubectl verison] [Helm version] [minikube version] [kubectl SHA256] [Helm SHA256] [minikube SHA256]
+# Syntax: ./kubectl-helm-debian.sh [kubectl version] [Helm version] [minikube version] [kubectl SHA256] [Helm SHA256] [minikube SHA256]
 
 set -e
 

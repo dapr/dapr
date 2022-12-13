@@ -52,6 +52,7 @@ metadata \
 pluggable_redis-statestore \
 pluggable_redis-pubsub \
 pluggable_kafka-bindings \
+tracingapp \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom
@@ -431,8 +432,16 @@ setup-test-env-mongodb:
 delete-test-env-mongodb:
 	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
 
+# install zipkin to the cluster
+setup-test-env-zipkin:
+	$(KUBECTL) create deployment dapr-zipkin -n $(DAPR_TEST_NAMESPACE) --image ghcr.io/dapr/3rdparty/zipkin:latest
+	$(KUBECTL) expose deployment dapr-zipkin -n $(DAPR_TEST_NAMESPACE) --type ClusterIP --port 9411
+delete-test-env-zipkin:
+	$(KUBECTL) delete service dapr-zipkin -n ${DAPR_TEST_NAMESPACE}
+	$(KUBECTL) delete deployment dapr-zipkin -n ${DAPR_TEST_NAMESPACE}
+
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -490,6 +499,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/resiliency_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_tracing_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	# TODO: Remove once AppHealthCheck feature is finalized
 	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
