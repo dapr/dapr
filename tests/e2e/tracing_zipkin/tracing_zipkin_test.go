@@ -79,6 +79,11 @@ func TestMain(m *testing.M) {
 }
 
 func TestInvoke(t *testing.T) {
+	if utils.TestTargetOS() == "windows" {
+		t.Skip("Skipping tracing test on windows")
+		return
+	}
+
 	t.Run("Simple HTTP invoke with tracing", func(t *testing.T) {
 		// Get the ingress external url of test app
 		externalURL := tr.Platform.AcquireAppExternalURL("tracingapp-a")
