@@ -511,6 +511,12 @@ jobs:
       - name: Run stress test actor double activation with SDK
         if: env.TEST_PREFIX != ''
         run: make test-perf-actor_double_activation
+      - name: Run stress test actor id without SDK
+        if: env.TEST_PREFIX != ''
+        run: make test-perf-actor_id_scale
+      - name: Run stress test actor types without SDK
+        if: env.TEST_PREFIX != ''
+        run: make test-perf-actor_type_scale
       - name: Save control plane logs
         if: always() && env.TEST_PREFIX != ''
         run: |
