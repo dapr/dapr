@@ -5,6 +5,7 @@ go 1.19
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
+	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
@@ -70,6 +71,8 @@ require (
 	k8s.io/metrics v0.25.3
 	sigs.k8s.io/controller-runtime v0.13.0
 )
+
+require github.com/PaesslerAG/gval v1.0.0 // indirect
 
 require (
 	cloud.google.com/go v0.105.0 // indirect
