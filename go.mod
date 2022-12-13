@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20221203215942-a4b27ae49b7c
+	github.com/dapr/components-contrib v1.9.1-0.20221213185150-c5c985a68514
 	github.com/dapr/kit v0.0.3
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
@@ -412,6 +412,3 @@ replace (
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-// TODO: TEMPORARY ONLY
-replace github.com/dapr/components-contrib => github.com/1046102779/components-contrib v1.6.0-rc.2.0.20221208075651-2dd7433a59b5
