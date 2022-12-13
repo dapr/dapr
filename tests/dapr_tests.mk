@@ -49,9 +49,6 @@ resiliencyapp_grpc \
 injectorapp \
 injectorapp-init \
 metadata \
-pluggable_redis-statestore \
-pluggable_redis-pubsub \
-pluggable_kafka-bindings \
 tracingapp \
 
 # PERFORMANCE test app list

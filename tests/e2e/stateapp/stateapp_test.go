@@ -33,11 +33,9 @@ import (
 )
 
 const (
-	appName              = "stateapp"                       // App name in Dapr.
-	appNamePluggable     = "stateapp-pluggable"             // App name with pluggable components in Dapr.
-	redisPluggableApp    = "e2e-pluggable_redis-statestore" // The name of the pluggable component app.
-	numHealthChecks      = 60                               // Number of get calls before starting tests.
-	testManyEntriesCount = 5                                // Anything between 1 and the number above (inclusive).
+	appName              = "stateapp" // App name in Dapr.
+	numHealthChecks      = 60         // Number of get calls before starting tests.
+	testManyEntriesCount = 5          // Anything between 1 and the number above (inclusive).
 )
 
 type testCommandRequest struct {
@@ -411,30 +409,6 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 		},
-	}
-
-	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
-		testApps = append(testApps, kube.AppDescription{
-			AppName:        appNamePluggable,
-			DaprEnabled:    true,
-			ImageName:      "e2e-stateapp",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			PluggableComponents: []apiv1.Container{
-				{
-					Name:  "redis-pluggable", // e2e-pluggable_redis
-					Image: runner.BuildTestImageName(redisPluggableApp),
-				},
-			},
-		})
-		stateStoreApps = append(stateStoreApps, struct {
-			name       string
-			stateStore string
-		}{
-			name:       appNamePluggable,
-			stateStore: "pluggable-statestore",
-		})
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)

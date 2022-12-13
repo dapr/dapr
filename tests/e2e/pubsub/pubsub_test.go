@@ -53,16 +53,11 @@ const (
 
 	receiveMessageRetries = 5
 
-	metadataPrefix             = "metadata."
-	publisherAppName           = "pubsub-publisher"
-	subscriberAppName          = "pubsub-subscriber"
-	publisherPluggableAppName  = "pubsub-publisher-pluggable"
-	subscriberPluggableAppName = "pubsub-subscriber-pluggable"
-	redisPubSubPluggableApp    = "e2e-pluggable_redis-pubsub"
-	PubSubEnvVar               = "DAPR_TEST_PUBSUB_NAME"
-	PubSubPluggableName        = "pluggable-messagebus"
-	pubsubKafka                = "kafka-messagebus"
-	bulkPubsubMetaKey          = "bulkPublishPubsubName"
+	metadataPrefix    = "metadata."
+	publisherAppName  = "pubsub-publisher"
+	subscriberAppName = "pubsub-subscriber"
+	pubsubKafka       = "kafka-messagebus"
+	bulkPubsubMetaKey = "bulkPublishPubsubName"
 )
 
 var (
@@ -641,69 +636,6 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
 		},
-	}
-
-	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
-		components = append(components, kube.ComponentDescription{
-			Name:      PubSubPluggableName,
-			Namespace: &kube.DaprTestNamespace,
-			TypeName:  "pubsub.redis-pluggable",
-			MetaData: map[string]kube.MetadataValue{
-				"redisHost": {
-					FromSecretRef: &kube.SecretRef{
-						Name: "redissecret",
-						Key:  "host",
-					},
-				},
-				"redisPassword":      {Raw: `""`},
-				"processingTimeout":  {Raw: `"1s"`},
-				"redeliverInterval":  {Raw: `"1s"`},
-				"idleCheckFrequency": {Raw: `"1s"`},
-				"readTimeout":        {Raw: `"1s"`},
-			},
-			Scopes:         []string{publisherPluggableAppName, subscriberPluggableAppName},
-			ContainerImage: runner.BuildTestImageName(redisPubSubPluggableApp),
-		})
-		pluggableTestApps := []kube.AppDescription{
-			{
-				AppName:                   publisherPluggableAppName,
-				DaprEnabled:               true,
-				ImageName:                 "e2e-pubsub-publisher",
-				Replicas:                  1,
-				IngressEnabled:            true,
-				MetricsEnabled:            true,
-				AppMemoryLimit:            "200Mi",
-				AppMemoryRequest:          "100Mi",
-				InjectPluggableComponents: true,
-				AppEnv: map[string]string{
-					PubSubEnvVar: PubSubPluggableName,
-				},
-			},
-			{
-				AppName:                   subscriberPluggableAppName,
-				DaprEnabled:               true,
-				ImageName:                 "e2e-pubsub-subscriber",
-				Replicas:                  1,
-				IngressEnabled:            true,
-				MetricsEnabled:            true,
-				AppMemoryLimit:            "200Mi",
-				AppMemoryRequest:          "100Mi",
-				InjectPluggableComponents: true,
-				AppEnv: map[string]string{
-					PubSubEnvVar: PubSubPluggableName,
-				},
-			},
-		}
-		testApps = append(testApps, pluggableTestApps...)
-		apps = append(apps, struct {
-			suite      string
-			publisher  string
-			subscriber string
-		}{
-			suite:      "pluggable",
-			publisher:  publisherPluggableAppName,
-			subscriber: subscriberPluggableAppName,
-		})
 	}
 
 	log.Printf("Creating TestRunner\n")

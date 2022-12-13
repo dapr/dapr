@@ -64,21 +64,13 @@ const (
 	// Number of times to call the endpoint to check for health.
 	numHealthChecks = 60
 	// Number of seconds to wait for binding travelling throughout the cluster.
-	inputBindingAppName                  = "bindinginput"
-	outputBindingAppName                 = "bindingoutput"
-	inputBindingGRPCAppName              = "bindinginputgrpc"
-	e2eInputBindingImage                 = "e2e-binding_input"
-	e2eOutputBindingImage                = "e2e-binding_output"
-	e2eInputBindingGRPCImage             = "e2e-binding_input_grpc"
-	inputBindingPluggableAppName         = "pluggable-bindinginput"
-	outputbindingPluggableAppName        = "pluggable-bindingoutput"
-	inputBindingGRPCPluggableAppName     = "pluggable-bindinginputgrpc"
-	kafkaBindingsPluggableComponentImage = "e2e-pluggable_kafka-bindings"
-	DaprTestTopicEnvVar                  = "DAPR_TEST_TOPIC_NAME"
-	DaprTestGRPCTopicEnvVar              = "DAPR_TEST_GRPC_TOPIC_NAME"
-	DaprTestInputBindingServiceEnVar     = "DAPR_TEST_INPUT_BINDING_SVC"
-	DaprTestCustomPathRouteEnvVar        = "DAPR_TEST_CUSTOM_PATH_ROUTE"
-	bindingPropagationDelay              = 10
+	inputBindingAppName      = "bindinginput"
+	outputBindingAppName     = "bindingoutput"
+	inputBindingGRPCAppName  = "bindinginputgrpc"
+	e2eInputBindingImage     = "e2e-binding_input"
+	e2eOutputBindingImage    = "e2e-binding_output"
+	e2eInputBindingGRPCImage = "e2e-binding_input_grpc"
+	bindingPropagationDelay  = 10
 )
 
 var tr *runner.TestRunner
@@ -134,65 +126,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
-	}
-
-	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
-		pluggableComponents := []apiv1.Container{
-			{
-				Name:  "kafka-pluggable",
-				Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
-			},
-		}
-		appEnv := map[string]string{
-			DaprTestGRPCTopicEnvVar:          "pluggable-test-topic-grpc",
-			DaprTestTopicEnvVar:              "pluggable-test-topic",
-			DaprTestInputBindingServiceEnVar: "pluggable-bindinginputgrpc",
-			DaprTestCustomPathRouteEnvVar:    "pluggable-custom-path",
-		}
-		testApps = append(testApps, []kube.AppDescription{
-			{
-				AppName:             inputBindingPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           e2eInputBindingImage,
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				PluggableComponents: pluggableComponents,
-				AppEnv:              appEnv,
-			},
-			{
-				AppName:             outputbindingPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           e2eOutputBindingImage,
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				PluggableComponents: pluggableComponents,
-				AppEnv:              appEnv,
-			},
-			{
-				AppName:             inputBindingGRPCPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           e2eInputBindingGRPCImage,
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				AppProtocol:         "grpc",
-				PluggableComponents: pluggableComponents,
-				AppEnv:              appEnv,
-			},
-		}...)
-		bindingsApps = append(bindingsApps, struct {
-			suite        string
-			inputApp     string
-			inputGRPCApp string
-			outputApp    string
-		}{
-			suite:        "pluggable",
-			inputApp:     inputBindingPluggableAppName,
-			inputGRPCApp: inputBindingGRPCPluggableAppName,
-			outputApp:    outputbindingPluggableAppName,
-		})
 	}
 
 	tr = runner.NewTestRunner("bindings", testApps, nil, nil)
