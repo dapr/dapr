@@ -3965,10 +3965,10 @@ func (c fakeStateStore) Ping() error {
 	return nil
 }
 
-func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
+func (c fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
 	for i := range req {
 		r := req[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := c.Delete(&r)
+		err := c.Delete(ctx, &r)
 		if err != nil {
 			return err
 		}
@@ -3977,10 +3977,10 @@ func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
 	return nil
 }
 
-func (c fakeStateStore) BulkSet(req []state.SetRequest) error {
+func (c fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
 	for i := range req {
 		s := req[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := c.Set(&s)
+		err := c.Set(ctx, &s)
 		if err != nil {
 			return err
 		}
@@ -3989,7 +3989,7 @@ func (c fakeStateStore) BulkSet(req []state.SetRequest) error {
 	return nil
 }
 
-func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
+func (c fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	if req.Key == "good-key" {
 		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
 			return errors.New("ETag mismatch")
@@ -3999,7 +3999,7 @@ func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 	return errors.New("NOT FOUND")
 }
 
-func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+func (c fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
 			Data: []byte("\"bGlmZSBpcyBnb29k\""),
@@ -4013,7 +4013,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 }
 
 // BulkGet performs a bulks get operations.
-func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (c fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	return false, nil, nil
 }
 
@@ -4029,7 +4029,7 @@ func (c fakeStateStore) Features() []state.Feature {
 	}
 }
 
-func (c fakeStateStore) Set(req *state.SetRequest) error {
+func (c fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	if req.Key == "good-key" {
 		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
 			return errors.New("ETag mismatch")
@@ -4039,7 +4039,7 @@ func (c fakeStateStore) Set(req *state.SetRequest) error {
 	return errors.New("NOT FOUND")
 }
 
-func (c fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
+func (c fakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
 	if request.Metadata != nil && request.Metadata["error"] == "true" {
 		return errors.New("Transaction error")
 	}
@@ -4050,7 +4050,7 @@ type fakeStateStoreQuerier struct {
 	fakeStateStore
 }
 
-func (c fakeStateStoreQuerier) Query(req *state.QueryRequest) (*state.QueryResponse, error) {
+func (c fakeStateStoreQuerier) Query(ctx context.Context, req *state.QueryRequest) (*state.QueryResponse, error) {
 	// simulate empty data
 	if req.Query.Sort == nil {
 		return &state.QueryResponse{}, nil
