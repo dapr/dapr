@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"os"
 	"sync"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -24,6 +24,7 @@ const (
 	sentrySignTimeout = time.Second * 5
 	certType          = "CERTIFICATE"
 	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
+	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	sentryMaxRetries  = 100
 )
 
@@ -84,7 +85,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	config, err := daprCredentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create tls config from cert and key")
+		return nil, fmt.Errorf("failed to create tls config from cert and key: %w", err)
 	}
 
 	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
@@ -102,7 +103,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 		grpc.WithUnaryInterceptor(unaryClientInterceptor))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
-		return nil, errors.Wrap(err, "error establishing connection to sentry")
+		return nil, fmt.Errorf("error establishing connection to sentry: %w", err)
 	}
 	defer conn.Close()
 
@@ -118,14 +119,14 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 		}, grpcRetry.WithMax(sentryMaxRetries), grpcRetry.WithPerRetryTimeout(sentrySignTimeout))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
-		return nil, errors.Wrap(err, "error from sentry SignCertificate")
+		return nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
 	}
 
 	workloadCert := resp.GetWorkloadCertificate()
 	validTimestamp := resp.GetValidUntil()
 	if err = validTimestamp.CheckValid(); err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
-		return nil, errors.Wrap(err, "error parsing ValidUntil")
+		return nil, fmt.Errorf("error parsing ValidUntil: %w", err)
 	}
 
 	expiry := validTimestamp.AsTime()
@@ -134,7 +135,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 		ok := trustChain.AppendCertsFromPEM(c)
 		if !ok {
 			diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("chaining")
-			return nil, errors.Wrap(err, "failed adding trust chain cert to x509 CertPool")
+			return nil, fmt.Errorf("failed adding trust chain cert to x509 CertPool: %w", err)
 		}
 	}
 
@@ -154,7 +155,14 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 // currently we support Kubernetes identities.
 func getToken() string {
-	b, _ := os.ReadFile(kubeTknPath)
+	b, err := os.ReadFile(kubeTknPath)
+	if err != nil && os.IsNotExist(err) {
+		// Attempt to use the legacy token if that exists
+		b, _ = os.ReadFile(legacyKubeTknPath)
+		if len(b) > 0 {
+			log.Warn("⚠️ daprd is initializing using the legacy service account token with access to Kubernetes APIs, which is discouraged. This usually happens when daprd is running against an older version of the Dapr control plane.")
+		}
+	}
 	return string(b)
 }
 
