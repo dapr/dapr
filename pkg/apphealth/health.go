@@ -185,7 +185,7 @@ func (h *AppHealth) ratelimitReports() bool {
 			return false
 		}
 
-		swapped = h.lastReport.CAS(prev, now)
+		swapped = h.lastReport.CompareAndSwap(prev, now)
 	}
 
 	// If we couldn't do the swap after 2 attempts, just return false

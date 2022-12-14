@@ -24,8 +24,6 @@ service Operator {
   rpc ComponentUpdate (ComponentUpdateRequest) returns (stream ComponentUpdateEvent) {}
   // Returns a list of available components
   rpc ListComponents (ListComponentsRequest) returns (ListComponentResponse) {}
-  // Returns a list fo available pluggable components
-  rpc ListPluggableComponents(ListPluggableComponentsRequest) returns (ListPluggableComponentsResponse) {}
   // Returns a given configuration by name
   rpc GetConfiguration (GetConfigurationRequest) returns (GetConfigurationResponse) {}
   // Returns a list of pub/sub subscriptions
@@ -36,17 +34,6 @@ service Operator {
   rpc ListResiliency (ListResiliencyRequest) returns (ListResiliencyResponse) {}
   // Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
   rpc ListSubscriptionsV2 (ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
-}
-
-// ListPluggableComponentsRequest is the request to get pluggable components available.
-message ListPluggableComponentsRequest {
-  string namespace = 1;
-  string pod_name = 2;
-}
-
-// ListPluggableComponentsResponse includes the list of available pluggable components.
-message ListPluggableComponentsResponse {
-  repeated bytes pluggable_components = 1;
 }
 
 // ListComponentsRequest is the request to get components for a sidecar in namespace.

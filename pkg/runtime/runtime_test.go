@@ -32,22 +32,23 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
+	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
@@ -77,6 +78,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -132,7 +134,7 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -214,6 +216,10 @@ func (m *MockKubernetesStateStore) Ping() error {
 
 func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{}
+}
+
+func (m MockKubernetesStateStore) GetComponentMetadata() map[string]string {
+	return nil
 }
 
 func NewMockKubernetesStore() secretstores.SecretStore {
@@ -362,7 +368,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -385,7 +391,7 @@ func TestDoProcessComponent(t *testing.T) {
 		lockComponentV3.Spec.Version = "v3"
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentV3)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentV3)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -415,7 +421,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 		}
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentWithWrongStrategy)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentWithWrongStrategy)
 		// assert
 		assert.Error(t, err)
 	})
@@ -434,7 +440,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
 		// assert
 		assert.Nil(t, err, "unexpected error")
 		// get modified key
@@ -463,7 +469,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("pubsub"), pubsubComponent)
+		err := rt.doProcessOneComponent(components.CategoryPubSub, pubsubComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -472,7 +478,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 	t.Run("test invalid category component", func(t *testing.T) {
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("invalid"), pubsubComponent)
+		err := rt.doProcessOneComponent(components.Category("invalid"), pubsubComponent)
 
 		// assert
 		assert.NoError(t, err, "no error expected")
@@ -1321,104 +1327,6 @@ func TestConsumerID(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func TestPluggableComponents(t *testing.T) {
-	t.Run("load pluggable components", func(t *testing.T) {
-		rts := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rts)
-
-		require.NoError(t, os.Mkdir(componentsDir, 0o777))
-		defer os.RemoveAll(componentsDir)
-
-		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
-		s := componentsV1alpha1.PluggableComponent{
-			ObjectMeta: metaV1.ObjectMeta{
-				Name: fakeName,
-			},
-			TypeMeta: metaV1.TypeMeta{
-				Kind: "PluggableComponent",
-			},
-			Spec: componentsV1alpha1.PluggableComponentSpec{
-				Type:    fakeType,
-				Version: fakeVersion,
-			},
-		}
-
-		cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
-		require.NoError(t, err)
-		defer cleanup()
-
-		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
-		pluggableComponents, err := rts.loadPluggableComponents()
-
-		require.NoError(t, err)
-		assert.Len(t, pluggableComponents, 1)
-		assert.Equal(t, fakeName, pluggableComponents[0].Name)
-		assert.Equal(t, fakeType, string(pluggableComponents[0].Type))
-		assert.Equal(t, fakeVersion, pluggableComponents[0].Version)
-	})
-
-	t.Run("init pluggable components call register", func(t *testing.T) {
-		require.NoError(t, os.Mkdir(componentsDir, 0o777))
-		defer os.RemoveAll(componentsDir)
-
-		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
-		s := componentsV1alpha1.PluggableComponent{
-			ObjectMeta: metaV1.ObjectMeta{
-				Name: fakeName,
-			},
-			TypeMeta: metaV1.TypeMeta{
-				Kind: "PluggableComponent",
-			},
-			Spec: componentsV1alpha1.PluggableComponentSpec{
-				Type:    fakeType,
-				Version: fakeVersion,
-			},
-		}
-
-		t.Run("when flag is enabled", func(t *testing.T) {
-			rts := NewTestDaprRuntime(modes.StandaloneMode)
-			rts.globalConfig.Spec.Features = append(rts.globalConfig.Spec.Features, config.FeatureSpec{
-				Name:    config.PluggableComponents,
-				Enabled: true,
-			})
-
-			defer stopRuntime(t, rts)
-
-			cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
-			require.NoError(t, err)
-			defer cleanup()
-
-			rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
-			rts.initPluggableComponents()
-
-			_, err = stateLoader.DefaultRegistry.Create("state.mypluggable", "v1")
-			require.NoError(t, err)
-		})
-
-		t.Run("when flag is disabled", func(t *testing.T) {
-			rts := NewTestDaprRuntime(modes.StandaloneMode)
-			rts.globalConfig.Spec.Features = append(rts.globalConfig.Spec.Features, config.FeatureSpec{
-				Name:    config.PluggableComponents,
-				Enabled: false,
-			})
-
-			defer stopRuntime(t, rts)
-
-			s.Name = "my-pluggable-new"
-			cleanup, err := writeComponentToDisk(s, "pluggable-feature-enabled.yaml")
-			require.NoError(t, err)
-			defer cleanup()
-
-			rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
-			rts.initPluggableComponents()
-
-			require.NoError(t, err)
-			_, err = stateLoader.DefaultRegistry.Create("state.my-pluggable-new", "v1")
-			assert.NotNil(t, err)
-		})
-	})
-}
-
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
@@ -1485,6 +1393,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
+		rt.subscriptions = nil
 		rt.pubSubs = make(map[string]pubsubItem)
 
 		return mockPubSub, mockPubSub2
@@ -1809,6 +1718,117 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
+	t.Run("test bulk publish, topic allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic0",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(res.Statuses))
+		assert.Equal(t, "1", res.Statuses[0].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+
+		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					ContentType: "text/plain",
+				},
+				{
+					EntryId:     "2",
+					Event:       []byte("test 2"),
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(res.Statuses))
+		expectedIds := []string{"1", "2"}
+		assert.Contains(t, expectedIds, res.Statuses[0].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+		assert.Contains(t, expectedIds, res.Statuses[1].EntryId)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[1].Status)
+	})
+
+	t.Run("test bulk publish, topic not allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			require.Nil(t, err)
+		}
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
+
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+	})
+
 	t.Run("test publish, topic allowed", func(t *testing.T) {
 		initMockPubSubForRuntime(rt)
 
@@ -2086,8 +2106,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
 				called++
 				return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-					return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-						return func(ctx *fasthttp.RequestCtx) {}
+					return func(next http.Handler) http.Handler {
+						return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 					}, nil
 				}
 			},
@@ -2783,7 +2803,9 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 					return nil
 				},
 			}
-			rt.grpc.AppClient = &mockClientConn
+			rt.grpc.SetLocalConnCreateFn(func() (grpc.ClientConnInterface, error) {
+				return &mockClientConn, nil
+			})
 
 			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
 			if tc.ExpectError {
@@ -3069,6 +3091,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "", []byte("Test Message"), "", "")
+	// add custom attributes
+	envelope["customInt"] = 123
+	envelope["customString"] = "abc"
+	envelope["customBool"] = true
+	envelope["customFloat"] = 1.23
+	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
+	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -3082,6 +3111,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
+	// add custom attributes
+	envelope["customInt"] = 123
+	envelope["customString"] = "abc"
+	envelope["customBool"] = true
+	envelope["customFloat"] = 1.23
+	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
+	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	base64, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -3094,12 +3130,13 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name             string
-		message          *pubsubSubscribedMessage
-		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
-		errorExpected    bool
-		noResponseStatus bool
-		responseError    error
+		name                        string
+		message                     *pubsubSubscribedMessage
+		responseStatus              runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+		errorExpected               bool
+		noResponseStatus            bool
+		responseError               error
+		validateCloudEventExtension *map[string]interface{}
 	}{
 		{
 			name:             "failed to publish message to user app with unimplemented error",
@@ -3147,6 +3184,32 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
 			errorExpected:  true,
 		},
+		{
+			name:           "succeeded to publish message to user app and validated cloud event extension attributes",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+				"customInt":    float64(123),
+				"customString": "abc",
+				"customBool":   true,
+				"customFloat":  float64(1.23),
+				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+			}),
+		},
+		{
+			name:           "succeeded to publish message to user app and validated cloud event extension attributes with base64 encoded data",
+			message:        testPubSubMessageBase64,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+				"customInt":    float64(123),
+				"customString": "abc",
+				"customBool":   true,
+				"customFloat":  float64(1.23),
+				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+			}),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -3166,12 +3229,14 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create mock application server first
 			if !tc.noResponseStatus {
 				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-					TopicEventResponseStatus: tc.responseStatus,
-					Error:                    tc.responseError,
+					TopicEventResponseStatus:    tc.responseStatus,
+					Error:                       tc.responseError,
+					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})
 			} else {
 				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-					Error: tc.responseError,
+					Error:                       tc.responseError,
+					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})
 			}
 			if grpcServer != nil {
@@ -3182,7 +3247,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer rt.grpc.CloseAppClient()
 
 			// act
 			err = rt.publishMessageGRPC(context.Background(), tc.message)
@@ -3504,27 +3569,27 @@ func TestPubsubWithResiliency(t *testing.T) {
 	defer stopRuntime(t, r)
 
 	failingPubsub := daprt.FailingPubsub{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingTopic": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutTopic": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	failingAppChannel := daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingSubTopic": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutSubTopic": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			rawData := req.Message().Data.Value
 			data := make(map[string]string)
@@ -3551,7 +3616,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		err := r.Publish(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingPubsub.Failure.CallCount["failingTopic"])
+		assert.Equal(t, 2, failingPubsub.Failure.CallCount("failingTopic"))
 	})
 
 	t.Run("pubsub publish times out with resiliency", func(t *testing.T) {
@@ -3565,7 +3630,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingPubsub.Failure.CallCount["timeoutTopic"])
+		assert.Equal(t, 2, failingPubsub.Failure.CallCount("timeoutTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3598,7 +3663,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		err := r.beginPubSub("failPubsub")
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
+		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("failingSubTopic"))
 	})
 
 	t.Run("pubsub times out sending event to app with resiliency", func(t *testing.T) {
@@ -3630,21 +3695,29 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 		// This is eaten, technically.
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["timeoutSubTopic"])
+		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("timeoutSubTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }
 
 // mockSubscribePubSub is an in-memory pubsub component.
 type mockSubscribePubSub struct {
-	handlers map[string]pubsub.Handler
-	pubCount map[string]int
+	bulkHandlers    map[string]pubsub.BulkHandler
+	handlers        map[string]pubsub.Handler
+	pubCount        map[string]int
+	bulkPubCount    map[string]int
+	isBulkSubscribe bool
+	bulkReponse     pubsub.BulkSubscribeResponse
 }
+
+// type BulkSubscribeResponse struct {
 
 // Init is a mock initialization method.
 func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
+	m.bulkHandlers = make(map[string]pubsub.BulkHandler)
 	m.handlers = make(map[string]pubsub.Handler)
 	m.pubCount = make(map[string]int)
+	m.bulkPubCount = make(map[string]int)
 	return nil
 }
 
@@ -3657,9 +3730,51 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 			Topic: req.Topic,
 		}
 		handler(context.Background(), pubsubMsg)
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		m.bulkPubCount[req.Topic]++
+		nbei := pubsub.BulkMessageEntry{
+			EntryId: "0",
+			Event:   req.Data,
+		}
+		msgArr := []pubsub.BulkMessageEntry{nbei}
+		nbm := &pubsub.BulkMessage{
+			Entries: msgArr,
+			Topic:   req.Topic,
+		}
+		bulkHandler(context.Background(), nbm)
+	}
+	return nil
+}
+
+// BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
+func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	m.bulkPubCount[req.Topic]++
+	res := pubsub.BulkPublishResponse{}
+	if handler, ok := m.handlers[req.Topic]; ok {
+		for _, entry := range req.Entries {
+			m.pubCount[req.Topic]++
+			// TODO this needs to be modified as part of BulkSubscribe deadletter test
+			pubsubMsg := &pubsub.NewMessage{
+				Data:  entry.Event,
+				Topic: req.Topic,
+			}
+			handler(context.Background(), pubsubMsg)
+			res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+				EntryId: entry.EntryId,
+				Status:  pubsub.PublishSucceeded,
+			})
+		}
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		nbm := &pubsub.BulkMessage{
+			Entries: req.Entries,
+			Topic:   req.Topic,
+		}
+		bulkResponses, err := bulkHandler(context.Background(), nbm)
+		m.bulkReponse.Statuses = bulkResponses
+		m.bulkReponse.Error = err
 	}
 
-	return nil
+	return res, nil
 }
 
 // Subscribe is a mock subscribe method.
@@ -3673,6 +3788,12 @@ func (m *mockSubscribePubSub) Close() error {
 }
 
 func (m *mockSubscribePubSub) Features() []pubsub.Feature {
+	return nil
+}
+
+func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
+	m.isBulkSubscribe = true
+	m.bulkHandlers[req.Topic] = handler
 	return nil
 }
 
@@ -3811,10 +3932,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer rt.grpc.CloseAppClient()
 
 			// act
-			resp := rt.getSubscribedBindingsGRPC()
+			resp, _ := rt.getSubscribedBindingsGRPC()
 
 			// assert
 			assert.Equal(t, tc.expectedResponse, resp, "expected response to match")
@@ -3988,10 +4109,10 @@ func TestMTLS(t *testing.T) {
 }
 
 type mockBinding struct {
-	hasError bool
-	data     string
-	metadata map[string]string
-	closeErr error
+	readErrorCh chan bool
+	data        string
+	metadata    map[string]string
+	closeErr    error
 }
 
 func (b *mockBinding) Init(metadata bindings.Metadata) error {
@@ -4010,7 +4131,9 @@ func (b *mockBinding) Read(ctx context.Context, handler bindings.Handler) error 
 			Metadata: metadata,
 			Data:     []byte(b.data),
 		})
-		b.hasError = err != nil
+		if b.readErrorCh != nil {
+			b.readErrorCh <- (err != nil)
+		}
 	}()
 
 	return nil
@@ -4099,12 +4222,13 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
-		assert.False(t, b.hasError)
+		assert.False(t, <-ch)
 	})
 
 	t.Run("app returns error", func(t *testing.T) {
@@ -4135,12 +4259,13 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
-		assert.True(t, b.hasError)
+		assert.True(t, <-ch)
 	})
 
 	t.Run("binding has data and metadata", func(t *testing.T) {
@@ -4171,9 +4296,10 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
 		assert.Equal(t, string(testInputBindingData), b.data)
@@ -4389,7 +4515,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 }
 
-type mockPublishPubSub struct{}
+type mockPublishPubSub struct {
+	PublishedRequest atomic.Pointer[pubsub.PublishRequest]
+}
 
 // Init is a mock initialization method.
 func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
@@ -4398,7 +4526,27 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 
 // Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
+	m.PublishedRequest.Store(req)
 	return nil
+}
+
+// BulkPublish is a mock bulk publish method returning a success all the time.
+func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	res := pubsub.BulkPublishResponse{}
+
+	for _, entry := range req.Entries {
+		e := pubsub.BulkPublishResponseEntry{
+			EntryId: entry.EntryId,
+			Status:  pubsub.PublishSucceeded,
+			Error:   nil,
+		}
+		res.Statuses = append(res.Statuses, e)
+	}
+	return res, nil
+}
+
+func (m *mockPublishPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
+	return pubsub.BulkSubscribeResponse{}, nil
 }
 
 // Subscribe is a mock subscribe method.
@@ -4593,15 +4741,15 @@ func TestBindingResiliency(t *testing.T) {
 	defer stopRuntime(t, r)
 
 	failingChannel := daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"inputFailingKey": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"inputTimeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			return string(req.Message().Data.Value)
 		},
@@ -4611,15 +4759,15 @@ func TestBindingResiliency(t *testing.T) {
 	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"outputFailingKey": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"outputTimeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	r.bindingsRegistry.RegisterOutputBinding(
@@ -4643,7 +4791,7 @@ func TestBindingResiliency(t *testing.T) {
 		_, err := r.sendToOutputBinding("failOutput", req)
 
 		assert.Nil(t, err)
-		assert.Equal(t, 2, failingBinding.Failure.CallCount["outputFailingKey"])
+		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputFailingKey"))
 	})
 
 	t.Run("output binding times out with resiliency", func(t *testing.T) {
@@ -4656,7 +4804,7 @@ func TestBindingResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.NotNil(t, err)
-		assert.Equal(t, 2, failingBinding.Failure.CallCount["outputTimeoutKey"])
+		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputTimeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -4664,7 +4812,7 @@ func TestBindingResiliency(t *testing.T) {
 		_, err := r.sendBindingEventToApp("failingInputBinding", []byte("inputFailingKey"), map[string]string{})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingChannel.Failure.CallCount["inputFailingKey"])
+		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputFailingKey"))
 	})
 
 	t.Run("input binding times out with resiliency", func(t *testing.T) {
@@ -4673,7 +4821,7 @@ func TestBindingResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingChannel.Failure.CallCount["inputTimeoutKey"])
+		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputTimeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }
@@ -5078,14 +5226,6 @@ func TestGRPCProxy(t *testing.T) {
 }
 
 func TestGetComponentsCapabilitiesMap(t *testing.T) {
-	cPubSub := componentsV1alpha1.Component{}
-	cPubSub.ObjectMeta.Name = "mockPubSub"
-	cPubSub.Spec.Type = "pubsub.mockPubSub"
-
-	cStateStore := componentsV1alpha1.Component{}
-	cStateStore.ObjectMeta.Name = "testStateStoreName"
-	cStateStore.Spec.Type = "state.mockState"
-
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
@@ -5096,8 +5236,10 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 		},
 		"mockState",
 	)
-
 	mockStateStore.On("Init", mock.Anything).Return(nil)
+	cStateStore := componentsV1alpha1.Component{}
+	cStateStore.ObjectMeta.Name = "testStateStoreName"
+	cStateStore.Spec.Type = "state.mockState"
 
 	mockPubSub := new(daprt.MockPubSub)
 	rt.pubSubRegistry.RegisterComponent(
@@ -5106,8 +5248,11 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 		},
 		"mockPubSub",
 	)
-
 	mockPubSub.On("Init", mock.Anything).Return(nil)
+	mockPubSub.On("Features").Return([]pubsub.Feature{pubsub.FeatureMessageTTL, pubsub.FeatureSubscribeWildcards})
+	cPubSub := componentsV1alpha1.Component{}
+	cPubSub.ObjectMeta.Name = "mockPubSub"
+	cPubSub.Spec.Type = "pubsub.mockPubSub"
 
 	rt.bindingsRegistry.RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
@@ -5129,13 +5274,35 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cout.ObjectMeta.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
 
+	mockSecretStoreName := "mockSecretStore"
+	mockSecretStore := new(daprt.FakeSecretStore)
+	rt.secretStoresRegistry.RegisterComponent(
+		func(_ logger.Logger) secretstores.SecretStore {
+			return mockSecretStore
+		},
+		mockSecretStoreName,
+	)
+	cSecretStore := componentsV1alpha1.Component{}
+	cSecretStore.ObjectMeta.Name = mockSecretStoreName
+	cSecretStore.Spec.Type = "secretstores.mockSecretStore"
+
 	require.NoError(t, rt.initInputBinding(cin))
 	require.NoError(t, rt.initOutputBinding(cout))
 	require.NoError(t, rt.initPubSub(cPubSub))
 	require.NoError(t, rt.initState(cStateStore))
+	require.NoError(t, rt.initSecretStore(cSecretStore))
 
 	capabilities := rt.getComponentsCapabilitesMap()
-	assert.Equal(t, 3, len(capabilities))
+	assert.Equal(t, 5, len(capabilities),
+		"All 5 registered components have are present in capabilities (stateStore pubSub input output secretStore)")
+	assert.Equal(t, 2, len(capabilities["mockPubSub"]),
+		"mockPubSub has 2 features because we mocked it so")
+	assert.Equal(t, 1, len(capabilities["testInputBinding"]),
+		"Input bindings always have INPUT_BINDING added to their capabilities")
+	assert.Equal(t, 1, len(capabilities["testOutputBinding"]),
+		"Output bindings always have OUTPUT_BINDING added to their capabilities")
+	assert.Equal(t, 1, len(capabilities[mockSecretStoreName]),
+		"mockSecretStore has a single feature and it should be present")
 }
 
 func runGRPCApp(port int) (func(), error) {
@@ -5197,4 +5364,47 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
+}
+
+func TestMetadataContainsNamespace(t *testing.T) {
+	t.Run("namespace field present", func(t *testing.T) {
+		r := metadataContainsNamespace(
+			[]componentsV1alpha1.MetadataItem{
+				{
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("{namespace}")},
+					},
+				},
+			},
+		)
+
+		assert.True(t, r)
+	})
+
+	t.Run("namespace field not present", func(t *testing.T) {
+		r := metadataContainsNamespace(
+			[]componentsV1alpha1.MetadataItem{
+				{},
+			},
+		)
+
+		assert.False(t, r)
+	})
+}
+
+func TestNamespacedPublisher(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.namespace = "ns1"
+	defer stopRuntime(t, rt)
+
+	rt.pubSubs[TestPubsubName] = pubsubItem{
+		component:       &mockPublishPubSub{},
+		namespaceScoped: true,
+	}
+	rt.Publish(&pubsub.PublishRequest{
+		PubsubName: TestPubsubName,
+		Topic:      "topic0",
+	})
+
+	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Load().Topic)
 }

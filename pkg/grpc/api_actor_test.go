@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var testActorResiliency = &v1alpha1.Resiliency{
@@ -36,7 +37,7 @@ var testActorResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -279,12 +280,13 @@ func TestInvokeActor(t *testing.T) {
 
 func TestInvokeActorWithResiliency(t *testing.T) {
 	failingActors := actors.FailingActors{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingActor": 1,
 			},
-			CallCount: map[string]int{},
-		},
+			nil,
+			map[string]int{},
+		),
 	}
 
 	port, _ := freeport.GetFreePort()
@@ -307,6 +309,6 @@ func TestInvokeActorWithResiliency(t *testing.T) {
 		_, err := client.InvokeActor(context.Background(), req)
 		assert.NoError(t, err)
 		assert.Equal(t, codes.OK, status.Code(err))
-		assert.Equal(t, 2, failingActors.Failure.CallCount["failingActor"])
+		assert.Equal(t, 2, failingActors.Failure.CallCount("failingActor"))
 	})
 }

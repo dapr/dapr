@@ -15,10 +15,8 @@ package pluggable
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 
 	"github.com/pkg/errors"
 
@@ -26,13 +24,18 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
+
+var log = logger.NewLogger("pluggable-components-grpc-connector")
 
 // GRPCClient is any client that supports common pluggable grpc operations.
 type GRPCClient interface {
 	// Ping is for liveness purposes.
 	Ping(ctx context.Context, in *proto.PingRequest, opts ...grpc.CallOption) (*proto.PingResponse, error)
 }
+
+type GRPCConnectionDialer = func(ctx context.Context, name string) (*grpc.ClientConn, error)
 
 // GRPCConnector is a connector that uses underlying gRPC protocol for common operations.
 type GRPCConnector[TClient GRPCClient] struct {
@@ -42,45 +45,56 @@ type GRPCConnector[TClient GRPCClient] struct {
 	Cancel context.CancelFunc
 	// Client is the proto client.
 	Client        TClient
-	socketFactory func(string) string
+	dialer        GRPCConnectionDialer
 	conn          *grpc.ClientConn
 	clientFactory func(grpc.ClientConnInterface) TClient
 }
 
-const (
-	DaprSocketFolderEnvVar = "DAPR_PLUGGABLE_COMPONENTS_SOCKETS_FOLDER"
-	defaultSocketFolder    = "/var/run"
-)
+// metadataInstanceID is used to differentiate between multiples instance of the same component.
+const metadataInstanceID = "x-component-instance"
 
-// GetSocketFolderPath returns the shared unix domain socket folder path
-func GetSocketFolderPath() string {
-	return utils.GetEnvOrElse(DaprSocketFolderEnvVar, defaultSocketFolder)
-}
-
-// socketFactoryFor returns a socket factory that returns the socket that will be used for the given pluggable component.
-func socketFactoryFor(pc components.Pluggable) func(string) string {
-	socketPrefix := fmt.Sprintf("%s/dapr-%s.%s-%s", GetSocketFolderPath(), pc.Type, pc.Name, pc.Version)
-	return func(componentName string) string {
-		return fmt.Sprintf("%s-%s.sock", socketPrefix, componentName)
+// instanceIDStreamInterceptor returns a grpc client unary interceptor that adds the instanceID on outgoing metadata.
+// instanceID is used for multiplexing connection if the component supports it.
+func instanceIDUnaryInterceptor(instanceID string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		return invoker(metadata.AppendToOutgoingContext(ctx, metadataInstanceID, instanceID), method, req, reply, cc, opts...)
 	}
 }
 
-// socketPathFor returns a unique socket for the given component.
-// the socket path will be composed by the pluggable component, name, version and type plus the component name.
-func (g *GRPCConnector[TClient]) socketPathFor(componentName string) string {
-	return g.socketFactory(componentName)
+// instanceIDStreamInterceptor returns a grpc client stream interceptor that adds the instanceID on outgoing metadata.
+// instanceID is used for multiplexing connection if the component supports it.
+func instanceIDStreamInterceptor(instanceID string) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		return streamer(metadata.AppendToOutgoingContext(ctx, metadataInstanceID, instanceID), desc, cc, method, opts...)
+	}
+}
+
+// socketDialer creates a dialer for the given socket.
+func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnectionDialer {
+	return func(ctx context.Context, name string) (*grpc.ClientConn, error) {
+		additionalOpts = append(additionalOpts, grpc.WithStreamInterceptor(instanceIDStreamInterceptor(name)), grpc.WithUnaryInterceptor(instanceIDUnaryInterceptor(name)))
+		return SocketDial(ctx, socket, additionalOpts...)
+	}
+}
+
+// SocketDial creates a grpc connection using the given socket.
+func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	udsSocket := "unix://" + socket
+	log.Debugf("using socket defined at '%s'", udsSocket)
+	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	grpcConn, err := grpc.DialContext(ctx, udsSocket, additionalOpts...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
+	}
+	return grpcConn, nil
 }
 
 // Dial opens a grpcConnection and creates a new client instance.
-func (g *GRPCConnector[TClient]) Dial(componentName string, additionalOpts ...grpc.DialOption) error {
-	udsSocket := fmt.Sprintf("unix://%s", g.socketPathFor(componentName))
-	log.Debugf("using socket defined at '%s' for the component '%s'", udsSocket, componentName)
-	// TODO Add Observability middlewares monitoring/tracing
-	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-	grpcConn, err := grpc.Dial(udsSocket, additionalOpts...)
+func (g *GRPCConnector[TClient]) Dial(name string) error {
+	grpcConn, err := g.dialer(g.Context, name)
 	if err != nil {
-		return errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
+		return errors.Wrapf(err, "unable to open GRPC connection using the dialer")
 	}
 	g.conn = grpcConn
 
@@ -103,19 +117,19 @@ func (g *GRPCConnector[TClient]) Close() error {
 	return g.conn.Close()
 }
 
-// NewGRPCConnectorWithFactory creates a new grpc connector for the given client factory and socket factory.
-func NewGRPCConnectorWithFactory[TClient GRPCClient](socketFactory func(string) string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
+// NewGRPCConnectorWithDialer creates a new grpc connector for the given client factory and dialer.
+func NewGRPCConnectorWithDialer[TClient GRPCClient](dialer GRPCConnectionDialer, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &GRPCConnector[TClient]{
 		Context:       ctx,
 		Cancel:        cancel,
-		socketFactory: socketFactory,
+		dialer:        dialer,
 		clientFactory: factory,
 	}
 }
 
-// NewGRPCConnector creates a new grpc connector for the given client.
-func NewGRPCConnector[TClient GRPCClient](pc components.Pluggable, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
-	return NewGRPCConnectorWithFactory(socketFactoryFor(pc), factory)
+// NewGRPCConnector creates a new grpc connector for the given client factory and socket.
+func NewGRPCConnector[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
+	return NewGRPCConnectorWithDialer(socketDialer(socket), factory)
 }

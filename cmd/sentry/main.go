@@ -24,7 +24,6 @@ import (
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
@@ -33,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
 
@@ -54,6 +54,7 @@ func main() {
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
+	tokenAudience := flag.String("token-audience", "", "Expected audience for tokens; multiple values can be separated by a comma")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -107,6 +108,9 @@ func main() {
 	config.IssuerKeyPath = issuerKeyPath
 	config.RootCertPath = rootCertPath
 	config.TrustDomain = *trustDomain
+	if *tokenAudience != "" {
+		config.TokenAudience = tokenAudience
+	}
 
 	watchDir := filepath.Dir(config.IssuerCertPath)
 

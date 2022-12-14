@@ -4,6 +4,9 @@ metadata:
   name: dapr-sidecar-injector
   labels:
     app: dapr-sidecar-injector
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
 {{- if eq .Values.global.ha.enabled true }}
   replicas: {{ .Values.global.ha.replicaCount }}
@@ -15,11 +18,9 @@ spec:
     metadata:
       labels:
         app: dapr-sidecar-injector
-        app.kubernetes.io/name: {{ .Release.Name }}
-        app.kubernetes.io/version: {{ .Values.global.tag }}
-        app.kubernetes.io/component: sidecar-injector
-        app.kubernetes.io/part-of: "dapr"
-        app.kubernetes.io/managed-by: "helm"
+        {{- range $key, $value := .Values.global.k8sLabels }}
+        {{ $key }}: {{ tpl $value $ }}
+        {{- end }}
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -61,7 +62,7 @@ spec:
 {{- if contains "/" .Values.injectorImage.name }}
         image: "{{ .Values.injectorImage.name }}"
 {{- else }}
-        image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
+        image: "{{ .Values.global.registry }}/{{ .Values.injectorImage.name }}:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
@@ -121,7 +122,7 @@ spec:
 {{- if contains "/" .Values.image.name }}
           value: "{{ .Values.image.name }}"
 {{- else }}
-          value: "{{ .Values.global.registry }}/daprd:{{ .Values.global.tag }}"
+          value: "{{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.global.tag }}"
 {{- end }}
         - name: SIDECAR_IMAGE_PULL_POLICY
           value: "{{ .Values.sidecarImagePullPolicy }}"
@@ -132,6 +133,14 @@ spec:
 {{- if .Values.ignoreEntrypointTolerations }}
         - name: IGNORE_ENTRYPOINT_TOLERATIONS
           value: "{{ .Values.ignoreEntrypointTolerations }}"
+{{- end }}
+{{- if .Values.sidecarRunAsNonRoot }}
+        - name: SIDECAR_RUN_AS_NON_ROOT
+          value: "{{ .Values.sidecarRunAsNonRoot }}"
+{{- end }}
+{{- if .Values.sidecarReadOnlyRootFilesystem }}
+        - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
+          value: "{{ .Values.sidecarReadOnlyRootFilesystem }}"
 {{- end }}
         ports:
         - name: https

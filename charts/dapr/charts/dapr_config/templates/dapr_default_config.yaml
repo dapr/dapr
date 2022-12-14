@@ -3,6 +3,10 @@ apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
   name: {{ .Values.dapr_default_system_config_name }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
   mtls:
     enabled: {{ .Values.global.mtls.enabled }}

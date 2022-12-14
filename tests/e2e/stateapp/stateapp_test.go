@@ -380,19 +380,21 @@ func generateSpecificLengthSample(sizeInBytes int) requestResponse {
 	}
 }
 
-var tr *runner.TestRunner
-var stateStoreApps []struct {
-	name       string
-	stateStore string
-} = []struct {
-	name       string
-	stateStore string
-}{
-	{
-		name:       appName,
-		stateStore: "statestore",
-	},
-}
+var (
+	tr             *runner.TestRunner
+	stateStoreApps []struct {
+		name       string
+		stateStore string
+	} = []struct {
+		name       string
+		stateStore string
+	}{
+		{
+			name:       appName,
+			stateStore: "statestore",
+		},
+	}
+)
 
 func TestMain(m *testing.M) {
 	utils.SetupLogs("stateapp")
@@ -419,9 +421,8 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			Config:         "pluggablecomponentsconfig",
-			PluggableComponents: map[string]apiv1.Container{
-				"dapr-state.redis-pluggable-v1-pluggable-statestore.sock": {
+			PluggableComponents: []apiv1.Container{
+				{
 					Name:  "redis-pluggable", // e2e-pluggable_redis
 					Image: runner.BuildTestImageName(redisPluggableApp),
 				},
@@ -489,7 +490,6 @@ func TestStateApp(t *testing.T) {
 			})
 		}
 	}
-
 }
 
 func TestStateTransactionApps(t *testing.T) {

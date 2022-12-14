@@ -20,10 +20,26 @@ func (m *MockPubSub) Init(metadata pubsub.Metadata) error {
 	return args.Error(0)
 }
 
+func (m *MockPubSub) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 // Publish is a mock publish method.
 func (m *MockPubSub) Publish(req *pubsub.PublishRequest) error {
 	args := m.Called(req)
 	return args.Error(0)
+}
+
+// BulkPublish is a mock bulk publish method.
+func (m *MockPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	args := m.Called(req)
+	return pubsub.BulkPublishResponse{}, args.Error(0)
+}
+
+// BulkSubscribe is a mock bulk subscribe method.
+func (m *MockPubSub) BulkSubscribe(rctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
+	args := m.Called(req)
+	return pubsub.BulkSubscribeResponse{}, args.Error(0)
 }
 
 // Subscribe is a mock subscribe method.
@@ -38,12 +54,17 @@ func (m *MockPubSub) Close() error {
 }
 
 func (m *MockPubSub) Features() []pubsub.Feature {
-	return nil
+	args := m.Called()
+	return args.Get(0).([]pubsub.Feature)
 }
 
 // FailingPubsub is a mock pubsub component object that simulates failures.
 type FailingPubsub struct {
 	Failure Failure
+}
+
+func (f *FailingPubsub) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (f *FailingPubsub) Init(metadata pubsub.Metadata) error {
@@ -52,6 +73,14 @@ func (f *FailingPubsub) Init(metadata pubsub.Metadata) error {
 
 func (f *FailingPubsub) Publish(req *pubsub.PublishRequest) error {
 	return f.Failure.PerformFailure(req.Topic)
+}
+
+func (f *FailingPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	return pubsub.BulkPublishResponse{}, f.Failure.PerformFailure(req.Topic)
+}
+
+func (f *FailingPubsub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
+	return pubsub.BulkSubscribeResponse{}, f.Failure.PerformFailure(req.Topic)
 }
 
 func (f *FailingPubsub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
@@ -88,13 +117,15 @@ type InMemoryPubsub struct {
 
 	subscribedTopics map[string]subscription
 	topicsCb         func([]string)
+	bulkHandler      func(topic string, msg *pubsub.BulkMessage)
 	handler          func(topic string, msg *pubsub.NewMessage)
 	lock             *sync.Mutex
 }
 
 type subscription struct {
-	cancel context.CancelFunc
-	send   chan *pubsub.NewMessage
+	cancel    context.CancelFunc
+	send      chan *pubsub.NewMessage
+	sendBatch chan *pubsub.BulkMessage
 }
 
 // Init is a mock initialization method.
@@ -106,14 +137,14 @@ func (m *InMemoryPubsub) Init(metadata pubsub.Metadata) error {
 
 // Publish is a mock publish method.
 func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
-	var send chan *pubsub.NewMessage
 	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	var send chan *pubsub.NewMessage
 	t, ok := m.subscribedTopics[req.Topic]
 	if ok && t.send != nil {
 		send = t.send
 	}
-	m.lock.Unlock()
-
 	if send != nil {
 		send <- &pubsub.NewMessage{
 			Data:        req.Data,
@@ -122,8 +153,70 @@ func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
 			ContentType: req.ContentType,
 		}
 	}
-
 	return nil
+}
+
+func (m *InMemoryPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	var sendBatch chan *pubsub.BulkMessage
+	bulkMessage := pubsub.BulkMessage{}
+	if req != nil {
+		m.lock.Lock()
+		t, ok := m.subscribedTopics[req.Topic]
+		if ok && t.sendBatch != nil {
+			sendBatch = t.sendBatch
+		}
+		m.lock.Unlock()
+		bulkMessage.Entries = make([]pubsub.BulkMessageEntry, len(req.Entries))
+		for i, datum := range req.Entries {
+			bulkMessage.Entries[i] = datum
+		}
+	}
+	bulkMessage.Metadata = req.Metadata
+	bulkMessage.Topic = req.Topic
+
+	if sendBatch != nil {
+		sendBatch <- &bulkMessage
+	}
+
+	return pubsub.BulkPublishResponse{}, nil
+}
+
+func (m *InMemoryPubsub) BulkSubscribe(parentCtx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
+	ctx, cancel := context.WithCancel(parentCtx)
+
+	ch := make(chan *pubsub.BulkMessage, 10)
+	m.lock.Lock()
+	if m.subscribedTopics == nil {
+		m.subscribedTopics = map[string]subscription{}
+	}
+	m.subscribedTopics[req.Topic] = subscription{
+		cancel:    cancel,
+		sendBatch: ch,
+	}
+	m.onSubscribedTopicsChanged()
+	m.lock.Unlock()
+
+	go func() {
+		for {
+			select {
+			case msg := <-ch:
+				if m.bulkHandler != nil && msg != nil {
+					go m.bulkHandler(req.Topic, msg)
+				}
+			case <-ctx.Done():
+				close(ch)
+				m.lock.Lock()
+				delete(m.subscribedTopics, req.Topic)
+				m.onSubscribedTopicsChanged()
+				m.lock.Unlock()
+				m.MethodCalled("unsubscribed", req.Topic)
+				return
+			}
+		}
+	}()
+
+	args := m.Called(req, handler)
+	return pubsub.BulkSubscribeResponse{}, args.Error(0)
 }
 
 // Subscribe is a mock subscribe method.
@@ -150,12 +243,12 @@ func (m *InMemoryPubsub) Subscribe(parentCtx context.Context, req pubsub.Subscri
 					go m.handler(req.Topic, msg)
 				}
 			case <-ctx.Done():
-				close(ch)
 				m.lock.Lock()
+				close(ch)
 				delete(m.subscribedTopics, req.Topic)
 				m.onSubscribedTopicsChanged()
-				m.lock.Unlock()
 				m.MethodCalled("unsubscribed", req.Topic)
+				m.lock.Unlock()
 				return
 			}
 		}
@@ -167,11 +260,13 @@ func (m *InMemoryPubsub) Subscribe(parentCtx context.Context, req pubsub.Subscri
 
 // Close is a mock close method.
 func (m *InMemoryPubsub) Close() error {
+	m.lock.Lock()
 	if len(m.subscribedTopics) > 0 {
 		for _, f := range m.subscribedTopics {
 			f.cancel()
 		}
 	}
+	m.lock.Unlock()
 	return nil
 }
 
@@ -181,6 +276,10 @@ func (m *InMemoryPubsub) Features() []pubsub.Feature {
 
 func (m *InMemoryPubsub) SetHandler(h func(topic string, msg *pubsub.NewMessage)) {
 	m.handler = h
+}
+
+func (m *InMemoryPubsub) SetBulkHandler(h func(topic string, msg *pubsub.BulkMessage)) {
+	m.bulkHandler = h
 }
 
 func (m *InMemoryPubsub) SetOnSubscribedTopicsChanged(f func([]string)) {

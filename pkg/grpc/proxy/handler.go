@@ -56,12 +56,13 @@ func RegisterService(server *grpc.Server, director StreamDirector, resiliency re
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector, resiliency resiliency.Provider, isLocalFn func(string) (bool, error)) grpc.StreamHandler {
+func TransparentHandler(director StreamDirector, resiliency resiliency.Provider, isLocalFn func(string) (bool, error), connFactory DirectorConnectionFactory) grpc.StreamHandler {
 	streamer := &handler{
 		director:      director,
 		resiliency:    resiliency,
 		isLocalFn:     isLocalFn,
 		bufferedCalls: sync.Map{},
+		connFactory:   connFactory,
 	}
 	return streamer.handler
 }
@@ -72,6 +73,7 @@ type handler struct {
 	isLocalFn     func(string) (bool, error)
 	bufferedCalls sync.Map
 	headersSent   sync.Map
+	connFactory   DirectorConnectionFactory
 }
 
 // handler is where the real magic of proxying happens.
@@ -79,7 +81,11 @@ type handler struct {
 // forwarding it to a ClientStream established against the relevant ClientConn.
 func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error {
 	// Create buffered calls for this request.
-	requestID := uuid.New().String()
+	requestIDObj, err := uuid.NewRandom()
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to generate UUID: %v", err)
+	}
+	requestID := requestIDObj.String()
 	s.bufferedCalls.Store(requestID, []interface{}{})
 	s.headersSent.Store(requestID, false)
 
@@ -90,39 +96,59 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	}
 
 	// Fetch the AppId so we can reference it for resiliency.
-	md, _ := metadata.FromIncomingContext(serverStream.Context())
-	v := md.Get(diagnostics.GRPCProxyAppIDKey)
+	ctx := serverStream.Context()
+	md, _ := metadata.FromIncomingContext(ctx)
+	v := md[diagnostics.GRPCProxyAppIDKey]
 
 	// The app id check is handled in the StreamDirector. If we don't have it here, we just use a NoOp policy since we know the request is impossible.
-	var policy resiliency.Runner
+	var policyDef *resiliency.PolicyDefinition
 	if len(v) == 0 {
 		noOp := resiliency.NoOp{}
-		policy = noOp.EndpointPolicy(serverStream.Context(), "", "")
+		policyDef = noOp.EndpointPolicy("", "")
 	} else {
 		isLocal, err := s.isLocalFn(v[0])
-
 		if err == nil && isLocal {
-			policy = s.resiliency.EndpointPolicy(serverStream.Context(), v[0], fmt.Sprintf("%s:%s", v[0], fullMethodName))
+			policyDef = s.resiliency.EndpointPolicy(v[0], fmt.Sprintf("%s:%s", v[0], fullMethodName))
 		} else {
 			noOp := resiliency.NoOp{}
-			policy = noOp.EndpointPolicy(serverStream.Context(), "", "")
+			policyDef = noOp.EndpointPolicy("", "")
 		}
 	}
+	policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
 
-	cErr := policy(func(ctx context.Context) (rErr error) {
-		// We require that the director's returned context inherits from the serverStream.Context().
-		outgoingCtx, backendConn, teardown, err := s.director(serverStream.Context(), fullMethodName)
-		defer teardown()
+	clientStreamOpts := []grpc.CallOption{
+		grpc.CallContentSubtype((&codec.Proxy{}).Name()),
+	}
+	_, cErr := policyRunner(func(ctx context.Context) (struct{}, error) {
+		// We require that the director's returned context inherits from the ctx.
+		outgoingCtx, backendConn, target, teardown, err := s.director(ctx, fullMethodName)
+		defer teardown(false)
 		if err != nil {
-			return err
+			return struct{}{}, err
 		}
 
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 
 		// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-		clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
+		clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOpts...)
 		if err != nil {
-			return err
+			code := status.Code(err)
+			if target != nil && (code == codes.Unavailable || code == codes.Unauthenticated) {
+				// Destroy the connection so it can be recreated
+				teardown(true)
+
+				// Re-connect
+				backendConn, teardown, err = s.connFactory(outgoingCtx, target.Address, target.ID, target.Namespace)
+				defer teardown(false)
+				if err != nil {
+					return struct{}{}, err
+				}
+
+				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOpts...)
+				if err != nil {
+					return struct{}{}, err
+				}
+			}
 		}
 
 		// Explicitly *do not close* s2cErrChan and c2sErrChan, otherwise the select below will not terminate.
@@ -144,7 +170,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 					// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 					// exit with an error to the stack
 					clientCancel()
-					return status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
+					return struct{}{}, status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 				}
 			case c2sErr := <-c2sErrChan:
 				// This happens when the clientStream has nothing else to offer (io.EOF), returned a gRPC error. In those two
@@ -153,13 +179,14 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				serverStream.SetTrailer(clientStream.Trailer())
 				// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
 				if c2sErr != io.EOF {
-					return c2sErr
+					return struct{}{}, c2sErr
 				}
-				return nil
+				return struct{}{}, nil
 			}
 		}
-		return status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
+		return struct{}{}, status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 	})
+
 	// Clear the request's buffered calls.
 	s.bufferedCalls.Delete(requestID)
 	s.headersSent.Delete(requestID)

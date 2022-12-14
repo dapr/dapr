@@ -14,8 +14,10 @@ limitations under the License.
 package utils
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -125,4 +127,42 @@ func IsYaml(fileName string) bool {
 		return true
 	}
 	return false
+}
+
+// GetIntOrDefault returns the value of the key in the map or the default value if the key is not present.
+func GetIntOrDefault(m map[string]string, key string, def int) int {
+	if val, ok := m[key]; ok {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return def
+}
+
+// IsSocket returns if the given file is a unix socket.
+func IsSocket(f fs.FileInfo) bool {
+	return f.Mode()&fs.ModeSocket != 0
+}
+
+// SocketExists returns true if the file in that path is an unix socket.
+func SocketExists(socketPath string) bool {
+	if s, err := os.Stat(socketPath); err == nil {
+		return IsSocket(s)
+	}
+	return false
+}
+
+func PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) map[string]string {
+	resMeta := map[string]string{}
+	for k, v := range entryMeta {
+		resMeta[k] = v
+	}
+	for k, v := range reqMeta {
+		if _, ok := resMeta[k]; !ok {
+			// Populate only metadata key that is already not present in the entry level metadata map
+			resMeta[k] = v
+		}
+	}
+
+	return resMeta
 }

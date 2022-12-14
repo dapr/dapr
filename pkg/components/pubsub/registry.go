@@ -66,6 +66,7 @@ func (p *Registry) getPubSub(name, version string) (func() pubsub.PubSub, bool) 
 			return p.wrapFn(pubSubFn), true
 		}
 	}
+
 	return nil, false
 }
 

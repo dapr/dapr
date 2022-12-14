@@ -1,13 +1,14 @@
 ## Overview
 
-| packages  | description                                                            |
-|-----------|------------------------------------------------------------------------|
-| common    | common protos that are imported by multiple packages                   |
-| internals | internal gRPC and protobuf definitions which is used for Dapr internal |
-| runtime   | Dapr and App Callback services and its associated protobuf messages    |
-| operator  | Dapr Operator gRPC service                                             |
-| placement | Dapr Placement service                                                 |
-| sentry    | Dapr Sentry for CA service                                             |
+| packages   | description                                                            |
+| ---------- | ---------------------------------------------------------------------- |
+| common     | common protos that are imported by multiple packages                   |
+| internals  | internal gRPC and protobuf definitions which is used for Dapr internal |
+| runtime    | Dapr and App Callback services and its associated protobuf messages    |
+| operator   | Dapr Operator gRPC service                                             |
+| placement  | Dapr Placement service                                                 |
+| sentry     | Dapr Sentry for CA service                                             |
+| components | Dapr gRPC-based components services                                    |
 
 ## Proto client generation
 
@@ -21,13 +22,12 @@ make init-proto
 
 3. Generate gRPC proto clients
 
-
 ```bash
 make gen-proto
 ```
 
-
 ## Update e2e test apps
+
 Whenever there are breaking changes in the proto files, we need to update the e2e test apps to use the correct version of dapr dependencies. This can be done by navigating to the tests folder and running the commands:-
 
 ```

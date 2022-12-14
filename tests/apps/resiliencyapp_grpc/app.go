@@ -146,7 +146,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*commonv1pb.TopicSubscription{
+		Subscriptions: []*runtimev1pb.TopicSubscription{
 			{
 				PubsubName: "dapr-resiliency-pubsub",
 				Topic:      "resiliency-topic-grpc",

@@ -66,6 +66,7 @@ func (s *Registry) getStateStore(name, version string) (func() state.Store, bool
 			return s.wrapFn(stateStoreFn), true
 		}
 	}
+
 	return nil, false
 }
 

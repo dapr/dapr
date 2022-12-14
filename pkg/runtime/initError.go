@@ -39,6 +39,10 @@ func (e *InitError) Error() string {
 	return fmt.Sprintf("[%s]: initialization error occurred for %s: %s", e.kind, e.entity, e.err)
 }
 
+func (e *InitError) Unwrap() error {
+	return e.err
+}
+
 // NewInitError returns an InitError wrapping an existing context error.
 func NewInitError(kind InitErrorKind, entity string, err error) *InitError {
 	return &InitError{

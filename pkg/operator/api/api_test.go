@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,11 +38,11 @@ import (
 
 type mockComponentUpdateServer struct {
 	grpc.ServerStream
-	Calls int
+	Calls atomic.Int64
 }
 
 func (m *mockComponentUpdateServer) Send(*operatorv1pb.ComponentUpdateEvent) error {
-	m.Calls++
+	m.Calls.Add(1)
 	return nil
 }
 
@@ -202,6 +203,9 @@ func TestComponentUpdate(t *testing.T) {
 			// Send a component update, give sidecar time to register
 			time.Sleep(time.Millisecond * 500)
 
+			api.connLock.Lock()
+			defer api.connLock.Unlock()
+
 			for _, connUpdateChan := range api.allConnUpdateChan {
 				connUpdateChan <- &c
 
@@ -216,7 +220,7 @@ func TestComponentUpdate(t *testing.T) {
 			Namespace: "ns2",
 		}, mockSidecar)
 
-		assert.Zero(t, mockSidecar.Calls)
+		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
 	})
 
 	t.Run("sidecar is updated when component namespace is a match", func(t *testing.T) {
@@ -244,6 +248,9 @@ func TestComponentUpdate(t *testing.T) {
 			// Send a component update, give sidecar time to register
 			time.Sleep(time.Millisecond * 500)
 
+			api.connLock.Lock()
+			defer api.connLock.Unlock()
+
 			for _, connUpdateChan := range api.allConnUpdateChan {
 				connUpdateChan <- &c
 
@@ -258,65 +265,11 @@ func TestComponentUpdate(t *testing.T) {
 			Namespace: "ns1",
 		}, mockSidecar)
 
-		assert.Equal(t, 1, mockSidecar.Calls)
+		assert.Equal(t, int64(1), mockSidecar.Calls.Load())
 	})
 }
 
 func TestListsNamespaced(t *testing.T) {
-	t.Run("list pluggable components should be namespaced", func(t *testing.T) {
-		s := runtime.NewScheme()
-		err := scheme.AddToScheme(s)
-		assert.NoError(t, err)
-
-		err = componentsapi.AddToScheme(s)
-		assert.NoError(t, err)
-
-		av, kind := componentsapi.SchemeGroupVersion.WithKind("PluggableComponent").ToAPIVersionAndKind()
-		typeMeta := metav1.TypeMeta{
-			Kind:       kind,
-			APIVersion: av,
-		}
-		client := fake.NewClientBuilder().
-			WithScheme(s).
-			WithObjects(&componentsapi.PluggableComponent{
-				TypeMeta: typeMeta,
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "obj1",
-					Namespace: "namespace-a",
-				},
-			}, &componentsapi.PluggableComponent{
-				TypeMeta: typeMeta,
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "obj2",
-					Namespace: "namespace-b",
-				},
-			}).
-			Build()
-
-		api := NewAPIServer(client).(*apiServer)
-
-		res, err := api.ListPluggableComponents(context.TODO(), &operatorv1pb.ListPluggableComponentsRequest{
-			PodName:   "foo",
-			Namespace: "namespace-a",
-		})
-
-		assert.Nil(t, err)
-		assert.Equal(t, 1, len(res.GetPluggableComponents()))
-
-		var sub componentsapi.PluggableComponent
-		err = yaml.Unmarshal(res.GetPluggableComponents()[0], &sub)
-		assert.Nil(t, err)
-
-		assert.Equal(t, "obj1", sub.Name)
-		assert.Equal(t, "namespace-a", sub.Namespace)
-
-		res, err = api.ListPluggableComponents(context.TODO(), &operatorv1pb.ListPluggableComponentsRequest{
-			PodName:   "foo",
-			Namespace: "namespace-c",
-		})
-		assert.Nil(t, err)
-		assert.Equal(t, 0, len(res.GetPluggableComponents()))
-	})
 	t.Run("list components namespace scoping", func(t *testing.T) {
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)

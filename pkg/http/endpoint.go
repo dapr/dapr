@@ -28,4 +28,6 @@ type Endpoint struct {
 	Alias             string
 	KeepParamUnescape bool // keep the param in path unescaped
 	Handler           fasthttp.RequestHandler
+	AlwaysAllowed     bool // Endpoint is always allowed regardless of API access rules
+	IsHealthCheck     bool // Mark endpoint as healthcheck - for API logging purposes
 }

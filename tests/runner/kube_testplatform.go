@@ -76,7 +76,7 @@ func (c *KubeTestPlatform) tearDown() error {
 }
 
 // addComponents adds component to disposable Resource queues.
-func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) error {
+func (c *KubeTestPlatform) AddComponents(comps []kube.ComponentDescription) error {
 	if c.KubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup")
 	}
@@ -94,7 +94,7 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 }
 
 // addApps adds test apps to disposable App Resource queues.
-func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
+func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
 	if c.KubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}
@@ -374,4 +374,8 @@ func (c *KubeTestPlatform) GetConfiguration(name string) (*configurationv1alpha1
 func (c *KubeTestPlatform) GetService(name string) (*corev1.Service, error) {
 	client := c.KubeClient.Services(kube.DaprTestNamespace)
 	return client.Get(context.Background(), name, metav1.GetOptions{})
+}
+
+func (c *KubeTestPlatform) LoadTest(loadtester LoadTester) error {
+	return loadtester.Run(c)
 }

@@ -11,23 +11,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package resiliency_test
+package resiliency
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
 )
 
-var log = logger.NewLogger("dapr.resiliency.test")
+var testLog = logger.NewLogger("dapr.resiliency.test")
 
 func TestPolicy(t *testing.T) {
 	retryValue := retry.DefaultConfig()
@@ -36,8 +36,8 @@ func TestPolicy(t *testing.T) {
 		Interval: 10 * time.Millisecond,
 		Timeout:  10 * time.Millisecond,
 	}
-	cbValue.Initialize(log)
-	tests := map[string]struct {
+	cbValue.Initialize(testLog)
+	tests := map[string]*struct {
 		t  time.Duration
 		r  *retry.Config
 		cb *breaker.CircuitBreaker
@@ -48,20 +48,30 @@ func TestPolicy(t *testing.T) {
 			r:  &retryValue,
 			cb: &cbValue,
 		},
+		"nil policy": nil,
 	}
 
 	ctx := context.Background()
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			called := false
-			fn := func(ctx context.Context) error {
-				called = true
-
-				return nil
+			called := atomic.Bool{}
+			fn := func(ctx context.Context) (any, error) {
+				called.Store(true)
+				return nil, nil
 			}
-			policy := resiliency.Policy(ctx, log, name, tt.t, tt.r, tt.cb)
+			var policyDef *PolicyDefinition
+			if tt != nil {
+				policyDef = &PolicyDefinition{
+					log:  testLog,
+					name: name,
+					t:    tt.t,
+					r:    tt.r,
+					cb:   tt.cb,
+				}
+			}
+			policy := NewRunner[any](ctx, policyDef)
 			policy(fn)
-			assert.True(t, called)
+			assert.True(t, called.Load())
 		})
 	}
 }
@@ -87,19 +97,24 @@ func TestPolicyTimeout(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for i := range tests {
+		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
-			called := false
-			fn := func(ctx context.Context) error {
+			called := atomic.Bool{}
+			fn := func(ctx context.Context) (any, error) {
 				time.Sleep(test.sleepTime)
-				called = true
-				return nil
+				called.Store(true)
+				return nil, nil
 			}
 
-			policy := resiliency.Policy(context.Background(), log, "timeout", test.timeout, nil, nil)
+			policy := NewRunner[any](context.Background(), &PolicyDefinition{
+				log:  testLog,
+				name: "timeout",
+				t:    test.timeout,
+			})
 			policy(fn)
 
-			assert.Equal(t, test.expected, called)
+			assert.Equal(t, test.expected, called.Load())
 		})
 	}
 }
@@ -107,15 +122,15 @@ func TestPolicyTimeout(t *testing.T) {
 func TestPolicyRetry(t *testing.T) {
 	tests := []struct {
 		name       string
-		maxCalls   int
-		maxRetries int
-		expected   int
+		maxCalls   int32
+		maxRetries int64
+		expected   int32
 	}{
 		{
 			name:       "Retries succeed",
 			maxCalls:   5,
 			maxRetries: 6,
-			expected:   5,
+			expected:   6,
 		},
 		{
 			name:       "Retries fail",
@@ -127,19 +142,24 @@ func TestPolicyRetry(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			called := 0
+			called := atomic.Int32{}
 			maxCalls := test.maxCalls
-			fn := func(ctx context.Context) error {
-				if called < maxCalls {
-					called++
-					return errors.Errorf("Called (%d) vs Max (%d)", called, maxCalls)
+			fn := func(ctx context.Context) (any, error) {
+				v := called.Add(1)
+				if v <= maxCalls {
+					return nil, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls)
 				}
-				return nil
+				return nil, nil
 			}
 
-			policy := resiliency.Policy(context.Background(), log, "retry", 10*time.Millisecond, &retry.Config{MaxRetries: int64(test.maxRetries)}, nil)
+			policy := NewRunner[any](context.Background(), &PolicyDefinition{
+				log:  testLog,
+				name: "retry",
+				t:    10 * time.Millisecond,
+				r:    &retry.Config{MaxRetries: test.maxRetries},
+			})
 			policy(fn)
-			assert.Equal(t, test.expected, called)
+			assert.Equal(t, test.expected, called.Load())
 		})
 	}
 }
