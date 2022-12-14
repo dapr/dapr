@@ -74,6 +74,11 @@ require (
 )
 
 require (
+	github.com/didip/tollbooth/v7 v7.0.1 // indirect
+	github.com/go-pkgz/expirable-cache v0.1.0 // indirect
+)
+
+require (
 	cloud.google.com/go v0.105.0 // indirect
 	cloud.google.com/go/compute v1.10.0 // indirect
 	cloud.google.com/go/datastore v1.8.0 // indirect
@@ -174,7 +179,6 @@ require (
 	github.com/dghubble/oauth1 v0.7.1 // indirect
 	github.com/dghubble/sling v1.4.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/didip/tollbooth v4.0.2+incompatible // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/dubbogo/gost v1.11.25 // indirect
 	github.com/dubbogo/triple v1.1.8 // indirect
@@ -426,4 +430,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // TEMP until https://github.com/dapr/components-contrib/pull/2237 is merged
-replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221213212450-95da1eda2c7f
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221214182554-c52dd59f4c9f
