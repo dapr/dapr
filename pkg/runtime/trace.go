@@ -29,7 +29,7 @@ type tracerProviderStore interface {
 	RegisterExporter(exporter sdktrace.SpanExporter)
 	RegisterResource(res *resource.Resource)
 	RegisterSampler(sampler sdktrace.Sampler)
-	RegisterTracerProvider()
+	RegisterTracerProvider() *sdktrace.TracerProvider
 }
 
 // newOpentelemetryTracerProviderStore returns an opentelemetryOptionsStore
@@ -61,7 +61,7 @@ func (s *opentelemetryTracerProviderStore) RegisterSampler(sampler sdktrace.Samp
 }
 
 // RegisterTraceProvider registers a trace provider as per the tracer options in the store
-func (s *opentelemetryTracerProviderStore) RegisterTracerProvider() {
+func (s *opentelemetryTracerProviderStore) RegisterTracerProvider() *sdktrace.TracerProvider {
 	if len(s.exporters) != 0 {
 		tracerOptions := []sdktrace.TracerProviderOption{}
 		for _, exporter := range s.exporters {
@@ -79,7 +79,9 @@ func (s *opentelemetryTracerProviderStore) RegisterTracerProvider() {
 		tp := sdktrace.NewTracerProvider(tracerOptions...)
 
 		otel.SetTracerProvider(tp)
+		return tp
 	}
+	return nil
 }
 
 // fakeTracerOptionsStore implements tracerOptionsStore by merely record the exporters
@@ -114,4 +116,4 @@ func (s *fakeTracerProviderStore) RegisterSampler(sampler sdktrace.Sampler) {
 }
 
 // RegisterTraceProvider does nothing
-func (s *fakeTracerProviderStore) RegisterTracerProvider() {}
+func (s *fakeTracerProviderStore) RegisterTracerProvider() *sdktrace.TracerProvider { return nil }

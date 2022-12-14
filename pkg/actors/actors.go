@@ -575,7 +575,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 		Metadata: metadata,
 	}
 	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-		return a.store.Get(storeReq)
+		return a.store.Get(ctx, storeReq)
 	})
 	if err != nil {
 		return nil, err
@@ -641,7 +641,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		Metadata:   metadata,
 	}
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, a.transactionalStore.Multi(stateReq)
+		return nil, a.transactionalStore.Multi(ctx, stateReq)
 	})
 	return err
 }
@@ -822,7 +822,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		Key: constructCompositeKey(actorKey, name),
 	}
 	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-		return a.store.Get(storeReq)
+		return a.store.Get(ctx, storeReq)
 	})
 	if err != nil {
 		return nil, err
@@ -861,7 +861,7 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 		},
 	}
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, a.store.Set(setReq)
+		return nil, a.store.Set(ctx, setReq)
 	})
 	return err
 }
@@ -1412,7 +1412,7 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, a.store.Set(setReq)
+		return nil, a.store.Set(ctx, setReq)
 	})
 	return err
 }
@@ -1438,7 +1438,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (re
 			Key: constructCompositeKey("actors", actorType, "metadata"),
 		}
 		return policyRunner(func(ctx context.Context) (*ActorMetadata, error) {
-			rResp, rErr := a.store.Get(getReq)
+			rResp, rErr := a.store.Get(ctx, getReq)
 			if rErr != nil {
 				return nil, rErr
 			}
@@ -1471,7 +1471,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (re
 
 	return backoff.RetryWithData(func() (*ActorMetadata, error) {
 		metadataKey := constructCompositeKey("actors", actorType, "metadata")
-		rResp, rErr := a.store.Get(&state.GetRequest{
+		rResp, rErr := a.store.Get(context.TODO(), &state.GetRequest{
 			Key: metadataKey,
 		})
 		if rErr != nil {
@@ -1607,7 +1607,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 
 		policyRunner := resiliency.NewRunner[*bulkGetRes](context.TODO(), policyDef)
 		bgr, err := policyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-			rBulkGet, rBulkResponse, rErr := a.store.BulkGet(getRequests)
+			rBulkGet, rBulkResponse, rErr := a.store.BulkGet(ctx, getRequests)
 			if rErr != nil {
 				return &bulkGetRes{}, rErr
 			}
@@ -1636,7 +1636,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 					r := param.(*state.BulkGetResponse)
 					policyRunner := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
 					resp, ferr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-						return a.store.Get(&getRequest)
+						return a.store.Get(ctx, &getRequest)
 					})
 					if ferr != nil {
 						r.Error = ferr.Error()
@@ -1693,7 +1693,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	key := constructCompositeKey("actors", actorType)
 	policyRunner := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-		return a.store.Get(&state.GetRequest{
+		return a.store.Get(ctx, &state.GetRequest{
 			Key: key,
 		})
 	})
@@ -1750,7 +1750,7 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 		},
 	}
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, a.store.Set(req)
+		return nil, a.store.Set(ctx, req)
 	})
 	return err
 }
@@ -1881,7 +1881,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 		Key: reminderKey,
 	}
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, a.store.Delete(deleteReq)
+		return nil, a.store.Delete(ctx, deleteReq)
 	})
 	return err
 }
