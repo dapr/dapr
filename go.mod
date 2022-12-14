@@ -417,4 +417,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // temporary replace for struct change
-replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221213105245-ace0d1a03c24
+replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221214053151-71a543aed7a4
