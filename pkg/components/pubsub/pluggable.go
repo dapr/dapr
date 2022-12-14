@@ -75,8 +75,8 @@ func (p *grpcPubSub) Features() []pubsub.Feature {
 }
 
 // Publish publishes data to a topic.
-func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
-	_, err := p.Client.Publish(p.Context, &proto.PublishRequest{
+func (p *grpcPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
+	_, err := p.Client.Publish(ctx, &proto.PublishRequest{
 		Topic:      req.Topic,
 		PubsubName: req.PubsubName,
 		Data:       req.Data,

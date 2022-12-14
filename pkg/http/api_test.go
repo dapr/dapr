@@ -4357,7 +4357,7 @@ func (l *fakeLockStore) InitLockStore(metadata lock.Metadata) error {
 	return nil
 }
 
-func (l *fakeLockStore) TryLock(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+func (l *fakeLockStore) TryLock(ctx context.Context, req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
 	if req == nil {
 		return &lock.TryLockResponse{
 			Success: false,
@@ -4387,7 +4387,7 @@ func (l *fakeLockStore) TryLock(req *lock.TryLockRequest) (*lock.TryLockResponse
 	}, nil
 }
 
-func (l *fakeLockStore) Unlock(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
 	if req == nil {
 		return &lock.UnlockResponse{}, errors.New("empty request")
 	}
