@@ -14,6 +14,7 @@ limitations under the License.
 package internal
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -201,24 +203,69 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
-	testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+	t.Run("already unlocked", func(t *testing.T) {
+		require.False(t, testPlacement.tableIsBlocked.Load())
 
-	asserted := atomic.Bool{}
-	asserted.Store(false)
-	go func() {
-		testPlacement.WaitUntilPlacementTableIsReady()
-		asserted.Store(true)
-	}()
+		err := testPlacement.WaitUntilPlacementTableIsReady(context.Background())
+		assert.NoError(t, err)
+	})
 
-	time.Sleep(50 * time.Millisecond)
-	assert.False(t, asserted.Load())
+	t.Run("wait until ready", func(t *testing.T) {
+		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
 
-	// unlock
-	testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
+		testSuccessCh := make(chan struct{})
+		go func() {
+			err := testPlacement.WaitUntilPlacementTableIsReady(context.Background())
+			if assert.NoError(t, err) {
+				testSuccessCh <- struct{}{}
+			}
+		}()
 
-	// ensure that it is unlocked
-	time.Sleep(50 * time.Millisecond)
-	assert.True(t, asserted.Load())
+		time.Sleep(50 * time.Millisecond)
+		require.True(t, testPlacement.tableIsBlocked.Load())
+
+		// unlock
+		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
+
+		// ensure that it is unlocked
+		select {
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("placement table not unlocked in 500ms")
+		case <-testSuccessCh:
+			// all good
+		}
+
+		assert.False(t, testPlacement.tableIsBlocked.Load())
+	})
+
+	t.Run("abort on context canceled", func(t *testing.T) {
+		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+
+		testSuccessCh := make(chan struct{})
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			err := testPlacement.WaitUntilPlacementTableIsReady(ctx)
+			if assert.ErrorIs(t, err, context.Canceled) {
+				testSuccessCh <- struct{}{}
+			}
+		}()
+
+		time.Sleep(50 * time.Millisecond)
+		require.True(t, testPlacement.tableIsBlocked.Load())
+
+		// cancel context
+		cancel()
+
+		// ensure that it is still locked
+		select {
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("did not return in 500ms")
+		case <-testSuccessCh:
+			// all good
+		}
+
+		assert.True(t, testPlacement.tableIsBlocked.Load())
+	})
 }
 
 func TestLookupActor(t *testing.T) {
