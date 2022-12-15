@@ -77,8 +77,12 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
-		policyRunner := resiliency.NewRunnerWithOptions(context.TODO(),
-			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+		policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
+		if policyDef.HasRetries() {
+			req.WithReplay(true)
+		}
+
+		policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
 			resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 				Disposer: func(resp *invokev1.InvokeMethodResponse) {
 					_ = resp.Close()
@@ -89,6 +93,8 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 			return channel.InvokeMethod(ctx, req)
 		})
 	} else {
+		req.WithReplay(true)
+
 		backoff := getSubscriptionsBackoff()
 		resp, err = retry.NotifyRecoverWithData(func() (*invokev1.InvokeMethodResponse, error) {
 			return channel.InvokeMethod(context.TODO(), req)

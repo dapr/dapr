@@ -3894,7 +3894,8 @@ func TestPubSubDeadLetter(t *testing.T) {
 		)
 		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
 			WithHTTPExtension(http.MethodGet, "").
-			WithContentType(invokev1.JSONContentType)
+			WithContentType(invokev1.JSONContentType).
+			WithReplay(true)
 		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{

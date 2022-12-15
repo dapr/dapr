@@ -107,19 +107,19 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 }
 
 // WithRawData sets message data from a readable stream.
-func (imr *InvokeMethodRequest) WithRawData(data io.ReadCloser) *InvokeMethodRequest {
+func (imr *InvokeMethodRequest) WithRawData(data io.Reader) *InvokeMethodRequest {
 	imr.replayableRequest.WithRawData(data)
 	return imr
 }
 
 // WithRawDataBytes sets message data from a []byte.
 func (imr *InvokeMethodRequest) WithRawDataBytes(data []byte) *InvokeMethodRequest {
-	return imr.WithRawData(io.NopCloser(bytes.NewReader(data)))
+	return imr.WithRawData(bytes.NewReader(data))
 }
 
 // WithRawDataString sets message data from a string.
 func (imr *InvokeMethodRequest) WithRawDataString(data string) *InvokeMethodRequest {
-	return imr.WithRawData(io.NopCloser(strings.NewReader(data)))
+	return imr.WithRawData(strings.NewReader(data))
 }
 
 // WithContentType sets the content type.

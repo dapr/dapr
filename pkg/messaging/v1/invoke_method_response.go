@@ -65,19 +65,19 @@ func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *Inv
 }
 
 // WithRawData sets message data from a readable stream.
-func (imr *InvokeMethodResponse) WithRawData(data io.ReadCloser) *InvokeMethodResponse {
+func (imr *InvokeMethodResponse) WithRawData(data io.Reader) *InvokeMethodResponse {
 	imr.replayableRequest.WithRawData(data)
 	return imr
 }
 
 // WithRawDataBytes sets message data from a []byte.
 func (imr *InvokeMethodResponse) WithRawDataBytes(data []byte) *InvokeMethodResponse {
-	return imr.WithRawData(io.NopCloser(bytes.NewReader(data)))
+	return imr.WithRawData(bytes.NewReader(data))
 }
 
 // WithRawDataString sets message data from a string.
 func (imr *InvokeMethodResponse) WithRawDataString(data string) *InvokeMethodResponse {
-	return imr.WithRawData(io.NopCloser(strings.NewReader(data)))
+	return imr.WithRawData(strings.NewReader(data))
 }
 
 // WithContentType sets the content type.

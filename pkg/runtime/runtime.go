@@ -1283,6 +1283,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+		policyDef := a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding)
+
 		reqMetadata := make(map[string][]string, len(metadata))
 		for k, v := range metadata {
 			reqMetadata[k] = []string{v}
@@ -1291,12 +1293,12 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			WithHTTPExtension(nethttp.MethodPost, "").
 			WithRawDataBytes(data).
 			WithContentType(invokev1.JSONContentType).
-			WithMetadata(reqMetadata)
+			WithMetadata(reqMetadata).
+			WithReplay(policyDef.HasRetries())
 		defer req.Close()
 
 		respErr := errors.New("error sending binding event to application")
-		policyRunner := resiliency.NewRunnerWithOptions(ctx,
-			a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding),
+		policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
 			resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 				Disposer: func(resp *invokev1.InvokeMethodResponse) {
 					_ = resp.Close()
@@ -2106,8 +2108,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
-		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
-		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.topic, sc, a.globalConfig.Spec.TracingSpec)
 	}
 
 	start := time.Now()

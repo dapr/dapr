@@ -454,19 +454,24 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx,
-		a.resiliency.EndpointPolicy(in.Id, in.Id+":"+req.Message().Method),
-	)
+	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+req.Message().Method)
+
+	// If the request can be retried, we need to enable replaying
+	if policyDef.HasRetries() {
+		req.WithReplay(true)
+	}
+
+	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*invokeServiceResp, error) {
 		rResp := &invokeServiceResp{}
 		imr, rErr := a.directMessaging.Invoke(ctx, in.Id, req)
 		if imr != nil {
+			defer imr.Close()
 			rResp.message = imr.Message()
 		}
 		if rErr != nil {
 			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
 		}
-		defer imr.Close()
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
@@ -1574,6 +1579,8 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
+	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+
 	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
 		reqMetadata[k] = []string{v}
@@ -1581,7 +1588,8 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req := invokev1.NewInvokeMethodRequest(in.Method).
 		WithActor(in.ActorType, in.ActorId).
 		WithRawDataBytes(in.Data).
-		WithMetadata(reqMetadata)
+		WithMetadata(reqMetadata).
+		WithReplay(policyDef.HasRetries())
 	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
@@ -1591,8 +1599,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunnerWithOptions(ctx,
-		a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId),
+	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: func(resp *invokev1.InvokeMethodResponse) {
 				_ = resp.Close()

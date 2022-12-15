@@ -36,7 +36,7 @@ func newBuffer() any {
 
 // replayableRequest is implemented by InvokeMethodRequest and InvokeMethodResponse
 type replayableRequest struct {
-	data             io.ReadCloser
+	data             io.Reader
 	replay           *bytes.Buffer
 	lock             sync.Mutex
 	currentTeeReader *streamutils.TeeReadCloser
@@ -44,7 +44,7 @@ type replayableRequest struct {
 }
 
 // WithRawData sets message data.
-func (rr *replayableRequest) WithRawData(data io.ReadCloser) {
+func (rr *replayableRequest) WithRawData(data io.Reader) {
 	rr.lock.Lock()
 	defer rr.lock.Unlock()
 
@@ -134,9 +134,11 @@ func (rr *replayableRequest) Close() (err error) {
 	rr.closeReplay()
 
 	if rr.data != nil {
-		err = rr.data.Close()
-		if err != nil {
-			return err
+		if rc, ok := rr.data.(io.Closer); ok {
+			err = rc.Close()
+			if err != nil {
+				return err
+			}
 		}
 		rr.data = nil
 	}

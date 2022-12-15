@@ -2406,7 +2406,8 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 	t.Run("callLocalActor times out with resiliency", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("actorMethod").
-			WithActor("failingActorType", "timeoutId")
+			WithActor("failingActorType", "timeoutId").
+			WithReplay(true)
 		defer req.Close()
 
 		start := time.Now()

@@ -165,6 +165,9 @@ func (d *directMessaging) invokeWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
+			// This policy has built-in retries so enable replay in the request
+			req.WithReplay(true)
+
 			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
 				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
 			)
@@ -192,6 +195,12 @@ func (d *directMessaging) invokeWithRetry(
 		teardown(false)
 		return resp, err
 	}
+
+	// The following path is used when resiliency is disabled
+
+	// We need to enable replaying because the request may be attempted again in this path
+	req.WithReplay(true)
+
 	for i := 0; i < numRetries; i++ {
 		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
@@ -211,6 +220,7 @@ func (d *directMessaging) invokeWithRetry(
 		teardown(false)
 		return resp, err
 	}
+
 	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
