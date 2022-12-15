@@ -1742,9 +1742,9 @@ func TestCallLocalActor(t *testing.T) {
 	t.Run("invoke actor successfully", func(t *testing.T) {
 		testActorRuntime := newTestActorsRuntime()
 		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
-		defer resp.Close()
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
+		defer resp.Close()
 	})
 
 	t.Run("actor is already disposed", func(t *testing.T) {
@@ -1767,7 +1767,6 @@ func TestCallLocalActor(t *testing.T) {
 
 		// act
 		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
-		defer resp.Close()
 
 		// assert
 		s, _ := status.FromError(err)
@@ -2214,9 +2213,9 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	reentrantAppChannel.a = testActorRuntime
 
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
-	defer resp.Close()
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
 		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first",
@@ -2250,9 +2249,9 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	reentrantAppChannel.a = testActorRuntime
 
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
-	defer resp.Close()
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
 		"Entering actors/reentrant/1/method/third", "Exiting actors/reentrant/1/method/third",
@@ -2284,7 +2283,6 @@ func TestReentrancyStackLimit(t *testing.T) {
 	reentrantAppChannel.a = testActorRuntime
 
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
-	defer resp.Close()
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 }
@@ -2322,9 +2320,9 @@ func TestReentrancyPerActor(t *testing.T) {
 	reentrantAppChannel.a = testActorRuntime
 
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
-	defer resp.Close()
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrantActor/1/method/first", "Entering actors/reentrantActor/1/method/second",
 		"Exiting actors/reentrantActor/1/method/second", "Exiting actors/reentrantActor/1/method/first",
@@ -2364,7 +2362,6 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 	reentrantAppChannel.a = testActorRuntime
 
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
-	defer resp.Close()
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 }
@@ -2415,7 +2412,6 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		start := time.Now()
 		resp, err := runtime.callLocalActor(context.Background(), req)
 		end := time.Now()
-		defer resp.Close()
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)

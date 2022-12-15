@@ -81,8 +81,8 @@ func TestInternalInvokeRequest(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeRequest(&pb)
-		defer ir.Close()
 		assert.NoError(t, err)
+		defer ir.Close()
 		assert.NotNil(t, ir.r.Message)
 		assert.Equal(t, "invoketest", ir.r.Message.Method)
 		assert.Nil(t, ir.r.Message.Data)
@@ -104,8 +104,8 @@ func TestInternalInvokeRequest(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeRequest(&pb)
-		defer ir.Close()
 		assert.NoError(t, err)
+		defer ir.Close()
 		assert.NotNil(t, ir.r.Message)
 		assert.Equal(t, "invoketest", ir.r.Message.Method)
 		assert.NotNil(t, ir.r.Message.Data)
@@ -228,8 +228,8 @@ func TestRequestProto(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeRequest(&pb)
-		defer ir.Close()
 		assert.NoError(t, err)
+		defer ir.Close()
 		req2 := ir.Proto()
 
 		assert.Equal(t, "application/json", req2.GetMessage().ContentType)
@@ -251,8 +251,8 @@ func TestRequestProto(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeRequest(&pb)
-		defer ir.Close()
 		assert.NoError(t, err)
+		defer ir.Close()
 		ir.data = io.NopCloser(strings.NewReader("test"))
 		req2 := ir.Proto()
 
@@ -278,8 +278,8 @@ func TestRequestProtoWithData(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeRequest(&pb)
-		defer ir.Close()
 		assert.NoError(t, err)
+		defer ir.Close()
 		req2, err := ir.ProtoWithData()
 		assert.NoError(t, err)
 
@@ -298,8 +298,8 @@ func TestRequestProtoWithData(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeRequest(&pb)
-		defer ir.Close()
 		assert.NoError(t, err)
+		defer ir.Close()
 		ir.data = io.NopCloser(strings.NewReader("test"))
 		req2, err := ir.ProtoWithData()
 		assert.NoError(t, err)

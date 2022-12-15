@@ -1061,7 +1061,9 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 			if rErr != nil {
 				return nil, rErr
 			}
-			defer rResp.Close()
+			if rResp != nil {
+				defer rResp.Close()
+			}
 
 			if rResp != nil && rResp.Status().Code != nethttp.StatusOK {
 				return nil, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().Code)
