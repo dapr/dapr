@@ -23,20 +23,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dapr/dapr/utils"
-
 	"github.com/ghodss/yaml"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
-
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-
-	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/config"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
@@ -66,6 +62,8 @@ const (
 	Pubsub                        ComponentType         = "Pubsub"
 	Secretstore                   ComponentType         = "Secretstore"
 	Statestore                    ComponentType         = "Statestore"
+	Inbound                       ComponentDirection    = "Inbound"
+	Outbound                      ComponentDirection    = "Outbound"
 )
 
 // ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
@@ -179,12 +177,13 @@ type (
 		getPolicyLevels() []string
 		getPolicyTypeName() PolicyTypeName
 	}
-	EndpointPolicy  struct{}
-	ActorPolicy     struct{}
-	ComponentType   string
-	ComponentPolicy struct {
+	EndpointPolicy     struct{}
+	ActorPolicy        struct{}
+	ComponentType      string
+	ComponentDirection string
+	ComponentPolicy    struct {
 		componentType      ComponentType
-		componentDirection string
+		componentDirection ComponentDirection
 	}
 )
 
@@ -785,7 +784,7 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
-		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: "Inbound"}); ok {
+		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: Inbound}); ok {
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
@@ -827,18 +826,21 @@ func (r *Resiliency) GetPolicy(target string, policyType PolicyType) *PolicyDesc
 		componentPolicy, exists = r.components[target]
 		if exists {
 			policy, _ := policyType.(*ComponentPolicy)
-			if policy.componentDirection == "Inbound" {
+			switch policy.componentDirection {
+			case Inbound:
 				policyName = PolicyNames{
 					Retry:          componentPolicy.Inbound.Retry,
 					CircuitBreaker: componentPolicy.Inbound.CircuitBreaker,
 					Timeout:        componentPolicy.Inbound.Timeout,
 				}
-			} else {
+			case Outbound:
 				policyName = PolicyNames{
 					Retry:          componentPolicy.Outbound.Retry,
 					CircuitBreaker: componentPolicy.Outbound.CircuitBreaker,
 					Timeout:        componentPolicy.Outbound.Timeout,
 				}
+			default:
+				panic(fmt.Errorf("invalid component policy direction: '%s'", policy.componentDirection))
 			}
 		}
 	case Actor:
@@ -1052,9 +1054,9 @@ func (*ComponentPolicy) getPolicyTypeName() PolicyTypeName {
 }
 
 var ComponentInboundPolicy = ComponentPolicy{
-	componentDirection: "Inbound",
+	componentDirection: Inbound,
 }
 
 var ComponentOutboundPolicy = ComponentPolicy{
-	componentDirection: "Outbound",
+	componentDirection: Outbound,
 }
