@@ -46,6 +46,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
+	defer req.Close()
 
 	err = a.callLocalValidateACL(ctx, req)
 	if err != nil {
@@ -68,15 +69,16 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}()
 
 	// stausCode will be read by the deferred method above
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	res, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		statusCode = int32(codes.Internal)
 		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	} else {
-		statusCode = resp.Status().Code
+		statusCode = res.Status().Code
 	}
+	defer res.Close()
 
-	return resp.Proto(), nil
+	return res.ProtoWithData()
 }
 
 // CallLocalStream is a variant of CallLocal that uses gRPC streams to send data in chunks, rather than in an unary RPC.
@@ -104,7 +106,8 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
-	req.WithRawData(pr, chunk.Request.Message.ContentType)
+	req.WithRawData(pr).
+		WithContentType(chunk.Request.Message.ContentType)
 	defer req.Close()
 
 	err = a.callLocalValidateACL(ctx, req)
@@ -215,6 +218,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
+	defer req.Close()
 
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	resp, err := a.actor.Call(ctx, req)
@@ -227,7 +231,8 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
-	return resp.Proto(), nil
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list

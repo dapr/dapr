@@ -1046,10 +1046,12 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		return err
 	}
 	for key := range e.Items {
-		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, key))
-		req.WithHTTPExtension(nethttp.MethodPost, "")
 		eventBody, _ := json.Marshal(e)
-		req.WithRawData(eventBody, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("/configuration/"+h.storeName+"/"+key).
+			WithHTTPExtension(nethttp.MethodPost, "").
+			WithRawDataBytes(eventBody).
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		policyRunner := resiliency.NewRunner[any](ctx,
 			h.res.ComponentInboundPolicy(h.storeName, resiliency.Configuration),
@@ -1059,6 +1061,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 			if rErr != nil {
 				return nil, rErr
 			}
+			defer rResp.Close()
 
 			if rResp != nil && rResp.Status().Code != nethttp.StatusOK {
 				return nil, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().Code)
@@ -1640,10 +1643,13 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// Construct internal invoke method request
-	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
-	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
-	// Save headers to internal metadata
-	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
+	req := invokev1.NewInvokeMethodRequest(invokeMethodName).
+		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
+		WithRawDataBytes(reqCtx.Request.Body()).
+		WithContentType(string(reqCtx.Request.Header.ContentType())).
+		// Save headers to internal metadata
+		WithFastHTTPHeaders(&reqCtx.Request.Header)
+	defer req.Close()
 
 	policyRunner := resiliency.NewRunner[*directMessagingPolicyRes](reqCtx,
 		a.resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName),
@@ -1665,9 +1671,17 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			}
 			return dmpr, invokeErr
 		}
+		defer rResp.Close()
 
 		dmpr.headers = rResp.Headers()
-		dmpr.contentType, dmpr.body = rResp.RawData()
+		dmpr.contentType = rResp.ContentType()
+		dmpr.body, rErr = rResp.RawDataFull()
+		if rErr != nil {
+			return dmpr, invokeError{
+				statusCode: fasthttp.StatusInternalServerError,
+				msg:        NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr)),
+			}
+		}
 
 		// Construct response
 		dmpr.statusCode = int(rResp.Status().Code)
@@ -1991,19 +2005,20 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	method := reqCtx.UserValue(methodParam).(string)
-	body := reqCtx.PostBody()
 
-	req := invokev1.NewInvokeMethodRequest(method)
-	req.WithActor(actorType, actorID)
-	req.WithHTTPExtension(verb, reqCtx.QueryArgs().String())
-	req.WithRawData(body, string(reqCtx.Request.Header.ContentType()))
-
-	// Save headers to metadata.
-	metadata := map[string][]string{}
+	metadata := make(map[string][]string, reqCtx.Request.Header.Len())
 	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
 		metadata[string(key)] = []string{string(value)}
 	})
-	req.WithMetadata(metadata)
+
+	req := invokev1.NewInvokeMethodRequest(method).
+		WithActor(actorType, actorID).
+		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
+		WithRawDataBytes(reqCtx.PostBody()).
+		WithContentType(string(reqCtx.Request.Header.ContentType())).
+		// Save headers to metadata.
+		WithMetadata(metadata)
+	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -2012,8 +2027,13 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](reqCtx,
+	policyRunner := resiliency.NewRunnerWithOptions(reqCtx,
 		a.resiliency.ActorPreLockPolicy(actorType, actorID),
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: func(resp *invokev1.InvokeMethodResponse) {
+				_ = resp.Close()
+			},
+		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.actor.Call(ctx, req)
@@ -2031,9 +2051,17 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
+	defer resp.Close()
+
 	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
-	contentType, body := resp.RawData()
-	reqCtx.Response.Header.SetContentType(contentType)
+	body, err := resp.RawDataFull()
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	reqCtx.Response.Header.SetContentType(resp.ContentType())
 
 	// Construct response.
 	statusCode := int(resp.Status().Code)

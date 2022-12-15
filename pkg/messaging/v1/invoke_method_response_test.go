@@ -416,7 +416,7 @@ func TestResponseReplayable(t *testing.T) {
 		})
 
 		t.Run("second read in full", func(t *testing.T) {
-			read, err := io.ReadAll(res.RawData())
+			read, err := res.RawDataFull()
 			assert.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})

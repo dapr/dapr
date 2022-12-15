@@ -120,16 +120,19 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+			WithHTTPExtension(http.MethodGet, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true", "rawPayload": "true"}},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -163,16 +166,19 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+			WithHTTPExtension(http.MethodGet, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true"}},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -208,16 +214,19 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+			WithHTTPExtension(http.MethodGet, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true"}},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -255,9 +264,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+			WithHTTPExtension(http.MethodGet, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{
@@ -279,8 +289,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -320,9 +332,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+			WithHTTPExtension(http.MethodGet, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{
@@ -344,8 +357,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -368,8 +383,10 @@ func TestBulkSubscribe(t *testing.T) {
 		}
 
 		resp1, _ := json.Marshal(responseItemsOrders1)
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		respInvoke1.WithRawData(resp1, "application/json")
+		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(resp1).
+			WithContentType("application/json")
+		defer respInvoke1.Close()
 
 		responseItemsOrders2 := pubsub.AppBulkResponse{
 			AppResponses: []pubsub.AppBulkResponseEntry{
@@ -381,8 +398,10 @@ func TestBulkSubscribe(t *testing.T) {
 		}
 
 		resp2, _ := json.Marshal(responseItemsOrders2)
-		respInvoke2 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		respInvoke2.WithRawData(resp2, "application/json")
+		respInvoke2 := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(resp2).
+			WithContentType("application/json")
+		defer respInvoke2.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
 			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" })).Return(respInvoke1, nil)
@@ -437,9 +456,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+			WithHTTPExtension(http.MethodGet, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{
@@ -450,8 +470,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -473,8 +495,10 @@ func TestBulkSubscribe(t *testing.T) {
 		}
 
 		resp1, _ := json.Marshal(responseItemsOrders1)
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		respInvoke1.WithRawData(resp1, "application/json")
+		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(resp1).
+			WithContentType("application/json")
+		defer respInvoke1.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
 			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders" })).Return(respInvoke1, nil)
@@ -517,9 +541,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+			WithHTTPExtension(http.MethodGet, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{
@@ -530,8 +555,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -554,11 +581,16 @@ func TestBulkSubscribe(t *testing.T) {
 		}
 
 		resp1, _ := json.Marshal(responseItemsOrders1)
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		respInvoke1.WithRawData(resp1, "application/json")
+		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(resp1).
+			WithContentType("application/json")
+		defer respInvoke1.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders" })).Return(respInvoke1, nil)
+		mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders" }),
+		).Return(respInvoke1, nil)
 
 		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -597,9 +629,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
+			WithHTTPExtension(http.MethodGet, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{
@@ -610,8 +643,10 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -634,11 +669,15 @@ func TestBulkSubscribe(t *testing.T) {
 		}
 
 		resp1, _ := json.Marshal(responseItemsOrders1)
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		respInvoke1.WithRawData(resp1, "application/json")
+		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(resp1).
+			WithContentType("application/json")
+		defer respInvoke1.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders" })).Return(respInvoke1, nil)
+		mockAppChannel.On("InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders" }),
+		).Return(respInvoke1, nil)
 
 		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,

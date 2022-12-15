@@ -225,3 +225,8 @@ func (imr *InvokeMethodResponse) RawData() (r io.Reader) {
 
 	return imr.replayableRequest.RawData()
 }
+
+// RawDataFull returns the entire data read from the stream body.
+func (imr *InvokeMethodResponse) RawDataFull() ([]byte, error) {
+	return io.ReadAll(imr.RawData())
+}

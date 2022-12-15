@@ -1283,19 +1283,25 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		req := invokev1.NewInvokeMethodRequest(path)
-		req.WithHTTPExtension(nethttp.MethodPost, "")
-		req.WithRawData(data, invokev1.JSONContentType)
-
-		reqMetadata := map[string][]string{}
+		reqMetadata := make(map[string][]string, len(metadata))
 		for k, v := range metadata {
 			reqMetadata[k] = []string{v}
 		}
-		req.WithMetadata(reqMetadata)
+		req := invokev1.NewInvokeMethodRequest(path).
+			WithHTTPExtension(nethttp.MethodPost, "").
+			WithRawDataBytes(data).
+			WithContentType(invokev1.JSONContentType).
+			WithMetadata(reqMetadata)
+		defer req.Close()
 
 		respErr := errors.New("error sending binding event to application")
-		policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+		policyRunner := resiliency.NewRunnerWithOptions(ctx,
 			a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding),
+			resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+				Disposer: func(resp *invokev1.InvokeMethodResponse) {
+					_ = resp.Close()
+				},
+			},
 		)
 		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 			rResp, rErr := a.appChannel.InvokeMethod(ctx, req)
@@ -1314,6 +1320,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		if resp == nil {
 			return nil, errors.New("error invoking app: response object is nil")
 		}
+		defer resp.Close()
 
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
@@ -1326,7 +1333,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code < 200 || resp.Status().Code > 299 {
-			_, body := resp.RawData()
+			body, _ := resp.RawDataFull()
 			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
 
@@ -1529,16 +1536,17 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		// if HTTP, check if there's an endpoint listening for that binding
 		path := a.inputBindingRoutes[binding]
-		req := invokev1.NewInvokeMethodRequest(path)
-		req.WithHTTPExtension(nethttp.MethodOptions, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.NewInvokeMethodRequest(path).
+			WithHTTPExtension(nethttp.MethodOptions, "").
+			WithContentType(invokev1.JSONContentType)
+		defer req.Close()
 
 		// TODO: Propagate Context
-		ctx := context.Background()
-		resp, err := a.appChannel.InvokeMethod(ctx, req)
+		resp, err := a.appChannel.InvokeMethod(context.TODO(), req)
 		if err != nil {
 			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %w", path, err)
 		}
+		defer resp.Close()
 		code := resp.Status().Code
 
 		return code/100 == 2 || code == nethttp.StatusMethodNotAllowed, nil
@@ -2088,10 +2096,12 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 
 	var span trace.Span
 
-	req := invokev1.NewInvokeMethodRequest(msg.path)
-	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.data, contenttype.CloudEventContentType)
-	req.WithCustomHTTPMetadata(msg.metadata)
+	req := invokev1.NewInvokeMethodRequest(msg.path).
+		WithHTTPExtension(nethttp.MethodPost, "").
+		WithRawDataBytes(msg.data).
+		WithContentType(contenttype.CloudEventContentType).
+		WithCustomHTTPMetadata(msg.metadata)
+	defer req.Close()
 
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
@@ -2106,8 +2116,9 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 
 	if err != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
+		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
 	}
+	defer resp.Close()
 
 	statusCode := int(resp.Status().Code)
 
@@ -2118,12 +2129,10 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		span.End()
 	}
 
-	_, body := resp.RawData()
-
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
 		var appResponse pubsub.AppResponse
-		err := json.Unmarshal(body, &appResponse)
+		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
@@ -2150,6 +2159,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
 	}
 
+	body, _ := resp.RawDataFull()
 	if statusCode == nethttp.StatusNotFound {
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:

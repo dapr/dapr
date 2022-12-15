@@ -24,7 +24,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -34,20 +34,20 @@ type MockActors struct {
 }
 
 // Call provides a mock function with given fields: req
-func (_m *MockActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
+func (_m *MockActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	ret := _m.Called(req)
 
-	var r0 *v1.InvokeMethodResponse
-	if rf, ok := ret.Get(0).(func(*v1.InvokeMethodRequest) *v1.InvokeMethodResponse); ok {
+	var r0 *invokev1.InvokeMethodResponse
+	if rf, ok := ret.Get(0).(func(*invokev1.InvokeMethodRequest) *invokev1.InvokeMethodResponse); ok {
 		r0 = rf(req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*v1.InvokeMethodResponse)
+			r0 = ret.Get(0).(*invokev1.InvokeMethodResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*v1.InvokeMethodRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*invokev1.InvokeMethodRequest) error); ok {
 		r1 = rf(req)
 	} else {
 		r1 = ret.Error(1)
@@ -238,7 +238,7 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
+func (f *FailingActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	proto := req.Proto()
 	if proto == nil || proto.Actor == nil {
 		return nil, errors.New("proto.Actor is nil")
@@ -250,8 +250,8 @@ func (f *FailingActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (
 	if proto.Message != nil && proto.Message.Data != nil {
 		data = proto.Message.Data.Value
 	}
-	resp := v1.NewInvokeMethodResponse(200, "Success", nil).
-		WithRawData(data, "")
+	resp := invokev1.NewInvokeMethodResponse(200, "Success", nil).
+		WithRawDataBytes(data)
 	return resp, nil
 }
 

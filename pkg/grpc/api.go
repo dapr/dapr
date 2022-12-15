@@ -74,6 +74,7 @@ type API interface {
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+	CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error
 
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
@@ -447,6 +448,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
 	}
+	defer req.Close()
 
 	if a.directMessaging == nil {
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
@@ -464,13 +466,14 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		if rErr != nil {
 			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
 		}
+		defer imr.Close()
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
 			errorMessage := ""
 			if imr != nil {
-				_, b := imr.RawData()
+				b, _ := imr.RawDataFull()
 				errorMessage = string(b)
 			}
 			code := int(imr.Status().Code)
@@ -1571,14 +1574,15 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	req := invokev1.NewInvokeMethodRequest(in.Method)
-	req.WithActor(in.ActorType, in.ActorId)
-	req.WithRawData(in.Data, "")
-	reqMetadata := map[string][]string{}
+	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
 		reqMetadata[k] = []string{v}
 	}
-	req.WithMetadata(reqMetadata)
+	req := invokev1.NewInvokeMethodRequest(in.Method).
+		WithActor(in.ActorType, in.ActorId).
+		WithRawDataBytes(in.Data).
+		WithMetadata(reqMetadata)
+	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1587,8 +1591,13 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+	policyRunner := resiliency.NewRunnerWithOptions(ctx,
 		a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId),
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: func(resp *invokev1.InvokeMethodResponse) {
+				_ = resp.Close()
+			},
+		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.actor.Call(ctx, req)
@@ -1602,7 +1611,12 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	if resp == nil {
 		resp = invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
 	}
-	_, response.Data = resp.RawData()
+	defer resp.Close()
+
+	response.Data, err = resp.RawDataFull()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response data: %w", err)
+	}
 	return response, nil
 }
 

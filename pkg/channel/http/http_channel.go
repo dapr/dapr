@@ -113,12 +113,14 @@ func (h *Channel) GetBaseAddress() string {
 func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint).
 		WithHTTPExtension(http.MethodGet, "").
-		WithRawData(nil, invokev1.JSONContentType)
+		WithContentType(invokev1.JSONContentType)
+	defer req.Close()
 
 	resp, err := h.InvokeMethod(context.TODO(), req)
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Close()
 
 	var config config.ApplicationConfig
 
@@ -139,8 +141,8 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	case "v1":
 		fallthrough
 	default:
-		_, body := resp.RawData()
-		if err = json.Unmarshal(body, &config); err != nil {
+		err = json.NewDecoder(resp.RawData()).Decode(&config)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -314,16 +316,14 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		uri.WriteString(qs)
 	}
 
-	ct, body := req.RawData()
-
-	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), bytes.NewReader(body))
+	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), req.RawData())
 	if err != nil {
 		return nil, err
 	}
 
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
-	channelReq.Header.Set("content-type", ct)
+	channelReq.Header.Set("content-type", req.ContentType())
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
@@ -352,16 +352,12 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channe
 		body = channelResp.Body
 	}
 
-	bodyData, err := io.ReadAll(body)
-	if err != nil {
-		return nil, err
-	}
-
 	// Convert status code
 	rsp := invokev1.
 		NewInvokeMethodResponse(int32(channelResp.StatusCode), "", nil).
 		WithHTTPHeaders(channelResp.Header).
-		WithRawData(bodyData, contentType)
+		WithRawData(body).
+		WithContentType(contentType)
 
 	return rsp, nil
 }

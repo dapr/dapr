@@ -264,9 +264,10 @@ func decomposeCompositeKey(compositeKey string) []string {
 }
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
-	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
-	req.WithHTTPExtension(nethttp.MethodDelete, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
+	req := invokev1.NewInvokeMethodRequest("actors/"+actorType+"/"+actorID).
+		WithHTTPExtension(nethttp.MethodDelete, "").
+		WithContentType(invokev1.JSONContentType)
+	defer req.Close()
 
 	// TODO Propagate context.
 	ctx := context.Background()
@@ -275,10 +276,11 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
 	}
+	defer resp.Close()
 
 	if resp.Status().Code != nethttp.StatusOK {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
-		_, body := resp.RawData()
+		body, _ := resp.RawDataFull()
 		return fmt.Errorf("error from actor service: %s", string(body))
 	}
 
@@ -484,7 +486,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	// Replace method to actors method.
 	msg := req.Message()
 	originalMethod := msg.Method
-	msg.Method = "actors/" + actorTypeID.GetActorType() + "/" + actorTypeID.GetActorId() + "/method/" + msg.Method
+	msg.Method = "actors/" + actorTypeID.ActorType + "/" + actorTypeID.ActorId + "/method/" + msg.Method
 
 	// Reset the method so we can perform retries.
 	defer func() {
@@ -498,8 +500,13 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
 	}
 
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+	policyRunner := resiliency.NewRunnerWithOptions[*invokev1.InvokeMethodResponse](ctx,
 		a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID),
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: func(val *invokev1.InvokeMethodResponse) {
+				_ = val.Close()
+			},
+		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.appChannel.InvokeMethod(ctx, req)
@@ -511,7 +518,12 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	if resp == nil {
 		return nil, errors.New("error from actor service: response object is nil")
 	}
-	_, respData := resp.RawData()
+	defer resp.Close()
+
+	respData, err := resp.RawDataFull()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response data: %w", err)
+	}
 	if resp.Status().Code != nethttp.StatusOK {
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}
@@ -1020,9 +1032,11 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	}
 
 	log.Debugf("executing reminder %s for actor type %s with id %s", reminder.Name, reminder.ActorType, reminder.ActorID)
-	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder.Name))
-	req.WithActor(reminder.ActorType, reminder.ActorID)
-	req.WithRawData(b, invokev1.JSONContentType)
+	req := invokev1.NewInvokeMethodRequest("remind/"+reminder.Name).
+		WithActor(reminder.ActorType, reminder.ActorID).
+		WithRawDataBytes(b).
+		WithContentType(invokev1.JSONContentType)
+	defer req.Close()
 
 	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
 		a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID),
@@ -1387,9 +1401,11 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	}
 
 	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
-	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("timer/%s", name))
-	req.WithActor(actorType, actorID)
-	req.WithRawData(b, invokev1.JSONContentType)
+	req := invokev1.NewInvokeMethodRequest("timer/"+name).
+		WithActor(actorType, actorID).
+		WithRawDataBytes(b).
+		WithContentType(invokev1.JSONContentType)
+	defer req.Close()
 
 	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
 		a.resiliency.ActorPreLockPolicy(actorType, actorID),

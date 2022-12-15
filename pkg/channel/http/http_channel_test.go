@@ -154,9 +154,11 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		defer fakeReq.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
+		defer resp.Close()
 
 		// assert
 		require.NoError(t, err)
@@ -184,9 +186,11 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		defer fakeReq.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
+		defer resp.Close()
 
 		// assert
 		require.NoError(t, err)
@@ -211,16 +215,19 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
-			WithRawData([]byte("m'illumino d'immenso"), "text/plain")
+			WithRawDataString("m'illumino d'immenso").
+			WithContentType("text/plain")
+		defer fakeReq.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
-		ct, body := resp.RawData()
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		require.NoError(t, err)
 		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
-		assert.Equal(t, "text/plain", ct)
+		assert.Equal(t, "text/plain", resp.ContentType())
 		assert.Equal(t, "M'ILLUMINO D'IMMENSO", string(body))
 	})
 
@@ -239,16 +246,19 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
-			WithRawData([]byte("helloworld"), "text/plain")
+			WithRawDataString("helloworld").
+			WithContentType("text/plain")
+		defer fakeReq.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
-		ct, body := resp.RawData()
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		require.NoError(t, err)
 		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
-		assert.Equal(t, "text/plain", ct)
+		assert.Equal(t, "text/plain", resp.ContentType())
 		assert.Equal(t, "true", string(body))
 	})
 
@@ -267,16 +277,19 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
-			WithRawData([]byte("helloworld"), "text/plain")
+			WithRawDataString("helloworld").
+			WithContentType("text/plain")
+		defer fakeReq.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
-		ct, body := resp.RawData()
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		require.NoError(t, err)
 		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
-		assert.Equal(t, "text/plain", ct)
+		assert.Equal(t, "text/plain", resp.ContentType())
 		assert.Equal(t, "FALSE", string(body))
 	})
 
@@ -296,16 +309,19 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
-			WithRawData([]byte("helloworld"), "text/plain")
+			WithRawDataString("helloworld").
+			WithContentType("text/plain")
+		defer fakeReq.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
-		ct, body := resp.RawData()
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		require.NoError(t, err)
 		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
-		assert.Equal(t, "text/plain", ct)
+		assert.Equal(t, "text/plain", resp.ContentType())
 		assert.Equal(t, "TRUE", string(body))
 	})
 }
@@ -326,13 +342,15 @@ func TestInvokeMethod(t *testing.T) {
 		th.serverURL = server.URL[len("http://"):]
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		defer fakeReq.Close()
 
 		// act
-		response, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		assert.NoError(t, err)
-		_, body := response.RawData()
 		assert.Equal(t, "param1=val1&param2=val2", string(body))
 	})
 
@@ -347,13 +365,15 @@ func TestInvokeMethod(t *testing.T) {
 		th.serverURL = server.URL[len("http://"):]
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
+		defer fakeReq.Close()
 
 		// act
-		response, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		assert.NoError(t, err)
-		_, body := response.RawData()
 		assert.Equal(t, "", string(body))
 	})
 
@@ -381,9 +401,10 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			go func() {
 				req := invokev1.
 					NewInvokeMethodRequest("method").
-					WithHTTPExtension("GET", "").
-					WithRawData(nil, "")
-				_, err := c.InvokeMethod(ctx, req)
+					WithHTTPExtension("GET", "")
+				defer req.Close()
+				resp, err := c.InvokeMethod(ctx, req)
+				defer resp.Close()
 				assert.NoError(t, err)
 				wg.Done()
 			}()
@@ -414,9 +435,10 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			go func() {
 				req := invokev1.
 					NewInvokeMethodRequest("method").
-					WithHTTPExtension("GET", "").
-					WithRawData(nil, "")
-				_, err := c.InvokeMethod(ctx, req)
+					WithHTTPExtension("GET", "")
+				defer req.Close()
+				resp, err := c.InvokeMethod(ctx, req)
+				defer resp.Close()
 				assert.NoError(t, err)
 				wg.Done()
 			}()
@@ -448,9 +470,10 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			}
 			req := invokev1.
 				NewInvokeMethodRequest("method").
-				WithHTTPExtension("GET", "").
-				WithRawData(nil, "")
-			_, err := c.InvokeMethod(ctx, req)
+				WithHTTPExtension("GET", "")
+			defer req.Close()
+			resp, err := c.InvokeMethod(ctx, req)
+			defer resp.Close()
 			if i < 10 {
 				assert.Error(t, err)
 			} else {
@@ -469,20 +492,21 @@ func TestInvokeWithHeaders(t *testing.T) {
 	testServer := httptest.NewServer(&testHandlerHeaders{})
 	c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
 
-	req := invokev1.NewInvokeMethodRequest("method")
-	md := map[string][]string{
-		"H1": {"v1"},
-		"H2": {"v2"},
-	}
-	req.WithMetadata(md)
-	req.WithHTTPExtension(http.MethodPost, "")
+	req := invokev1.NewInvokeMethodRequest("method").
+		WithMetadata(map[string][]string{
+			"H1": {"v1"},
+			"H2": {"v2"},
+		}).
+		WithHTTPExtension(http.MethodPost, "")
+	defer req.Close()
 
 	// act
-	response, err := c.InvokeMethod(ctx, req)
+	resp, err := c.InvokeMethod(ctx, req)
+	defer resp.Close()
+	body, _ := resp.RawDataFull()
 
 	// assert
 	assert.NoError(t, err)
-	_, body := response.RawData()
 
 	actual := map[string]string{}
 	json.Unmarshal(body, &actual)
@@ -504,16 +528,17 @@ func TestContentType(t *testing.T) {
 			client:      &http.Client{},
 		}
 		req := invokev1.NewInvokeMethodRequest("method").
-			WithRawData(nil, "").
 			WithHTTPExtension(http.MethodGet, "")
+		defer req.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, req)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		assert.NoError(t, err)
-		contentType, body := resp.RawData()
-		assert.Equal(t, "", contentType)
+		assert.Equal(t, "", resp.ContentType())
 		assert.Equal(t, []byte{}, body)
 		testServer.Close()
 	})
@@ -523,16 +548,18 @@ func TestContentType(t *testing.T) {
 		testServer := httptest.NewServer(handler)
 		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
 		req := invokev1.NewInvokeMethodRequest("method").
-			WithRawData(nil, "application/json").
+			WithContentType("application/json").
 			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, req)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		assert.NoError(t, err)
-		contentType, body := resp.RawData()
-		assert.Equal(t, "text/plain; charset=utf-8", contentType)
+		assert.Equal(t, "text/plain; charset=utf-8", resp.ContentType())
 		assert.Equal(t, []byte("application/json"), body)
 		testServer.Close()
 	})
@@ -542,16 +569,18 @@ func TestContentType(t *testing.T) {
 		testServer := httptest.NewServer(handler)
 		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
 		req := invokev1.NewInvokeMethodRequest("method").
-			WithRawData(nil, "text/plain").
+			WithContentType("text/plain").
 			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, req)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		assert.NoError(t, err)
-		contentType, body := resp.RawData()
-		assert.Equal(t, "text/plain; charset=utf-8", contentType)
+		assert.Equal(t, "text/plain; charset=utf-8", resp.ContentType())
 		assert.Equal(t, []byte("text/plain"), body)
 		testServer.Close()
 	})
@@ -565,13 +594,15 @@ func TestAppToken(t *testing.T) {
 
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
 
 		// act
-		response, err := c.InvokeMethod(ctx, req)
+		resp, err := c.InvokeMethod(ctx, req)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		assert.NoError(t, err)
-		_, body := response.RawData()
 
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)
@@ -589,13 +620,15 @@ func TestAppToken(t *testing.T) {
 
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
 
 		// act
-		response, err := c.InvokeMethod(ctx, req)
+		resp, err := c.InvokeMethod(ctx, req)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
 
 		// assert
 		assert.NoError(t, err)
-		_, body := response.RawData()
 
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)

@@ -251,6 +251,11 @@ func (imr *InvokeMethodRequest) RawData() (r io.Reader) {
 	return imr.replayableRequest.RawData()
 }
 
+// RawDataFull returns the entire data read from the stream body.
+func (imr *InvokeMethodRequest) RawDataFull() ([]byte, error) {
+	return io.ReadAll(imr.RawData())
+}
+
 // Adds a new header to the existing set.
 func (imr *InvokeMethodRequest) AddHeaders(header *fasthttp.RequestHeader) {
 	md := map[string][]string{}

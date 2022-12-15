@@ -98,16 +98,17 @@ func TestInvokeMethod(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	req := invokev1.NewInvokeMethodRequest("method")
-	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+	req := invokev1.NewInvokeMethodRequest("method").
+		WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+	defer req.Close()
 	response, err := c.InvokeMethod(ctx, req)
 	assert.NoError(t, err)
-	contentType, body := response.RawData()
+	defer response.Close()
 
-	assert.Equal(t, "application/json", contentType)
+	assert.Equal(t, "application/json", response.ContentType())
 
 	actual := map[string]string{}
-	json.Unmarshal(body, &actual)
+	json.NewDecoder(response.RawData()).Decode(&actual)
 
 	assert.Equal(t, "POST", actual["httpverb"])
 	assert.Equal(t, "method", actual["method"])
