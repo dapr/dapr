@@ -57,6 +57,11 @@ func (sp ByteSlicePool) Get(cap int) []byte {
 
 // Put a slice back in the pool.
 func (sp ByteSlicePool) Put(bs []byte) {
+	// The linter here complains because we're putting a slice rather than a pointer in the pool.
+	// The complain is valid, because doing so does cause an allocation for the local copy of the slice header.
+	// However, this is ok for us because given how we use ByteSlicePool, we can't keep around the pointer we took out.
+	// See this thread for some discussion: https://github.com/dominikh/go-tools/issues/1336
+	//nolint:staticcheck
 	sp.pool.Put(bs)
 }
 
