@@ -280,7 +280,7 @@ type InvokeRequest struct {
 
 	// Required. method is a method name which will be invoked by caller.
 	Method string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
-	// Required. Bytes value or Protobuf message which caller sent.
+	// Required in unary RPCs. Bytes value or Protobuf message which caller sent.
 	// Dapr treats Any.value as bytes type if Any.type_url is unset.
 	Data *anypb.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	// The type of data content.
@@ -364,7 +364,7 @@ type InvokeResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Required. The content body of InvokeService response.
+	// Required in unary RPCs. The content body of InvokeService response.
 	Data *anypb.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	// Required. The type of data content.
 	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
@@ -674,6 +674,69 @@ func (x *ConfigurationItem) GetMetadata() map[string]string {
 	return nil
 }
 
+// Chunk of data sent in a streaming request or response.
+// This is used in requests including InternalInvokeRequestStream.
+type StreamPayload struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Data sent in the chunk.
+	// The amount of data included in each chunk is up to the discretion of the sender, and can be empty.
+	// Additionally, the amount of data doesn't need to be fixed and subsequent messages can send more, or less, data.
+	// Receivers must not make assumptions about the number of bytes they'll receive in each chunk.
+	Data *anypb.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	// Set to true if this is the last chunk.
+	// After a message with `complete=true` is received, the sender must not send any more chunk.
+	Complete bool `protobuf:"varint,2,opt,name=complete,proto3" json:"complete,omitempty"`
+}
+
+func (x *StreamPayload) Reset() {
+	*x = StreamPayload{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_common_v1_common_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *StreamPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamPayload) ProtoMessage() {}
+
+func (x *StreamPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_common_v1_common_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamPayload.ProtoReflect.Descriptor instead.
+func (*StreamPayload) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *StreamPayload) GetData() *anypb.Any {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *StreamPayload) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
 var File_dapr_proto_common_v1_common_proto protoreflect.FileDescriptor
 
 var file_dapr_proto_common_v1_common_proto_rawDesc = []byte{
@@ -773,14 +836,20 @@ var file_dapr_proto_common_v1_common_proto_rawDesc = []byte{
 	0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03,
 	0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14,
 	0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76,
-	0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64,
-	0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0c, 0x43, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x50, 0x72,
-	0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
-	0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63,
-	0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69,
-	0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63,
-	0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x55, 0x0a, 0x0d, 0x53, 0x74, 0x72, 0x65,
+	0x61, 0x6d, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x28, 0x0a, 0x04, 0x64, 0x61, 0x74,
+	0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x41, 0x6e, 0x79, 0x52, 0x04, 0x64,
+	0x61, 0x74, 0x61, 0x12, 0x1a, 0x0a, 0x08, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x08, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x42,
+	0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0c, 0x43,
+	0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x2f, 0x67, 0x69, 0x74,
+	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70,
+	0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x63, 0x6f, 0x6d, 0x6d,
+	0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0xaa, 0x02, 0x1b, 0x44,
+	0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67,
+	0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x33,
 }
 
 var (
@@ -796,7 +865,7 @@ func file_dapr_proto_common_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_dapr_proto_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_dapr_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_dapr_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
 	(HTTPExtension_Verb)(0),            // 0: dapr.proto.common.v1.HTTPExtension.Verb
 	(StateOptions_StateConcurrency)(0), // 1: dapr.proto.common.v1.StateOptions.StateConcurrency
@@ -808,26 +877,28 @@ var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
 	(*Etag)(nil),                       // 7: dapr.proto.common.v1.Etag
 	(*StateOptions)(nil),               // 8: dapr.proto.common.v1.StateOptions
 	(*ConfigurationItem)(nil),          // 9: dapr.proto.common.v1.ConfigurationItem
-	nil,                                // 10: dapr.proto.common.v1.StateItem.MetadataEntry
-	nil,                                // 11: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
-	(*anypb.Any)(nil),                  // 12: google.protobuf.Any
+	(*StreamPayload)(nil),              // 10: dapr.proto.common.v1.StreamPayload
+	nil,                                // 11: dapr.proto.common.v1.StateItem.MetadataEntry
+	nil,                                // 12: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	(*anypb.Any)(nil),                  // 13: google.protobuf.Any
 }
 var file_dapr_proto_common_v1_common_proto_depIdxs = []int32{
 	0,  // 0: dapr.proto.common.v1.HTTPExtension.verb:type_name -> dapr.proto.common.v1.HTTPExtension.Verb
-	12, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any
+	13, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any
 	3,  // 2: dapr.proto.common.v1.InvokeRequest.http_extension:type_name -> dapr.proto.common.v1.HTTPExtension
-	12, // 3: dapr.proto.common.v1.InvokeResponse.data:type_name -> google.protobuf.Any
+	13, // 3: dapr.proto.common.v1.InvokeResponse.data:type_name -> google.protobuf.Any
 	7,  // 4: dapr.proto.common.v1.StateItem.etag:type_name -> dapr.proto.common.v1.Etag
-	10, // 5: dapr.proto.common.v1.StateItem.metadata:type_name -> dapr.proto.common.v1.StateItem.MetadataEntry
+	11, // 5: dapr.proto.common.v1.StateItem.metadata:type_name -> dapr.proto.common.v1.StateItem.MetadataEntry
 	8,  // 6: dapr.proto.common.v1.StateItem.options:type_name -> dapr.proto.common.v1.StateOptions
 	1,  // 7: dapr.proto.common.v1.StateOptions.concurrency:type_name -> dapr.proto.common.v1.StateOptions.StateConcurrency
 	2,  // 8: dapr.proto.common.v1.StateOptions.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
-	11, // 9: dapr.proto.common.v1.ConfigurationItem.metadata:type_name -> dapr.proto.common.v1.ConfigurationItem.MetadataEntry
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	12, // 9: dapr.proto.common.v1.ConfigurationItem.metadata:type_name -> dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	13, // 10: dapr.proto.common.v1.StreamPayload.data:type_name -> google.protobuf.Any
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_common_v1_common_proto_init() }
@@ -920,6 +991,18 @@ func file_dapr_proto_common_v1_common_proto_init() {
 				return nil
 			}
 		}
+		file_dapr_proto_common_v1_common_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*StreamPayload); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -927,7 +1010,7 @@ func file_dapr_proto_common_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_common_v1_common_proto_rawDesc,
 			NumEnums:      3,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

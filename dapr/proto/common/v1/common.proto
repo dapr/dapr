@@ -60,7 +60,7 @@ message InvokeRequest {
   // Required. method is a method name which will be invoked by caller.
   string method = 1;
 
-  // Required. Bytes value or Protobuf message which caller sent.
+  // Required in unary RPCs. Bytes value or Protobuf message which caller sent.
   // Dapr treats Any.value as bytes type if Any.type_url is unset.
   google.protobuf.Any data = 2;
 
@@ -82,7 +82,7 @@ message InvokeRequest {
 // This message is used in InvokeService of Dapr gRPC Service and OnInvoke
 // of AppCallback gRPC service.
 message InvokeResponse {
-  // Required. The content body of InvokeService response.
+  // Required in unary RPCs. The content body of InvokeService response.
   google.protobuf.Any data = 1;
 
   // Required. The type of data content.
@@ -144,4 +144,18 @@ message ConfigurationItem {
 
   // the metadata which will be passed to/from configuration store component.
   map<string,string> metadata = 3;
+}
+
+// Chunk of data sent in a streaming request or response.
+// This is used in requests including InternalInvokeRequestStream.
+message StreamPayload {
+  // Data sent in the chunk.
+  // The amount of data included in each chunk is up to the discretion of the sender, and can be empty.
+  // Additionally, the amount of data doesn't need to be fixed and subsequent messages can send more, or less, data.
+  // Receivers must not make assumptions about the number of bytes they'll receive in each chunk.
+  google.protobuf.Any data = 1;
+
+  // Set to true if this is the last chunk.
+  // After a message with `complete=true` is received, the sender must not send any more chunk.
+  bool complete = 2;
 }

@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -29,18 +30,17 @@ import (
 	"google.golang.org/grpc/status"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
-
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
@@ -222,6 +222,15 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 	return d.appChannel.InvokeMethod(ctx, req)
 }
 
+func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, reqProto *internalv1pb.InternalInvokeRequest, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {
+	var resp *internalv1pb.InternalInvokeResponse
+	resp, err := clientV1.CallLocal(ctx, reqProto, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return invokev1.InternalInvokeResponse(resp)
+}
+
 func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 	span := diagUtils.SpanFromContext(ctx)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -268,6 +277,33 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 		return nil, nil, err
 	}
 	return imr, teardown, err
+}
+
+// Interface for *internalv1pb.InternalInvokeResponseStream and *internalv1pb.InternalInvokeRequestStream
+type chunkWithPayload interface {
+	GetPayload() *commonv1pb.StreamPayload
+}
+
+// ReadChunk reads a chunk of data from an InternalInvokeResponseStream or InternalInvokeRequestStream object
+// The returned value "done" is true if the sender of the chunk claims this is the last chunk.
+func ReadChunk(chunk chunkWithPayload, out io.Writer) (done bool, err error) {
+	payload := chunk.GetPayload()
+	if payload == nil {
+		return false, nil
+	}
+
+	if payload.Data != nil && len(payload.Data.Value) > 0 {
+		var n int
+		n, err = out.Write(payload.Data.Value)
+		if err != nil {
+			return false, err
+		}
+		if n != len(payload.Data.Value) {
+			return false, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.Data.Value))
+		}
+	}
+
+	return payload.Complete, nil
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
