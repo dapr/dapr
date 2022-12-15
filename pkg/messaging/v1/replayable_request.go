@@ -60,6 +60,7 @@ func (rr *replayableRequest) SetReplay(enabled bool) {
 		rr.replay = nil
 	} else if rr.replay == nil {
 		rr.replay = bufPool.Get().(*bytes.Buffer)
+		rr.replay.Reset()
 	}
 }
 
@@ -103,7 +104,6 @@ func (rr *replayableRequest) Close() (err error) {
 
 	// Return the buffer to the pool if we got one
 	if rr.replay != nil {
-		rr.replay.Reset()
 		bufPool.Put(rr.replay)
 		rr.replay = nil
 	}

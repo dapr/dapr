@@ -49,6 +49,11 @@ type PolicyDefinition struct {
 	cb   *breaker.CircuitBreaker
 }
 
+// HasRetries returns true if the policy is configured to have more than 1 retry.
+func (p PolicyDefinition) HasRetries() bool {
+	return p.r != nil && p.r.MaxRetries != 0
+}
+
 type RunnerOpts[T any] struct {
 	// The disposer is a function which is invoked when the operation fails, including due to timing out in a background goroutine. It receives the value returned by the operation function as long as it's non-zero (e.g. non-nil for pointer types).
 	// The disposer can be used to perform cleanup tasks on values returned by the operation function that would otherwise leak (because they're not returned by the result of the runner).

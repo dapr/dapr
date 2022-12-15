@@ -222,15 +222,6 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 	return d.appChannel.InvokeMethod(ctx, req)
 }
 
-func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, reqProto *internalv1pb.InternalInvokeRequest, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {
-	var resp *internalv1pb.InternalInvokeResponse
-	resp, err := clientV1.CallLocal(ctx, reqProto, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return invokev1.InternalInvokeResponse(resp)
-}
-
 func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 	span := diagUtils.SpanFromContext(ctx)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -257,6 +248,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB << 20),
 	}
 
+	// Set up timers
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
 

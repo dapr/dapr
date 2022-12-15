@@ -391,6 +391,8 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if a.isResiliencyEnabled {
 		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
+			// This policy has built-in retries so enable replay in the request
+			req.WithReplay(true)
 			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
 				a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
 			)
@@ -419,6 +421,12 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		teardown(false)
 		return resp, err
 	}
+
+	// Path for when resiliency is not enabled
+
+	// We need to enable replaying because the request may be attempted again in this path
+	req.WithReplay(true)
+
 	for i := 0; i < numRetries; i++ {
 		resp, teardown, err := fn(ctx, targetAddress, targetID, req)
 		if err == nil {
@@ -500,8 +508,15 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
 	}
 
-	policyRunner := resiliency.NewRunnerWithOptions[*invokev1.InvokeMethodResponse](ctx,
-		a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID),
+	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
+
+	// If the request can be retried, we need to enable replaying
+	if policyDef.HasRetries() {
+		req.WithReplay(true)
+	}
+
+	policyRunner := resiliency.NewRunnerWithOptions(ctx,
+		policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: func(val *invokev1.InvokeMethodResponse) {
 				_ = val.Close()
@@ -1031,16 +1046,17 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 		return err
 	}
 
+	policyDef := a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
+
 	log.Debugf("executing reminder %s for actor type %s with id %s", reminder.Name, reminder.ActorType, reminder.ActorID)
 	req := invokev1.NewInvokeMethodRequest("remind/"+reminder.Name).
 		WithActor(reminder.ActorType, reminder.ActorID).
 		WithRawDataBytes(b).
-		WithContentType(invokev1.JSONContentType)
+		WithContentType(invokev1.JSONContentType).
+		WithReplay(policyDef.HasRetries())
 	defer req.Close()
 
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
-		a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID),
-	)
+	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(), policyDef)
 	_, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
@@ -1400,16 +1416,17 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 		return err
 	}
 
+	policyDef := a.resiliency.ActorPreLockPolicy(actorType, actorID)
+
 	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
 	req := invokev1.NewInvokeMethodRequest("timer/"+name).
 		WithActor(actorType, actorID).
 		WithRawDataBytes(b).
-		WithContentType(invokev1.JSONContentType)
+		WithContentType(invokev1.JSONContentType).
+		WithReplay(policyDef.HasRetries())
 	defer req.Close()
 
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
-		a.resiliency.ActorPreLockPolicy(actorType, actorID),
-	)
+	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(), policyDef)
 	_, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
