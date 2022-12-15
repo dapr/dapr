@@ -1,39 +1,10 @@
-# Adapted from https://github.com/dotnet/dotnet-docker/blob/3c17243313fe40456e930b64e44d45e6829e19f3/src/runtime-deps/6.0/cbl-mariner2.0-distroless/amd64/Dockerfile
-# Copyright (c) 2016 .NET Foundation
-# License: MIT (https://github.com/dotnet/dotnet-docker/blob/3c17243313fe40456e930b64e44d45e6829e19f3/LICENSE)
-
 # Note: current directory must be ./dist
 
-### Builder image ###
 ARG MARINER_VERSION=2.0
-FROM mcr.microsoft.com/cbl-mariner/base/core:${MARINER_VERSION} AS builder
-
-# Install dependencies into a staging location
-ARG MARINER_VERSION
-RUN mkdir /staging \
-    && tdnf install -y --releasever="$MARINER_VERSION" --installroot /staging \
-        prebuilt-ca-certificates \
-        tzdata \
-    && tdnf clean all
-
-# Create a non-root user and group
-RUN tdnf install -y shadow-utils \
-    && tdnf clean all \
-    && groupadd --system --gid=900 app \
-    && adduser --uid 900 --gid app --shell /bin/false --no-create-home --system app \
-    && cp /etc/passwd /etc/group /staging/etc
-
-# Clean up staging
-RUN rm -rf /staging/etc/dnf \
-        /staging/run/* \
-        /staging/var/cache/* \
-        /staging/var/log \
-        /staging/var/lib/rpm
-
-### Runtime image ###
-FROM mcr.microsoft.com/cbl-mariner/distroless/minimal:${MARINER_VERSION}
+FROM mcr.microsoft.com/cbl-mariner/distroless/minimal:${MARINER_VERSION}-nonroot
 ARG PKG_FILES
-COPY --from=builder /staging/ /
+# The base image specifies the user with its name ("nonroot").
+# This is the equivalent UID: Kubernetes requires a numeric ID for "runAsRoot: false" support
+USER 65532
 WORKDIR /
-USER 900
 COPY /$PKG_FILES /

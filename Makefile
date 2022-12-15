@@ -280,7 +280,7 @@ test: test-deps
 ################################################################################
 # Target: test-race                                                            #
 ################################################################################
-# Note that we are expliciting maintaing an allow-list of packages that should be tested
+# Note that we are expliciting maintaining an allow-list of packages that should be tested
 # with "-race", as many packags aren't passing those tests yet.
 # Eventually, the goal is to be able to have all packages pass tests with "-race"
 # Note: CGO is required for tests with "-race"

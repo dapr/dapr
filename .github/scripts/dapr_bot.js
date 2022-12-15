@@ -13,6 +13,7 @@ const owners = [
     'mukundansundar',
     'pkedy',
     'pruthvidhodda',
+    'ryanlettieri',
     'shubham1172',
     'skyao',
     'tanvigour',

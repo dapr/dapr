@@ -178,7 +178,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 		}
 		var overallInvokeErr error
 		for path, psm := range routePathBulkMessageMap {
-			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, psm, topic, psName, msg, route, &bulkResponses, &entryIdIndexMap, path, policy, &bulkSubDiag)
+			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, psm, topic, psName, msg, route, &bulkResponses, &entryIdIndexMap, path, policy, &bulkSubDiag, rawPayload)
 			if invokeErr != nil {
 				hasAnyError = true
 				err = invokeErr
@@ -260,6 +260,7 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRout
 func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm pubsubBulkSubscribedMessage, topic string, psName string,
 	msg *pubsub.BulkMessage, route TopicRouteElem, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
 	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner[any], bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+	rawPayload bool,
 ) error {
 	var id string
 	idObj, err := uuid.NewRandom()
@@ -293,7 +294,7 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 			pErr = a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag,
 				envelope, route)
 		case GRPCProtocol:
-			pErr = a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
+			pErr = a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag, rawPayload)
 		default:
 			pErr = backoff.Permanent(errors.New("invalid application protocol"))
 		}
@@ -467,39 +468,96 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, psm *pubsubBul
 	return errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", psm.topic, statusCode)
 }
 
-// publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
-func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, psm *pubsubBulkSubscribedMessage,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIdIndexMap map[string]int, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
-) error {
-	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(psm.pubSubMessages))
-	for i, pubSubMsg := range psm.pubSubMessages {
-		entry := pubSubMsg.entry
-		item := &runtimev1pb.TopicEventBulkRequestEntry{
+func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
+	envelope := &runtimev1pb.TopicEventCERequest{
+		Id:              extractCloudEventProperty(event, pubsub.IDField),
+		Source:          extractCloudEventProperty(event, pubsub.SourceField),
+		DataContentType: extractCloudEventProperty(event, pubsub.DataContentTypeField),
+		Type:            extractCloudEventProperty(event, pubsub.TypeField),
+		SpecVersion:     extractCloudEventProperty(event, pubsub.SpecVersionField),
+	}
+
+	if data, ok := event[pubsub.DataField]; ok && data != nil {
+		envelope.Data = nil
+
+		if contenttype.IsStringContentType(envelope.DataContentType) {
+			switch v := data.(type) {
+			case string:
+				envelope.Data = []byte(v)
+			case []byte:
+				envelope.Data = v
+			default:
+				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, ErrUnexpectedEnvelopeData //nolint:nosnakecase
+			}
+		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
+			envelope.Data, _ = json.Marshal(data)
+		}
+	}
+	extensions, extensionsErr := extractCloudEventExtensions(event)
+	if extensionsErr != nil {
+		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
+	}
+	envelope.Extensions = extensions
+	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
+}
+
+func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
+	if rawPayload {
+		return &runtimev1pb.TopicEventBulkRequestEntry{
 			EntryId:     entry.EntryId,
-			Event:       entry.Event,
+			Event:       &runtimev1pb.TopicEventBulkRequestEntry_Bytes{Bytes: entry.Event}, //nolint:nosnakecase
 			ContentType: entry.ContentType,
 			Metadata:    entry.Metadata,
+		}, nil
+	} else {
+		eventLocal, err := extractCloudEvent(cloudEvent)
+		if err != nil {
+			return nil, err
+		}
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &eventLocal,
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	}
+}
+
+// publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
+func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBulkSubscribedMessage,
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIdIndexMap map[string]int, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+	rawPayload bool,
+) error {
+	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(msg.pubSubMessages))
+	for i, pubSubMsg := range msg.pubSubMessages {
+		entry := pubSubMsg.entry
+		item, err := fetchEntry(rawPayload, entry, msg.pubSubMessages[i].cloudEvent)
+		if err != nil {
+			bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
+			setBulkResponseEntry(bulkResponses, i, entry.EntryId, err)
+			continue
 		}
 		items[i] = item
 	}
+
 	envelope := &runtimev1pb.TopicEventBulkRequest{
 		Id:         uuid.New().String(),
 		Entries:    items,
-		Metadata:   psm.metadata,
-		Topic:      psm.topic,
-		PubsubName: psm.pubsub,
+		Metadata:   msg.metadata,
+		Topic:      msg.topic,
+		PubsubName: msg.pubsub,
 		Type:       pubsub.DefaultBulkEventType,
-		Path:       psm.path,
+		Path:       msg.path,
 	}
 
-	spans := make([]trace.Span, len(psm.pubSubMessages))
+	spans := make([]trace.Span, len(msg.pubSubMessages))
 	n := 0
-	for _, pubSubMsg := range psm.pubSubMessages {
+	for _, pubSubMsg := range msg.pubSubMessages {
 		cloudEvent := pubSubMsg.cloudEvent
 		if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 			if traceID, ok := iTraceID.(string); ok {
 				sc, _ := diag.SpanContextFromW3CString(traceID)
-				spanName := fmt.Sprintf("pubsub/%s", psm.topic)
+				spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
 				// no ops if trace is off
 				var span trace.Span
@@ -514,7 +572,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, psm *pubsubBul
 	}
 	spans = spans[:n]
 	defer endSpans(spans)
-	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
+	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
 	conn, err := a.grpc.GetAppClient()
 	if err != nil {
@@ -539,17 +597,17 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, psm *pubsubBul
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
-			bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(psm.pubSubMessages))
+			bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(msg.pubSubMessages))
 			bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(psm, bulkResponses, &entryIdIndexMap, nil)
+			populateBulkSubscribeResponsesWithError(msg, bulkResponses, &entryIdIndexMap, nil)
 			return nil
 		}
 
 		err = errors.Errorf("error returned from app while processing bulk pub/sub event: %s", err)
 		log.Debug(err)
-		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(psm.pubSubMessages))
+		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.pubSubMessages))
 		bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bulkResponses, &entryIdIndexMap, err)
+		populateBulkSubscribeResponsesWithError(msg, bulkResponses, &entryIdIndexMap, err)
 		// on error from application, return error for redelivery of event
 		return nil
 	}
@@ -584,7 +642,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, psm *pubsubBul
 			continue
 		}
 	}
-	for _, item := range psm.pubSubMessages {
+	for _, item := range msg.pubSubMessages {
 		ind := entryIdIndexMap[item.entry.EntryId]
 		if (*bulkResponses)[ind].EntryId == "" {
 			setBulkResponseEntry(bulkResponses, ind, item.entry.EntryId,

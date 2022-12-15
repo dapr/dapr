@@ -152,9 +152,8 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	}
 }
 
-// invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
-// TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target
-// Server shuts down.
+// invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures.
+// TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target server shuts down.
 func (d *directMessaging) invokeWithRetry(
 	ctx context.Context,
 	numRetries int,
@@ -244,12 +243,10 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
-	var opts []grpc.CallOption
-	opts = append(
-		opts,
-		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB<<20),
-		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB<<20),
-	)
+	opts := []grpc.CallOption{
+		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB << 20),
+		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB << 20),
+	}
 
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)

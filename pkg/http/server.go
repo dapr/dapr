@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
@@ -106,9 +107,10 @@ func (s *server) StartNonBlocking() error {
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
+			addr := net.JoinHostPort(apiListenAddress, strconv.Itoa(s.config.Port))
+			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.Port, err)
+				log.Warnf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				listeners = append(listeners, l)
 			}
@@ -155,10 +157,11 @@ func (s *server) StartNonBlocking() error {
 
 	if s.config.EnableProfiling {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			log.Infof("starting profiling server on %v:%v", apiListenAddress, s.config.ProfilePort)
-			pl, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.ProfilePort))
+			addr := net.JoinHostPort(apiListenAddress, strconv.Itoa(s.config.ProfilePort))
+			log.Infof("starting profiling server on %s", addr)
+			pl, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.ProfilePort, err)
+				log.Warnf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				profilingListeners = append(profilingListeners, pl)
 			}
