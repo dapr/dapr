@@ -151,7 +151,7 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 }
 
 // InvokeMethod invokes user code via HTTP.
-func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (rsp *invokev1.InvokeMethodResponse, err error) {
 	if h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
@@ -166,8 +166,6 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
 	}
 
-	var rsp *invokev1.InvokeMethodResponse
-	var err error
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
 		rsp, err = h.invokeMethodV1(ctx, req)
@@ -274,8 +272,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	var contentLength int64
 	if resp != nil {
-		defer resp.Body.Close()
-
 		if resp.Header != nil {
 			contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
 		}

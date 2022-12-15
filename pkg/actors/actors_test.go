@@ -108,7 +108,8 @@ func (m *mockAppChannel) GetBaseAddress() string {
 func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
-		if err := json.Unmarshal(req.Message().Data.Value, &request); err == nil {
+		err := json.NewDecoder(req.RawData()).Decode(&request)
+		if err == nil {
 			m.requestC <- request
 		}
 	}
@@ -128,7 +129,7 @@ func (r *reentrantAppChannel) GetBaseAddress() string {
 }
 
 func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	r.callLog = append(r.callLog, fmt.Sprintf("Entering %s", req.Message().Method))
+	r.callLog = append(r.callLog, "Entering "+req.Message().Method)
 	if len(r.nextCall) > 0 {
 		nextReq := r.nextCall[0]
 		r.nextCall = r.nextCall[1:]
@@ -144,7 +145,7 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 		}
 		defer resp.Close()
 	}
-	r.callLog = append(r.callLog, fmt.Sprintf("Exiting %s", req.Message().Method))
+	r.callLog = append(r.callLog, "Exiting "+req.Message().Method)
 
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
 }

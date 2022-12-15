@@ -1677,7 +1677,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			}
 			return dmpr, invokeErr
 		}
-		defer rResp.Close()
 
 		dmpr.headers = rResp.Headers()
 		dmpr.contentType = rResp.ContentType()

@@ -56,11 +56,15 @@ type FailingDirectMessaging struct {
 }
 
 func (f *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	err := f.Failure.PerformFailure(string(req.Message().Data.Value))
+	r, err := req.ProtoWithData()
 	if err != nil {
 		return &invokev1.InvokeMethodResponse{}, err
 	}
-	res := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-		WithRawDataBytes(req.Message().Data.Value)
-	return res, nil
+	err = f.Failure.PerformFailure(string(r.Message.Data.Value))
+	if err != nil {
+		return &invokev1.InvokeMethodResponse{}, err
+	}
+	resp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataBytes(r.Message.Data.Value)
+	return resp, nil
 }

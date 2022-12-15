@@ -239,7 +239,10 @@ type FailingActors struct {
 }
 
 func (f *FailingActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	proto := req.Proto()
+	proto, err := req.ProtoWithData()
+	if err != nil {
+		return nil, err
+	}
 	if proto == nil || proto.Actor == nil {
 		return nil, errors.New("proto.Actor is nil")
 	}
