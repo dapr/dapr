@@ -82,7 +82,7 @@ func (rr *replayableRequest) RawData() (r io.Reader) {
 		currentData := make([]byte, rr.replay.Len())
 		copy(currentData, rr.replay.Bytes())
 		rr.replay.Reset()
-		mr := io.MultiReader(
+		mr := streamutils.NewMultiReaderCloser(
 			bytes.NewReader(currentData),
 			rr.data,
 		)
