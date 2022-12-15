@@ -18,15 +18,20 @@ import (
 	"io"
 	"sync"
 
+	"github.com/dapr/dapr/utils"
 	streamutils "github.com/dapr/dapr/utils/streams"
 )
 
-// Contains a pool of *bytes.Buffer objects.
-// Use this to reduce the number of allocations in replayableRequest for buffers and relieve pressure on the GC.
-var bufPool = sync.Pool{
-	New: func() any {
-		return new(bytes.Buffer)
-	},
+// Contain pools of *bytes.Buffer and []byte objects.
+// Used to reduce the number of allocations in replayableRequest for buffers and relieve pressure on the GC.
+var (
+	bufPool = sync.Pool{New: newBuffer}
+	// Minimum capacity for the slices is 2KB
+	bsPool = utils.NewByteSlicePool(2 << 10)
+)
+
+func newBuffer() any {
+	return new(bytes.Buffer)
 }
 
 // replayableRequest is implemented by InvokeMethodRequest and InvokeMethodResponse
@@ -35,6 +40,7 @@ type replayableRequest struct {
 	replay           *bytes.Buffer
 	lock             sync.Mutex
 	currentTeeReader *streamutils.TeeReadCloser
+	currentData      []byte
 }
 
 // WithRawData sets message data.
@@ -57,7 +63,7 @@ func (rr *replayableRequest) SetReplay(enabled bool) {
 	defer rr.lock.Unlock()
 
 	if !enabled {
-		rr.replay = nil
+		rr.closeReplay()
 	} else if rr.replay == nil {
 		rr.replay = bufPool.Get().(*bytes.Buffer)
 		rr.replay.Reset()
@@ -80,11 +86,22 @@ func (rr *replayableRequest) RawData() (r io.Reader) {
 	} else if rr.replay != nil {
 		// If there's replaying enabled, we need to create a new TeeReadCloser
 		// We need to copy the data read insofar from the reply buffer because the buffer becomes invalid after new data is written into the it, then reset the buffer
-		currentData := make([]byte, rr.replay.Len())
-		copy(currentData, rr.replay.Bytes())
+		l := rr.replay.Len()
+
+		// Get a new byte slice from the pool if we don't have one, and ensure it has enough capacity
+		if rr.currentData == nil {
+			rr.currentData = bsPool.Get(l)
+		}
+		bsPool.Resize(rr.currentData, l)
+
+		// Copy the data from the replay buffer into the byte slice
+		copy(rr.currentData[0:l], rr.replay.Bytes())
 		rr.replay.Reset()
+
+		// Create a new TeeReadCloser that reads from the previously-read data and then the data not yet processed
+		// The TeeReadCloser also keeps all the data it reads into the replay buffer
 		mr := streamutils.NewMultiReaderCloser(
-			bytes.NewReader(currentData),
+			bytes.NewReader(rr.currentData[0:l]),
 			rr.data,
 		)
 		rr.currentTeeReader = streamutils.NewTeeReadCloser(mr, rr.replay)
@@ -97,16 +114,24 @@ func (rr *replayableRequest) RawData() (r io.Reader) {
 	return r
 }
 
+func (rr *replayableRequest) closeReplay() {
+	// Return the buffer and byte slice to the pools if we got one
+	if rr.replay != nil {
+		bufPool.Put(rr.replay)
+		rr.replay = nil
+	}
+	if rr.currentData != nil {
+		bsPool.Put(rr.currentData)
+		rr.currentData = nil
+	}
+}
+
 // Close the data stream.
 func (rr *replayableRequest) Close() (err error) {
 	rr.lock.Lock()
 	defer rr.lock.Unlock()
 
-	// Return the buffer to the pool if we got one
-	if rr.replay != nil {
-		bufPool.Put(rr.replay)
-		rr.replay = nil
-	}
+	rr.closeReplay()
 
 	if rr.data != nil {
 		err = rr.data.Close()
