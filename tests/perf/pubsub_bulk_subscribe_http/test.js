@@ -18,7 +18,7 @@ import ws from "k6/ws";
 const targetUrl = __ENV.TARGET_URL
 const pubsubName = __ENV.PUBSUB_NAME
 const subscribeType = __ENV.SUBSCRIBE_TYPE
-const defaultTopic = "test-topic"
+const defaultTopic = "perf-test"
 const defaultCount = 100
 const oneKiloByteMessage = "a".repeat(1024)
 
@@ -68,19 +68,20 @@ function publishMessages(pubsub, topic, message, count) {
 }
 
 export default function () {
-    params = { type: subscribeType, topic: defaultTopic, pubsubName: pubsubName, count: defaultCount }
+    const url = `${targetUrl}/test`
+    const params = { type: subscribeType, count: defaultCount }
 
-    const res = ws.connect(targetUrl, params, (socket) => {
+    const res = ws.connect(url, params, (socket) => {
         socket.on("open", () => {
             const publishResponse = publishMessages(pubsubName, defaultTopic, oneKiloByteMessage, defaultCount);
             check(publishResponse, {
                 "publish response status code is 2xx": (r) => r.status >= 200 && r.status < 300
             });
         });
-        socket.on("complete", (data) => {
+        socket.on("message", (data) => {
             console.log("Received data: " + data);
             check(data, {
-                "all messages received": (d) => d.count === defaultCount,
+                "completed with success": (d) => d === "true",
             })
         });
         socket.on("close", () => {

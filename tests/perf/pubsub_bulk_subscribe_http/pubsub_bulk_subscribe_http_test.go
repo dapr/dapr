@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 		{
 			AppName:           testAppName,
 			DaprEnabled:       true,
-			ImageName:         "perf-pubsub_bulk_subscribe_http",
+			ImageName:         "perf-pubsub_subscribe_http",
 			Replicas:          1,
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
