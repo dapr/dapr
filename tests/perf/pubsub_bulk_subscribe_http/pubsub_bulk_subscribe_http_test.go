@@ -123,5 +123,5 @@ func TestPubsubSuscribeHttpPerformance(t *testing.T) {
 }
 
 func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
-	runTest(t, "bulk", 200)
+	runTest(t, "bulk", 50)
 }

@@ -31,7 +31,7 @@ export const options = {
         http_req_duration: ['p(95)<' + httpReqDurationThreshold],
     },
     scenarios: {
-        idStress: {
+        bulkPSubscribe: {
             executor: "ramping-vus",
             startVUs: 0,
             stages: [
