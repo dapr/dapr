@@ -34,7 +34,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
     # export DARP_TEST_TAG=dev
     # export DAPR_TEST_REGISTRY_SECRET=yourself_private_image_secret
 
-    # Set the below environment variables to configure test specific settings.
+    # Set the below environment variables to configure test specific settings for Fortio based tests.
     # DAPR_PERF_QPS sets the desired number of requests per second. Default is 1.
     # DAPR_PERF_CONNECTIONS sets the number of client connections used to send requests to Dapr. Default is 1.
     # DAPR_TEST_DURATION sets the duration of the test. Default is "1m".
@@ -109,6 +109,14 @@ make build-perf-app-all
 
 # push perf apps docker image to docker hub
 make push-perf-app-all
+```
+
+### (K6) Install the k6-operator
+
+If you are running k6 based tests, install the k6-operator.
+
+```bash
+make setup-test-env-k6
 ```
 
 ### Run performance tests

@@ -484,9 +484,9 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD_SIZE: 1024
         run: make test-perf-pubsub_bulk_publish_grpc
-      - name: Run Perf test pubsub_subscribe_grpc
+      - name: Run Perf test pubsub_subscribe_http
         if: env.TEST_PREFIX != ''
-        run: make test-perf-pubsub_subscribe_grpc
+        run: make test-perf-pubsub_subscribe_http
       - name: Run Perf test actor_timer in Java
         if: env.TEST_PREFIX != ''
         env:
