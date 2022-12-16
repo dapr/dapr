@@ -26,16 +26,16 @@ export const options = {
     discardResponseBodies: true,
     thresholds: {
         checks: ['rate==1'],
-        http_req_duration: ['p(95)<1000'], // 95% of requests should be below 1s
+        http_req_duration: ['p(95)<200'], // 95% of requests should be below 200ms
     },
     scenarios: {
         idStress: {
             executor: "ramping-vus",
             startVUs: 0,
             stages: [
-                { duration: "2s", target: 10 },
-                { duration: "3s", target: 30 },
-                { duration: "4s", target: 50 },
+                { duration: "2s", target: 100 },
+                { duration: "3s", target: 300 },
+                { duration: "4s", target: 500 },
             ],
             gracefulRampDown: "0s",
         },
