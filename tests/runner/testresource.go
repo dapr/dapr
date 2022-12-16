@@ -97,8 +97,8 @@ func (r *TestResources) setup() error {
 		if dr == nil {
 			break
 		}
-		resourceCount++
 
+		resourceCount++
 		go func() {
 			err := dr.Init(r.ctx)
 			r.pushActiveResource(dr)
