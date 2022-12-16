@@ -85,7 +85,7 @@ func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
 	k6Test := loadtest.NewK6("./test.js",
 		loadtest.WithParallelism(1),
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
-		loadtest.WithRunnerEnvVar("PUBSUB_NAME", "inmemorypubsub"))
+		loadtest.WithRunnerEnvVar("PUBSUB_NAME", "kafka-messagebus"))
 	defer k6Test.Dispose()
 
 	t.Log("running the k6 load test...")

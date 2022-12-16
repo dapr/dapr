@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	pubSubName  = "pubsub" // "inmemorypubsub"
+	pubSubName  = "kafka-messagebus"
 	topic       = "perf-test"
 	route       = "perf-test"
 	numMessages = 100

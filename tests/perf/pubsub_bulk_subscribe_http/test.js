@@ -20,13 +20,13 @@ const pubsubName = __ENV.PUBSUB_NAME
 const subscribeType = __ENV.SUBSCRIBE_TYPE
 const defaultTopic = "perf-test"
 const defaultCount = 100
-const oneKiloByteMessage = "a".repeat(1024)
+const hundredBytesMessage = "a".repeat(100)
 
 export const options = {
     discardResponseBodies: true,
     thresholds: {
         checks: ['rate==1'],
-        http_req_duration: ['p(95)<200'], // 95% of requests should be below 200ms
+        http_req_duration: ['p(95)<1000'], // 95% of requests should be below 1s
     },
     scenarios: {
         idStress: {
@@ -73,7 +73,7 @@ export default function () {
 
     const res = ws.connect(url, params, (socket) => {
         socket.on("open", () => {
-            const publishResponse = publishMessages(pubsubName, defaultTopic, oneKiloByteMessage, defaultCount);
+            const publishResponse = publishMessages(pubsubName, defaultTopic, hundredBytesMessage, defaultCount);
             check(publishResponse, {
                 "publish response status code is 2xx": (r) => r.status >= 200 && r.status < 300
             });

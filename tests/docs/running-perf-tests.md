@@ -101,7 +101,7 @@ make setup-test-components
 
 ### Build and push test apps to docker hub
 
-Build docker images from apps and push the images to test docker hub
+Build docker images from apps and push the images to test docker hub.
 
 ```bash
 # build perf apps docker image under apps/
@@ -111,7 +111,21 @@ make build-perf-app-all
 make push-perf-app-all
 ```
 
-### (K6) Install the k6-operator
+You can also build and push the test apps individually.
+
+```bash
+# build perf apps docker image under apps/
+make build-perf-app-<app-name>
+
+# push perf apps docker image to docker hub
+make push-perf-app-<app-name>
+```
+
+If you are building test apps individually, you need to build and push the tester app also:
+- tester (`build-perf-app-tester` and `push-perf-app-tester`) for Fortio based tests
+- k6-custom (`build-perf-app-k6-custom` and `push-perf-app-k6-custom`) for k6 based tests
+
+### (k6) Install the k6-operator
 
 If you are running k6 based tests, install the k6-operator.
 
