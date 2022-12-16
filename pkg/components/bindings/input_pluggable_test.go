@@ -21,25 +21,20 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
+
+	guuid "github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/bindings"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
-
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
-
-	guuid "github.com/google/uuid"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"go.uber.org/atomic"
-
 	"github.com/dapr/kit/logger"
-
-	"google.golang.org/grpc"
 )
 
 type inputBindingServer struct {
