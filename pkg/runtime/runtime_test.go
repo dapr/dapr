@@ -3090,7 +3090,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil).
-			WithRawDataString("Internal error").
+			WithRawDataString("Internal Error").
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
@@ -3613,7 +3613,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 			map[string]int{},
 		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
-			rawData := req.Message().Data.Value
+			rawData, _ := io.ReadAll(req.RawData())
 			data := make(map[string]string)
 			json.Unmarshal(rawData, &data)
 			val, _ := base64.StdEncoding.DecodeString(data["data_base64"])
@@ -4236,11 +4236,6 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
-			WithHTTPExtension(http.MethodOptions, "").
-			WithContentType(invokev1.JSONContentType)
-		defer fakeBindingReq.Close()
-
 		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		defer fakeBindingResp.Close()
 
@@ -4257,7 +4252,7 @@ func TestReadInputBindings(t *testing.T) {
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeBindingReq).Return(fakeBindingResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod(testInputBindingMethod)).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -4344,7 +4339,7 @@ func TestReadInputBindings(t *testing.T) {
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeBindingReq).Return(fakeBindingResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod(testInputBindingMethod)).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -4802,7 +4797,8 @@ func TestBindingResiliency(t *testing.T) {
 			map[string]int{},
 		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
-			return string(req.Message().Data.Value)
+			r, _ := io.ReadAll(req.RawData())
+			return string(r)
 		},
 	}
 
@@ -5415,6 +5411,15 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
+}
+
+func matchDaprRequestMethod(method string) any {
+	return mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+		if req == nil || req.Message() == nil || req.Message().Method != method {
+			return false
+		}
+		return true
+	})
 }
 
 func TestMetadataContainsNamespace(t *testing.T) {
