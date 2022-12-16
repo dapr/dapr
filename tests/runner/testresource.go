@@ -44,7 +44,7 @@ func (r *TestResources) Add(dr Disposable) {
 	r.resources = append(r.resources, dr)
 }
 
-// dequeueResource dequeus Disposable resource from resources queue.
+// dequeueResource dequeues Disposable resource from resources queue.
 func (r *TestResources) dequeueResource() Disposable {
 	r.resourcesLock.Lock()
 	defer r.resourcesLock.Unlock()
@@ -90,26 +90,60 @@ func (r *TestResources) FindActiveResource(name string) Disposable {
 func (r *TestResources) setup() error {
 	r.ctx, r.cancel = context.WithCancel(context.Background())
 
-	for dr := r.dequeueResource(); dr != nil; dr = r.dequeueResource() {
-		err := dr.Init(r.ctx)
-		r.pushActiveResource(dr)
+	resourceCount := 0
+	errs := make(chan error)
+	for {
+		dr := r.dequeueResource()
+		if dr == nil {
+			break
+		}
+		resourceCount++
+
+		go func() {
+			err := dr.Init(r.ctx)
+			r.pushActiveResource(dr)
+			errs <- err
+		}()
+	}
+
+	for i := 0; i < resourceCount; i++ {
+		err := <-errs
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
 // TearDown initializes the resources by calling Dispose.
 func (r *TestResources) tearDown() (retErr error) {
-	retErr = nil
-	for dr := r.popActiveResource(); dr != nil; dr = r.popActiveResource() {
-		err := dr.Dispose(false)
+	resourceCount := 0
+	errs := make(chan error)
+	for {
+		dr := r.popActiveResource()
+		if dr == nil {
+			break
+		}
+
+		resourceCount++
+		go func() {
+			err := dr.Dispose(false)
+			if err != nil {
+				err = fmt.Errorf("failed to tear down %s. got: %w", dr.Name(), err)
+			}
+			errs <- err
+		}()
+	}
+
+	for i := 0; i < resourceCount; i++ {
+		err := <-errs
 		if err != nil {
+			os.Stderr.WriteString(err.Error() + "\n")
 			retErr = err
-			fmt.Fprintf(os.Stderr, "Failed to tear down %s. got: %q", dr.Name(), err)
 		}
 	}
+
 	if r.cancel != nil {
 		r.cancel()
 		r.cancel = nil
