@@ -1665,6 +1665,9 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		dmpr := &directMessagingPolicyRes{}
 
 		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
+		if rResp != nil {
+			defer rResp.Close()
+		}
 		if rErr != nil {
 			// Allowlists policies that are applied on the callee side can return a Permission Denied error.
 			// For everything else, treat it as a gRPC transport error

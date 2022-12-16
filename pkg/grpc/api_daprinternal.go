@@ -88,7 +88,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err != nil {
 		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
 		if errors.Is(err, actors.ErrDaprResponseHeader) {
-			return resp.Proto(), nil
+			return resp.ProtoWithData()
 		}
 
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)

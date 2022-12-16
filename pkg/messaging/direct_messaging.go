@@ -267,7 +267,11 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 		}
 	}()
 
-	resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
+	pd, err := req.ProtoWithData()
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to read data from request object: %w", err)
+	}
+	resp, err = clientV1.CallLocal(ctx, pd, opts...)
 	if err != nil {
 		return nil, teardown, err
 	}
