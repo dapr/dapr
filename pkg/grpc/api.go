@@ -444,21 +444,18 @@ type invokeServiceResp struct {
 }
 
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
-	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
-	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
-		req.WithMetadata(incomingMD)
-	}
-	defer req.Close()
-
 	if a.directMessaging == nil {
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+req.Message().Method)
+	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
-	// If the request can be retried, we need to enable replaying
-	if policyDef.HasRetries() {
-		req.WithReplay(true)
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage()).
+		WithReplay(policyDef.HasRetries())
+	defer req.Close()
+
+	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		req.WithMetadata(incomingMD)
 	}
 
 	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx, policyDef)
@@ -466,8 +463,17 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp := &invokeServiceResp{}
 		imr, rErr := a.directMessaging.Invoke(ctx, in.Id, req)
 		if imr != nil {
-			defer imr.Close()
-			rResp.message = imr.Message()
+			// Read the entire message in memory then close imr
+			pd, pdErr := imr.ProtoWithData()
+			imr.Close()
+			if pd != nil {
+				rResp.message = pd.Message
+			}
+
+			// If we have an error, set it only if rErr is not already set
+			if pdErr != nil && rErr == nil {
+				rErr = pdErr
+			}
 		}
 		if rErr != nil {
 			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
@@ -476,10 +482,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
-			errorMessage := ""
-			if imr != nil {
-				b, _ := imr.RawDataFull()
-				errorMessage = string(b)
+			var errorMessage string
+			if rResp.message != nil && rResp.message.Data != nil {
+				errorMessage = string(rResp.message.Data.Value)
 			}
 			code := int(imr.Status().Code)
 			// If the status is OK, will be nil

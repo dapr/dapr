@@ -197,12 +197,13 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return nil, errors.New("message is nil")
 	}
 
+	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
+
 	data, err := io.ReadAll(imr.RawData())
 	if err != nil {
-		return nil, err
+		return m, err
 	}
 
-	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
 	m.Message.Data = &anypb.Any{
 		Value: data,
 	}
