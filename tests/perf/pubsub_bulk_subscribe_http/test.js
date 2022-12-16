@@ -33,9 +33,9 @@ export const options = {
             executor: "ramping-vus",
             startVUs: 0,
             stages: [
-                { duration: "2s", target: 100 },
-                { duration: "2s", target: 300 },
-                { duration: "4s", target: 500 },
+                { duration: "2s", target: 10 },
+                { duration: "3s", target: 30 },
+                { duration: "4s", target: 50 },
             ],
             gracefulRampDown: "0s",
         },
@@ -56,16 +56,16 @@ function publishMessages(pubsub, topic, message, count) {
     const bulkPublishBody = [];
     for (let i = 0; i < count; i++) {
         bulkPublishBody.push({
-            entryId: i,
+            entryId: i.toString(),
             event: message,
             contentType: "text/plain",
         });
     }
+
     return http.post(
-        `${DAPR_ADDRESS}/v1.0-alpha/publish/bulk/${pubsub}/${topic}`,
+        `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${pubsub}/${topic}`,
         JSON.stringify(bulkPublishBody),
-        { headers: { "Content-Type": "application/json" } }
-    );
+        { headers: { 'Content-Type': 'application/json' }, });
 }
 
 export default function () {

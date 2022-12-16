@@ -84,7 +84,6 @@ func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
 
 	k6Test := loadtest.NewK6("./test.js",
 		loadtest.WithParallelism(1),
-		loadtest.EnableLog(),
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
 		loadtest.WithRunnerEnvVar("PUBSUB_NAME", "kafka-messagebus"),
 		loadtest.WithRunnerEnvVar("SUBSCRIBE_TYPE", "bulk"))
