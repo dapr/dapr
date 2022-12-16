@@ -16,25 +16,19 @@ package grpc
 import (
 	"context"
 	"errors"
-	"io"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
-
-// Maximum size, in bytes, for the buffer used by CallLocalStream: 4KB.
-const StreamBufferSize = 4 << 10
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
 func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -79,137 +73,6 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	defer res.Close()
 
 	return res.ProtoWithData()
-}
-
-// CallLocalStream is a variant of CallLocal that uses gRPC streams to send data in chunks, rather than in an unary RPC.
-// It is invoked by another Dapr instance with a request to the local app.
-func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
-	if a.appChannel == nil {
-		return status.Error(codes.Internal, messages.ErrChannelNotFound)
-	}
-
-	ctx, cancel := context.WithCancel(stream.Context())
-	defer cancel()
-
-	// Read the first chunk of the incoming request
-	// This contains the metadata of the request
-	chunk := &internalv1pb.InternalInvokeRequestStream{}
-	err := stream.RecvMsg(chunk)
-	if err != nil {
-		return err
-	}
-	if chunk.Request == nil || chunk.Request.Metadata == nil || chunk.Request.Message == nil {
-		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, "request does not contain the required fields in the leading chunk")
-	}
-	pr, pw := io.Pipe()
-	req, err := invokev1.InternalInvokeRequest(chunk.Request)
-	if err != nil {
-		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
-	}
-	req.WithRawData(pr).
-		WithContentType(chunk.Request.Message.ContentType)
-	defer req.Close()
-
-	err = a.callLocalValidateACL(ctx, req)
-	if err != nil {
-		return err
-	}
-
-	// Read the rest of the data in background as we submit the request
-	go func() {
-		var (
-			done    bool
-			readErr error
-		)
-		for {
-			if ctx.Err() != nil {
-				pw.CloseWithError(ctx.Err())
-				return
-			}
-
-			done, readErr = messaging.ReadChunk(chunk, pw)
-			if readErr != nil {
-				pw.CloseWithError(readErr)
-				return
-			}
-
-			if done {
-				break
-			}
-
-			readErr = stream.RecvMsg(chunk)
-			if err != nil {
-				pw.CloseWithError(readErr)
-				return
-			}
-
-			if chunk.Request != nil && (chunk.Request.Metadata != nil || chunk.Request.Message != nil) {
-				pw.CloseWithError(errors.New("request metadata found in non-leading chunk"))
-				return
-			}
-		}
-
-		pw.Close()
-	}()
-
-	// Submit the request to the app
-	res, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
-	}
-	defer res.Close()
-
-	// Respond to the caller
-	r := res.RawData()
-	resProto := res.Proto()
-	buf := make([]byte, StreamBufferSize)
-	var (
-		proto *internalv1pb.InternalInvokeResponseStream
-		n     int
-	)
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		proto = &internalv1pb.InternalInvokeResponseStream{
-			Payload: &commonv1pb.StreamPayload{},
-		}
-
-		// First message only
-		if resProto != nil {
-			proto.Response = resProto
-			resProto = nil
-		}
-
-		if r != nil {
-			n, err = r.Read(buf)
-			if err == io.EOF {
-				proto.Payload.Complete = true
-			} else if err != nil {
-				return err
-			}
-			if n > 0 {
-				proto.Payload.Data = &anypb.Any{
-					Value: buf[:n],
-				}
-			}
-		} else {
-			proto.Payload.Complete = true
-		}
-
-		err = stream.Send(proto)
-		if err != nil {
-			return err
-		}
-
-		// Stop with the last chunk
-		if proto.Payload.Complete {
-			break
-		}
-	}
-
-	return nil
 }
 
 // CallActor invokes a virtual actor.

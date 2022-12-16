@@ -163,24 +163,6 @@ func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalIn
 	return resp.ProtoWithData()
 }
 
-func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
-		WithRawDataBytes(ExtractSpanContext(stream.Context())).
-		WithContentType("text/plain")
-	pd, err := resp.ProtoWithData()
-	if err != nil {
-		return err
-	}
-	stream.Send(&internalv1pb.InternalInvokeResponseStream{
-		Response: resp.Proto(),
-		Payload: &commonv1pb.StreamPayload{
-			Data:     pd.Message.Data,
-			Complete: true,
-		},
-	})
-	return nil
-}
-
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
