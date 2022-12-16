@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -35,7 +34,6 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
@@ -279,33 +277,6 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 		return nil, nil, err
 	}
 	return imr, teardown, err
-}
-
-// Interface for *internalv1pb.InternalInvokeResponseStream and *internalv1pb.InternalInvokeRequestStream
-type chunkWithPayload interface {
-	GetPayload() *commonv1pb.StreamPayload
-}
-
-// ReadChunk reads a chunk of data from an InternalInvokeResponseStream or InternalInvokeRequestStream object
-// The returned value "done" is true if the sender of the chunk claims this is the last chunk.
-func ReadChunk(chunk chunkWithPayload, out io.Writer) (done bool, err error) {
-	payload := chunk.GetPayload()
-	if payload == nil {
-		return false, nil
-	}
-
-	if payload.Data != nil && len(payload.Data.Value) > 0 {
-		var n int
-		n, err = out.Write(payload.Data.Value)
-		if err != nil {
-			return false, err
-		}
-		if n != len(payload.Data.Value) {
-			return false, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.Data.Value))
-		}
-	}
-
-	return payload.Complete, nil
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
