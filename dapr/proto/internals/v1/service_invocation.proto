@@ -87,23 +87,3 @@ message ListStringValue {
   // The array of string.
   repeated string values = 1;
 }
-
-// InternalInvokeRequestStream is a variant of InternalInvokeRequest used in streaming RPCs.
-message InternalInvokeRequestStream {
-  // Request details.
-  // This does not contain any data in message.data.
-  InternalInvokeRequest request = 1;
-
-  // Chunk of data.
-  common.v1.StreamPayload payload = 2;
-}
-
-// InternalInvokeResponseStream is a variant of InternalInvokeResponse used in streaming RPCs.
-message InternalInvokeResponseStream {
-  // Response details.
-  // This does not contain any data in message.data.
-  InternalInvokeResponse response = 1;
-
-  // Chunk of data.
-  common.v1.StreamPayload payload = 2;
-}
