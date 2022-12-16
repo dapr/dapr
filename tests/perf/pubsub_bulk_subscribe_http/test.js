@@ -18,6 +18,7 @@ import ws from "k6/ws";
 const targetUrl = __ENV.TARGET_URL
 const pubsubName = __ENV.PUBSUB_NAME
 const subscribeType = __ENV.SUBSCRIBE_TYPE
+const httpReqDurationThreshold = __ENV.HTTP_REQ_DURATION_THRESHOLD
 const defaultTopic = "perf-test"
 const defaultCount = 100
 const hundredBytesMessage = "a".repeat(100)
@@ -26,7 +27,8 @@ export const options = {
     discardResponseBodies: true,
     thresholds: {
         checks: ['rate==1'],
-        http_req_duration: ['p(95)<200'], // 95% of requests should be below 200ms
+        // 95% of requests should be below HTTP_REQ_DURATION_THRESHOLD milliseconds
+        http_req_duration: ['p(95)<' + httpReqDurationThreshold],
     },
     scenarios: {
         idStress: {
@@ -70,10 +72,14 @@ function publishMessages(pubsub, topic, message, count) {
 
 export default function () {
     const url = `ws://${targetUrl}/test`
-    const params = { type: subscribeType, count: defaultCount }
+    const params = { tags: { "subscribeType": subscribeType } }
 
     const res = ws.connect(url, params, (socket) => {
         socket.on("open", () => {
+            // Tell the application to use bulk subscribe or normal subscribe
+            socket.send(subscribeType)
+
+            // Publish messages to the topic
             const publishResponse = publishMessages(pubsubName, defaultTopic, hundredBytesMessage, defaultCount);
             check(publishResponse, {
                 "publish response status code is 2xx": (r) => r.status >= 200 && r.status < 300

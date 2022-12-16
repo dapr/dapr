@@ -15,20 +15,23 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 )
 
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("subscribeHandler called")
 	subscriptions := []subscription{
 		{
 			PubsubName: pubSubName,
 			Topic:      topic,
-			Route:      route,
+			Route:      route + "-bulk",
 			Metadata:   map[string]string{"bulkSubscribe": "true"},
+		},
+		{
+			PubsubName: pubSubName,
+			Topic:      topic,
+			Route:      route,
 		},
 	}
 	jsonBytes, err := json.Marshal(subscriptions)
@@ -42,8 +45,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func messageHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("messageHandler called")
+func bulkMessageHandler(w http.ResponseWriter, r *http.Request) {
 	postBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Fatalf("error reading request body: %s", err)
@@ -56,7 +58,7 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("received %d messages", len(bulkSubscribeMessage.Entries))
-	messagesCh <- len(bulkSubscribeMessage.Entries)
+	bulkMessagesCh <- len(bulkSubscribeMessage.Entries)
 
 	var bulkSubscribeResponseStatuses []bulkSubscribeResponseStatus
 	for _, entry := range bulkSubscribeMessage.Entries {
@@ -74,6 +76,22 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(jsonBytes)
+	if err != nil {
+		log.Fatalf("error writing response: %s", err)
+	}
+}
+
+func messageHandler(w http.ResponseWriter, r *http.Request) {
+	_, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Fatalf("error reading request body: %s", err)
+	}
+
+	log.Printf("received 1 message\n")
+	messagesCh <- 1
+
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write([]byte("SUCCESS"))
 	if err != nil {
 		log.Fatalf("error writing response: %s", err)
 	}

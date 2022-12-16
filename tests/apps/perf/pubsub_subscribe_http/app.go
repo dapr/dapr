@@ -14,7 +14,6 @@ limitations under the License.
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -31,13 +30,18 @@ const (
 var upgrader = websocket.Upgrader{}
 
 // messagesCh contains the number of messages received
-var messagesCh = make(chan int, 10)
+var messagesCh = make(chan int, 100)
+
+// bulkMessagesCh contains the number of messages received in bulk
+var bulkMessagesCh = make(chan int, 100)
 
 // notifyCh is used to notify completion of receiving messages
 var notifyCh = make(chan struct{})
 
+// bulkNotifyCh is used to notify completion of receiving messages in bulk
+var bulkNotifyCh = make(chan struct{})
+
 func testHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("testHandler")
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("error upgrading websocket: %s", err)
@@ -45,9 +49,19 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	fmt.Printf("waiting for %d messages\n", numMessages)
-	<-notifyCh
-	fmt.Printf("received %d messages\n", numMessages)
+	_, message, err := ws.ReadMessage()
+	if err != nil {
+		log.Printf("error reading message: %s", err)
+		return
+	}
+
+	// wait for messages to be received
+	log.Printf("subscribeType: %s", message)
+	if string(message) == "bulk" {
+		<-bulkNotifyCh
+	} else {
+		<-notifyCh
+	}
 
 	err = ws.WriteMessage(websocket.TextMessage, []byte("true"))
 	if err != nil {
@@ -55,23 +69,25 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func main() {
-	fmt.Println("starting app on port 3000")
-
-	go func() {
-		total := 0
-		for {
-			count := <-messagesCh
-			total += count
-			if total >= numMessages {
-				notifyCh <- struct{}{}
-				total -= numMessages
-			}
+func notify(msgRecvCh chan int, notifySendCh chan struct{}) {
+	total := 0
+	for {
+		count := <-msgRecvCh
+		total += count
+		if total >= numMessages {
+			notifySendCh <- struct{}{}
+			total -= numMessages
 		}
-	}()
+	}
+}
+
+func main() {
+	go notify(messagesCh, notifyCh)
+	go notify(bulkMessagesCh, bulkNotifyCh)
 
 	http.HandleFunc("/dapr/subscribe", subscribeHandler)
 	http.HandleFunc("/"+route, messageHandler)
+	http.HandleFunc("/"+route+"-bulk", bulkMessageHandler)
 	http.HandleFunc("/test", testHandler)
 	log.Fatal(http.ListenAndServe(":3000", nil))
 }

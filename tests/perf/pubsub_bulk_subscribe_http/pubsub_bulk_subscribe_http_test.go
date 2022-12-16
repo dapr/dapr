@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -72,7 +73,9 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
+func runTest(t *testing.T, subscribeType string, httpReqDurationThresholdMs int) {
+	t.Logf("Starting test with subscribe type %s", subscribeType)
+
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(testAppName)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
@@ -86,7 +89,8 @@ func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
 		loadtest.WithParallelism(1),
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
 		loadtest.WithRunnerEnvVar("PUBSUB_NAME", "kafka-messagebus"),
-		loadtest.WithRunnerEnvVar("SUBSCRIBE_TYPE", "bulk"))
+		loadtest.WithRunnerEnvVar("SUBSCRIBE_TYPE", subscribeType),
+		loadtest.WithRunnerEnvVar("HTTP_REQ_DURATION_THRESHOLD", strconv.Itoa(httpReqDurationThresholdMs)))
 	defer k6Test.Dispose()
 
 	t.Log("running the k6 load test...")
@@ -112,4 +116,12 @@ func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
 	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 	t.Logf("target dapr app or sidecar restarted %v times", restarts)
 	require.Equal(t, 0, restarts)
+}
+
+func TestPubsubSuscribeHttpPerformance(t *testing.T) {
+	runTest(t, "normal", 400)
+}
+
+func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
+	runTest(t, "bulk", 200)
 }
