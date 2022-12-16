@@ -37,7 +37,7 @@ func FromIncomingContext(ctx context.Context) (MD, bool) {
 }
 
 // SetMetadataInContextUnary sets the metadata in the context for an unary gRPC invocation.
-func SetMetadataInContextUnary(ctx context.Context, req any, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (any, error) {
+func SetMetadataInContextUnary(ctx context.Context, req any, _ *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (any, error) {
 	// Because metadata.FromIncomingContext re-allocates the entire map every time to ensure the keys are lowercased, we can do it once and re-use that after
 	meta, ok := grpcMetadata.FromIncomingContext(ctx)
 	if ok && len(meta) > 0 {
@@ -47,7 +47,7 @@ func SetMetadataInContextUnary(ctx context.Context, req any, info *grpcGo.UnaryS
 }
 
 // SetMetadataInTapHandle sets the metadata in the context for a streaming gRPC invocation.
-func SetMetadataInTapHandle(ctx context.Context, info *tap.Info) (context.Context, error) {
+func SetMetadataInTapHandle(ctx context.Context, _ *tap.Info) (context.Context, error) {
 	// Because metadata.FromIncomingContext re-allocates the entire map every time to ensure the keys are lowercased, we can do it once and re-use that after
 	meta, ok := grpcMetadata.FromIncomingContext(ctx)
 	if ok && len(meta) > 0 {
