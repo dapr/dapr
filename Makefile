@@ -73,7 +73,7 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_VERSION = v1.28.0
+PROTOC_GEN_GO_VERSION = v1.28.1
 PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
 
 ifeq ($(TARGET_OS_LOCAL),windows)
@@ -415,14 +415,14 @@ check-diff:
 ################################################################################
 .PHONY: check-proto-version
 check-proto-version: ## Checking the version of proto related tools
-	@test "$(shell protoc --version)" = "libprotoc 3.21.1" \
-	|| { echo "please use protoc 3.21.1 (protobuf 21.1) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	@test "$(shell protoc --version)" = "libprotoc 3.21.12" \
+	|| { echo "please use protoc 3.21.12 (protobuf 21.12) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc 1.2.0" \
 	|| { echo "please use protoc-gen-go-grpc 1.2.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 	@test "$(shell protoc-gen-go --version 2>&1)" = "$(PROTOC_GEN_GO_NAME)" \
-	|| { echo "please use protoc-gen-go v1.28.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	|| { echo "please use protoc-gen-go v1.28.1 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
 # Target: check-proto-diff                                                           #
