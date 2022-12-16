@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -33,6 +34,7 @@ var upgrader = websocket.Upgrader{}
 var messagesCh = make(chan int, 10)
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("testHandler")
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("error upgrading websocket: %s", err)
@@ -40,6 +42,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
+	fmt.Printf("waiting for %d messages\n", numMessages)
 	total := 0
 	for {
 		count := <-messagesCh
@@ -49,6 +52,8 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	fmt.Printf("received %d messages\n", total)
+
 	err = ws.WriteMessage(websocket.TextMessage, []byte("true"))
 	if err != nil {
 		log.Printf("error writing message: %s", err)
@@ -56,6 +61,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	fmt.Println("starting app on port 3000")
 	http.HandleFunc("/dapr/subscribe", subscribeHandler)
 	http.HandleFunc("/"+route, messageHandler)
 	http.HandleFunc("/test", testHandler)

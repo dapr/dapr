@@ -15,12 +15,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 )
 
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("subscribeHandler called")
 	subscriptions := []subscription{
 		{
 			PubsubName: pubSubName,
@@ -41,6 +43,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func messageHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("messageHandler called")
 	postBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Fatalf("error reading request body: %s", err)
@@ -52,6 +55,7 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("error unmarshalling request body: %s", err)
 	}
 
+	log.Printf("received %d messages", len(bulkSubscribeMessage.Entries))
 	messagesCh <- len(bulkSubscribeMessage.Entries)
 
 	var bulkSubscribeResponseStatuses []bulkSubscribeResponseStatus

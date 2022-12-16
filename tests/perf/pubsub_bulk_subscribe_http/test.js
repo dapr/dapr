@@ -64,11 +64,12 @@ function publishMessages(pubsub, topic, message, count) {
     return http.post(
         `${DAPR_ADDRESS}/v1.0-alpha/publish/bulk/${pubsub}/${topic}`,
         JSON.stringify(bulkPublishBody),
+        { headers: { "Content-Type": "application/json" } }
     );
 }
 
 export default function () {
-    const url = `${targetUrl}/test`
+    const url = `ws://${targetUrl}/test`
     const params = { type: subscribeType, count: defaultCount }
 
     const res = ws.connect(url, params, (socket) => {
