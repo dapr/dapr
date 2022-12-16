@@ -528,8 +528,8 @@ func assertTestSignal(t *testing.T, ch <-chan struct{}) {
 	select {
 	case <-ch:
 		// all good
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("did not receive signal in 500ms")
+	case <-time.After(700 * time.Millisecond):
+		t.Fatal("did not receive signal in 700ms")
 	}
 }
 
@@ -553,12 +553,12 @@ func advanceTickers(rt *actorsRuntime, step time.Duration, count int) {
 	clock.Add(100 * time.Millisecond)
 	// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync (especially when testing with -race)
 	runtime.Gosched()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	for i := 0; i < count; i++ {
 		clock.Add(step)
 		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync (especially when testing with -race)
 		runtime.Gosched()
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
