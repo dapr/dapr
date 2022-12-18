@@ -65,7 +65,6 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			Config:         "resiliencyconfig",
 		},
 		{
 			AppName:        "resiliencyappgrpc",
@@ -74,7 +73,6 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			Config:         "resiliencyconfig",
 			AppProtocol:    "grpc",
 		},
 	}
