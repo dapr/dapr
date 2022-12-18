@@ -2945,7 +2945,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), ErrRetriable)
+		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), NewRetriableError(nil))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3033,7 +3033,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		expectedError := fmt.Errorf("%w from app channel while sending pub/sub event to app: %v", ErrRetriable, invokeError)
+		expectedError := fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", NewRetriableError(invokeError))
 		assert.Equal(t, expectedError.Error(), err.Error(), "expected errors to match")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3072,7 +3072,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := fmt.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500, err: %w", cloudEvent["id"].(string), cloudEvent["topic"], ErrRetriable)
+		errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
+		expectedClientError := NewRetriableError(errors.New(errMsg))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3142,10 +3143,9 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			noResponseStatus: true,
 			responseError:    assert.AnError,
 			expectedError: fmt.Errorf(
-				"%w returned from app while processing pub/sub event %v: %v",
-				ErrRetriable,
+				"error returned from app while processing pub/sub event %v: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
-				status.Error(codes.Unknown, assert.AnError.Error()),
+				NewRetriableError(status.Error(codes.Unknown, assert.AnError.Error())),
 			),
 		},
 		{
@@ -3170,7 +3170,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			expectedError: fmt.Errorf(
 				"RETRY status returned from app while processing pub/sub event %v: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
-				ErrRetriable,
+				NewRetriableError(nil),
 			),
 		},
 		{
@@ -3186,7 +3186,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				"unknown status returned from app while processing pub/sub event %v, status: %v, err: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
 				runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
-				ErrRetriable,
+				NewRetriableError(nil),
 			),
 		},
 		{
