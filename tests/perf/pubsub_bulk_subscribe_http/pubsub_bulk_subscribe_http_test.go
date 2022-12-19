@@ -175,37 +175,3 @@ func TestPubsubBulkPublishBulkSubscribeHttpPerformance(t *testing.T) {
 	}
 	runTest(t, bulkTestAppURL, "bulk", "bulk", threshold)
 }
-
-func TestPubsubPublishSubscribeHttpPerformance(t *testing.T) {
-	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL(testAppName)
-	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
-
-	// Check if test app endpoint is available
-	t.Logf("test app url: %s", testAppURL+"/health")
-	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
-	require.NoError(t, err)
-
-	threshold := os.Getenv("DAPR_PERF_PUBSUB_SUBSCRIBE_HTTP_THRESHOLD")
-	if threshold == "" {
-		threshold = "800"
-	}
-	runTest(t, testAppURL, "normal", "normal", threshold)
-}
-
-func TestPubsubPublishBulkSubscribeHttpPerformance(t *testing.T) {
-	// Get the ingress external url of test app
-	bulkTestAppURL := tr.Platform.AcquireAppExternalURL(bulkTestAppName)
-	require.NotEmpty(t, bulkTestAppURL, "test app external URL must not be empty")
-
-	// Check if test app endpoint is available
-	t.Logf("bulk test app url: %s", bulkTestAppURL+"/health")
-	_, err := utils.HTTPGetNTimes(bulkTestAppURL+"/health", numHealthChecks)
-	require.NoError(t, err)
-
-	threshold := os.Getenv("DAPR_PERF_PUBSUB_BULK_SUBSCRIBE_HTTP_THRESHOLD")
-	if threshold == "" {
-		threshold = "400"
-	}
-	runTest(t, bulkTestAppURL, "normal", "bulk", threshold)
-}

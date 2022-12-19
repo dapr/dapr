@@ -105,7 +105,7 @@ export default function () {
         socket.on("open", () => {
             // Publish messages to the topic
             if (publishType === "bulk") {
-                const publishResponse = publishMessages(pubsubName, topic, hundredBytesMessage, defaultCount);
+                let publishResponse = publishMessages(pubsubName, topic, hundredBytesMessage, defaultCount);
                 check(publishResponse, {
                     "bulk publish response status code is 2xx": (r) => r.status >= 200 && r.status < 300
                 });
