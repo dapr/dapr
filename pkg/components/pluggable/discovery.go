@@ -123,7 +123,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to list services")
 		}
-		dialer := socketDialer(socket)
+		dialer := socketDialer(socket, grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
 
 		componentName := removeExt(f.Name())
 		for _, svc := range serviceList {
