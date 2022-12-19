@@ -375,6 +375,9 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 			// We return the response to maintain the .NET Actor contract which communicates errors via the body, but resiliency needs the error to retry.
 			return resp, err
 		}
+		if resp != nil {
+			resp.Close()
+		}
 		return nil, err
 	}
 	return resp, nil
@@ -407,6 +410,9 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
+					// Invoke ProtoWithData to read the entire response body in-memory so it can be better garbage-collected later
+					_, _ = rResp.ProtoWithData()
+
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
 					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", targetAddress, attempt-1, rErr)
@@ -533,13 +539,12 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	if resp == nil {
 		return nil, errors.New("error from actor service: response object is nil")
 	}
-	defer resp.Close()
 
-	respData, err := resp.RawDataFull()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response data: %w", err)
-	}
 	if resp.Status().Code != nethttp.StatusOK {
+		respData, err := resp.RawDataFull()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response data: %w", err)
+		}
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}
 

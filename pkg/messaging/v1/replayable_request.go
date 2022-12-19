@@ -126,7 +126,8 @@ func (rr *replayableRequest) closeReplay() {
 	}
 }
 
-// Close the data stream.
+// Close the data stream and replay buffers.
+// It's safe to call Close multiple times on the same object.
 func (rr *replayableRequest) Close() (err error) {
 	rr.lock.Lock()
 	defer rr.lock.Unlock()

@@ -87,7 +87,8 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
-		if errors.Is(err, actors.ErrDaprResponseHeader) {
+		if resp != nil && errors.Is(err, actors.ErrDaprResponseHeader) {
+			defer resp.Close()
 			return resp.ProtoWithData()
 		}
 

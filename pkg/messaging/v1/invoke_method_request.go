@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/valyala/fasthttp"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -197,17 +196,27 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return nil, errors.New("message is nil")
 	}
 
-	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
-
-	data, err := io.ReadAll(imr.RawData())
-	if err != nil {
-		return m, err
+	// If the data has already been read, return it right away
+	if imr.HasMessageData() {
+		return imr.r, nil
 	}
 
-	m.Message.Data = &anypb.Any{
+	// Read the data and store it in the object
+	data, err := imr.RawDataFull()
+	if err != nil {
+		return imr.r, err
+	}
+	imr.r.Message.Data = &anypb.Any{
 		Value: data,
 	}
-	return m, nil
+
+	// Close the source data stream and replay buffers
+	err = imr.replayableRequest.Close()
+	if err != nil {
+		return imr.r, err
+	}
+
+	return imr.r, nil
 }
 
 // Actor returns actor type and id.
@@ -254,6 +263,11 @@ func (imr *InvokeMethodRequest) RawData() (r io.Reader) {
 
 // RawDataFull returns the entire data read from the stream body.
 func (imr *InvokeMethodRequest) RawDataFull() ([]byte, error) {
+	// If the message has a data property, use that
+	if imr.HasMessageData() {
+		return imr.r.Message.Data.Value, nil
+	}
+
 	return io.ReadAll(imr.RawData())
 }
 
