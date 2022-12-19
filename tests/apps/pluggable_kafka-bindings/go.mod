@@ -2,8 +2,6 @@ module github.com/dapr/dapr/tests/apps/kafka-bindings
 
 go 1.19
 
-replace github.com/dapr/dapr => ../../../
-
 require (
 	github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff
 	github.com/dapr/components-contrib v1.9.1-0.20221213185150-c5c985a68514
