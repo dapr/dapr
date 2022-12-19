@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20221203215942-a4b27ae49b7c
+	github.com/dapr/components-contrib v1.9.1-0.20221213185150-c5c985a68514
 	github.com/dapr/kit v0.0.3
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
@@ -416,7 +416,7 @@ replace (
 )
 
 // TEMP UNTIL https://github.com/dapr/components-contrib/pull/2363 IS MERGED
-replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221213024233-fabf7fe5a74e
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221219175526-45ab96d3d732
 
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
