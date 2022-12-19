@@ -181,7 +181,9 @@ func (d *directMessaging) invokeWithRetry(
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					// Invoke ProtoWithData to read the entire response body in-memory so it can be better garbage-collected later
-					_, _ = rResp.ProtoWithData()
+					if rResp != nil {
+						_, _ = rResp.ProtoWithData()
+					}
 
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
