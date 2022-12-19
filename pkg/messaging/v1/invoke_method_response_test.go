@@ -140,6 +140,91 @@ func TestResponseData(t *testing.T) {
 	})
 }
 
+func TestResponseRawData(t *testing.T) {
+	t.Run("message is nil", func(t *testing.T) {
+		req := &InvokeMethodResponse{
+			r: &internalv1pb.InternalInvokeResponse{},
+		}
+		r := req.RawData()
+		assert.Nil(t, r)
+	})
+
+	t.Run("return data from stream", func(t *testing.T) {
+		req := NewInvokeMethodResponse(0, "OK", nil).
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		r := req.RawData()
+		bData, err := io.ReadAll(r)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "nel blu dipinto di blu", string(bData))
+
+		_ = assert.Nil(t, req.Message().Data) ||
+			assert.Len(t, req.Message().Data.Value, 0)
+	})
+
+	t.Run("data inside message has priority", func(t *testing.T) {
+		req := NewInvokeMethodResponse(0, "OK", nil).
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		// Override
+		const msg = "felice di stare lassu'"
+		req.Message().Data = &anypb.Any{Value: []byte(msg)}
+
+		r := req.RawData()
+		bData, err := io.ReadAll(r)
+
+		assert.NoError(t, err)
+		assert.Equal(t, msg, string(bData))
+
+		_ = assert.NotNil(t, req.Message().Data) &&
+			assert.Equal(t, msg, string(req.Message().Data.Value))
+	})
+}
+
+func TestResponseRawDataFull(t *testing.T) {
+	t.Run("message is nil", func(t *testing.T) {
+		req := &InvokeMethodResponse{
+			r: &internalv1pb.InternalInvokeResponse{},
+		}
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Nil(t, data)
+	})
+
+	t.Run("return data from stream", func(t *testing.T) {
+		req := NewInvokeMethodResponse(0, "OK", nil).
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Equal(t, "nel blu dipinto di blu", string(data))
+
+		_ = assert.Nil(t, req.Message().Data) ||
+			assert.Len(t, req.Message().Data.Value, 0)
+	})
+
+	t.Run("data inside message has priority", func(t *testing.T) {
+		req := NewInvokeMethodResponse(0, "OK", nil).
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		// Override
+		const msg = "felice di stare lassu'"
+		req.Message().Data = &anypb.Any{Value: []byte(msg)}
+
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Equal(t, msg, string(data))
+
+		_ = assert.NotNil(t, req.Message().Data) &&
+			assert.Equal(t, msg, string(req.Message().Data.Value))
+	})
+}
+
 func TestResponseProto(t *testing.T) {
 	t.Run("byte slice", func(t *testing.T) {
 		m := &commonv1pb.InvokeResponse{
@@ -336,7 +421,7 @@ func TestResponseReplayable(t *testing.T) {
 			assert.Equal(t, message, string(read))
 		})
 
-		t.Run("close request", func(t *testing.T) {
+		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
 			assert.NoError(t, err)
 			assert.Nil(t, res.data)
@@ -380,7 +465,7 @@ func TestResponseReplayable(t *testing.T) {
 			assert.Equal(t, message, string(read))
 		})
 
-		t.Run("close request", func(t *testing.T) {
+		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
 			assert.NoError(t, err)
 			assert.Nil(t, res.data)
@@ -421,7 +506,7 @@ func TestResponseReplayable(t *testing.T) {
 			assert.Equal(t, message, string(read))
 		})
 
-		t.Run("close request", func(t *testing.T) {
+		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
 			assert.NoError(t, err)
 			assert.Nil(t, res.data)
@@ -475,7 +560,7 @@ func TestResponseReplayable(t *testing.T) {
 			assert.Equal(t, message, string(read))
 		})
 
-		t.Run("close request", func(t *testing.T) {
+		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
 			assert.NoError(t, err)
 			assert.Nil(t, res.data)
@@ -487,7 +572,7 @@ func TestResponseReplayable(t *testing.T) {
 		res := newReplayable()
 		defer res.Close()
 
-		t.Run("first ProtoWithData request", func(t *testing.T) {
+		t.Run("first ProtoWithData response", func(t *testing.T) {
 			pb, err := res.ProtoWithData()
 			assert.NoError(t, err)
 			assert.NotNil(t, pb)
@@ -496,7 +581,7 @@ func TestResponseReplayable(t *testing.T) {
 			assert.Equal(t, message, string(pb.Message.Data.Value))
 		})
 
-		t.Run("second ProtoWithData request", func(t *testing.T) {
+		t.Run("second ProtoWithData response", func(t *testing.T) {
 			pb, err := res.ProtoWithData()
 			assert.NoError(t, err)
 			assert.NotNil(t, pb)
@@ -505,7 +590,7 @@ func TestResponseReplayable(t *testing.T) {
 			assert.Equal(t, message, string(pb.Message.Data.Value))
 		})
 
-		t.Run("close request", func(t *testing.T) {
+		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
 			assert.NoError(t, err)
 			assert.Nil(t, res.data)

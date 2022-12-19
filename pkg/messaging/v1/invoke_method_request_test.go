@@ -199,6 +199,91 @@ func TestData(t *testing.T) {
 	})
 }
 
+func TestRawData(t *testing.T) {
+	t.Run("message is nil", func(t *testing.T) {
+		req := &InvokeMethodRequest{
+			r: &internalv1pb.InternalInvokeRequest{},
+		}
+		r := req.RawData()
+		assert.Nil(t, r)
+	})
+
+	t.Run("return data from stream", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		r := req.RawData()
+		bData, err := io.ReadAll(r)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "nel blu dipinto di blu", string(bData))
+
+		_ = assert.Nil(t, req.Message().Data) ||
+			assert.Len(t, req.Message().Data.Value, 0)
+	})
+
+	t.Run("data inside message has priority", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		// Override
+		const msg = "felice di stare lassu'"
+		req.Message().Data = &anypb.Any{Value: []byte(msg)}
+
+		r := req.RawData()
+		bData, err := io.ReadAll(r)
+
+		assert.NoError(t, err)
+		assert.Equal(t, msg, string(bData))
+
+		_ = assert.NotNil(t, req.Message().Data) &&
+			assert.Equal(t, msg, string(req.Message().Data.Value))
+	})
+}
+
+func TestRawDataFull(t *testing.T) {
+	t.Run("message is nil", func(t *testing.T) {
+		req := &InvokeMethodRequest{
+			r: &internalv1pb.InternalInvokeRequest{},
+		}
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Nil(t, data)
+	})
+
+	t.Run("return data from stream", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Equal(t, "nel blu dipinto di blu", string(data))
+
+		_ = assert.Nil(t, req.Message().Data) ||
+			assert.Len(t, req.Message().Data.Value, 0)
+	})
+
+	t.Run("data inside message has priority", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		// Override
+		const msg = "felice di stare lassu'"
+		req.Message().Data = &anypb.Any{Value: []byte(msg)}
+
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Equal(t, msg, string(data))
+
+		_ = assert.NotNil(t, req.Message().Data) &&
+			assert.Equal(t, msg, string(req.Message().Data.Value))
+	})
+}
+
 func TestHTTPExtension(t *testing.T) {
 	req := NewInvokeMethodRequest("test_method").
 		WithHTTPExtension("POST", "query1=value1&query2=value2")

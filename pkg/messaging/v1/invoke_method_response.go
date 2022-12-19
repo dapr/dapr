@@ -243,5 +243,9 @@ func (imr *InvokeMethodResponse) RawDataFull() ([]byte, error) {
 		return imr.r.Message.Data.Value, nil
 	}
 
-	return io.ReadAll(imr.RawData())
+	r := imr.RawData()
+	if r == nil {
+		return nil, nil
+	}
+	return io.ReadAll(r)
 }
