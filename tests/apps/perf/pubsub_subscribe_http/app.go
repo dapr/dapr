@@ -16,6 +16,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -32,14 +33,8 @@ var upgrader = websocket.Upgrader{}
 // messagesCh contains the number of messages received
 var messagesCh = make(chan int, 100)
 
-// bulkMessagesCh contains the number of messages received in bulk
-var bulkMessagesCh = make(chan int, 100)
-
 // notifyCh is used to notify completion of receiving messages
 var notifyCh = make(chan struct{})
-
-// bulkNotifyCh is used to notify completion of receiving messages in bulk
-var bulkNotifyCh = make(chan struct{})
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -49,23 +44,20 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	_, message, err := ws.ReadMessage()
-	if err != nil {
-		log.Printf("error reading message: %s", err)
-		return
-	}
-
-	// wait for messages to be received
-	log.Printf("subscribeType: %s", message)
-	if string(message) == "bulk" {
-		<-bulkNotifyCh
-	} else {
-		<-notifyCh
-	}
+	<-notifyCh
 
 	err = ws.WriteMessage(websocket.TextMessage, []byte("true"))
 	if err != nil {
 		log.Printf("error writing message: %s", err)
+	}
+
+	// gracefully close the connection
+	err = ws.WriteControl(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+		time.Now().Add(4*time.Second))
+	if err != nil {
+		log.Printf("error closing websocket: %s", err)
 	}
 }
 
@@ -83,11 +75,10 @@ func notify(msgRecvCh chan int, notifySendCh chan struct{}) {
 
 func main() {
 	go notify(messagesCh, notifyCh)
-	go notify(bulkMessagesCh, bulkNotifyCh)
 
 	http.HandleFunc("/dapr/subscribe", subscribeHandler)
-	http.HandleFunc("/"+route, messageHandler)
 	http.HandleFunc("/"+route+"-bulk", bulkMessageHandler)
+	http.HandleFunc("/"+route, messageHandler)
 	http.HandleFunc("/test", testHandler)
 	log.Fatal(http.ListenAndServe(":3000", nil))
 }

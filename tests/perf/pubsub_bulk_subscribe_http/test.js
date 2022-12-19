@@ -19,13 +19,14 @@ import { Counter } from 'k6/metrics';
 const targetUrl = __ENV.TARGET_URL
 const pubsubName = __ENV.PUBSUB_NAME
 const subscribeType = __ENV.SUBSCRIBE_TYPE
+const publishType = __ENV.PUBLISH_TYPE || "bulk"
 const httpReqDurationThreshold = __ENV.HTTP_REQ_DURATION_THRESHOLD
 
 const defaultTopic = "perf-test"
 const defaultCount = 100
 const hundredBytesMessage = "a".repeat(100)
 
-const testTimeoutMs = 10 * 1000
+const testTimeoutMs = 60 * 1000
 const errCounter = new Counter("error_counter");
 
 export const options = {
@@ -77,20 +78,45 @@ function publishMessages(pubsub, topic, message, count) {
         { headers: { 'Content-Type': 'application/json' }, });
 }
 
+/**
+ * Publish a message to a topic using the publish API.
+ * @param {String} pubsub 
+ * @param {String} topic 
+ * @param {String} message 
+ * @returns 
+ */
+function publishMessage(pubsub, topic, message) {
+    return http.post(
+        `${DAPR_ADDRESS}/v1.0/publish/${pubsub}/${topic}`,
+        message,
+        { headers: { 'Content-Type': 'text/plain' }, });
+}
+
 export default function () {
     const url = `ws://${targetUrl}/test`
     const params = { tags: { "subscribeType": subscribeType } }
 
+    let topic = defaultTopic
+    if (subscribeType === "bulk") {
+        topic = `${defaultTopic}-bulk`
+    }
+
     const res = ws.connect(url, params, (socket) => {
         socket.on("open", () => {
-            // Tell the application to use bulk subscribe or normal subscribe
-            socket.send(subscribeType)
-
             // Publish messages to the topic
-            const publishResponse = publishMessages(pubsubName, defaultTopic, hundredBytesMessage, defaultCount);
-            check(publishResponse, {
-                "publish response status code is 2xx": (r) => r.status >= 200 && r.status < 300
-            });
+            if (publishType === "bulk") {
+                const publishResponse = publishMessages(pubsubName, topic, hundredBytesMessage, defaultCount);
+                check(publishResponse, {
+                    "bulk publish response status code is 2xx": (r) => r.status >= 200 && r.status < 300
+                });
+            } else {
+                for (let i = 0; i < defaultCount; i++) {
+                    const publishResponse = publishMessage(pubsubName, topic, hundredBytesMessage);
+                    check(publishResponse, {
+                        "publish response status code is 2xx": (r) => r.status >= 200 && r.status < 300
+                    });
+                }
+            }
         });
 
         socket.on("message", (data) => {
@@ -105,8 +131,8 @@ export default function () {
         });
 
         socket.on("error", (err) => {
-            if (e.error() != 'websocket: close sent') {
-                console.log(err);
+            if (err.error() != 'websocket: close sent') {
+                console.log("Error: " + err.error());
                 errCounter.add(1);
             }
         });

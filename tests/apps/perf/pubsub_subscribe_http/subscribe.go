@@ -18,22 +18,30 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 )
 
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
-	subscriptions := []subscription{
-		{
+	subscriptions := []subscription{}
+
+	subscribeType := os.Getenv("SUBSCRIBE_TYPE")
+	if subscribeType == "bulk" {
+		subscriptions = append(subscriptions, subscription{
 			PubsubName: pubSubName,
-			Topic:      topic,
+			Topic:      topic + "-bulk",
 			Route:      route + "-bulk",
 			Metadata:   map[string]string{"bulkSubscribe": "true"},
-		},
-		{
+		})
+	} else {
+		subscriptions = append(subscriptions, subscription{
 			PubsubName: pubSubName,
 			Topic:      topic,
 			Route:      route,
-		},
+		})
 	}
+
+	log.Printf("Sending subscriptions: %v", subscriptions)
+
 	jsonBytes, err := json.Marshal(subscriptions)
 	if err != nil {
 		log.Fatalf("error marshalling subscriptions: %s", err)
@@ -58,7 +66,7 @@ func bulkMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("received %d messages", len(bulkSubscribeMessage.Entries))
-	bulkMessagesCh <- len(bulkSubscribeMessage.Entries)
+	messagesCh <- len(bulkSubscribeMessage.Entries)
 
 	var bulkSubscribeResponseStatuses []bulkSubscribeResponseStatus
 	for _, entry := range bulkSubscribeMessage.Entries {

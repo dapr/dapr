@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -33,7 +34,11 @@ const (
 	numHealthChecks = 60 // Number of times to check for endpoint health per app.
 	numberOfActors  = 100
 	testAppName     = "testapp"
+	bulkTestAppName = "testapp-bulk"
 	testLabel       = "pubsub_bulk_subscribe_http"
+
+	defaultBulkPublishSubscribeHttpThresholdMs     = 1500
+	defaultBulkPublishBulkSubscribeHttpThresholdMs = 500
 )
 
 var (
@@ -45,6 +50,30 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs(testLabel)
 
 	testApps := []kube.AppDescription{
+		{
+			AppName:           bulkTestAppName,
+			DaprEnabled:       true,
+			ImageName:         "perf-pubsub_subscribe_http",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			AppPort:           3000,
+			AppProtocol:       "http",
+			DaprCPULimit:      "4.0",
+			DaprCPURequest:    "0.1",
+			DaprMemoryLimit:   "512Mi",
+			DaprMemoryRequest: "250Mi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "0.1",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": testLabel + "-" + bulkTestAppName,
+			},
+			AppEnv: map[string]string{
+				"SUBSCRIBE_TYPE": "bulk",
+			},
+		},
 		{
 			AppName:           testAppName,
 			DaprEnabled:       true,
@@ -65,6 +94,9 @@ func TestMain(m *testing.M) {
 			Labels: map[string]string{
 				"daprtest": testLabel + "-" + testAppName,
 			},
+			AppEnv: map[string]string{
+				"SUBSCRIBE_TYPE": "normal",
+			},
 		},
 	}
 
@@ -72,22 +104,15 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func runTest(t *testing.T, subscribeType string, httpReqDurationThresholdMs string) {
+func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurationThresholdMs string) {
 	t.Logf("Starting test with subscribe type %s", subscribeType)
-
-	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL(testAppName)
-	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
-
-	// Check if test app endpoint is available
-	t.Logf("test app url: %s", testAppURL+"/health")
-	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
-	require.NoError(t, err)
 
 	k6Test := loadtest.NewK6("./test.js",
 		loadtest.WithParallelism(1),
+		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
 		loadtest.WithRunnerEnvVar("PUBSUB_NAME", "kafka-messagebus"),
+		loadtest.WithRunnerEnvVar("PUBLISH_TYPE", publishType),
 		loadtest.WithRunnerEnvVar("SUBSCRIBE_TYPE", subscribeType),
 		loadtest.WithRunnerEnvVar("HTTP_REQ_DURATION_THRESHOLD", httpReqDurationThresholdMs))
 	defer k6Test.Dispose()
@@ -117,18 +142,70 @@ func runTest(t *testing.T, subscribeType string, httpReqDurationThresholdMs stri
 	require.Equal(t, 0, restarts)
 }
 
-func TestPubsubSubscribeHttpPerformance(t *testing.T) {
+func TestPubsubBulkPublishSubscribeHttpPerformance(t *testing.T) {
+	// Get the ingress external url of test app
+	testAppURL := tr.Platform.AcquireAppExternalURL(testAppName)
+	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
+
+	// Check if test app endpoint is available
+	t.Logf("test app url: %s", testAppURL+"/health")
+	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
+	require.NoError(t, err)
+
 	threshold := os.Getenv("DAPR_PERF_PUBSUB_SUBSCRIBE_HTTP_THRESHOLD")
+	if threshold == "" {
+		threshold = strconv.Itoa(defaultBulkPublishSubscribeHttpThresholdMs)
+	}
+	runTest(t, testAppURL, "bulk", "normal", threshold)
+}
+
+func TestPubsubBulkPublishBulkSubscribeHttpPerformance(t *testing.T) {
+	// Get the ingress external url of test app
+	bulkTestAppURL := tr.Platform.AcquireAppExternalURL(bulkTestAppName)
+	require.NotEmpty(t, bulkTestAppURL, "test app external URL must not be empty")
+
+	// Check if test app endpoint is available
+	t.Logf("bulk test app url: %s", bulkTestAppURL+"/health")
+	_, err := utils.HTTPGetNTimes(bulkTestAppURL+"/health", numHealthChecks)
+	require.NoError(t, err)
+
+	threshold := os.Getenv("DAPR_PERF_PUBSUB_BULK_SUBSCRIBE_HTTP_THRESHOLD")
+	if threshold == "" {
+		threshold = strconv.Itoa(defaultBulkPublishBulkSubscribeHttpThresholdMs)
+	}
+	runTest(t, bulkTestAppURL, "bulk", "bulk", threshold)
+}
+
+func TestPubsubPublishSubscribeHttpPerformance(t *testing.T) {
+	// Get the ingress external url of test app
+	testAppURL := tr.Platform.AcquireAppExternalURL(testAppName)
+	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
+
+	// Check if test app endpoint is available
+	t.Logf("test app url: %s", testAppURL+"/health")
+	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
+	require.NoError(t, err)
+
+	threshold := os.Getenv("DAPR_PERF_PUBSUB_SUBSCRIBE_HTTP_THRESHOLD")
+	if threshold == "" {
+		threshold = "800"
+	}
+	runTest(t, testAppURL, "normal", "normal", threshold)
+}
+
+func TestPubsubPublishBulkSubscribeHttpPerformance(t *testing.T) {
+	// Get the ingress external url of test app
+	bulkTestAppURL := tr.Platform.AcquireAppExternalURL(bulkTestAppName)
+	require.NotEmpty(t, bulkTestAppURL, "test app external URL must not be empty")
+
+	// Check if test app endpoint is available
+	t.Logf("bulk test app url: %s", bulkTestAppURL+"/health")
+	_, err := utils.HTTPGetNTimes(bulkTestAppURL+"/health", numHealthChecks)
+	require.NoError(t, err)
+
+	threshold := os.Getenv("DAPR_PERF_PUBSUB_BULK_SUBSCRIBE_HTTP_THRESHOLD")
 	if threshold == "" {
 		threshold = "400"
 	}
-	runTest(t, "normal", threshold)
-}
-
-func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
-	threshold := os.Getenv("DAPR_PERF_PUBSUB_BULK_SUBSCRIBE_HTTP_THRESHOLD")
-	if threshold == "" {
-		threshold = "50"
-	}
-	runTest(t, "bulk", threshold)
+	runTest(t, bulkTestAppURL, "normal", "bulk", threshold)
 }
