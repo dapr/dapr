@@ -14,14 +14,19 @@ limitations under the License.
 import http from "k6/http";
 import { check } from "k6";
 import ws from "k6/ws";
+import { Counter } from 'k6/metrics';
 
 const targetUrl = __ENV.TARGET_URL
 const pubsubName = __ENV.PUBSUB_NAME
 const subscribeType = __ENV.SUBSCRIBE_TYPE
 const httpReqDurationThreshold = __ENV.HTTP_REQ_DURATION_THRESHOLD
+
 const defaultTopic = "perf-test"
 const defaultCount = 100
 const hundredBytesMessage = "a".repeat(100)
+
+const testTimeoutMs = 10 * 1000
+const errCounter = new Counter("error_counter");
 
 export const options = {
     discardResponseBodies: true,
@@ -29,6 +34,8 @@ export const options = {
         checks: ['rate==1'],
         // 95% of requests should be below HTTP_REQ_DURATION_THRESHOLD milliseconds
         http_req_duration: ['p(95)<' + httpReqDurationThreshold],
+        error_counter: ['count==0'],
+        'error_counter{errType:timeout}': ['count==0'],
     },
     scenarios: {
         bulkPSubscribe: {
@@ -85,18 +92,30 @@ export default function () {
                 "publish response status code is 2xx": (r) => r.status >= 200 && r.status < 300
             });
         });
+
         socket.on("message", (data) => {
             console.log("Received data: " + data);
             check(data, {
                 "completed with success": (d) => d === "true",
-            })
+            });
         });
+
         socket.on("close", () => {
             console.log("closed");
         });
+
         socket.on("error", (err) => {
-            console.log(err);
+            if (e.error() != 'websocket: close sent') {
+                console.log(err);
+                errCounter.add(1);
+            }
         });
+
+        socket.setTimeout(() => {
+            console.log("timeout reached, closing socket and failing test");
+            errCounter.add(1, { "errType": "timeout" })
+            socket.close();
+        }, testTimeoutMs);
     });
 
     check(res, { "status is 101": (r) => r && r.status === 101 });

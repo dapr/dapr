@@ -118,7 +118,7 @@ func runTest(t *testing.T, subscribeType string, httpReqDurationThresholdMs int)
 	require.Equal(t, 0, restarts)
 }
 
-func TestPubsubSuscribeHttpPerformance(t *testing.T) {
+func TestPubsubSubscribeHttpPerformance(t *testing.T) {
 	runTest(t, "normal", 400)
 }
 
