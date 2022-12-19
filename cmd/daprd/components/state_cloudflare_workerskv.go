@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	cfkv "github.com/dapr/components-contrib/state/cloudflare/kv"
+	cfkv "github.com/dapr/components-contrib/state/cloudflare/workerskv"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(cfkv.NewCFKV, "cloudflare.kv")
+	stateLoader.DefaultRegistry.RegisterComponent(cfkv.NewCFWorkersKV, "cloudflare.workerskv")
 }
