@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"testing"
 
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -73,7 +72,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func runTest(t *testing.T, subscribeType string, httpReqDurationThresholdMs int) {
+func runTest(t *testing.T, subscribeType string, httpReqDurationThresholdMs string) {
 	t.Logf("Starting test with subscribe type %s", subscribeType)
 
 	// Get the ingress external url of test app
@@ -90,7 +89,7 @@ func runTest(t *testing.T, subscribeType string, httpReqDurationThresholdMs int)
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
 		loadtest.WithRunnerEnvVar("PUBSUB_NAME", "kafka-messagebus"),
 		loadtest.WithRunnerEnvVar("SUBSCRIBE_TYPE", subscribeType),
-		loadtest.WithRunnerEnvVar("HTTP_REQ_DURATION_THRESHOLD", strconv.Itoa(httpReqDurationThresholdMs)))
+		loadtest.WithRunnerEnvVar("HTTP_REQ_DURATION_THRESHOLD", httpReqDurationThresholdMs))
 	defer k6Test.Dispose()
 
 	t.Log("running the k6 load test...")
@@ -119,9 +118,17 @@ func runTest(t *testing.T, subscribeType string, httpReqDurationThresholdMs int)
 }
 
 func TestPubsubSubscribeHttpPerformance(t *testing.T) {
-	runTest(t, "normal", 400)
+	threshold := os.Getenv("DAPR_PERF_PUBSUB_SUBSCRIBE_HTTP_THRESHOLD")
+	if threshold == "" {
+		threshold = "400"
+	}
+	runTest(t, "normal", threshold)
 }
 
 func TestPubsubBulkSubscribeHttpPerformance(t *testing.T) {
-	runTest(t, "bulk", 50)
+	threshold := os.Getenv("DAPR_PERF_PUBSUB_BULK_SUBSCRIBE_HTTP_THRESHOLD")
+	if threshold == "" {
+		threshold = "50"
+	}
+	runTest(t, "bulk", threshold)
 }
