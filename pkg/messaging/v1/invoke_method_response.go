@@ -115,7 +115,7 @@ func (imr *InvokeMethodResponse) IsHTTPResponse() bool {
 	return imr.r.Status.Code >= 100
 }
 
-// Proto clones the internal InvokeMethodResponse pb object.
+// Proto returns the internal InvokeMethodResponse Proto object.
 func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 	return imr.r
 }

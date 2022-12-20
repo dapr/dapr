@@ -1104,7 +1104,7 @@ func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Lock),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*lock.TryLockResponse, error) {
-		return store.TryLock(&req)
+		return store.TryLock(ctx, &req)
 	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
@@ -1145,7 +1145,7 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Lock),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*lock.UnlockResponse, error) {
-		return store.Unlock(req)
+		return store.Unlock(ctx, req)
 	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_UNLOCK", err.Error())

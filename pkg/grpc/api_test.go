@@ -32,6 +32,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -148,13 +149,13 @@ type mockGRPCAPI struct{}
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
+	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
 	return resp.Proto(), nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
+	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
 	return resp.Proto(), nil
 }
 
@@ -312,7 +313,10 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(
+		fmt.Sprintf("localhost:%d", port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -401,7 +405,10 @@ func TestCallLocal(t *testing.T) {
 		port, _ := freeport.GetFreePort()
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(nil, status.Error(codes.Unknown, "unknown error"))
+		mockAppChannel.On("InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
+		).Return(nil, status.Error(codes.Unknown, "unknown error"))
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
@@ -446,7 +453,7 @@ func TestAPIToken(t *testing.T) {
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.AnythingOfType("*context.valueCtx"),
+			mock.MatchedBy(matchContextInterface),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -494,7 +501,7 @@ func TestAPIToken(t *testing.T) {
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.AnythingOfType("*context.valueCtx"),
+			mock.MatchedBy(matchContextInterface),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -536,7 +543,7 @@ func TestAPIToken(t *testing.T) {
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.AnythingOfType("*context.valueCtx"),
+			mock.MatchedBy(matchContextInterface),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -628,7 +635,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 			// Set up direct messaging mock
 			mockDirectMessaging.Calls = nil // reset call count
 			mockDirectMessaging.On("Invoke",
-				mock.AnythingOfType("*context.valueCtx"),
+				mock.MatchedBy(matchContextInterface),
 				"fakeAppID",
 				mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -698,7 +705,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.AnythingOfType("*context.valueCtx"),
+			mock.MatchedBy(matchContextInterface),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -1145,7 +1152,7 @@ func TestGetState(t *testing.T) {
 func TestGetConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	fakeConfigurationStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.GetRequest) bool {
 			return req.Keys[0] == goodKey
 		})).Return(
@@ -1157,7 +1164,7 @@ func TestGetConfiguration(t *testing.T) {
 			},
 		}, nil)
 	fakeConfigurationStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.GetRequest) bool {
 			return req.Keys[0] == "good-key1" && req.Keys[1] == goodKey2 && req.Keys[2] == "good-key3"
 		})).Return(
@@ -1175,7 +1182,7 @@ func TestGetConfiguration(t *testing.T) {
 			},
 		}, nil)
 	fakeConfigurationStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.GetRequest) bool {
 			return req.Keys[0] == "error-key"
 		})).Return(
@@ -1278,7 +1285,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	var tempReq *configuration.SubscribeRequest
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
 			return len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey
@@ -1296,7 +1303,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			return true
 		})).Return("id", nil)
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
 			return len(req.Keys) == 2 && req.Keys[0] == goodKey && req.Keys[1] == goodKey2
@@ -1317,7 +1324,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			return true
 		})).Return("id", nil)
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			return req.Keys[0] == "error-key"
 		}),
@@ -1431,12 +1438,12 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	defer close(stop)
 	var tempReq *configuration.SubscribeRequest
 	fakeConfigurationStore.On("Unsubscribe",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return true
 		})).Return(nil)
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
 			return len(req.Keys) == 1 && req.Keys[0] == goodKey
@@ -1468,7 +1475,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return true
 		})).Return(mockSubscribeID, nil)
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
 			return len(req.Keys) == 2 && req.Keys[0] == goodKey && req.Keys[1] == goodKey2
@@ -1606,7 +1613,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	fakeConfigurationStore.On("Unsubscribe",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return req.ID == mockSubscribeID
 		})).Return(nil)
@@ -3248,16 +3255,20 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	t.Run("Test invoke direct message retries with resiliency", func(t *testing.T) {
-		_, err := client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
+		val := []byte("failingKey")
+		res, err := client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
 			Id: "failingApp",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "test",
-				Data:   &anypb.Any{Value: []byte("failingKey")},
+				Data:   &anypb.Any{Value: val},
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
+		require.NotNil(t, res)
+		require.NotNil(t, res.Data)
+		assert.Equal(t, val, res.Data.Value)
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
@@ -3506,7 +3517,7 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().TryLock(gomock.Any()).DoAndReturn(func(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+		mockLockStore.EXPECT().TryLock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			assert.Equal(t, int32(1), req.ExpiryInSeconds)
@@ -3602,7 +3613,7 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().Unlock(gomock.Any()).DoAndReturn(func(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+		mockLockStore.EXPECT().Unlock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			return &lock.UnlockResponse{
@@ -3622,4 +3633,9 @@ func TestUnlock(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
 	})
+}
+
+func matchContextInterface(v any) bool {
+	_, ok := v.(context.Context)
+	return ok
 }

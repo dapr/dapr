@@ -329,7 +329,10 @@ type lookupActorRes struct {
 }
 
 func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	a.placement.WaitUntilPlacementTableIsReady()
+	err := a.placement.WaitUntilPlacementTableIsReady(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait for placement table readiness: %w", err)
+	}
 
 	actor := req.Actor()
 	// Retry here to allow placement table dissemination/rebalancing to happen.
@@ -1031,13 +1034,14 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 }
 
 func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest, reminder *Reminder) bool {
-	if reminder.ActorID == req.ActorID && reminder.ActorType == req.ActorType && reminder.Name == req.Name &&
-		(!reflect.DeepEqual(reminder.Data, req.Data) || reminder.DueTime != req.DueTime || reminder.Period != req.Period ||
-			len(req.TTL) != 0 || (len(reminder.ExpirationTime) != 0 && len(req.TTL) == 0)) {
-		return true
-	}
-
-	return false
+	return reminder.ActorID == req.ActorID &&
+		reminder.ActorType == req.ActorType &&
+		reminder.Name == req.Name &&
+		(!reflect.DeepEqual(reminder.Data, req.Data) ||
+			reminder.DueTime != req.DueTime ||
+			reminder.Period != req.Period ||
+			len(req.TTL) != 0 ||
+			(len(reminder.ExpirationTime) != 0 && len(req.TTL) == 0))
 }
 
 func (a *actorsRuntime) getReminder(reminderName string, actorType string, actorID string) (*Reminder, bool) {
