@@ -3,8 +3,5 @@
 ARG MARINER_VERSION=2.0
 FROM mcr.microsoft.com/cbl-mariner/distroless/minimal:${MARINER_VERSION}-nonroot
 ARG PKG_FILES
-# The base image specifies the user with its name ("nonroot").
-# This is the equivalent UID: Kubernetes requires a numeric ID for "runAsRoot: false" support
-USER 65532
 WORKDIR /
 COPY /$PKG_FILES /
