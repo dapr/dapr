@@ -1939,7 +1939,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
 	)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, ps.component.Publish(req)
+		return nil, ps.component.Publish(ctx, req)
 	})
 	return err
 }

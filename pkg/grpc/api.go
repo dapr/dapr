@@ -178,7 +178,7 @@ func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 	// 4. delegate to the component
-	compResp, err := store.TryLock(compReq)
+	compResp, err := store.TryLock(ctx, compReq)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
@@ -218,7 +218,7 @@ func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) 
 		return newInternalErrorUnlockResponse(), err
 	}
 	// 4. delegate to the component
-	compResp, err := store.Unlock(compReq)
+	compResp, err := store.Unlock(ctx, compReq)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
