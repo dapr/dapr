@@ -53,6 +53,7 @@ const (
 	order9     string = `{"` + ext1Key + `":"` + ext1Value + `","orderId":"9","type":"type1"}`
 	order10    string = `{"data":` + data10 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"ded2rd44-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
 	wrongOrder string = `{"data":` + data2 + `,"datacontenttype":"application/xml;wwwwwww","` + ext2Key + `":"` + ext2Value + `","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	orders1    string = "orders1"
 )
 
 func getBulkMessageEntries(len int) []pubsub.BulkMessageEntry {
@@ -266,7 +267,7 @@ func TestBulkSubscribe(t *testing.T) {
 				Routes: runtimePubsub.RoutesJSON{
 					Rules: []*runtimePubsub.RuleJSON{
 						{
-							Path:  "orders1",
+							Path:  orders1,
 							Match: `event.type == "type1"`,
 						},
 						{
@@ -305,8 +306,8 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.Contains(t, string(reqs["orders1"].Message().Data.Value), "\"event\":"+order1)
-		assert.NotContains(t, string(reqs["orders1"].Message().Data.Value), "\"event\":"+order2)
+		assert.Contains(t, string(reqs[orders1].Message().Data.Value), "\"event\":"+order1)
+		assert.NotContains(t, string(reqs[orders1].Message().Data.Value), "\"event\":"+order2)
 		assert.Contains(t, string(reqs["orders2"].Message().Data.Value), "\"event\":"+order2)
 		assert.NotContains(t, string(reqs["orders2"].Message().Data.Value), "\"event\":"+order1)
 	})
@@ -331,7 +332,7 @@ func TestBulkSubscribe(t *testing.T) {
 				Routes: runtimePubsub.RoutesJSON{
 					Rules: []*runtimePubsub.RuleJSON{
 						{
-							Path:  "orders1",
+							Path:  orders1,
 							Match: `event.type == "type1"`,
 						},
 						{
@@ -385,7 +386,7 @@ func TestBulkSubscribe(t *testing.T) {
 		respInvoke2.WithRawData(resp2, "application/json")
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" })).Return(respInvoke1, nil)
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 })).Return(respInvoke1, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
 			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders2" })).Return(respInvoke2, nil)
 
@@ -401,9 +402,9 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.True(t, verifyIfEventContainsStrings(reqs["orders1"].Message().Data.Value, "\"event\":"+order1,
+		assert.True(t, verifyIfEventContainsStrings(reqs[orders1].Message().Data.Value, "\"event\":"+order1,
 			"\"event\":"+order3, "\"event\":"+order5, "\"event\":"+order7, "\"event\":"+order8, "\"event\":"+order9))
-		assert.True(t, verifyIfEventNotContainsStrings(reqs["orders1"].Message().Data.Value, "\"event\":"+order2,
+		assert.True(t, verifyIfEventNotContainsStrings(reqs[orders1].Message().Data.Value, "\"event\":"+order2,
 			"\"event\":"+order4, "\"event\":"+order6, "\"event\":"+order10))
 		assert.True(t, verifyIfEventContainsStrings(reqs["orders2"].Message().Data.Value, "\"event\":"+order2,
 			"\"event\":"+order4, "\"event\":"+order6, "\"event\":"+order10))
@@ -784,7 +785,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Rules: []*runtimev1pb.TopicRule{
 							{
-								Path:  "orders1",
+								Path:  orders1,
 								Match: `event.type == "type1"`,
 							},
 							{
@@ -836,7 +837,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Statuses: responseEntries2,
 		}
 		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
-		mapResp["orders1"] = &responses1
+		mapResp[orders1] = &responses1
 		mapResp["orders2"] = &responses2
 		// create mock application server first
 		mockServer := &channelt.MockServer{
@@ -879,7 +880,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 		assert.True(t, verifyBulkSubscribeRequest(getExpectedBulkRequests()["type1"],
-			getExpectedExtension()["type1"], mockServer.RequestsReceived["orders1"]))
+			getExpectedExtension()["type1"], mockServer.RequestsReceived[orders1]))
 		assert.True(t, verifyBulkSubscribeRequest(getExpectedBulkRequests()["type2"],
 			getExpectedExtension()["type2"], mockServer.RequestsReceived["orders2"]))
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))

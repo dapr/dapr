@@ -50,7 +50,7 @@ type bulkSubscribeCallData struct {
 	ctx             context.Context
 	bulkResponses   *[]pubsub.BulkSubscribeResponseEntry
 	bulkSubDiag     *bulkSubIngressDiagnostics
-	entryIdIndexMap *map[string]int
+	entryIdIndexMap *map[string]int //nolint:stylecheck
 	psName          string
 	topic           string
 }
@@ -225,7 +225,8 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 
 // sendBulkToDLQIfConfigured sends the message to the dead letter queue if configured.
 func (a *DaprRuntime) sendBulkToDLQIfConfigured(bulkSubCallData *bulkSubscribeCallData, msg *pubsub.BulkMessage,
-	sendAllEntries bool, route TopicRouteElem) error {
+	sendAllEntries bool, route TopicRouteElem,
+) error {
 	bscData := *bulkSubCallData
 	if route.deadLetterTopic != "" {
 		if dlqErr := a.sendBulkToDeadLetter(bulkSubCallData, msg, route.deadLetterTopic, sendAllEntries); dlqErr == nil {
@@ -391,7 +392,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(bulkSubCallData *bulkSubscribeCallD
 
 		var hasAnyError bool
 		for _, response := range appBulkResponse.AppResponses {
-			if _, ok := (*bscData.entryIdIndexMap)[response.EntryId]; ok { //nolint:stylecheck
+			if _, ok := (*bscData.entryIdIndexMap)[response.EntryId]; ok {
 				switch response.Status {
 				case "":
 					// When statusCode 2xx, Consider empty status field OR not receiving status for an item as retry
@@ -607,7 +608,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(bulkSubCallData *bulkSubscribeCallD
 
 	hasAnyError := false
 	for _, response := range res.GetStatuses() {
-		if _, ok := (*bscData.entryIdIndexMap)[response.EntryId]; ok { //nolint:stylecheck
+		if _, ok := (*bscData.entryIdIndexMap)[response.EntryId]; ok {
 			switch response.GetStatus() {
 			case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
@@ -758,7 +759,7 @@ func populateBulkSubcribedMessage(message *pubsub.BulkMessageEntry, event interf
 }
 
 func populateBulkSubscribeResponsesWithError(psm *pubsubBulkSubscribedMessage,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, err error, //nolint:stylecheck
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, err error,
 ) {
 	for _, message := range psm.pubSubMessages {
 		addBulkResponseEntry(bulkResponses, message.entry.EntryId, err)

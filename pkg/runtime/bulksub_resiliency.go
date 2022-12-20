@@ -5,10 +5,11 @@ import (
 	"sync/atomic"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/pkg/errors"
+
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
-	"github.com/pkg/errors"
 )
 
 // ApplyBulkSubscribeResiliency applies resiliency support to bulk subscribe. It tries to filter
@@ -52,7 +53,7 @@ func (a *DaprRuntime) ApplyBulkSubscribeResiliency(bulkSubCallData *bulkSubscrib
 		return &bsre, pErr
 	})
 	// setting error if any entry has not been yet touched - only use case that seems possible is of timeout
-	for eId, ind := range *bscData.entryIdIndexMap {
+	for eId, ind := range *bscData.entryIdIndexMap { //nolint:stylecheck
 		if (*bscData.bulkResponses)[ind].EntryId == "" {
 			(*bscData.bulkResponses)[ind].EntryId = eId
 			(*bscData.bulkResponses)[ind].Error = err

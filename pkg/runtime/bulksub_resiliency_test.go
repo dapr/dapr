@@ -22,10 +22,7 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-var (
-	testLogger = logger.NewLogger("dapr.test")
-	// zero       = contribPubsub.BulkPublishResponse{}
-)
+var testLogger = logger.NewLogger("dapr.runtime.test")
 
 type input struct {
 	pbsm     pubsubBulkSubscribedMessage
@@ -34,48 +31,25 @@ type input struct {
 }
 
 type testSettings struct {
-	entryIdRetryTimes map[string]int
+	entryIdRetryTimes map[string]int //nolint:stylecheck
 	failEvenOnes      bool
 	failAllEntries    bool
 	failCount         int
 }
 
-const (
-	d1    string = `{"orderId":"1"}`
-	d2    string = `{"orderId":"2"}`
-	d3    string = `{"orderId":"3"}`
-	d4    string = `{"orderId":"4"}`
-	d5    string = `{"orderId":"5"}`
-	d6    string = `{"orderId":"6"}`
-	d7    string = `{"orderId":"7"}`
-	d8    string = `{"orderId":"8"}`
-	d9    string = ``
-	d10   string = `{"orderId":"10"}`
-	ord1  string = `{"data":` + d1 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	ord2  string = `{"data":` + d2 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
-	ord3  string = `{"data":` + d3 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"6767010u-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	ord4  string = `{"data":` + d4 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"91011121-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
-	ord5  string = `{"data":` + d5 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"718271cd-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	ord6  string = `{"data":` + d6 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"7uw2233d-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
-	ord7  string = `{"data":` + d7 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"78sqs98s-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
-	ord8  string = `{"data":` + d8 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"45122j82-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
-	ord9  string = `{"` + ext1Key + `":"` + ext1Value + `","orderId":"9","type":"type1"}`
-	ord10 string = `{"data":` + d10 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"ded2rd44-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type1"}`
-)
-
 func getBulkMessageEntriesForResiliency(len int) []pubsub.BulkMessageEntry {
 	bulkEntries := make([]pubsub.BulkMessageEntry, 10)
 
-	bulkEntries[0] = pubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(ord1)}
-	bulkEntries[1] = pubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(ord2)}
-	bulkEntries[2] = pubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(ord3)}
-	bulkEntries[3] = pubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(ord4)}
-	bulkEntries[4] = pubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(ord5)}
-	bulkEntries[5] = pubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(ord6)}
-	bulkEntries[6] = pubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(ord7)}
-	bulkEntries[7] = pubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(ord8)}
-	bulkEntries[8] = pubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(ord9)}
-	bulkEntries[9] = pubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(ord10)}
+	bulkEntries[0] = pubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(order1)}
+	bulkEntries[1] = pubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(order2)}
+	bulkEntries[2] = pubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(order3)}
+	bulkEntries[3] = pubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(order4)}
+	bulkEntries[4] = pubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(order5)}
+	bulkEntries[5] = pubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(order6)}
+	bulkEntries[6] = pubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(order7)}
+	bulkEntries[7] = pubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(order8)}
+	bulkEntries[8] = pubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(order9)}
+	bulkEntries[9] = pubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
 
 	return bulkEntries[:len]
 }
@@ -84,14 +58,18 @@ var shortRetry = resiliencyV1alpha.Retry{
 	Policy:   "constant",
 	Duration: "1s",
 }
+
 var longRetry = resiliencyV1alpha.Retry{
 	Policy:   "constant",
 	Duration: "5s",
 }
-var longTimeout = "10s"
-var shortTimeout = "1s"
 
-var orders []string = []string{ord1, ord2, ord3, ord4, ord5, ord6, ord7, ord8, ord9, ord10}
+var (
+	longTimeout  = "10s"
+	shortTimeout = "1s"
+)
+
+var orders []string = []string{order1, order2, order3, order4, order5, order6, order7, order8, order9, order10}
 
 func getPubSubMessages() []pubSubMessage {
 	pubSubMessages := make([]pubSubMessage, 10)
@@ -116,7 +94,8 @@ func getPubSubMessages() []pubSubMessage {
 }
 
 func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, timeout string,
-	retry resiliencyV1alpha.Retry) *resiliency.Resiliency {
+	retry resiliencyV1alpha.Retry,
+) *resiliency.Resiliency {
 	r := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
@@ -153,7 +132,7 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 	if e == nil {
 		entries := data["entries"].([]interface{})
 		for j := 1; j <= len(entries); j++ {
-			entryId := entries[j-1].(map[string]interface{})["entryId"].(string)
+			entryId := entries[j-1].(map[string]interface{})["entryId"].(string) //nolint:stylecheck
 			abre := pubsub.AppBulkResponseEntry{
 				EntryId: entryId,
 			}
@@ -191,13 +170,13 @@ func getInput() input {
 		pubSubMessages: psMessages,
 		topic:          "topic0",
 		pubsub:         testBulkSubscribePubsub,
-		path:           "orders1",
+		path:           orders1,
 		length:         len(psMessages),
 	}
 
 	bulkResponses := make([]pubsub.BulkSubscribeResponseEntry, 10)
 	in.bscData.bulkResponses = &bulkResponses
-	entryIdIndexMap := make(map[string]int)
+	entryIdIndexMap := make(map[string]int) //nolint:stylecheck
 	in.bscData.entryIdIndexMap = &entryIdIndexMap
 	for i, entry := range msgArr {
 		(*in.bscData.entryIdIndexMap)[entry.EntryId] = i
@@ -216,7 +195,6 @@ func getInput() input {
 }
 
 func TestBulkSubscribeResiliency(t *testing.T) {
-
 	t.Run("verify Responses when few entries fail even after retries", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
@@ -233,7 +211,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		// After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
@@ -244,7 +222,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 		assert.Equal(t, 10, len(*b))
@@ -295,7 +273,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		// After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
@@ -306,7 +284,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 		assert.Equal(t, 10, len(*b))
@@ -357,7 +335,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		// After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
@@ -368,7 +346,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Equal(t, 10, len(*b))
@@ -419,7 +397,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		// After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
@@ -430,7 +408,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.Equal(t, 10, len(*b))
@@ -481,7 +459,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" })).
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 })).
 			After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
@@ -492,7 +470,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		assert.Equal(t, 10, len(*b))
 
@@ -531,7 +509,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
@@ -548,7 +526,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -583,7 +561,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
-		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Equal(t, 10, len(*b))
@@ -609,7 +587,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
@@ -626,7 +604,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -661,7 +639,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
-		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Equal(t, 10, len(*b))
@@ -687,7 +665,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
@@ -704,7 +682,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -756,7 +734,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
@@ -773,7 +751,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -810,7 +788,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		time.Sleep(5 * time.Second)
 
-		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse = BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -844,7 +822,6 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		assert.Nil(t, e)
 		// assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
-
 	})
 
 	t.Run("Fail all events with timeout and then Open CB - short retries", func(t *testing.T) {
@@ -863,7 +840,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" })).
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 })).
 			After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
@@ -881,7 +858,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -902,15 +879,15 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
-		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		assert.Equal(t, 10, len(*b))
 		assert.NotNil(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
-
 	})
 }
+
 func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 	t.Run("verify Responses when Circuitbreaker half open state changes happen", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
@@ -928,7 +905,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" }))
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
@@ -946,7 +923,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -984,7 +961,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 		time.Sleep(5 * time.Second)
 		// after this time, circuit breaker should be half-open
-		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse = BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1022,7 +999,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
 		// circuit breaker is open, so no call should go through
-		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 		assert.Equal(t, 10, len(*b))
@@ -1033,7 +1010,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 		time.Sleep(5 * time.Second)
 		// after this time, circuit breaker should be half-open
-		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse = BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1069,7 +1046,6 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		assert.Nil(t, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
-
 }
 
 func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
@@ -1089,7 +1065,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders1" })).
+			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 })).
 			After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
 			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
@@ -1107,7 +1083,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, shortTimeout, longRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e := rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1128,7 +1104,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
-		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", "orders1", policyDef, true, in.envelope)
+		b, e = rt.ApplyBulkSubscribeResiliency(&in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		assert.Equal(t, 10, len(*b))
 		assert.NotNil(t, e)
