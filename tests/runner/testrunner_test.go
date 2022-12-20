@@ -36,12 +36,12 @@ type MockPlatform struct {
 	mock.Mock
 }
 
-func (m *MockPlatform) setup() error {
+func (m *MockPlatform) Setup() error {
 	args := m.Called()
 	return args.Error(0)
 }
 
-func (m *MockPlatform) tearDown() error {
+func (m *MockPlatform) TearDown() error {
 	args := m.Called()
 	return args.Error(0)
 }

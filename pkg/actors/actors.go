@@ -1068,10 +1068,21 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 		WithReplay(policyDef.HasRetries())
 	defer req.Close()
 
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(), policyDef)
-	_, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+	policyRunner := resiliency.NewRunnerWithOptions(
+		context.TODO(), policyDef, resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: func(imr *invokev1.InvokeMethodResponse) {
+				_ = imr.Close()
+			},
+		})
+	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
+	if err != nil {
+		log.Errorf("error executing reminder %s for actor type %s with id %s: %v", reminder.Name, reminder.ActorType, reminder.ActorID, err)
+	}
+	if imr != nil {
+		_ = imr.Close()
+	}
 	return err
 }
 
@@ -1439,12 +1450,20 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 		WithReplay(policyDef.HasRetries())
 	defer req.Close()
 
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(), policyDef)
-	_, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+	policyRunner := resiliency.NewRunnerWithOptions(
+		context.TODO(), policyDef, resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: func(imr *invokev1.InvokeMethodResponse) {
+				_ = imr.Close()
+			},
+		})
+	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
 	if err != nil {
-		log.Errorf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
+		log.Errorf("error executing timer %s for actor type %s with id %s: %v", name, actorType, actorID, err)
+	}
+	if imr != nil {
+		_ = imr.Close()
 	}
 	return err
 }
