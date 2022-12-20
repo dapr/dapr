@@ -100,7 +100,7 @@ func (g *GRPCConnector[TClient]) Dial(name string) error {
 
 	g.Client = g.clientFactory(grpcConn)
 
-	return g.Ping()
+	return nil
 }
 
 // Ping pings the grpc component.
