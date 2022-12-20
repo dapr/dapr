@@ -151,8 +151,8 @@ func TestStartRunner(t *testing.T) {
 
 	t.Run("Run Runner successfully", func(t *testing.T) {
 		mockPlatform := new(MockPlatform)
-		mockPlatform.On("tearDown").Return(nil)
-		mockPlatform.On("setup").Return(nil)
+		mockPlatform.On("TearDown").Return(nil)
+		mockPlatform.On("Setup").Return(nil)
 		mockPlatform.On("AddApps", fakeTestApps).Return(nil)
 		mockPlatform.On("AddComponents", fakeComps).Return(nil)
 
@@ -174,8 +174,8 @@ func TestStartRunner(t *testing.T) {
 
 	t.Run("setup is failed, but teardown is called", func(t *testing.T) {
 		mockPlatform := new(MockPlatform)
-		mockPlatform.On("setup").Return(fmt.Errorf("setup is failed"))
-		mockPlatform.On("tearDown").Return(nil)
+		mockPlatform.On("Setup").Return(fmt.Errorf("setup is failed"))
+		mockPlatform.On("TearDown").Return(nil)
 		mockPlatform.On("AddApps", fakeTestApps).Return(nil)
 		mockPlatform.On("AddComponents", fakeComps).Return(nil)
 
