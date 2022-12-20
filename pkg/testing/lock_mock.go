@@ -4,6 +4,7 @@
 package testing
 
 import (
+	"context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -49,31 +50,31 @@ func (mr *MockStoreMockRecorder) InitLockStore(metadata interface{}) *gomock.Cal
 }
 
 // TryLock mocks base method.
-func (m *MockStore) TryLock(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+func (m *MockStore) TryLock(ctx context.Context, req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TryLock", req)
+	ret := m.ctrl.Call(m, "TryLock", ctx, req)
 	ret0, _ := ret[0].(*lock.TryLockResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // TryLock indicates an expected call of TryLock.
-func (mr *MockStoreMockRecorder) TryLock(req interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) TryLock(ctx context.Context, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TryLock", reflect.TypeOf((*MockStore)(nil).TryLock), req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TryLock", reflect.TypeOf((*MockStore)(nil).TryLock), ctx, req)
 }
 
 // Unlock mocks base method.
-func (m *MockStore) Unlock(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+func (m *MockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Unlock", req)
+	ret := m.ctrl.Call(m, "Unlock", ctx, req)
 	ret0, _ := ret[0].(*lock.UnlockResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Unlock indicates an expected call of Unlock.
-func (mr *MockStoreMockRecorder) Unlock(req interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) Unlock(ctx context.Context, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockStore)(nil).Unlock), req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockStore)(nil).Unlock), ctx, req)
 }
