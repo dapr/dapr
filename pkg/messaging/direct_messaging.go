@@ -169,9 +169,7 @@ func (d *directMessaging) invokeWithRetry(
 			policyRunner := resiliency.NewRunnerWithOptions(ctx,
 				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
 				resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-					Disposer: func(imr *invokev1.InvokeMethodResponse) {
-						_ = imr.Close()
-					},
+					Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 				},
 			)
 			attempts := atomic.Int32{}

@@ -1605,9 +1605,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// after the timeout.
 	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: func(resp *invokev1.InvokeMethodResponse) {
-				_ = resp.Close()
-			},
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {

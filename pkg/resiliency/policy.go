@@ -16,6 +16,7 @@ package resiliency
 import (
 	"context"
 	"errors"
+	"io"
 	"reflect"
 	"sync/atomic"
 	"time"
@@ -174,6 +175,11 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 			},
 		)
 	}
+}
+
+// DisposerCloser is a Disposer function for RunnerOpts that invokes Close() on the object.
+func DisposerCloser[T io.Closer](obj T) {
+	_ = obj.Close()
 }
 
 func isZero(val any) bool {

@@ -1300,9 +1300,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		respErr := errors.New("error sending binding event to application")
 		policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
 			resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-				Disposer: func(resp *invokev1.InvokeMethodResponse) {
-					_ = resp.Close()
-				},
+				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 			},
 		)
 		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {

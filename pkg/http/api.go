@@ -2040,9 +2040,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// after the timeout.
 	policyRunner := resiliency.NewRunnerWithOptions(reqCtx, policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: func(resp *invokev1.InvokeMethodResponse) {
-				_ = resp.Close()
-			},
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {

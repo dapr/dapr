@@ -399,9 +399,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 			policyRunner := resiliency.NewRunnerWithOptions(ctx,
 				a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
 				resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-					Disposer: func(imr *invokev1.InvokeMethodResponse) {
-						_ = imr.Close()
-					},
+					Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 				},
 			)
 			attempts := atomic.Int32{}
@@ -526,9 +524,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	policyRunner := resiliency.NewRunnerWithOptions(ctx,
 		policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: func(val *invokev1.InvokeMethodResponse) {
-				_ = val.Close()
-			},
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
@@ -1070,9 +1066,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 
 	policyRunner := resiliency.NewRunnerWithOptions(
 		context.TODO(), policyDef, resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: func(imr *invokev1.InvokeMethodResponse) {
-				_ = imr.Close()
-			},
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		})
 	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
@@ -1452,9 +1446,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 
 	policyRunner := resiliency.NewRunnerWithOptions(
 		context.TODO(), policyDef, resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: func(imr *invokev1.InvokeMethodResponse) {
-				_ = imr.Close()
-			},
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		})
 	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
