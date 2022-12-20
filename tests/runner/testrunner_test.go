@@ -166,8 +166,8 @@ func TestStartRunner(t *testing.T) {
 		ret := fakeRunner.Start(&fakeTestingM{})
 		assert.Equal(t, 0, ret)
 
-		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
-		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
+		mockPlatform.AssertNumberOfCalls(t, "Setup", 1)
+		mockPlatform.AssertNumberOfCalls(t, "TearDown", 1)
 		mockPlatform.AssertNumberOfCalls(t, "AddApps", 1)
 		mockPlatform.AssertNumberOfCalls(t, "AddComponents", 1)
 	})
@@ -189,8 +189,8 @@ func TestStartRunner(t *testing.T) {
 		ret := fakeRunner.Start(&fakeTestingM{})
 		assert.Equal(t, 1, ret)
 
-		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
-		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
+		mockPlatform.AssertNumberOfCalls(t, "Setup", 1)
+		mockPlatform.AssertNumberOfCalls(t, "TearDown", 1)
 		mockPlatform.AssertNumberOfCalls(t, "AddApps", 0)
 		mockPlatform.AssertNumberOfCalls(t, "AddComponents", 0)
 	})

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/valyala/fasthttp"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -190,7 +191,7 @@ func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
 	return imr.r
 }
 
-// ProtoWithData returns a copy of the internal InvokeMethodRequest Proto object with the entire data stream read into the Data property.
+// ProtoWithData returns a copy of the internal InternalInvokeRequest Proto object with the entire data stream read into the Data property.
 func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeRequest, error) {
 	if imr.r == nil || imr.r.Message == nil {
 		return nil, errors.New("message is nil")
@@ -201,22 +202,19 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return imr.r, nil
 	}
 
+	// Clone the object
+	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
+
 	// Read the data and store it in the object
 	data, err := imr.RawDataFull()
 	if err != nil {
-		return imr.r, err
+		return m, err
 	}
-	imr.r.Message.Data = &anypb.Any{
+	m.Message.Data = &anypb.Any{
 		Value: data,
 	}
 
-	// Close the source data stream and replay buffers
-	err = imr.replayableRequest.Close()
-	if err != nil {
-		return imr.r, err
-	}
-
-	return imr.r, nil
+	return m, nil
 }
 
 // Actor returns actor type and id.

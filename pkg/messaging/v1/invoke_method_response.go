@@ -21,6 +21,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -146,7 +147,7 @@ func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 	return imr.r
 }
 
-// ProtoWithData returns the internal InvokeMethodResponse Proto object with the entire data stream read into the Data property.
+// ProtoWithData returns a copy of the internal InternalInvokeResponse Proto object with the entire data stream read into the Data property.
 func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeResponse, error) {
 	if imr.r == nil || imr.r.Message == nil {
 		return nil, errors.New("message is nil")
@@ -157,22 +158,19 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 		return imr.r, nil
 	}
 
+	// Clone the object
+	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeResponse)
+
 	// Read the data and store it in the object
 	data, err := imr.RawDataFull()
 	if err != nil {
-		return imr.r, err
+		return m, err
 	}
-	imr.r.Message.Data = &anypb.Any{
+	m.Message.Data = &anypb.Any{
 		Value: data,
 	}
 
-	// Close the source data stream and replay buffers
-	err = imr.replayableRequest.Close()
-	if err != nil {
-		return imr.r, err
-	}
-
-	return imr.r, nil
+	return m, nil
 }
 
 // Headers gets Headers metadata.

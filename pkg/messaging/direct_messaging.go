@@ -166,8 +166,13 @@ func (d *directMessaging) invokeWithRetry(
 			// This policy has built-in retries so enable replay in the request
 			req.WithReplay(true)
 
-			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+			policyRunner := resiliency.NewRunnerWithOptions(ctx,
 				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
+				resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+					Disposer: func(imr *invokev1.InvokeMethodResponse) {
+						_ = imr.Close()
+					},
+				},
 			)
 			attempts := atomic.Int32{}
 			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
@@ -180,11 +185,6 @@ func (d *directMessaging) invokeWithRetry(
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
-					// Invoke ProtoWithData to read the entire response body in-memory so it can be better garbage-collected later
-					if rResp != nil {
-						_, _ = rResp.ProtoWithData()
-					}
-
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
 					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)

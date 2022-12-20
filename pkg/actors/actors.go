@@ -396,8 +396,13 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
 			// This policy has built-in retries so enable replay in the request
 			req.WithReplay(true)
-			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+			policyRunner := resiliency.NewRunnerWithOptions(ctx,
 				a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
+				resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+					Disposer: func(imr *invokev1.InvokeMethodResponse) {
+						_ = imr.Close()
+					},
+				},
 			)
 			attempts := atomic.Int32{}
 			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
@@ -410,11 +415,6 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
-					// Invoke ProtoWithData to read the entire response body in-memory so it can be better garbage-collected later
-					if rResp != nil {
-						_, _ = rResp.ProtoWithData()
-					}
-
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
 					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", targetAddress, attempt-1, rErr)
