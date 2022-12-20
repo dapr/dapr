@@ -5423,7 +5423,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	assert.NotNil(t, rt.topicRoutes)
 	go sendSigterm(rt)
 	select {
-	case <-rt.shutdownC:
+	case <-rt.pubsubCtx.Done():
 		assert.Nil(t, rt.pubsubCtx)
 		assert.Nil(t, rt.topicCtxCancels)
 		assert.Nil(t, rt.topicRoutes)
