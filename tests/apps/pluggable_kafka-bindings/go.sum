@@ -7,6 +7,8 @@ github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff h1:
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff/go.mod h1:gK31Fk/lEYg0sCaoxFhPyBL54N5AOeeWfeZFl36P2Ko=
 github.com/dapr/components-contrib v1.9.1-0.20221213185150-c5c985a68514 h1:2HaeVAj6ePRjxwEXJVeUV209VVAiurQ+eS7xB1k7t7g=
 github.com/dapr/components-contrib v1.9.1-0.20221213185150-c5c985a68514/go.mod h1:o92XRraeBOkmrZKZCUaEGuxAN0OdOH4CGwdqwi8pYMQ=
+github.com/dapr/dapr v1.9.4-0.20221212235750-ac9256f214e0 h1:Y3WZ1lgR7vBXowF6xbBo1lSEsW2aiXN7U9gRhz8rQcM=
+github.com/dapr/dapr v1.9.4-0.20221212235750-ac9256f214e0/go.mod h1:chJw8EsdwW+Z0E2e0XJN2JzVO5FgUkMkYCYrRKTIqGc=
 github.com/dapr/kit v0.0.4-0.20221211173611-bcf6ee09314e h1:/1VuHsZJOeOLZ1KkW+484RDVZ1FqHTunUSCagEtP8bw=
 github.com/dapr/kit v0.0.4-0.20221211173611-bcf6ee09314e/go.mod h1:+vh2UIRT0KzFm5YJWfj7az4XVSdodys1OCz1WzNe1Eo=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
