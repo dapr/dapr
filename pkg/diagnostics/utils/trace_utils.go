@@ -31,6 +31,8 @@ const (
 	daprFastHTTPContextKey = "daprSpanContextKey"
 )
 
+var emptySpanContext trace.SpanContext
+
 // StdoutExporter implements an open telemetry span exporter that writes to stdout.
 type StdoutExporter struct {
 	log logger.Logger
@@ -103,7 +105,7 @@ func BinaryFromSpanContext(sc trace.SpanContext) []byte {
 	traceID := sc.TraceID()
 	spanID := sc.SpanID()
 	traceFlags := sc.TraceFlags()
-	if sc.Equal(trace.SpanContext{}) {
+	if sc.Equal(emptySpanContext) {
 		return nil
 	}
 	var b [29]byte

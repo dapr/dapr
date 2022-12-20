@@ -173,6 +173,12 @@ func (s *server) Close() error {
 		server.GracefulStop()
 	}
 
+	if s.api != nil {
+		if closer, ok := s.api.(io.Closer); ok {
+			closer.Close()
+		}
+	}
+
 	return nil
 }
 
