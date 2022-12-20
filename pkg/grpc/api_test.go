@@ -3535,7 +3535,7 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().TryLock(gomock.Any()).DoAndReturn(func(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+		mockLockStore.EXPECT().TryLock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			assert.Equal(t, int32(1), req.ExpiryInSeconds)
@@ -3631,7 +3631,7 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().Unlock(gomock.Any()).DoAndReturn(func(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+		mockLockStore.EXPECT().Unlock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			return &lock.UnlockResponse{
