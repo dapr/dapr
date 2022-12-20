@@ -194,6 +194,7 @@ func TestActorInvocationCrossSDKs(t *testing.T) {
 				method := fmt.Sprintf(tt.method, actorType, uuid.New().String())
 				name := fmt.Sprintf("Test %s calling %s", app, fmt.Sprintf(tt.method, actorType, "ActorId"))
 				t.Run(name, func(t *testing.T) {
+					t.Logf("invoking %s/%s", externalURL, method)
 					resp, err := utils.HTTPPost(fmt.Sprintf("%s/%s", externalURL, method), []byte(tt.payload))
 					t.Log("checking err...")
 					require.NoError(t, err)
