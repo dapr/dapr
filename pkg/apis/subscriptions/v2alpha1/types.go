@@ -45,6 +45,16 @@ type SubscriptionSpec struct {
 	Routes Routes `json:"routes"`
 	// The optional dead letter queue for this topic to send events to.
 	DeadLetterTopic string `json:"deadLetterTopic,omitempty"`
+	// The option to enable bulk subscription for this topic.
+	BulkSubscribe BulkSubscribe `json:"bulkSubscribe,omitempty"`
+}
+
+// BulkSubscribe encapsulates the bulk subscription configuration for a topic.
+type BulkSubscribe struct {
+	Enabled string `json:"enabled"`
+	// +optional
+	MaxBulkSubCount           string `json:"maxBulkSubCount,omitempty"`
+	MaxBulkSubAwaitDurationMs string `json:"maxBulkSubAwaitDurationMs,omitempty"`
 }
 
 // Routes encapsulates the rules and optional default path for a topic.

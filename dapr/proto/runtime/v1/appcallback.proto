@@ -265,6 +265,9 @@ message TopicSubscription {
 
   // The optional dead letter queue for this topic to send events to.
   string dead_letter_topic = 6;
+
+  // The optional bulk subscribe settings for this topic.
+  BulkSubscribeRequest bulk_subscribe = 7;
 }
 
 message TopicRoutes {
@@ -285,6 +288,18 @@ message TopicRule {
   // This value is passed in TopicEventRequest and used by OnTopicEvent to "switch"
   // inside the handler.
   string path = 2;
+}
+
+// BulkSubscribeRequest is the message to pass settings for bulk subscribe
+message BulkSubscribeRequest {
+  // Required. Flag to enable/disable bulk subscribe
+  string enabled = 1;
+
+  // Optional. Max number of messages to be sent in a single bulk request
+  string maxBulkSubCount = 2;
+
+  // Optional. Max duration to wait for messages to be sent in a single bulk request
+  string maxBulkSubAwaitDurationMs  = 3;
 }
 
 // ListInputBindingsResponse is the message including the list of input bindings.

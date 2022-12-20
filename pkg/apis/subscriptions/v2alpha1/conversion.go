@@ -40,9 +40,19 @@ func (s *Subscription) ConvertTo(dstRaw conversion.Hub) error {
 	dst.Spec.Metadata = s.Spec.Metadata
 	dst.Spec.Route = s.Spec.Routes.Default
 	dst.Spec.DeadLetterTopic = s.Spec.DeadLetterTopic
+	dst.Spec.BulkSubscribe = *convertBulkSubscriptionV2alpha1ToV1alpha1(&s.Spec.BulkSubscribe)
 
 	// +kubebuilder:docs-gen:collapse=rote conversion
 	return nil
+}
+
+func convertBulkSubscriptionV2alpha1ToV1alpha1(in *BulkSubscribe) *v1alpha1.BulkSubscribe {
+	out := v1alpha1.BulkSubscribe{
+		Enabled:                   in.Enabled,
+		MaxBulkSubCount:           in.MaxBulkSubCount,
+		MaxBulkSubAwaitDurationMs: in.MaxBulkSubAwaitDurationMs,
+	}
+	return &out
 }
 
 /*
@@ -68,7 +78,17 @@ func (s *Subscription) ConvertFrom(srcRaw conversion.Hub) error {
 	s.Spec.Metadata = src.Spec.Metadata
 	s.Spec.Routes.Default = src.Spec.Route
 	s.Spec.DeadLetterTopic = src.Spec.DeadLetterTopic
+	s.Spec.BulkSubscribe = *convertBulkSubscriptionV1alpha1ToV2alpha1(&src.Spec.BulkSubscribe)
 
 	// +kubebuilder:docs-gen:collapse=rote conversion
 	return nil
+}
+
+func convertBulkSubscriptionV1alpha1ToV2alpha1(in *v1alpha1.BulkSubscribe) *BulkSubscribe {
+	out := BulkSubscribe{
+		Enabled:                   in.Enabled,
+		MaxBulkSubCount:           in.MaxBulkSubCount,
+		MaxBulkSubAwaitDurationMs: in.MaxBulkSubAwaitDurationMs,
+	}
+	return &out
 }

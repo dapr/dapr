@@ -38,7 +38,16 @@ type SubscriptionSpec struct {
 	// +optional
 	Metadata        map[string]string `json:"metadata,omitempty"`
 	Route           string            `json:"route"`
+	BulkSubscribe   BulkSubscribe     `json:"bulkSubscribe,omitempty"`
 	DeadLetterTopic string            `json:"deadLetterTopic,omitempty"`
+}
+
+// BulkSubscribe encapsulates the bulk subscription configuration for a topic.
+type BulkSubscribe struct {
+	Enabled string `json:"enabled"`
+	// +optional
+	MaxBulkSubCount           string `json:"maxBulkSubCount,omitempty"`
+	MaxBulkSubAwaitDurationMs string `json:"maxBulkSubAwaitDurationMs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -125,7 +125,10 @@ func TestBulkSubscribe(t *testing.T) {
 		req.WithRawData(nil, invokev1.JSONContentType)
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true", "rawPayload": "true"}},
+			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders",
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: "true"},
+				Metadata:      map[string]string{"rawPayload": "true"},
+			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)

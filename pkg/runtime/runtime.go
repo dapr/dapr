@@ -151,6 +151,7 @@ type TopicRouteElem struct {
 	metadata        map[string]string
 	rules           []*runtimePubsub.Rule
 	deadLetterTopic string
+	bulkSubscribe   *runtimePubsub.BulkSubscribe
 }
 
 // Type of function that determines if a component is authorized.
@@ -734,7 +735,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 	namespaced := a.pubSubs[name].namespaceScoped
 
-	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
+	if utils.IsTruthy(route.bulkSubscribe.Enabled) {
 		err := a.bulkSubscribeTopic(ctx, policyRunner, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
@@ -1858,6 +1859,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 			metadata:        s.Metadata,
 			rules:           s.Rules,
 			deadLetterTopic: s.DeadLetterTopic,
+			bulkSubscribe:   &s.BulkSubscribe,
 		}
 	}
 

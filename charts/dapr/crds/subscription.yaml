@@ -51,6 +51,18 @@ spec:
                 type: string
               deadLetterTopic:
                 type: string
+              bulkSubscribe:
+                description: Represents bulk subscribe properies
+                properties:
+                  enabled: 
+                    type: string
+                  maxBulkSubCount:
+                    type: string
+                  maxBulkSubAwaitDurationMs:
+                    type: string
+                required:
+                  - enabled
+                type: object
               metadata:
                 additionalProperties:
                   type: string
@@ -129,6 +141,18 @@ spec:
               deadLetterTopic:
                 description: The optional dead letter queue for this topic to send events to.
                 type: string
+              bulkSubscribe:
+                description: Represents bulk subscribe properies
+                properties:
+                  enabled: 
+                    type: string
+                  maxBulkSubCount:
+                    type: string
+                  maxBulkSubAwaitDurationMs:
+                    type: string
+                required:
+                  - enabled
+                type: object
             required:
             - pubsubname
             - routes
