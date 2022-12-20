@@ -78,12 +78,12 @@ type rule struct {
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	routedMessagesA sets.String
-	routedMessagesB sets.String
-	routedMessagesC sets.String
-	routedMessagesD sets.String
-	routedMessagesE sets.String
-	routedMessagesF sets.String
+	routedMessagesA sets.Set[string]
+	routedMessagesB sets.Set[string]
+	routedMessagesC sets.Set[string]
+	routedMessagesD sets.Set[string]
+	routedMessagesE sets.Set[string]
+	routedMessagesF sets.Set[string]
 	lock            sync.Mutex
 )
 
@@ -93,12 +93,12 @@ func initializeSets() {
 	defer lock.Unlock()
 
 	// initialize all the sets
-	routedMessagesA = sets.NewString()
-	routedMessagesB = sets.NewString()
-	routedMessagesC = sets.NewString()
-	routedMessagesD = sets.NewString()
-	routedMessagesE = sets.NewString()
-	routedMessagesF = sets.NewString()
+	routedMessagesA = sets.New[string]()
+	routedMessagesB = sets.New[string]()
+	routedMessagesC = sets.New[string]()
+	routedMessagesD = sets.New[string]()
+	routedMessagesE = sets.New[string]()
+	routedMessagesF = sets.New[string]()
 }
 
 // indexHandler is the handler for root path
@@ -161,7 +161,7 @@ func eventHandlerF(w http.ResponseWriter, r *http.Request) {
 	eventHandler(w, r, routedMessagesF)
 }
 
-func eventHandler(w http.ResponseWriter, r *http.Request, set sets.String) {
+func eventHandler(w http.ResponseWriter, r *http.Request, set sets.Set[string]) {
 	reqID, ok := r.Context().Value("reqid").(string)
 	if reqID == "" || !ok {
 		reqID = uuid.New().String()
@@ -250,12 +250,12 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := routedMessagesResponse{
-		RouteA: unique(routedMessagesA.List()),
-		RouteB: unique(routedMessagesB.List()),
-		RouteC: unique(routedMessagesC.List()),
-		RouteD: unique(routedMessagesD.List()),
-		RouteE: unique(routedMessagesE.List()),
-		RouteF: unique(routedMessagesF.List()),
+		RouteA: unique(sets.List(routedMessagesA)),
+		RouteB: unique(sets.List(routedMessagesB)),
+		RouteC: unique(sets.List(routedMessagesC)),
+		RouteD: unique(sets.List(routedMessagesD)),
+		RouteE: unique(sets.List(routedMessagesE)),
+		RouteF: unique(sets.List(routedMessagesF)),
 	}
 
 	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
