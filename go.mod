@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20221219224748-4a983f3cafac
+	github.com/dapr/components-contrib v1.9.1-0.20221220192417-c156d4ba04e4
 	github.com/dapr/kit v0.0.3
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
@@ -422,6 +422,3 @@ replace (
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-// temporary replace for struct change
-replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221220173419-cff6d7b6b1d2
