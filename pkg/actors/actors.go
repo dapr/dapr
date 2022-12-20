@@ -539,10 +539,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	}
 
 	if resp.Status().Code != nethttp.StatusOK {
-		respData, err := resp.RawDataFull()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response data: %w", err)
-		}
+		respData, _ := resp.RawDataFull()
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}
 
@@ -1309,7 +1306,6 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	defer a.activeTimersLock.Unlock()
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := constructCompositeKey(actorKey, req.Name)
-	now := time.Now()
 
 	_, exists := a.actorsTable.Load(actorKey)
 	if !exists {
@@ -1321,6 +1317,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		close(stopChan.(chan bool))
 	}
 
+	now := time.Now()
 	if len(req.DueTime) != 0 {
 		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
 			return fmt.Errorf("error parsing timer due time: %w", err)
