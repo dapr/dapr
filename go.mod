@@ -73,8 +73,9 @@ require (
 )
 
 require (
-	github.com/Azure/azure-amqp-common-go/v3 v3.2.3 // indirect
-	github.com/didip/tollbooth v4.0.2+incompatible // indirect
+	github.com/didip/tollbooth/v7 v7.0.1 // indirect
+	github.com/go-pkgz/expirable-cache v0.1.0 // indirect
+	github.com/go-redis/redis/v9 v9.0.0-rc.2 // indirect
 )
 
 require (
@@ -423,4 +424,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // temporary replace for struct change
-replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221214053151-71a543aed7a4
+replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221220173419-cff6d7b6b1d2
