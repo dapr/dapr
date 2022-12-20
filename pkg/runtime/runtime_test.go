@@ -5474,6 +5474,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		},
 		"mockPubSub",
 	)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	mockPubSub.On("Init", mock.Anything).Return(nil)
 	mockPubSub.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
 	mockPubSub.On("Close").Return(nil)
@@ -5508,7 +5509,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	assert.NotNil(t, rt.topicRoutes)
 	go sendSigterm(rt)
 	select {
-	case <-rt.pubsubCtx.Done():
+	case <-rt.shutdownC:
 		assert.Nil(t, rt.pubsubCtx)
 		assert.Nil(t, rt.topicCtxCancels)
 		assert.Nil(t, rt.topicRoutes)
@@ -5519,6 +5520,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 
 func TestGracefulShutdownBindings(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 
 	rt.bindingsRegistry.RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
@@ -5553,6 +5555,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 
 func TestGracefulShutdownActors(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
@@ -5634,6 +5637,7 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 
 func TestTraceShutdown(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
 		Otel: config.OtelSpec{
 			EndpointAddress: "foo.bar",
@@ -5652,6 +5656,5 @@ func TestTraceShutdown(t *testing.T) {
 }
 
 func sendSigterm(rt *DaprRuntime) {
-	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 }
