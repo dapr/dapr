@@ -25,13 +25,13 @@ func (m *MockPubSub) GetComponentMetadata() map[string]string {
 }
 
 // Publish is a mock publish method.
-func (m *MockPubSub) Publish(req *pubsub.PublishRequest) error {
+func (m *MockPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	args := m.Called(req)
 	return args.Error(0)
 }
 
 // BulkPublish is a mock bulk publish method.
-func (m *MockPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+func (m *MockPubSub) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	args := m.Called(req)
 	return pubsub.BulkPublishResponse{}, args.Error(0)
 }
@@ -71,11 +71,11 @@ func (f *FailingPubsub) Init(metadata pubsub.Metadata) error {
 	return nil
 }
 
-func (f *FailingPubsub) Publish(req *pubsub.PublishRequest) error {
+func (f *FailingPubsub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	return f.Failure.PerformFailure(req.Topic)
 }
 
-func (f *FailingPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+func (f *FailingPubsub) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	return pubsub.BulkPublishResponse{}, f.Failure.PerformFailure(req.Topic)
 }
 
@@ -132,7 +132,7 @@ func (m *InMemoryPubsub) Init(metadata pubsub.Metadata) error {
 }
 
 // Publish is a mock publish method.
-func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
+func (m *InMemoryPubsub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
