@@ -43,7 +43,7 @@ func NewDefaultBulkPublisher(p contribPubsub.PubSub) *defaultBulkPublisher {
 
 // BulkPublish publishes a list of messages as parallel Publish requests to the topic in the incoming request.
 // There is no guarantee that messages sent to the broker are in the same order as specified in the request.
-func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
+func (p *defaultBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	failedEntries := make([]contribPubsub.BulkPublishResponseFailedEntry, 0, len(req.Entries))
 
 	var eg errgroup.Group
@@ -54,7 +54,7 @@ func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub
 	for i := range req.Entries {
 		entry := req.Entries[i]
 		eg.Go(func() error {
-			failedEntry := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
+			failedEntry := p.bulkPublishSingleEntry(ctx, req.PubsubName, req.Topic, entry)
 			if failedEntry != nil {
 				faileEntryChan <- *failedEntry
 				return failedEntry.Error
@@ -74,7 +74,7 @@ func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub
 }
 
 // bulkPublishSingleEntry sends a single message to the broker as a Publish request.
-func (p *defaultBulkPublisher) bulkPublishSingleEntry(pubsubName, topic string, entry contribPubsub.BulkMessageEntry) *contribPubsub.BulkPublishResponseFailedEntry {
+func (p *defaultBulkPublisher) bulkPublishSingleEntry(ctx context.Context, pubsubName, topic string, entry contribPubsub.BulkMessageEntry) *contribPubsub.BulkPublishResponseFailedEntry {
 	pr := contribPubsub.PublishRequest{
 		Data:        entry.Event,
 		PubsubName:  pubsubName,
@@ -83,7 +83,7 @@ func (p *defaultBulkPublisher) bulkPublishSingleEntry(pubsubName, topic string, 
 		ContentType: &entry.ContentType,
 	}
 
-	if err := p.p.Publish(&pr); err != nil {
+	if err := p.p.Publish(ctx, &pr); err != nil {
 		return &contribPubsub.BulkPublishResponseFailedEntry{
 			EntryId: entry.EntryId,
 			Error:   err,

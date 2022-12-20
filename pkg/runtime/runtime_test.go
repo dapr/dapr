@@ -3684,7 +3684,7 @@ func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
 }
 
 // Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
-func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
+func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.pubCount[req.Topic]++
 	if handler, ok := m.handlers[req.Topic]; ok {
 		pubsubMsg := &pubsub.NewMessage{
@@ -4491,7 +4491,7 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 }
 
 // Publish is a mock publish method.
-func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
+func (m *mockPublishPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.PublishedRequest.Store(req)
 	return nil
 }
