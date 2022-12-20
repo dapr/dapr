@@ -38,7 +38,6 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/workflows"
-	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -331,83 +330,6 @@ func NewAPI(opts APIOpts) API {
 		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		daprRunTimeVersion:         version.Version(),
 	}
-}
-
-// CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
-func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	if a.appChannel == nil {
-		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
-	}
-
-	req, err := invokev1.InternalInvokeRequest(in)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
-	}
-
-	if a.accessControlList != nil {
-		// An access control policy has been specified for the app. Apply the policies.
-		operation := req.Message().Method
-		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
-		// Get the http verb in case the application protocol is http
-		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
-			httpExt := req.Message().GetHttpExtension()
-			if httpExt != nil {
-				httpVerb = httpExt.GetVerb()
-			}
-		}
-		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol, a.accessControlList)
-
-		if !callAllowed {
-			return nil, status.Errorf(codes.PermissionDenied, errMsg)
-		}
-	}
-
-	var callerAppID string
-	callerIDHeader, ok := req.Metadata()[invokev1.CallerIDHeader]
-	if ok && len(callerIDHeader.Values) > 0 {
-		callerAppID = callerIDHeader.Values[0]
-	} else {
-		callerAppID = "unknown"
-	}
-
-	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message().Method)
-
-	var statusCode int32
-	defer func() {
-		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
-	}()
-
-	// stausCode will be read by the deferred method above
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		statusCode = int32(codes.Internal)
-		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
-	} else {
-		statusCode = resp.Status().Code
-	}
-
-	return resp.Proto(), nil
-}
-
-// CallActor invokes a virtual actor.
-func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	req, err := invokev1.InternalInvokeRequest(in)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
-	}
-
-	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	resp, err := a.actor.Call(ctx, req)
-	if err != nil {
-		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
-		if errors.Is(err, actors.ErrDaprResponseHeader) {
-			return resp.Proto(), nil
-		}
-
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
-		return nil, err
-	}
-	return resp.Proto(), nil
 }
 
 // validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
@@ -791,7 +713,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	policyDef := a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
 	bgrPolicyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
 	bgr, err := bgrPolicyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-		rBulkGet, rBulkResponse, rErr := store.BulkGet(reqs)
+		rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, reqs)
 		return &bulkGetRes{
 			bulkGet:   rBulkGet,
 			responses: rBulkResponse,
@@ -832,7 +754,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			req := param.(*state.GetRequest)
 			policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
 			res, policyErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-				return store.Get(req)
+				return store.Get(ctx, req)
 			})
 
 			item := &runtimev1pb.BulkStateItem{
@@ -906,7 +828,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-		return store.Get(req)
+		return store.Get(ctx, req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -996,7 +918,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkSet(reqs)
+		return nil, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1045,7 +967,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
-		return querier.Query(&req)
+		return querier.Query(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1123,7 +1045,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.Delete(&req)
+		return nil, store.Delete(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1173,7 +1095,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkDelete(reqs)
+		return nil, store.BulkDelete(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1415,7 +1337,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		Metadata:   in.Metadata,
 	}
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, transactionalStore.Multi(storeReq)
+		return nil, transactionalStore.Multi(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -2030,8 +1952,6 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	subscribeKeys := make([]string, 0)
 
 	// TODO(@halspang) provide a switch to use just resiliency or this.
-	newCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	if len(request.Keys) > 0 {
 		subscribeKeys = append(subscribeKeys, request.Keys...)
@@ -2050,7 +1970,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[string](newCtx,
+	policyRunner := resiliency.NewRunner[string](configurationServer.Context(),
 		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
 	)
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
@@ -2129,4 +2049,16 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
+}
+
+func (a *api) Close() error {
+	a.configurationSubscribeLock.Lock()
+	defer a.configurationSubscribeLock.Unlock()
+
+	for k, stop := range a.configurationSubscribe {
+		close(stop)
+		delete(a.configurationSubscribe, k)
+	}
+
+	return nil
 }

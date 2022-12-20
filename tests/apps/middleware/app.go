@@ -68,7 +68,7 @@ func testLogCall(w http.ResponseWriter, r *http.Request) {
 
 	input := "hello"
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/logCall", daprPort, service)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte(input))) //nolint:gosec
+	resp, err := http.Post(url, "application/json", bytes.NewReader([]byte(input))) //nolint:gosec
 	if err != nil {
 		log.Println("Could not call service")
 		w.WriteHeader(http.StatusInternalServerError)

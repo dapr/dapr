@@ -19,6 +19,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -46,23 +47,28 @@ type daprConfig struct {
 	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
 
-var registeredActorType = getActorType()
+var registeredActorType = map[string]bool{}
 
 var daprConfigResponse = daprConfig{
-	[]string{getActorType()},
+	getActorType(),
 	actorIdleTimeout,
 	actorScanInterval,
 	drainOngoingCallTimeout,
 	drainRebalancedActors,
 }
 
-func getActorType() string {
+func getActorType() []string {
 	actorType := os.Getenv(actorTypeEnvName)
 	if actorType == "" {
-		return defaultActorType
+		registeredActorType[defaultActorType] = true
+		return []string{defaultActorType}
 	}
 
-	return actorType
+	actorTypes := strings.Split(actorType, ",")
+	for _, tp := range actorTypes {
+		registeredActorType[tp] = true
+	}
+	return actorTypes
 }
 
 // indexHandler is the handler for root path
@@ -88,8 +94,8 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s actor request for %s\n", r.Method, r.URL.RequestURI())
 	actorType := mux.Vars(r)["actorType"]
 
-	if actorType != registeredActorType {
-		log.Printf("Unknown actor type: %s\n", actorType)
+	if !registeredActorType[actorType] {
+		log.Printf("Unknown actor type: %s", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
