@@ -1304,6 +1304,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	defer a.activeTimersLock.Unlock()
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := constructCompositeKey(actorKey, req.Name)
+	now := time.Now()
 
 	_, exists := a.actorsTable.Load(actorKey)
 	if !exists {
@@ -1320,7 +1321,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 			return fmt.Errorf("error parsing timer due time: %w", err)
 		}
 	} else {
-		dueTime = time.Now()
+		dueTime = now
 	}
 
 	repeats = -1 // set to default
@@ -1338,7 +1339,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		if ttl, err = parseTime(req.TTL, &dueTime); err != nil {
 			return fmt.Errorf("error parsing timer TTL: %w", err)
 		}
-		if time.Now().After(ttl) || dueTime.After(ttl) {
+		if now.After(ttl) || dueTime.After(ttl) {
 			return fmt.Errorf("timer %s has already expired: dueTime: %s TTL: %s", timerKey, req.DueTime, req.TTL)
 		}
 	}

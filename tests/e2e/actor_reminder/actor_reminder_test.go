@@ -483,7 +483,7 @@ func TestActorReminderPeriod(t *testing.T) {
 
 		t.Log("Checking if all reminders did trigger ...")
 		count := countActorAction(resp, actorID, reminderName)
-		require.Equal(t, 5, count)
+		require.Equal(t, 5, count, "response: %s", string(resp))
 	})
 }
 

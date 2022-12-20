@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -130,9 +131,10 @@ func (s *server) StartNonBlocking() error {
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
+			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
+			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.Port, err)
+				s.logger.Warnf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				listeners = append(listeners, l)
 			}

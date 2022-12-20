@@ -2795,7 +2795,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("localhost", strconv.Itoa(a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
+		conn, _ := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(a.runtimeConfig.ApplicationPort), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()
 			break

@@ -339,6 +339,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 
 	url := fmt.Sprintf(actorMethodURLFormat, actorType, id, callType, method)
 
+	log.Printf("Invoking: %s %s\n", r.Method, url)
 	expectedHTTPCode := 200
 	var req timerReminderRequest
 	switch callType {
@@ -359,6 +360,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		log.Println("Body data: " + string(body))
 		json.Unmarshal(body, &req)
 	}
 
