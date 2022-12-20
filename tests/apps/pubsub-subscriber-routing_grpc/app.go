@@ -59,12 +59,12 @@ type routedMessagesResponse struct {
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message.
-	routedMessagesA sets.String
-	routedMessagesB sets.String
-	routedMessagesC sets.String
-	routedMessagesD sets.String
-	routedMessagesE sets.String
-	routedMessagesF sets.String
+	routedMessagesA sets.Set[string]
+	routedMessagesB sets.Set[string]
+	routedMessagesC sets.Set[string]
+	routedMessagesD sets.Set[string]
+	routedMessagesE sets.Set[string]
+	routedMessagesF sets.Set[string]
 	lock            sync.Mutex
 )
 
@@ -109,12 +109,12 @@ func main() {
 // initialize all the sets for a clean test.
 func initializeSets() {
 	// initialize all the sets.
-	routedMessagesA = sets.NewString()
-	routedMessagesB = sets.NewString()
-	routedMessagesC = sets.NewString()
-	routedMessagesD = sets.NewString()
-	routedMessagesE = sets.NewString()
-	routedMessagesF = sets.NewString()
+	routedMessagesA = sets.New[string]()
+	routedMessagesB = sets.New[string]()
+	routedMessagesC = sets.New[string]()
+	routedMessagesD = sets.New[string]()
+	routedMessagesE = sets.New[string]()
+	routedMessagesF = sets.New[string]()
 }
 
 // This method gets invoked when a remote service has called the app through Dapr.
@@ -146,12 +146,12 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 func (s *server) getMessages(reqID string) []byte {
 	resp := routedMessagesResponse{
-		RouteA: routedMessagesA.List(),
-		RouteB: routedMessagesB.List(),
-		RouteC: routedMessagesC.List(),
-		RouteD: routedMessagesD.List(),
-		RouteE: routedMessagesE.List(),
-		RouteF: routedMessagesF.List(),
+		RouteA: sets.List(routedMessagesA),
+		RouteB: sets.List(routedMessagesB),
+		RouteC: sets.List(routedMessagesC),
+		RouteD: sets.List(routedMessagesD),
+		RouteE: sets.List(routedMessagesE),
+		RouteF: sets.List(routedMessagesF),
 	}
 
 	rawResp, _ := json.Marshal(resp)
@@ -194,7 +194,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	reqID := uuid.New().String()
 	log.Printf("(%s) Message arrived - Topic: %s, Message: %s, Path: %s", reqID, in.Topic, string(in.Data), in.Path)
 
-	var set *sets.String
+	var set *sets.Set[string]
 	switch in.Path {
 	case pathA:
 		set = &routedMessagesA
