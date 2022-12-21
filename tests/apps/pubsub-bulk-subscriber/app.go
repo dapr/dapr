@@ -135,10 +135,10 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesSubRaw  sets.String
-	receivedMessagesSubCE   sets.String
-	receivedMessagesBulkRaw sets.String
-	receivedMessagesBulkCE  sets.String
+	receivedMessagesSubRaw  sets.Set[string]
+	receivedMessagesSubCE   sets.Set[string]
+	receivedMessagesBulkRaw sets.Set[string]
+	receivedMessagesBulkCE  sets.Set[string]
 	desiredResponse         respondWith
 	lock                    sync.Mutex
 )
@@ -491,10 +491,10 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicRawSub:     unique(receivedMessagesSubRaw.List()),
-		ReceivedByTopicCESub:      unique(receivedMessagesSubCE.List()),
-		ReceivedByTopicRawBulkSub: unique(receivedMessagesBulkRaw.List()),
-		ReceivedByTopicCEBulkSub:  unique(receivedMessagesBulkCE.List()),
+		ReceivedByTopicRawSub:     unique(sets.List(receivedMessagesSubRaw)),
+		ReceivedByTopicCESub:      unique(sets.List(receivedMessagesSubCE)),
+		ReceivedByTopicRawBulkSub: unique(sets.List(receivedMessagesBulkRaw)),
+		ReceivedByTopicCEBulkSub:  unique(sets.List(receivedMessagesBulkCE)),
 	}
 
 	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
@@ -525,10 +525,10 @@ func initializeHandler(w http.ResponseWriter, _ *http.Request) {
 // initialize all the sets for a clean test.
 func initializeSets() {
 	// initialize all the sets
-	receivedMessagesSubRaw = sets.NewString()
-	receivedMessagesSubCE = sets.NewString()
-	receivedMessagesBulkRaw = sets.NewString()
-	receivedMessagesBulkCE = sets.NewString()
+	receivedMessagesSubRaw = sets.New[string]()
+	receivedMessagesSubCE = sets.New[string]()
+	receivedMessagesBulkRaw = sets.New[string]()
+	receivedMessagesBulkCE = sets.New[string]()
 }
 
 // appRouter initializes restful api router
