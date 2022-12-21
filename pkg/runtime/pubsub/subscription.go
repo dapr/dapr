@@ -7,7 +7,7 @@ type Subscription struct {
 	Metadata        map[string]string `json:"metadata"`
 	Rules           []*Rule           `json:"rules,omitempty"`
 	Scopes          []string          `json:"scopes"`
-	BulkSubscribe   BulkSubscribe     `json:"bulkSubscribe"`
+	BulkSubscribe   *BulkSubscribe    `json:"bulkSubscribe"`
 }
 
 type BulkSubscribe struct {

@@ -144,13 +144,11 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 				}
 				n++
 			}
-
-			bulkSubscribe := BulkSubscribe{
+			bulkSubscribe := &BulkSubscribe{
 				Enabled:                   si.BulkSubscribe.Enabled,
 				MaxBulkSubCount:           si.BulkSubscribe.MaxBulkSubCount,
 				MaxBulkSubAwaitDurationMs: si.BulkSubscribe.MaxBulkSubAwaitDurationMs,
 			}
-
 			subscriptions[i] = Subscription{
 				PubsubName:      si.PubsubName,
 				Topic:           si.Topic,
@@ -253,17 +251,21 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			if err != nil {
 				return nil, err
 			}
+			var bulkSubscribe *BulkSubscribe
+			if s.BulkSubscribe != nil {
+				bulkSubscribe = &BulkSubscribe{
+					Enabled:                   s.BulkSubscribe.Enabled,
+					MaxBulkSubCount:           s.BulkSubscribe.MaxBulkSubCount,
+					MaxBulkSubAwaitDurationMs: s.BulkSubscribe.MaxBulkSubAwaitDurationMs,
+				}
+			}
 			subscriptions[i] = Subscription{
 				PubsubName:      s.PubsubName,
 				Topic:           s.GetTopic(),
 				Metadata:        s.GetMetadata(),
 				DeadLetterTopic: s.DeadLetterTopic,
 				Rules:           rules,
-				BulkSubscribe: BulkSubscribe{
-					Enabled:                   s.BulkSubscribe.Enabled,
-					MaxBulkSubCount:           s.BulkSubscribe.MaxBulkSubCount,
-					MaxBulkSubAwaitDurationMs: s.BulkSubscribe.MaxBulkSubAwaitDurationMs,
-				},
+				BulkSubscribe:   bulkSubscribe,
 			}
 		}
 	}
@@ -348,7 +350,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Metadata:        sub.Spec.Metadata,
 			Scopes:          sub.Scopes,
 			DeadLetterTopic: sub.Spec.DeadLetterTopic,
-			BulkSubscribe: BulkSubscribe{
+			BulkSubscribe: &BulkSubscribe{
 				Enabled:                   sub.Spec.BulkSubscribe.Enabled,
 				MaxBulkSubCount:           sub.Spec.BulkSubscribe.MaxBulkSubCount,
 				MaxBulkSubAwaitDurationMs: sub.Spec.BulkSubscribe.MaxBulkSubAwaitDurationMs,
@@ -374,7 +376,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Metadata:        sub.Spec.Metadata,
 			Scopes:          sub.Scopes,
 			DeadLetterTopic: sub.Spec.DeadLetterTopic,
-			BulkSubscribe: BulkSubscribe{
+			BulkSubscribe: &BulkSubscribe{
 				Enabled:                   sub.Spec.BulkSubscribe.Enabled,
 				MaxBulkSubCount:           sub.Spec.BulkSubscribe.MaxBulkSubCount,
 				MaxBulkSubAwaitDurationMs: sub.Spec.BulkSubscribe.MaxBulkSubAwaitDurationMs,
