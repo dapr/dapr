@@ -414,8 +414,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 
 	tpStore.RegisterSampler(daprTraceSampler)
 
-	tpStore.RegisterTracerProvider()
-
+	a.tracerProvider = tpStore.RegisterTracerProvider()
 	return nil
 }
 
@@ -1152,7 +1151,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 					a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
 				)
 				_, err := policyRunner(func(ctx context.Context) (any, error) {
-					return nil, a.stateStores[response.StoreName].BulkSet(reqs)
+					return nil, a.stateStores[response.StoreName].BulkSet(ctx, reqs)
 				})
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
@@ -1944,7 +1943,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
 	)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, ps.component.Publish(req)
+		return nil, ps.component.Publish(ctx, req)
 	})
 	return err
 }
@@ -2660,32 +2659,26 @@ func (a *DaprRuntime) cleanSocket() {
 func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
-
-	log.Info("dapr shutting down.")
-
+	log.Info("Dapr shutting down")
 	log.Info("Stopping PubSub subscribers and input bindings")
 	a.stopSubscriptions()
 	a.stopReadingFromBindings()
-	a.cancel()
+
+	log.Info("Initiating actor shutdown")
 	a.stopActor()
+
+	log.Infof("Holding shutdown for %s to allow graceful stop of outstanding operations", duration.String())
+	<-time.After(duration)
+
 	log.Info("Stopping Dapr APIs")
 	for _, closer := range a.apiClosers {
 		if err := closer.Close(); err != nil {
 			log.Warnf("error closing API: %v", err)
 		}
 	}
-
-	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
-	go func() {
-		if a.tracerProvider != nil {
-			a.tracerProvider.Shutdown(shutdownCtx)
-		}
-	}()
-
-	log.Infof("Waiting %s to finish outstanding operations", duration)
-	<-time.After(duration)
-	shutdownCancel()
+	a.stopTrace()
 	a.shutdownOutputComponents()
+	a.cancel()
 	a.shutdownC <- nil
 }
 
@@ -3113,4 +3106,22 @@ func createGRPCManager(runtimeConfig *Config, globalConfig *config.Configuration
 	m := grpc.NewGRPCManager(runtimeConfig.Mode, grpcAppChannelConfig)
 	m.StartCollector()
 	return m
+}
+
+func (a *DaprRuntime) stopTrace() {
+	if a.tracerProvider == nil {
+		return
+	}
+	// Flush and shutdown the tracing provider.
+	shutdownCtx, shutdownCancel := context.WithCancel(a.ctx)
+	defer shutdownCancel()
+	if err := a.tracerProvider.ForceFlush(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+		log.Warnf("error flushing tracing provider: %v", err)
+	}
+
+	if err := a.tracerProvider.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+		log.Warnf("error shutting down tracing provider: %v", err)
+	} else {
+		a.tracerProvider = nil
+	}
 }

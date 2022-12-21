@@ -66,7 +66,7 @@ func TestRegisterActorReminder(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.RegisterActorReminder(context.TODO(), &runtimev1pb.RegisterActorReminderRequest{})
+		_, err := client.RegisterActorReminder(context.Background(), &runtimev1pb.RegisterActorReminderRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
@@ -83,7 +83,7 @@ func TestUnregisterActorTimer(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.UnregisterActorTimer(context.TODO(), &runtimev1pb.UnregisterActorTimerRequest{})
+		_, err := client.UnregisterActorTimer(context.Background(), &runtimev1pb.UnregisterActorTimerRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
@@ -100,7 +100,7 @@ func TestRegisterActorTimer(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.RegisterActorTimer(context.TODO(), &runtimev1pb.RegisterActorTimerRequest{})
+		_, err := client.RegisterActorTimer(context.Background(), &runtimev1pb.RegisterActorTimerRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
@@ -117,7 +117,7 @@ func TestGetActorState(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.GetActorState(context.TODO(), &runtimev1pb.GetActorStateRequest{})
+		_, err := client.GetActorState(context.Background(), &runtimev1pb.GetActorStateRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 
@@ -150,7 +150,7 @@ func TestGetActorState(t *testing.T) {
 		client := runtimev1pb.NewDaprClient(clientConn)
 
 		// act
-		res, err := client.GetActorState(context.TODO(), &runtimev1pb.GetActorStateRequest{
+		res, err := client.GetActorState(context.Background(), &runtimev1pb.GetActorStateRequest{
 			ActorId:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
@@ -176,7 +176,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.ExecuteActorStateTransaction(context.TODO(), &runtimev1pb.ExecuteActorStateTransactionRequest{})
+		_, err := client.ExecuteActorStateTransaction(context.Background(), &runtimev1pb.ExecuteActorStateTransactionRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 
@@ -220,7 +220,8 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 		client := runtimev1pb.NewDaprClient(clientConn)
 
 		// act
-		res, err := client.ExecuteActorStateTransaction(context.TODO(),
+		res, err := client.ExecuteActorStateTransaction(
+			context.Background(),
 			&runtimev1pb.ExecuteActorStateTransactionRequest{
 				ActorId:   "fakeActorID",
 				ActorType: "fakeActorType",
@@ -256,7 +257,7 @@ func TestUnregisterActorReminder(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.UnregisterActorReminder(context.TODO(), &runtimev1pb.UnregisterActorReminderRequest{})
+		_, err := client.UnregisterActorReminder(context.Background(), &runtimev1pb.UnregisterActorReminderRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
@@ -273,7 +274,7 @@ func TestInvokeActor(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.InvokeActor(context.TODO(), &runtimev1pb.InvokeActorRequest{})
+		_, err := client.InvokeActor(context.Background(), &runtimev1pb.InvokeActorRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
