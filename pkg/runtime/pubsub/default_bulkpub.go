@@ -54,7 +54,7 @@ func (p *defaultBulkPublisher) BulkPublish(ctx context.Context, req *contribPubs
 	for i := range req.Entries {
 		entry := req.Entries[i]
 		eg.Go(func() error {
-			failedEntry := p.bulkPublishSingleEntry(req.PubsubName, req.Topic, entry)
+			failedEntry := p.bulkPublishSingleEntry(ctx, req.PubsubName, req.Topic, entry)
 			if failedEntry != nil {
 				faileEntryChan <- *failedEntry
 				return failedEntry.Error
@@ -68,9 +68,13 @@ func (p *defaultBulkPublisher) BulkPublish(ctx context.Context, req *contribPubs
 
 	for entry := range faileEntryChan {
 		failedEntries = append(failedEntries, entry)
-// bulkPublishSingleEntry sends a single message to the broker as a Publish request.
-func (p *defaultBulkPublisher) bulkPublishSingleEntry(ctx context.Context, pubsubName string, topic string, entry contribPubsub.BulkMessageEntry) *contribPubsub.BulkPublishResponseFailedEntry {
+	}
 
+	return contribPubsub.BulkPublishResponse{FailedEntries: failedEntries}, err
+}
+
+// bulkPublishSingleEntry sends a single message to the broker as a Publish request.
+func (p *defaultBulkPublisher) bulkPublishSingleEntry(ctx context.Context, pubsubName, topic string, entry contribPubsub.BulkMessageEntry) *contribPubsub.BulkPublishResponseFailedEntry {
 	pr := contribPubsub.PublishRequest{
 		Data:        entry.Event,
 		PubsubName:  pubsubName,
