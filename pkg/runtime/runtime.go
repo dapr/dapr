@@ -119,9 +119,6 @@ const (
 	componentFormat = "%s (%s/%s)"
 
 	defaultComponentInitTimeout = time.Second * 5
-
-	// Metadata needed to call bulk subscribe
-	BulkSubscribe = "bulkSubscribe"
 )
 
 type ComponentCategory string

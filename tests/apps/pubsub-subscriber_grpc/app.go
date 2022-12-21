@@ -293,11 +293,13 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 				Routes: &runtimev1pb.TopicRoutes{
 					Default: pubsubRawBulkSubTopic,
 				},
+				BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{
+					Enabled:                   "true",
+					MaxBulkSubCount:           "60",
+					MaxBulkSubAwaitDurationMs: "1000",
+				},
 				Metadata: map[string]string{
-					"rawPayload":                "true",
-					"bulkSubscribe":             "true",
-					"maxBulkSubCount":           "60",
-					"maxBulkSubAwaitDurationMs": "1000",
+					"rawPayload": "true",
 				},
 			},
 			{
@@ -306,10 +308,10 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 				Routes: &runtimev1pb.TopicRoutes{
 					Default: pubsubCEBulkSubTopic,
 				},
-				Metadata: map[string]string{
-					"bulkSubscribe":             "true",
-					"maxBulkSubCount":           "60",
-					"maxBulkSubAwaitDurationMs": "1000",
+				BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{
+					Enabled:                   "true",
+					MaxBulkSubCount:           "60",
+					MaxBulkSubAwaitDurationMs: "1000",
 				},
 			},
 		},
