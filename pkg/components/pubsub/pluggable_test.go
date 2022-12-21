@@ -186,7 +186,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = ps.Publish(&pubsub.PublishRequest{
+		err = ps.Publish(context.Background(), &pubsub.PublishRequest{
 			Topic: fakeTopic,
 		})
 
@@ -207,7 +207,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = ps.Publish(&pubsub.PublishRequest{
+		err = ps.Publish(context.Background(), &pubsub.PublishRequest{
 			Topic: fakeTopic,
 		})
 

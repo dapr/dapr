@@ -3691,7 +3691,7 @@ func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
 }
 
 // Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
-func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
+func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.pubCount[req.Topic]++
 	if handler, ok := m.handlers[req.Topic]; ok {
 		pubsubMsg := &pubsub.NewMessage{
@@ -4502,7 +4502,7 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 }
 
 // Publish is a mock publish method.
-func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
+func (m *mockPublishPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.PublishedRequest.Store(req)
 	return nil
 }
@@ -5391,6 +5391,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		},
 		"mockPubSub",
 	)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	mockPubSub.On("Init", mock.Anything).Return(nil)
 	mockPubSub.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
 	mockPubSub.On("Close").Return(nil)
@@ -5433,6 +5434,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 
 func TestGracefulShutdownBindings(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 
 	rt.bindingsRegistry.RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
@@ -5467,6 +5469,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 
 func TestGracefulShutdownActors(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
@@ -5548,6 +5551,7 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 
 func TestTraceShutdown(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
 		Otel: config.OtelSpec{
 			EndpointAddress: "foo.bar",
@@ -5566,6 +5570,5 @@ func TestTraceShutdown(t *testing.T) {
 }
 
 func sendSigterm(rt *DaprRuntime) {
-	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 }

@@ -107,17 +107,17 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesA            sets.String
-	receivedMessagesB            sets.String
-	receivedMessagesC            sets.String
-	receivedMessagesJob          sets.String
-	receivedMessagesRaw          sets.String
-	receivedMessagesDead         sets.String
-	receivedMessagesDeadLetter   sets.String
-	receivedMessagesBulkTopic    sets.String
-	receivedMessagesRawBulkTopic sets.String
-	receivedMessagesCEBulkTopic  sets.String
-	receivedMessagesDefBulkTopic sets.String
+	receivedMessagesA            sets.Set[string]
+	receivedMessagesB            sets.Set[string]
+	receivedMessagesC            sets.Set[string]
+	receivedMessagesJob          sets.Set[string]
+	receivedMessagesRaw          sets.Set[string]
+	receivedMessagesDead         sets.Set[string]
+	receivedMessagesDeadLetter   sets.Set[string]
+	receivedMessagesBulkTopic    sets.Set[string]
+	receivedMessagesRawBulkTopic sets.Set[string]
+	receivedMessagesCEBulkTopic  sets.Set[string]
+	receivedMessagesDefBulkTopic sets.Set[string]
 	desiredResponse              respondWith
 	lock                         sync.Mutex
 )
@@ -394,17 +394,17 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicA:          unique(receivedMessagesA.List()),
-		ReceivedByTopicB:          unique(receivedMessagesB.List()),
-		ReceivedByTopicC:          unique(receivedMessagesC.List()),
-		ReceivedByTopicJob:        unique(receivedMessagesJob.List()),
-		ReceivedByTopicRaw:        unique(receivedMessagesRaw.List()),
-		ReceivedByTopicDead:       unique(receivedMessagesDead.List()),
-		ReceivedByTopicDeadLetter: unique(receivedMessagesDeadLetter.List()),
-		ReceivedByTopicBulk:       unique(receivedMessagesBulkTopic.List()),
-		ReceivedByTopicRawBulk:    unique(receivedMessagesRawBulkTopic.List()),
-		ReceivedByTopicCEBulk:     unique(receivedMessagesCEBulkTopic.List()),
-		ReceivedByTopicDefBulk:    unique(receivedMessagesDefBulkTopic.List()),
+		ReceivedByTopicA:          unique(sets.List(receivedMessagesA)),
+		ReceivedByTopicB:          unique(sets.List(receivedMessagesB)),
+		ReceivedByTopicC:          unique(sets.List(receivedMessagesC)),
+		ReceivedByTopicJob:        unique(sets.List(receivedMessagesJob)),
+		ReceivedByTopicRaw:        unique(sets.List(receivedMessagesRaw)),
+		ReceivedByTopicDead:       unique(sets.List(receivedMessagesDead)),
+		ReceivedByTopicDeadLetter: unique(sets.List(receivedMessagesDeadLetter)),
+		ReceivedByTopicBulk:       unique(sets.List(receivedMessagesBulkTopic)),
+		ReceivedByTopicRawBulk:    unique(sets.List(receivedMessagesRawBulkTopic)),
+		ReceivedByTopicCEBulk:     unique(sets.List(receivedMessagesCEBulkTopic)),
+		ReceivedByTopicDefBulk:    unique(sets.List(receivedMessagesDefBulkTopic)),
 	}
 
 	log.Printf("getReceivedMessages called. reqID=%s response=%s\n", reqID, response)
@@ -435,17 +435,17 @@ func initializeHandler(w http.ResponseWriter, _ *http.Request) {
 // initialize all the sets for a clean test.
 func initializeSets() {
 	// initialize all the sets
-	receivedMessagesA = sets.NewString()
-	receivedMessagesB = sets.NewString()
-	receivedMessagesC = sets.NewString()
-	receivedMessagesJob = sets.NewString()
-	receivedMessagesRaw = sets.NewString()
-	receivedMessagesDead = sets.NewString()
-	receivedMessagesDeadLetter = sets.NewString()
-	receivedMessagesBulkTopic = sets.NewString()
-	receivedMessagesRawBulkTopic = sets.NewString()
-	receivedMessagesCEBulkTopic = sets.NewString()
-	receivedMessagesDefBulkTopic = sets.NewString()
+	receivedMessagesA = sets.New[string]()
+	receivedMessagesB = sets.New[string]()
+	receivedMessagesC = sets.New[string]()
+	receivedMessagesJob = sets.New[string]()
+	receivedMessagesRaw = sets.New[string]()
+	receivedMessagesDead = sets.New[string]()
+	receivedMessagesDeadLetter = sets.New[string]()
+	receivedMessagesBulkTopic = sets.New[string]()
+	receivedMessagesRawBulkTopic = sets.New[string]()
+	receivedMessagesCEBulkTopic = sets.New[string]()
+	receivedMessagesDefBulkTopic = sets.New[string]()
 }
 
 // appRouter initializes restful api router

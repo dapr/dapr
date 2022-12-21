@@ -57,18 +57,18 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message.
-	receivedMessagesA            sets.String
-	receivedMessagesB            sets.String
-	receivedMessagesC            sets.String
-	receivedMessagesRaw          sets.String
-	receivedMessagesBulkTopic    sets.String
-	receivedMessagesRawBulkTopic sets.String
-	receivedMessagesCEBulkTopic  sets.String
-	receivedMessagesDefBulkTopic sets.String
-	receivedMessagesSubRaw       sets.String
-	receivedMessagesSubCE        sets.String
-	receivedMessagesRawBulkSub   sets.String
-	receivedMessagesCEBulkSub    sets.String
+	receivedMessagesA            sets.Set[string]
+	receivedMessagesB            sets.Set[string]
+	receivedMessagesC            sets.Set[string]
+	receivedMessagesRaw          sets.Set[string]
+	receivedMessagesBulkTopic    sets.Set[string]
+	receivedMessagesRawBulkTopic sets.Set[string]
+	receivedMessagesCEBulkTopic  sets.Set[string]
+	receivedMessagesDefBulkTopic sets.Set[string]
+	receivedMessagesSubRaw       sets.Set[string]
+	receivedMessagesSubCE        sets.Set[string]
+	receivedMessagesRawBulkSub   sets.Set[string]
+	receivedMessagesCEBulkSub    sets.Set[string]
 
 	// boolean variable to respond with empty json message if set.
 	respondWithEmptyJSON bool
@@ -136,18 +136,18 @@ func main() {
 }
 
 func initializeSets() {
-	receivedMessagesA = sets.NewString()
-	receivedMessagesB = sets.NewString()
-	receivedMessagesC = sets.NewString()
-	receivedMessagesRaw = sets.NewString()
-	receivedMessagesBulkTopic = sets.NewString()
-	receivedMessagesRawBulkTopic = sets.NewString()
-	receivedMessagesCEBulkTopic = sets.NewString()
-	receivedMessagesDefBulkTopic = sets.NewString()
-	receivedMessagesSubRaw = sets.NewString()
-	receivedMessagesSubCE = sets.NewString()
-	receivedMessagesRawBulkSub = sets.NewString()
-	receivedMessagesCEBulkSub = sets.NewString()
+	receivedMessagesA = sets.New[string]()
+	receivedMessagesB = sets.New[string]()
+	receivedMessagesC = sets.New[string]()
+	receivedMessagesRaw = sets.New[string]()
+	receivedMessagesBulkTopic = sets.New[string]()
+	receivedMessagesRawBulkTopic = sets.New[string]()
+	receivedMessagesCEBulkTopic = sets.New[string]()
+	receivedMessagesDefBulkTopic = sets.New[string]()
+	receivedMessagesSubRaw = sets.New[string]()
+	receivedMessagesSubCE = sets.New[string]()
+	receivedMessagesRawBulkSub = sets.New[string]()
+	receivedMessagesCEBulkSub = sets.New[string]()
 }
 
 // This method gets invoked when a remote service has called the app through Dapr
@@ -187,18 +187,18 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 func (s *server) getMessages(reqID string) []byte {
 	resp := receivedMessagesResponse{
-		ReceivedByTopicA:          receivedMessagesA.List(),
-		ReceivedByTopicB:          receivedMessagesB.List(),
-		ReceivedByTopicC:          receivedMessagesC.List(),
-		ReceivedByTopicRaw:        receivedMessagesRaw.List(),
-		ReceivedByTopicBulk:       receivedMessagesBulkTopic.List(),
-		ReceivedByTopicRawBulk:    receivedMessagesRawBulkTopic.List(),
-		ReceivedByTopicCEBulk:     receivedMessagesCEBulkTopic.List(),
-		ReceivedByTopicDefBulk:    receivedMessagesDefBulkTopic.List(),
-		ReceivedByTopicRawSub:     receivedMessagesSubRaw.List(),
-		ReceivedByTopicCESub:      receivedMessagesSubCE.List(),
-		ReceivedByTopicRawBulkSub: receivedMessagesRawBulkSub.List(),
-		ReceivedByTopicCEBulkSub:  receivedMessagesCEBulkSub.List(),
+		ReceivedByTopicA:          sets.List(receivedMessagesA),
+		ReceivedByTopicB:          sets.List(receivedMessagesB),
+		ReceivedByTopicC:          sets.List(receivedMessagesC),
+		ReceivedByTopicRaw:        sets.List(receivedMessagesRaw),
+		ReceivedByTopicBulk:       sets.List(receivedMessagesBulkTopic),
+		ReceivedByTopicRawBulk:    sets.List(receivedMessagesRawBulkTopic),
+		ReceivedByTopicCEBulk:     sets.List(receivedMessagesCEBulkTopic),
+		ReceivedByTopicDefBulk:    sets.List(receivedMessagesDefBulkTopic),
+		ReceivedByTopicRawSub:     sets.List(receivedMessagesSubRaw),
+		ReceivedByTopicCESub:      sets.List(receivedMessagesSubCE),
+		ReceivedByTopicRawBulkSub: sets.List(receivedMessagesRawBulkSub),
+		ReceivedByTopicCEBulkSub:  sets.List(receivedMessagesCEBulkSub),
 	}
 
 	rawResp, _ := json.Marshal(resp)
