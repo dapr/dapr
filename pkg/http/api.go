@@ -2436,8 +2436,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	if err != nil {
 		bulkRes.FailedEntries = make([]BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
 		for _, r := range res.FailedEntries {
-			resEntry := BulkPublishResponseFailedEntry{}
-			resEntry.EntryId = r.EntryId
+			resEntry := BulkPublishResponseFailedEntry{EntryId: r.EntryId}
 			if r.Error != nil {
 				resEntry.Error = r.Error.Error()
 			}

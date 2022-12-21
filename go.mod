@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20221220192417-c156d4ba04e4
+	github.com/dapr/components-contrib v1.9.1-0.20221221070425-8b82b91fa5e2
 	github.com/dapr/kit v0.0.3
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
@@ -73,8 +73,9 @@ require (
 )
 
 require (
-	github.com/Azure/azure-amqp-common-go/v3 v3.2.3 // indirect
-	github.com/didip/tollbooth v4.0.2+incompatible // indirect
+	github.com/didip/tollbooth/v7 v7.0.1 // indirect
+	github.com/go-pkgz/expirable-cache v0.1.0 // indirect
+	github.com/go-redis/redis/v9 v9.0.0-rc.2 // indirect
 )
 
 require (
@@ -421,6 +422,3 @@ replace (
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-// temporary replace for struct change
-replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20221214053151-71a543aed7a4
