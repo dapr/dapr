@@ -532,14 +532,17 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	features := thepubsub.Features()
+	entryIdSet := map[string]struct{}{} //nolint:stylecheck
 
 	entries := make([]pubsub.BulkMessageEntry, len(in.Entries))
 	for i, entry := range in.Entries {
-		if entry.EntryId == "" {
-			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "missing entryId")
+		// Validate entry_id
+		if _, ok := entryIdSet[entry.EntryId]; ok || entry.EntryId == "" {
+			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "entryId is duplicated or not present for entry")
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.BulkPublishResponse{}, err
 		}
+		entryIdSet[entry.EntryId] = struct{}{}
 		entries[i].EntryId = entry.EntryId
 		entries[i].ContentType = entry.ContentType
 		entries[i].Event = entry.Event
