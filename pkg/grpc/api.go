@@ -532,7 +532,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	features := thepubsub.Features()
-	entryIdSet := map[string]struct{}{} //nolint:stylecheck
+	entryIdSet := make(map[string]struct{}, len(in.Entries))
 
 	entries := make([]pubsub.BulkMessageEntry, len(in.Entries))
 	for i, entry := range in.Entries {
