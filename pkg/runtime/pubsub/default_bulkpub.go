@@ -44,34 +44,37 @@ func NewDefaultBulkPublisher(p contribPubsub.PubSub) *defaultBulkPublisher {
 // BulkPublish publishes a list of messages as parallel Publish requests to the topic in the incoming request.
 // There is no guarantee that messages sent to the broker are in the same order as specified in the request.
 func (p *defaultBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
-	statuses := make([]contribPubsub.BulkPublishResponseEntry, 0, len(req.Entries))
+	failedEntries := make([]contribPubsub.BulkPublishResponseFailedEntry, 0, len(req.Entries))
 
 	var eg errgroup.Group
 	eg.SetLimit(defaultBulkPublishMaxConcurrency)
 
-	statusChan := make(chan contribPubsub.BulkPublishResponseEntry, len(req.Entries))
+	faileEntryChan := make(chan contribPubsub.BulkPublishResponseFailedEntry, len(req.Entries))
 
 	for i := range req.Entries {
 		entry := req.Entries[i]
 		eg.Go(func() error {
-			status := p.bulkPublishSingleEntry(ctx, req.PubsubName, req.Topic, entry)
-			statusChan <- status
-			return status.Error
+			failedEntry := p.bulkPublishSingleEntry(ctx, req.PubsubName, req.Topic, entry)
+			if failedEntry != nil {
+				faileEntryChan <- *failedEntry
+				return failedEntry.Error
+			}
+			return nil
 		})
 	}
 
 	err := eg.Wait()
-	close(statusChan)
+	close(faileEntryChan)
 
-	for status := range statusChan {
-		statuses = append(statuses, status)
+	for entry := range faileEntryChan {
+		failedEntries = append(failedEntries, entry)
 	}
 
-	return contribPubsub.BulkPublishResponse{Statuses: statuses}, err
+	return contribPubsub.BulkPublishResponse{FailedEntries: failedEntries}, err
 }
 
 // bulkPublishSingleEntry sends a single message to the broker as a Publish request.
-func (p *defaultBulkPublisher) bulkPublishSingleEntry(ctx context.Context, pubsubName, topic string, entry contribPubsub.BulkMessageEntry) contribPubsub.BulkPublishResponseEntry {
+func (p *defaultBulkPublisher) bulkPublishSingleEntry(ctx context.Context, pubsubName, topic string, entry contribPubsub.BulkMessageEntry) *contribPubsub.BulkPublishResponseFailedEntry {
 	pr := contribPubsub.PublishRequest{
 		Data:        entry.Event,
 		PubsubName:  pubsubName,
@@ -81,15 +84,11 @@ func (p *defaultBulkPublisher) bulkPublishSingleEntry(ctx context.Context, pubsu
 	}
 
 	if err := p.p.Publish(ctx, &pr); err != nil {
-		return contribPubsub.BulkPublishResponseEntry{
+		return &contribPubsub.BulkPublishResponseFailedEntry{
 			EntryId: entry.EntryId,
-			Status:  contribPubsub.PublishFailed,
 			Error:   err,
 		}
 	}
 
-	return contribPubsub.BulkPublishResponseEntry{
-		EntryId: entry.EntryId,
-		Status:  contribPubsub.PublishSucceeded,
-	}
+	return nil
 }
