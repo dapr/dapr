@@ -125,7 +125,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorfeatures",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			DaprCPULimit:   "2.0",
 			DaprCPURequest: "0.1",
 			AppCPULimit:    "2.0",
@@ -140,7 +139,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorfeatures",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			DaprCPULimit:   "2.0",
 			DaprCPURequest: "0.1",
 			AppCPULimit:    "2.0",
@@ -212,13 +210,13 @@ func TestActorReminder(t *testing.T) {
 
 				for i := 0; i < numActorsPerThread; i++ {
 					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
-					// Deleting pre-existing reminder
-					t.Logf("Deleting pre-existing reminder just in case: %s %s ...", actorID, reminderName)
+					t.Logf("Registering reminder: %s %s ...", actorID, reminderName)
+
+					// Deleting pre-existing reminder, just in case…
 					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 					require.NoError(t, err)
 
 					// Registering reminder
-					t.Logf("Registering reminder: %s %s ...", actorID, reminderName)
 					_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reminderBody)
 					require.NoError(t, err)
 				}
@@ -483,7 +481,7 @@ func TestActorReminderPeriod(t *testing.T) {
 
 		t.Log("Checking if all reminders did trigger ...")
 		count := countActorAction(resp, actorID, reminderName)
-		require.Equal(t, 5, count)
+		require.Equal(t, 5, count, "response: %s", string(resp))
 	})
 }
 
