@@ -118,7 +118,10 @@ func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethod
 
 // WithReplay enables replaying for the data stream.
 func (imr *InvokeMethodResponse) WithReplay(enabled bool) *InvokeMethodResponse {
-	imr.replayableRequest.SetReplay(enabled)
+	// If the object has data in-memory, WithReplay is a nop
+	if !imr.HasMessageData() {
+		imr.replayableRequest.SetReplay(enabled)
+	}
 	return imr
 }
 
@@ -151,7 +154,9 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 		return nil, errors.New("message is nil")
 	}
 
-	// If the data has already been read, return it right away
+	// If the data is already in-memory in the object, return the object directly.
+	// This doesn't copy the object, and that's fine because receivers are not expected to modify the received object.
+	// Only reason for cloning the object below is to make ProtoWithData concurrency-safe.
 	if imr.HasMessageData() {
 		return imr.r, nil
 	}
