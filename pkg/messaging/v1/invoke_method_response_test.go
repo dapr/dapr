@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -76,8 +77,9 @@ func TestInternalInvocationResponse(t *testing.T) {
 		defer ir.Close()
 		assert.NotNil(t, ir.r.Message)
 		assert.Equal(t, int32(0), ir.r.Status.Code)
-		assert.NotNil(t, ir.r.Message.Data)
-		assert.Len(t, ir.r.Message.Data.Value, 0)
+		require.NotNil(t, ir.r.Message.Data)
+		require.NotNil(t, ir.r.Message.Data.Value)
+		assert.Equal(t, []byte("test"), ir.r.Message.Data.Value)
 
 		bData, err := io.ReadAll(ir.RawData())
 		assert.NoError(t, err)
@@ -240,9 +242,12 @@ func TestResponseProto(t *testing.T) {
 		assert.NoError(t, err)
 		defer ir.Close()
 		req2 := ir.Proto()
+		msg := req2.GetMessage()
 
-		assert.Equal(t, "application/json", req2.Message.ContentType)
-		assert.Len(t, req2.Message.Data.Value, 0)
+		assert.Equal(t, "application/json", msg.ContentType)
+		require.NotNil(t, msg.Data)
+		require.NotNil(t, msg.Data.Value)
+		assert.Equal(t, []byte("test"), msg.Data.Value)
 
 		bData, err := io.ReadAll(ir.RawData())
 		assert.NoError(t, err)

@@ -50,9 +50,6 @@ func InternalInvokeResponse(pb *internalv1pb.InternalInvokeResponse) (*InvokeMet
 	rsp := &InvokeMethodResponse{r: pb}
 	if pb.Message == nil {
 		pb.Message = &commonv1pb.InvokeResponse{Data: nil}
-	} else if pb.Message.Data != nil && pb.Message.Data.Value != nil {
-		rsp.data = io.NopCloser(bytes.NewReader(pb.Message.Data.Value))
-		pb.Message.Data.Reset()
 	}
 
 	return rsp, nil
@@ -66,6 +63,7 @@ func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *Inv
 
 // WithRawData sets message data from a readable stream.
 func (imr *InvokeMethodResponse) WithRawData(data io.Reader) *InvokeMethodResponse {
+	imr.ResetMessageData()
 	imr.replayableRequest.WithRawData(data)
 	return imr
 }
@@ -201,6 +199,15 @@ func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
 func (imr *InvokeMethodResponse) HasMessageData() bool {
 	m := imr.r.Message
 	return m != nil && m.Data != nil && len(m.Data.Value) > 0
+}
+
+// ResetMessageData resets the data inside the message object if present.
+func (imr *InvokeMethodResponse) ResetMessageData() {
+	if !imr.HasMessageData() {
+		return
+	}
+
+	imr.r.Message.Data.Reset()
 }
 
 // ContenType returns the content type of the message.

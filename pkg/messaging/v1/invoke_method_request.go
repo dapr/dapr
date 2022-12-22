@@ -54,19 +54,12 @@ func NewInvokeMethodRequest(method string) *InvokeMethodRequest {
 
 // FromInvokeRequestMessage creates InvokeMethodRequest object from InvokeRequest pb object.
 func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest {
-	req := &InvokeMethodRequest{
+	return &InvokeMethodRequest{
 		r: &internalv1pb.InternalInvokeRequest{
 			Ver:     DefaultAPIVersion,
 			Message: pb,
 		},
 	}
-
-	if pb != nil && pb.Data != nil && pb.Data.Value != nil {
-		req.data = io.NopCloser(bytes.NewReader(pb.Data.Value))
-		pb.Data.Reset()
-	}
-
-	return req
 }
 
 // InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object.
@@ -74,11 +67,6 @@ func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMetho
 	req := &InvokeMethodRequest{r: pb}
 	if pb.Message == nil {
 		return nil, errors.New("field Message is nil")
-	}
-
-	if pb.Message.Data != nil && pb.Message.Data.Value != nil {
-		req.data = io.NopCloser(bytes.NewReader(pb.Message.Data.Value))
-		pb.Message.Data.Reset()
 	}
 
 	return req, nil
@@ -108,6 +96,7 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 
 // WithRawData sets message data from a readable stream.
 func (imr *InvokeMethodRequest) WithRawData(data io.Reader) *InvokeMethodRequest {
+	imr.ResetMessageData()
 	imr.replayableRequest.WithRawData(data)
 	return imr
 }
@@ -231,6 +220,15 @@ func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
 func (imr *InvokeMethodRequest) HasMessageData() bool {
 	m := imr.r.Message
 	return m != nil && m.Data != nil && len(m.Data.Value) > 0
+}
+
+// ResetMessageData resets the data inside the message object if present.
+func (imr *InvokeMethodRequest) ResetMessageData() {
+	if !imr.HasMessageData() {
+		return
+	}
+
+	imr.r.Message.Data.Reset()
 }
 
 // ContenType returns the content type of the message.
