@@ -606,35 +606,25 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	start := time.Now()
+	// err is only nil if all entries are successfully published.
+	// For partial success, err is not nil and res contains the failed entries.
 	res, err := a.pubsubAdapter.BulkPublish(&req)
+
 	elapsed := diag.ElapsedSince(start)
-	var eventsPublished int64 = 0
+	eventsPublished := int64(len(req.Entries))
 
-	// BulkPublishResponse contains all failed entries from the request.
-	// If there are no failed entries, then the statuses array will be empty.
-	bulkRes := runtimev1pb.BulkPublishResponse{}
-
-	if len(res.Statuses) != 0 {
-		bulkRes.Statuses = make([]*runtimev1pb.BulkPublishResponseEntry, 0, len(res.Statuses))
-		for _, r := range res.Statuses {
-			if r.Status == pubsub.PublishSucceeded {
-				// Only count the events that have been successfully published to the pub/sub component
-				eventsPublished++
-			} else {
-				resEntry := runtimev1pb.BulkPublishResponseEntry{}
-				resEntry.EntryId = r.EntryId
-				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
-				if r.Error != nil {
-					resEntry.Error = r.Error.Error()
-				}
-				bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
-			}
-		}
+	if len(res.FailedEntries) != 0 {
+		eventsPublished -= int64(len(res.FailedEntries))
 	}
-
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
 
+	// BulkPublishResponse contains all failed entries from the request.
+	// If there are no failed entries, then the failedEntries array will be empty.
+	bulkRes := runtimev1pb.BulkPublishResponse{}
+
 	if err != nil {
+		// Only respond with error if it is  permission denied or not found.
+		// On error, the response will be empty.
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			nerr = status.Errorf(codes.PermissionDenied, err.Error())
@@ -648,7 +638,17 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		return &bulkRes, nerr
 	}
 
+	bulkRes.FailedEntries = make([]*runtimev1pb.BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
+	for _, r := range res.FailedEntries {
+		resEntry := runtimev1pb.BulkPublishResponseFailedEntry{}
+		resEntry.EntryId = r.EntryId
+		if r.Error != nil {
+			resEntry.Error = r.Error.Error()
+		}
+		bulkRes.FailedEntries = append(bulkRes.FailedEntries, &resEntry)
+	}
 	closeChildSpans(ctx, nil)
+	// even on partial failures, err is nil. As when error is set, the response is expected to not be processed.
 	return &bulkRes, nil
 }
 
