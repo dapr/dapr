@@ -54,14 +54,14 @@ func NewKubeTestPlatform() *KubeTestPlatform {
 	}
 }
 
-func (c *KubeTestPlatform) setup() (err error) {
+func (c *KubeTestPlatform) Setup() (err error) {
 	// TODO: KubeClient will be properly configured by go test arguments
 	c.KubeClient, err = kube.NewKubeClient("", "")
 
 	return
 }
 
-func (c *KubeTestPlatform) tearDown() error {
+func (c *KubeTestPlatform) TearDown() error {
 	if err := c.AppResources.tearDown(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to tear down AppResources. got: %q", err)
 	}
