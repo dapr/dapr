@@ -332,23 +332,15 @@ message BulkPublishRequestEntry {
 
 // BulkPublishResponse is the message returned from a BulkPublishEvent call
 message BulkPublishResponse {
-  // The publish statuses for different events in the BulkPublishEvent call
-  repeated BulkPublishResponseEntry statuses = 1;
+  // The entries for different events that failed publish in the BulkPublishEvent call
+  repeated BulkPublishResponseFailedEntry failedEntries = 1;
 }
 
-// BulkPublishResponseEntry is the message mapping response status for each event in the BulkPublishEvent call
-message BulkPublishResponseEntry {
-
-  enum Status {
-    SUCCESS = 0;
-    FAILED = 1;
-  }
+// BulkPublishResponseFailedEntry is the message containing the entryID and error of a failed event in BulkPublishEvent call
+message BulkPublishResponseFailedEntry {
 
   // The response scoped unique ID referring to this message
   string entry_id = 1;
-
-  // The status of event publish
-  Status status  = 2;
 
   // The error message if any on failure
   string error = 3;
@@ -364,10 +356,10 @@ message InvokeBindingRequest {
   bytes data = 2;
 
   // The metadata passing to output binding components
-  // 
+  //
   // Common metadata property:
-  // - ttlInSeconds : the time to live in seconds for the message. 
-  // If set in the binding definition will cause all messages to 
+  // - ttlInSeconds : the time to live in seconds for the message.
+  // If set in the binding definition will cause all messages to
   // have a default time to live. The message ttl overrides any value
   // in the binding definition.
   map<string, string> metadata = 3;
@@ -430,7 +422,7 @@ message TransactionalStateOperation {
   // The type of operation to be executed
   string operationType = 1;
 
-  // State values to be operated on 
+  // State values to be operated on
   common.v1.StateItem request = 2;
 }
 

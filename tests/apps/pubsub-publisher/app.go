@@ -219,8 +219,8 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
 			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes.ErrorCode)
-			for _, stat := range bulkRes.Statuses {
-				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryId, stat.Status, stat.Error)
+			for _, stat := range bulkRes.FailedEntries {
+				log.Printf("Failed event with entry ID (%s) and error %s", stat.EntryId, stat.Error)
 			}
 
 			w.WriteHeader(status)
@@ -268,8 +268,8 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
 			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes)
-			for _, stat := range bulkRes.Statuses {
-				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryId, stat.Status, stat.Error)
+			for _, stat := range bulkRes.FailedEntries {
+				log.Printf("Failed event with entry ID (%s) and error %s", stat.EntryId, stat.Error)
 			}
 
 			w.WriteHeader(status)
