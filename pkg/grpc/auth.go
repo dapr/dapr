@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -18,8 +18,8 @@ func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.Unary
 			return nil, err
 		}
 
-		token := md.Get(authHeader)
-		if len(token) == 0 {
+		token, ok := md[authHeader]
+		if !ok || len(token) == 0 {
 			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "missing api token in request metadata")
 			return nil, err
 		}

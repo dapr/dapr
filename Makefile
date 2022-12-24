@@ -32,6 +32,12 @@ FORCE_INMEM ?= true
 LATEST_RELEASE ?=
 
 PROTOC ?=protoc
+
+# Version of "protoc" to use
+# We must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
+PROTOC_VERSION = 3.21.12
+PROTOBUF_SUITE_VERSION = 21.12
+
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
 ifdef REL_VERSION
@@ -73,18 +79,10 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_VERSION = v1.28.0
+PROTOC_GEN_GO_VERSION = v1.28.1
 PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
 
-ifeq ($(TARGET_OS_LOCAL),windows)
-	BUILD_TOOLS_BIN ?= build-tools.exe
-	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; go.exe run .
-else
-	BUILD_TOOLS_BIN ?= build-tools
-	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; go run .
-endif
+PROTOC_GEN_GO_GRPC_VERSION = 1.2.0
 
 ifeq ($(TARGET_OS_LOCAL),windows)
 	BUILD_TOOLS_BIN ?= build-tools.exe
@@ -93,7 +91,7 @@ ifeq ($(TARGET_OS_LOCAL),windows)
 else
 	BUILD_TOOLS_BIN ?= build-tools
 	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; go run .
+	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
 endif
 
 # Default docker container and e2e test targst.
@@ -246,6 +244,14 @@ ADDITIONAL_HELM_SET ?= ""
 ifneq ($(ADDITIONAL_HELM_SET),)
 	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
 endif
+ifeq ($(ONLY_DAPR_IMAGE),true)
+	ADDITIONAL_HELM_SET := $(ADDITIONAL_HELM_SET) \
+		--set dapr_operator.image.name=$(RELEASE_NAME) \
+		--set dapr_placement.image.name=$(RELEASE_NAME) \
+		--set dapr_sentry.image.name=$(RELEASE_NAME) \
+		--set dapr_sidecar_injector.image.name=$(RELEASE_NAME) \
+		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME)
+endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) upgrade --install \
@@ -282,7 +288,7 @@ test: test-deps
 ################################################################################
 # Target: test-race                                                            #
 ################################################################################
-# Note that we are expliciting maintaing an allow-list of packages that should be tested
+# Note that we are expliciting maintaining an allow-list of packages that should be tested
 # with "-race", as many packags aren't passing those tests yet.
 # Eventually, the goal is to be able to have all packages pass tests with "-race"
 # Note: CGO is required for tests with "-race"
@@ -297,7 +303,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
-./pkg/fswatcher/... \
 ./pkg/grpc/... \
 ./pkg/health/... \
 ./pkg/http/... \
@@ -321,8 +326,8 @@ test-race:
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.48.0 , otherwise you might encounter errors.
-# You can download version v1.48.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.48.0
+# Please use golangci-lint version v1.50.1 , otherwise you might encounter errors.
+# You can download version v1.50.1 at https://github.com/golangci/golangci-lint/releases/tag/v1.50.1
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
@@ -375,7 +380,7 @@ check: format test lint
 .PHONY: init-proto
 init-proto:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2.0
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v$(PROTOC_GEN_GO_GRPC_VERSION)
 
 ################################################################################
 # Target: gen-proto                                                            #
@@ -418,14 +423,14 @@ check-diff:
 ################################################################################
 .PHONY: check-proto-version
 check-proto-version: ## Checking the version of proto related tools
-	@test "$(shell protoc --version)" = "libprotoc 3.21.1" \
-	|| { echo "please use protoc 3.21.1 (protobuf 21.1) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	@test "$(shell protoc --version)" = "libprotoc $(PROTOC_VERSION)" \
+	|| { echo "please use protoc $(PROTOC_VERSION) (protobuf $(PROTOBUF_SUITE_VERSION)) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
-	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc 1.2.0" \
-	|| { echo "please use protoc-gen-go-grpc 1.2.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc $(PROTOC_GEN_GO_GRPC_VERSION)" \
+	|| { echo "please use protoc-gen-go-grpc $(PROTOC_GEN_GO_GRPC_VERSION) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 	@test "$(shell protoc-gen-go --version 2>&1)" = "$(PROTOC_GEN_GO_NAME)" \
-	|| { echo "please use protoc-gen-go v1.28.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	|| { echo "please use protoc-gen-go $(PROTOC_GEN_GO_VERSION) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
 # Target: check-proto-diff                                                           #

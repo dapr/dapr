@@ -126,7 +126,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 func logsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing dapr %s request for %s", r.Method, r.URL.RequestURI())
-	if r.Method == "DELETE" {
+	if r.Method == http.MethodDelete {
 		resetLogs()
 	}
 

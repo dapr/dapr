@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -72,7 +73,7 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -178,7 +179,7 @@ func (f *fakeStateStore) Features() []state.Feature {
 	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
 }
 
-func (f *fakeStateStore) Delete(req *state.DeleteRequest) error {
+func (f *fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	delete(f.items, req.Key)
@@ -186,11 +187,11 @@ func (f *fakeStateStore) Delete(req *state.DeleteRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
+func (f *fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+func (f *fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	item := f.items[req.Key]
@@ -202,10 +203,10 @@ func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) 
 	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
 }
 
-func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	res := []state.BulkGetResponse{}
 	for _, oneRequest := range req {
-		oneResponse, err := f.Get(&state.GetRequest{
+		oneResponse, err := f.Get(ctx, &state.GetRequest{
 			Key:      oneRequest.Key,
 			Metadata: oneRequest.Metadata,
 			Options:  oneRequest.Options,
@@ -224,7 +225,7 @@ func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetR
 	return true, res, nil
 }
 
-func (f *fakeStateStore) Set(req *state.SetRequest) error {
+func (f *fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	b, _ := json.Marshal(&req.Value)
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -233,11 +234,15 @@ func (f *fakeStateStore) Set(req *state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
+func (f *fakeStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
+func (f *fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
+func (f *fakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	// First we check all eTags

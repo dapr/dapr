@@ -21,11 +21,11 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -41,13 +41,13 @@ type testConcurrencyHandler struct {
 }
 
 func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	cur := t.currentCalls.Inc()
+	cur := t.currentCalls.Add(1)
 
 	if cur > t.maxCalls {
 		t.testFailed = true
 	}
 
-	t.currentCalls.Dec()
+	t.currentCalls.Add(-1)
 	io.WriteString(w, r.URL.RawQuery)
 }
 
@@ -365,7 +365,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 	t.Run("single concurrency", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls:     1,
-			currentCalls: atomic.NewInt32(0),
+			currentCalls: &atomic.Int32{},
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{
@@ -398,7 +398,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 	t.Run("10 concurrent calls", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls:     10,
-			currentCalls: atomic.NewInt32(0),
+			currentCalls: &atomic.Int32{},
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{
@@ -431,7 +431,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 	t.Run("introduce failures", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls:     5,
-			currentCalls: atomic.NewInt32(0),
+			currentCalls: &atomic.Int32{},
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{

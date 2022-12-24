@@ -22,9 +22,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/pkg/errors"
 
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -32,13 +34,13 @@ import (
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
-	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 )
@@ -90,6 +92,20 @@ func FromFlags() (*DaprRuntime, error) {
 
 	flag.Parse()
 
+	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
+	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
+	// It's not the prettiest approach, but…
+	if !*enableAPILogging {
+		enableAPILogging = nil
+		for _, v := range os.Args {
+			if strings.HasPrefix(v, "--enable-api-logging") || strings.HasPrefix(v, "-enable-api-logging") {
+				// This means that enable-api-logging was explicitly set to false
+				enableAPILogging = ptr.Of(false)
+				break
+			}
+		}
+	}
+
 	if *resourcesPath != "" {
 		componentsPath = resourcesPath
 	}
@@ -109,8 +125,10 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	if *appID == "" {
-		return nil, errors.New("app-id parameter cannot be empty")
+	if *mode == string(modes.StandaloneMode) {
+		if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply options to all loggers
@@ -149,7 +167,7 @@ func FromFlags() (*DaprRuntime, error) {
 			return nil, errors.Wrap(err, "error parsing dapr-internal-grpc-port")
 		}
 	} else {
-		daprInternalGRPC, err = grpc.GetFreePort()
+		daprInternalGRPC, err = freeport.GetFreePort()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get free port for internal grpc server")
 		}
@@ -272,7 +290,6 @@ func FromFlags() (*DaprRuntime, error) {
 		UnixDomainSocket:             *unixDomainSocket,
 		ReadBufferSize:               readBufferSize,
 		GracefulShutdownDuration:     gracefulShutdownDuration,
-		EnableAPILogging:             *enableAPILogging,
 		DisableBuiltinK8sSecretStore: *disableBuiltinK8sSecretStore,
 		EnableAppHealthCheck:         *enableAppHealthCheck,
 		AppHealthCheckPath:           *appHealthCheckPath,
@@ -313,9 +330,9 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	// Config and resiliency need the operator client, only initiate once and only if we will actually use it.
+	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
-	if *mode == string(modes.KubernetesMode) && *config != "" {
+	if *mode == string(modes.KubernetesMode) {
 		log.Infof("Initializing the operator client (config: %s)", *config)
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
@@ -326,14 +343,12 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	var accessControlList *daprGlobalConfig.AccessControlList
-	var namespace string
-	var podName string
+	namespace := os.Getenv("NAMESPACE")
+	podName := os.Getenv("POD_NAME")
 
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			namespace = os.Getenv("NAMESPACE")
-			podName = os.Getenv("POD_NAME")
 			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
@@ -361,7 +376,6 @@ func FromFlags() (*DaprRuntime, error) {
 		var resiliencyConfigs []*resiliencyV1alpha.Resiliency
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			namespace = os.Getenv("NAMESPACE")
 			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
 		case modes.StandaloneMode:
 			resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
@@ -378,6 +392,14 @@ func FromFlags() (*DaprRuntime, error) {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
+
+	// API logging can be enabled for this app or for every app, globally in the config
+	if enableAPILogging != nil {
+		runtimeConfig.EnableAPILogging = *enableAPILogging
+	} else {
+		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.Enabled
+	}
+
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
 }
 

@@ -33,18 +33,25 @@ import (
 )
 
 const (
-	appPort          = 3000
-	pubsubA          = "pubsub-a-topic-http"
-	pubsubB          = "pubsub-b-topic-http"
-	pubsubC          = "pubsub-c-topic-http"
-	pubsubJob        = "pubsub-job-topic-http"
-	pubsubRaw        = "pubsub-raw-topic-http"
-	pubsubDead       = "pubsub-dead-topic-http"
-	pubsubDeadLetter = "pubsub-deadletter-topic-http"
-	PubSubEnvVar     = "DAPR_TEST_PUBSUB_NAME"
+	appPort            = 3000
+	pubsubA            = "pubsub-a-topic-http"
+	pubsubB            = "pubsub-b-topic-http"
+	pubsubC            = "pubsub-c-topic-http"
+	pubsubJob          = "pubsub-job-topic-http"
+	pubsubRaw          = "pubsub-raw-topic-http"
+	pubsubDead         = "pubsub-dead-topic-http"
+	pubsubDeadLetter   = "pubsub-deadletter-topic-http"
+	pubsubBulkTopic    = "pubsub-bulk-topic-http"
+	pubsubRawBulkTopic = "pubsub-raw-bulk-topic-http"
+	pubsubCEBulkTopic  = "pubsub-ce-bulk-topic-http"
+	pubsubDefBulkTopic = "pubsub-def-bulk-topic-http"
+	PubSubEnvVar       = "DAPR_TEST_PUBSUB_NAME"
 )
 
-var pubsubName = "messagebus"
+var (
+	pubsubName  = "messagebus"
+	pubsubKafka = "kafka-messagebus"
+)
 
 func init() {
 	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
@@ -68,6 +75,10 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
 	ReceivedByTopicDead       []string `json:"pubsub-dead-topic"`
 	ReceivedByTopicDeadLetter []string `json:"pubsub-deadletter-topic"`
+	ReceivedByTopicBulk       []string `json:"pubsub-bulk-topic"`
+	ReceivedByTopicRawBulk    []string `json:"pubsub-raw-bulk-topic"`
+	ReceivedByTopicCEBulk     []string `json:"pubsub-ce-bulk-topic"`
+	ReceivedByTopicDefBulk    []string `json:"pubsub-def-bulk-topic"`
 }
 
 type subscription struct {
@@ -96,15 +107,19 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesA          sets.String
-	receivedMessagesB          sets.String
-	receivedMessagesC          sets.String
-	receivedMessagesJob        sets.String
-	receivedMessagesRaw        sets.String
-	receivedMessagesDead       sets.String
-	receivedMessagesDeadLetter sets.String
-	desiredResponse            respondWith
-	lock                       sync.Mutex
+	receivedMessagesA            sets.Set[string]
+	receivedMessagesB            sets.Set[string]
+	receivedMessagesC            sets.Set[string]
+	receivedMessagesJob          sets.Set[string]
+	receivedMessagesRaw          sets.Set[string]
+	receivedMessagesDead         sets.Set[string]
+	receivedMessagesDeadLetter   sets.Set[string]
+	receivedMessagesBulkTopic    sets.Set[string]
+	receivedMessagesRawBulkTopic sets.Set[string]
+	receivedMessagesCEBulkTopic  sets.Set[string]
+	receivedMessagesDefBulkTopic sets.Set[string]
+	desiredResponse              respondWith
+	lock                         sync.Mutex
 )
 
 // indexHandler is the handler for root path
@@ -155,6 +170,33 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Topic:      pubsubDeadLetter,
 			Route:      pubsubDeadLetter,
 		},
+		{
+			// receive normal string message from kafka pubsub
+			PubsubName: pubsubKafka,
+			Topic:      pubsubBulkTopic,
+			Route:      pubsubBulkTopic,
+		},
+		{
+			// receive raw payload message from kafka pubsub
+			PubsubName: pubsubKafka,
+			Topic:      pubsubRawBulkTopic,
+			Route:      pubsubRawBulkTopic,
+			Metadata: map[string]string{
+				"rawPayload": "true",
+			},
+		},
+		{
+			// receive CE payload message from kafka pubsub
+			PubsubName: pubsubKafka,
+			Topic:      pubsubCEBulkTopic,
+			Route:      pubsubCEBulkTopic,
+		},
+		{
+			// receive def bulk payload message from redis pubsub (default)
+			PubsubName: pubsubName,
+			Topic:      pubsubDefBulkTopic,
+			Route:      pubsubDefBulkTopic,
+		},
 	}
 
 	log.Printf("configureSubscribeHandler called; subscribing to: %v\n", t)
@@ -189,7 +231,7 @@ func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
 
 	// Raw data does not have content-type, so it is handled as-is.
 	// Because the publisher encodes to JSON before publishing, we need to decode here.
-	if strings.HasSuffix(r.URL.String(), pubsubRaw) {
+	if strings.HasSuffix(r.URL.String(), pubsubRaw) || strings.HasSuffix(r.URL.String(), pubsubRawBulkTopic) {
 		var actualMsg string
 		err = json.Unmarshal([]byte(msg), &actualMsg)
 		if err != nil {
@@ -267,6 +309,14 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesDead.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubDeadLetter) && !receivedMessagesDeadLetter.Has(msg) {
 		receivedMessagesDeadLetter.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubBulkTopic) && !receivedMessagesBulkTopic.Has(msg) {
+		receivedMessagesBulkTopic.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubRawBulkTopic) && !receivedMessagesRawBulkTopic.Has(msg) {
+		receivedMessagesRawBulkTopic.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubCEBulkTopic) && !receivedMessagesCEBulkTopic.Has(msg) {
+		receivedMessagesCEBulkTopic.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubDefBulkTopic) && !receivedMessagesDefBulkTopic.Has(msg) {
+		receivedMessagesDefBulkTopic.Insert(msg)
 	} else {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
@@ -318,7 +368,8 @@ func extractMessage(reqID string, body []byte) (string, error) {
 	}
 
 	msg := m["data"].(string)
-	log.Printf("(%s) output='%s'", reqID, msg)
+	pubsubName := m["pubsubname"].(string)
+	log.Printf("(%s) pubsub='%s' output='%s'", reqID, pubsubName, msg)
 
 	return msg, nil
 }
@@ -343,13 +394,17 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicA:          unique(receivedMessagesA.List()),
-		ReceivedByTopicB:          unique(receivedMessagesB.List()),
-		ReceivedByTopicC:          unique(receivedMessagesC.List()),
-		ReceivedByTopicJob:        unique(receivedMessagesJob.List()),
-		ReceivedByTopicRaw:        unique(receivedMessagesRaw.List()),
-		ReceivedByTopicDead:       unique(receivedMessagesDead.List()),
-		ReceivedByTopicDeadLetter: unique(receivedMessagesDeadLetter.List()),
+		ReceivedByTopicA:          unique(sets.List(receivedMessagesA)),
+		ReceivedByTopicB:          unique(sets.List(receivedMessagesB)),
+		ReceivedByTopicC:          unique(sets.List(receivedMessagesC)),
+		ReceivedByTopicJob:        unique(sets.List(receivedMessagesJob)),
+		ReceivedByTopicRaw:        unique(sets.List(receivedMessagesRaw)),
+		ReceivedByTopicDead:       unique(sets.List(receivedMessagesDead)),
+		ReceivedByTopicDeadLetter: unique(sets.List(receivedMessagesDeadLetter)),
+		ReceivedByTopicBulk:       unique(sets.List(receivedMessagesBulkTopic)),
+		ReceivedByTopicRawBulk:    unique(sets.List(receivedMessagesRawBulkTopic)),
+		ReceivedByTopicCEBulk:     unique(sets.List(receivedMessagesCEBulkTopic)),
+		ReceivedByTopicDefBulk:    unique(sets.List(receivedMessagesDefBulkTopic)),
 	}
 
 	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
@@ -380,13 +435,17 @@ func initializeHandler(w http.ResponseWriter, _ *http.Request) {
 // initialize all the sets for a clean test.
 func initializeSets() {
 	// initialize all the sets
-	receivedMessagesA = sets.NewString()
-	receivedMessagesB = sets.NewString()
-	receivedMessagesC = sets.NewString()
-	receivedMessagesJob = sets.NewString()
-	receivedMessagesRaw = sets.NewString()
-	receivedMessagesDead = sets.NewString()
-	receivedMessagesDeadLetter = sets.NewString()
+	receivedMessagesA = sets.New[string]()
+	receivedMessagesB = sets.New[string]()
+	receivedMessagesC = sets.New[string]()
+	receivedMessagesJob = sets.New[string]()
+	receivedMessagesRaw = sets.New[string]()
+	receivedMessagesDead = sets.New[string]()
+	receivedMessagesDeadLetter = sets.New[string]()
+	receivedMessagesBulkTopic = sets.New[string]()
+	receivedMessagesRawBulkTopic = sets.New[string]()
+	receivedMessagesCEBulkTopic = sets.New[string]()
+	receivedMessagesDefBulkTopic = sets.New[string]()
 }
 
 // appRouter initializes restful api router
@@ -421,6 +480,10 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/"+pubsubRaw, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubDead, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubDeadLetter, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubBulkTopic, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubRawBulkTopic, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubCEBulkTopic, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubDefBulkTopic, subscribeHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

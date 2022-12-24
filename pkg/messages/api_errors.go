@@ -31,6 +31,9 @@ const (
 	ErrPubsubPublishMessage     = "error when publish to topic %s in pubsub %s: %s"
 	ErrPubsubForbidden          = "topic %s is not allowed for app id %s"
 	ErrPubsubCloudEventCreation = "cannot create cloudevent: %s"
+	ErrPubsubUnmarshal          = "error when unmarshaling the request for topic %s pubsub %s: %s"
+	ErrPubsubMarshal            = "error marshaling events to bytes for topic %s pubsub %s: %s"
+	ErrPubsubGetSubscriptions   = "unable to get app subscriptions %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
@@ -73,16 +76,27 @@ const (
 	ErrHealthNotReady = "dapr is not ready"
 
 	// Configuration.
-	ErrConfigurationStoresNotConfigured = "error configuration stores not configured"
-	ErrConfigurationStoreNotFound       = "error configuration stores %s not found"
-	ErrConfigurationGet                 = "fail to get %s from Configuration store %s: %s"
-	ErrConfigurationSubscribe           = "fail to subscribe %s from Configuration store %s: %s"
-	ErrConfigurationUnsubscribe         = "fail to unsubscribe to configuration request %s: %s"
+	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
+	ErrConfigurationStoreNotFound       = "configuration store %s not found"
+	ErrConfigurationGet                 = "failed to get %s from Configuration store %s: %s"
+	ErrConfigurationSubscribe           = "failed to subscribe %s from Configuration store %s: %s"
+	ErrConfigurationUnsubscribe         = "failed to unsubscribe to configuration request %s: %s"
 
-	//	Lock
+	// Lock.
 	ErrLockStoresNotConfigured    = "lock store is not configured"
 	ErrResourceIDEmpty            = "ResourceId is empty in lock store %s"
 	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
 	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
 	ErrLockStoreNotFound          = "lock store %s not found"
+
+	// Workflow
+	ErrWorkflowNameMissing           = "workflow name is not configured"
+	ErrMissingOrEmptyInstance        = "no instance or empty instance was provided"
+	ErrMissingWorkflowType           = "missing workflow type"
+	ErrNoOrMissingWorkflowComponent  = "no component or empty component was provided"
+	ErWorkflowrComponentDoesNotExist = "provided component does not exist %s"
+	ErrWorkflowGetResponse           = "error while getting workflow info %s"
+	ErrStartWorkflow                 = "error starting workflow %s"
+	ErrTerminateWorkflow             = "error terminating workflow %s"
+	ErrTimerParse                    = "error parsing time - %s"
 )

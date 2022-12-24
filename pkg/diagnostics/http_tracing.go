@@ -14,7 +14,6 @@ limitations under the License.
 package diagnostics
 
 import (
-	"fmt"
 	"net/http"
 	"net/textproto"
 	"strconv"
@@ -102,6 +101,14 @@ func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName st
 	return ctx, span
 }
 
+func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace.Span) trace.Span {
+	path := string(ctx.Request.URI().Path())
+	netCtx := trace.ContextWithRemoteSpanContext(ctx, parentSpan.SpanContext())
+	kindOption := trace.WithSpanKind(trace.SpanKindProducer)
+	_, span := tracer.Start(netCtx, path, kindOption)
+	return span
+}
+
 // SpanContextFromRequest extracts a span context from incoming requests.
 func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok bool) {
 	h, ok := getRequestHeader(req, TraceparentHeader)
@@ -176,10 +183,8 @@ func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
 }
 
 func getContextValue(ctx *fasthttp.RequestCtx, key string) string {
-	if ctx.UserValue(key) == nil {
-		return ""
-	}
-	return ctx.UserValue(key).(string)
+	v, _ := ctx.UserValue(key).(string)
+	return v
 }
 
 func getAPIComponent(apiPath string) (string, string) {
@@ -226,7 +231,7 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]strin
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		targetID := getContextValue(ctx, "id")
 		m[netPeerNameSpanAttributeKey] = targetID
-		m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", targetID, getContextValue(ctx, "method"))
+		m[daprAPISpanNameInternal] = "CallLocal/" + targetID + "/" + getContextValue(ctx, "method")
 
 	case "publish":
 		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
@@ -240,13 +245,13 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]strin
 	// Populate the rest of database attributes.
 	if _, ok := m[dbNameSpanAttributeKey]; ok {
 		m[dbSystemSpanAttributeKey] = dbType
-		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, path)
+		m[dbStatementSpanAttributeKey] = method + " " + path
 		m[dbConnectionStringSpanAttributeKey] = dbType
 	}
 
 	// Populate dapr original api attributes.
 	m[daprAPIProtocolSpanAttributeKey] = daprAPIHTTPSpanAttrValue
-	m[daprAPISpanAttributeKey] = fmt.Sprintf("%s %s", method, path)
+	m[daprAPISpanAttributeKey] = method + " " + path
 	m[daprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
 
 	return m
@@ -267,14 +272,14 @@ func populateActorParams(ctx *fasthttp.RequestCtx, m map[string]string) string {
 		return ""
 	}
 
-	m[daprAPIActorTypeID] = fmt.Sprintf("%s.%s", actorType, actorID)
+	m[daprAPIActorTypeID] = actorType + "." + actorID
 
 	dbType := ""
 	switch tokens[5] {
 	case "method":
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		m[netPeerNameSpanAttributeKey] = m[daprAPIActorTypeID]
-		m[daprAPISpanNameInternal] = fmt.Sprintf("CallActor/%s/%s", actorType, getContextValue(ctx, "method"))
+		m[daprAPISpanNameInternal] = "CallActor/" + actorType + "/" + getContextValue(ctx, "method")
 
 	case "state":
 		dbType = stateBuildingBlockType

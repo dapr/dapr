@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -124,7 +125,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorfeatures",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			DaprCPULimit:   "2.0",
 			DaprCPURequest: "0.1",
 			AppCPULimit:    "2.0",
@@ -139,7 +139,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorfeatures",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			DaprCPULimit:   "2.0",
 			DaprCPURequest: "0.1",
 			AppCPULimit:    "2.0",
@@ -211,7 +210,9 @@ func TestActorReminder(t *testing.T) {
 
 				for i := 0; i < numActorsPerThread; i++ {
 					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
-					// Deleting pre-existing reminder
+					t.Logf("Registering reminder: %s %s ...", actorID, reminderName)
+
+					// Deleting pre-existing reminder, just in case…
 					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 					require.NoError(t, err)
 
@@ -229,6 +230,7 @@ func TestActorReminder(t *testing.T) {
 
 					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 					// Unregistering reminder
+					t.Logf("Unregistering reminder: %s %s ...", actorID, reminderName)
 					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 					require.NoError(t, err)
 				}
@@ -250,6 +252,45 @@ func TestActorReminder(t *testing.T) {
 			}(iteration)
 		}
 		wg.Wait()
+
+		err = backoff.RetryNotify(
+			func() error {
+				t.Logf("Checking if unregistration of reminders took place in %s ...", appName)
+				resp1, err := utils.HTTPGet(logsURL)
+				if err != nil {
+					return err
+				}
+
+				time.Sleep(secondsToCheckReminderResult * time.Second)
+
+				resp2, err := utils.HTTPGet(logsURL)
+				if err != nil {
+					return err
+				}
+
+				t.Log("Checking if NO reminder triggered after unregister and before restart ...")
+				for iteration := 1; iteration <= numIterations; iteration++ {
+					// This is useful to make sure the unregister call was processed.
+					for i := 0; i < numActorsPerThread; i++ {
+						actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
+						count1 := countActorAction(resp1, actorID, reminderName)
+						count2 := countActorAction(resp2, actorID, reminderName)
+						count := count2 - count1
+
+						if count > 0 {
+							return fmt.Errorf("after unregistration but before restart, reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+						}
+					}
+				}
+
+				return nil
+			},
+			backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10),
+			func(err error, d time.Duration) {
+				t.Logf("Error while validating reminder unregistration logs: '%v' - retrying in %s", err, d)
+			},
+		)
+		require.NoError(t, err)
 
 		t.Logf("Restarting %s ...", appName)
 		// Shutdown the sidecar
@@ -276,7 +317,7 @@ func TestActorReminder(t *testing.T) {
 			for i := 0; i < numActorsPerThread; i++ {
 				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 				count := countActorAction(resp, actorID, reminderName)
-				require.True(t, count == 0, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+				require.True(t, count == 0, "After restart, reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
 			}
 		}
 
@@ -440,7 +481,7 @@ func TestActorReminderPeriod(t *testing.T) {
 
 		t.Log("Checking if all reminders did trigger ...")
 		count := countActorAction(resp, actorID, reminderName)
-		require.Equal(t, 5, count)
+		require.Equal(t, 5, count, "response: %s", string(resp))
 	})
 }
 

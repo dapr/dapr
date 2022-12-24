@@ -75,8 +75,8 @@ func (p *grpcPubSub) Features() []pubsub.Feature {
 }
 
 // Publish publishes data to a topic.
-func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
-	_, err := p.Client.Publish(p.Context, &proto.PublishRequest{
+func (p *grpcPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
+	_, err := p.Client.Publish(ctx, &proto.PublishRequest{
 		Topic:      req.Topic,
 		PubsubName: req.PubsubName,
 		Data:       req.Data,
@@ -183,6 +183,12 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 		Metadata: req.Metadata,
 	}
 	return p.pullMessages(ctx, subscription, handler)
+}
+
+// Returns the component metadata options
+func (p *grpcPubSub) GetComponentMetadata() map[string]string {
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
+	return map[string]string{}
 }
 
 // fromConnector creates a new GRPC pubsub using the given underlying connector.
