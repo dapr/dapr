@@ -1456,7 +1456,7 @@ func TestGetComponentHealth(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.String("test-etag"),
+			ETag: ptr.Of("test-etag"),
 		}, nil)
 
 	fakeAPI := &api{

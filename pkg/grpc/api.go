@@ -869,7 +869,6 @@ func (a *api) GetAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.
 	}
 	for i, comp := range components {
 		a.componentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
-		i++
 	}
 	return hresp, nil
 }
@@ -914,7 +913,7 @@ func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.Comp
 }
 
 func (a *api) checkHealthUtil(componentKind string, componentName string) (
-	healthStatus string, errorCode string, message string, err error,
+	string, string, string, error,
 ) {
 	component := a.getComponent(componentKind, componentName)
 
@@ -935,7 +934,7 @@ func (a *api) checkHealthUtil(componentKind string, componentName string) (
 		}
 		return utils.StatusOk, "", "", nil
 	}
-	err = status.Errorf(codes.Unimplemented, messages.ErrPingNotImplemented)
+	err := status.Errorf(codes.Unimplemented, messages.ErrPingNotImplemented)
 	return utils.StatusUndefined, messages.ErrPingNotImplemented, "", err
 }
 

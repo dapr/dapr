@@ -135,7 +135,7 @@ type metadata struct {
 }
 
 type componentHealth struct {
-	HttpStatusCode int    `json:"httpStatusCode,omitempty"`
+	HTTPStatusCode int    `json:"httpStatusCode,omitempty"`
 	HealthStatus   string `json:"healthStatus,omitempty"`
 	ErrorCode      string `json:"errorCode,omitempty"`
 	ErrorMessage   string `json:"errorMessage,omitempty"`
@@ -2625,7 +2625,7 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 			if comphealth.ErrorMessage != "" {
 				log.Debug(msg)
 			}
-			respond(reqCtx, withHealthStatus(comphealth.HttpStatusCode, msg))
+			respond(reqCtx, withHealthStatus(comphealth.HTTPStatusCode, msg))
 			break
 		}
 	}
@@ -2642,7 +2642,7 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 	component := a.getComponent(componentKind, componentName)
 	if component == nil {
 		return componentHealth{
-			HttpStatusCode: fasthttp.StatusBadRequest,
+			HTTPStatusCode: fasthttp.StatusBadRequest,
 			HealthStatus:   utils.StatusUndefined,
 			ErrorCode:      messages.ErrComponentNotFound,
 		}
@@ -2651,19 +2651,19 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 		err := pinger.Ping()
 		if err != nil {
 			return componentHealth{
-				HttpStatusCode: fasthttp.StatusInternalServerError,
+				HTTPStatusCode: fasthttp.StatusInternalServerError,
 				HealthStatus:   utils.StatusNotOk,
 				ErrorCode:      messages.ErrHealthNotOk,
 				ErrorMessage:   err.Error(),
 			}
 		}
 		return componentHealth{
-			HttpStatusCode: fasthttp.StatusOK,
+			HTTPStatusCode: fasthttp.StatusOK,
 			HealthStatus:   utils.StatusOk,
 		}
 	}
 	return componentHealth{
-		HttpStatusCode: fasthttp.StatusMethodNotAllowed,
+		HTTPStatusCode: fasthttp.StatusMethodNotAllowed,
 		HealthStatus:   utils.StatusUndefined,
 		ErrorCode:      messages.ErrPingNotImplemented,
 	}
