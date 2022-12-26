@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 var log = logger.NewLogger("pluggable-components-grpc-connector")
@@ -35,7 +36,33 @@ type GRPCClient interface {
 	Ping(ctx context.Context, in *proto.PingRequest, opts ...grpc.CallOption) (*proto.PingResponse, error)
 }
 
-type GRPCConnectionDialer = func(ctx context.Context, name string) (*grpc.ClientConn, error)
+// unaryErrorMappingInterceptor receives a target method and a mapping error that will be used to map from grpc errors to business level errors.
+func unaryErrorMappingInterceptor(targetMethod string, mapping ErrorMapping) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		err := invoker(ctx, method, req, reply, cc, opts...)
+		if targetMethod != method {
+			return err
+		}
+		s, ok := status.FromError(err)
+		if !ok {
+			return err
+		}
+		mapping, ok := mapping[s.Code()]
+		if !ok {
+			return err
+		}
+		return mapping(*s)
+	}
+}
+
+type GRPCConnectionDialer func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error)
+
+// MapErrors return a new connection dialer that adds a mapping errors interceptor into it.
+func (g GRPCConnectionDialer) MapErrors(method string, mapping ErrorMapping) GRPCConnectionDialer {
+	return func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+		return g(ctx, name, append(opts, grpc.WithChainUnaryInterceptor(unaryErrorMappingInterceptor(method, mapping)))...)
+	}
+}
 
 // GRPCConnector is a connector that uses underlying gRPC protocol for common operations.
 type GRPCConnector[TClient GRPCClient] struct {
@@ -71,9 +98,9 @@ func instanceIDStreamInterceptor(instanceID string) grpc.StreamClientInterceptor
 
 // socketDialer creates a dialer for the given socket.
 func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnectionDialer {
-	return func(ctx context.Context, name string) (*grpc.ClientConn, error) {
-		additionalOpts = append(additionalOpts, grpc.WithStreamInterceptor(instanceIDStreamInterceptor(name)), grpc.WithUnaryInterceptor(instanceIDUnaryInterceptor(name)))
-		return SocketDial(ctx, socket, additionalOpts...)
+	return func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+		additionalOpts = append(additionalOpts, grpc.WithChainStreamInterceptor(instanceIDStreamInterceptor(name)), grpc.WithChainUnaryInterceptor(instanceIDUnaryInterceptor(name)))
+		return SocketDial(ctx, socket, append(additionalOpts, opts...)...)
 	}
 }
 
@@ -129,7 +156,12 @@ func NewGRPCConnectorWithDialer[TClient GRPCClient](dialer GRPCConnectionDialer,
 	}
 }
 
+// NewGRPCConnectorUseDialer creates a new grpc connector for the given client factory and socket, and use the dial callback to allow dialer modifications.
+func NewGRPCConnectorUseDialer[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient, useDialer func(dialer GRPCConnectionDialer) GRPCConnectionDialer) *GRPCConnector[TClient] {
+	return NewGRPCConnectorWithDialer(useDialer(socketDialer(socket)), factory)
+}
+
 // NewGRPCConnector creates a new grpc connector for the given client factory and socket.
 func NewGRPCConnector[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
-	return NewGRPCConnectorWithDialer(socketDialer(socket), factory)
+	return NewGRPCConnectorUseDialer(socket, factory, func(dialer GRPCConnectionDialer) GRPCConnectionDialer { return dialer })
 }

@@ -26,6 +26,8 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -34,6 +36,30 @@ var (
 	ErrRespNil                       = errors.New("the response for GetRequest is nil")
 	ErrTransactOperationNotSupported = errors.New("transact operation not supported")
 )
+
+// errors code
+var (
+	GRPCCodeETagMismatch = codes.FailedPrecondition
+	GRPCCodeETagInvalid  = codes.InvalidArgument
+)
+
+// errors mapping
+var mapping = pluggable.ErrorMapping{
+	GRPCCodeETagInvalid: func(s status.Status) error {
+		return state.NewETagError(state.ETagInvalid, s.Err())
+	},
+	GRPCCodeETagMismatch: func(s status.Status) error {
+		return state.NewETagError(state.ETagMismatch, s.Err())
+	},
+}
+
+// targetMethods that should be used for mapping errors.
+var targetMethods = []string{
+	"Set",
+	"Delete",
+	"BulkSet",
+	"BulkDelete",
+}
 
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
 type grpcStateStore struct {
@@ -453,15 +479,20 @@ func fromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[stateStor
 	}
 }
 
+// useErrorsMapping receives a grpc connection dialer and apply the errors mapping intercetor to the target methods
+func useErrorsMapping(dialer pluggable.GRPCConnectionDialer) pluggable.GRPCConnectionDialer {
+	return mapping.ForMethod(dialer, proto.StateStore_ServiceDesc.ServiceName, targetMethods...)
+}
+
 // NewGRPCStateStore creates a new grpc state store using the given socket factory.
 func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
-	return fromConnector(l, pluggable.NewGRPCConnector(socket, newStateStoreClient))
+	return fromConnector(l, pluggable.NewGRPCConnectorUseDialer(socket, newStateStoreClient, useErrorsMapping))
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
 func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) state.Store {
 	return func(l logger.Logger) state.Store {
-		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, newStateStoreClient))
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(useErrorsMapping(dialer), newStateStoreClient))
 	}
 }
 

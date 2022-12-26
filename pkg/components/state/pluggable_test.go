@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,16 +164,21 @@ func wrapString(str string) string {
 }
 
 func TestComponentCalls(t *testing.T) {
-	getStateStore := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *server) {
-		proto.RegisterStateStoreServer(s, svc)
-		proto.RegisterTransactionalStateStoreServer(s, svc)
-		proto.RegisterQueriableStateStoreServer(s, svc)
-	}, func(cci grpc.ClientConnInterface) *grpcStateStore {
-		client := newStateStoreClient(cci)
-		stStore := NewGRPCStateStore(testLogger, "/tmp/socket.sock")
-		stStore.Client = client
-		return stStore
-	})
+	getStateStore := func(srv *server) (statestore *grpcStateStore, cleanupf func(), err error) {
+		withSvc := testingGrpc.TestServerWithDialer(testLogger, func(s *grpc.Server, svc *server) {
+			proto.RegisterStateStoreServer(s, svc)
+			proto.RegisterTransactionalStateStoreServer(s, svc)
+			proto.RegisterQueriableStateStoreServer(s, svc)
+		})
+		dialer, cleanup, err := withSvc(srv)
+		require.NoError(t, err)
+		clientFactory := newGRPCStateStore(func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+			return dialer(ctx, opts...)
+		})
+		client := clientFactory(testLogger).(*grpcStateStore)
+		require.NoError(t, client.Init(state.Metadata{}))
+		return client, cleanup, err
+	}
 
 	if runtime.GOOS != "windows" {
 		t.Run("test init should populate features and call grpc init", func(t *testing.T) {
@@ -263,6 +269,54 @@ func TestComponentCalls(t *testing.T) {
 		})
 
 		assert.NotNil(t, err)
+		assert.Equal(t, int64(1), svc.deleteCalled.Load())
+	})
+
+	t.Run("delete should return etag mismatch err when grpc delete returns etag mismatch code", func(t *testing.T) {
+		const fakeKey = "fakeKey"
+		fakeErr := status.Error(GRPCCodeETagMismatch, "fake-err-msg")
+
+		svc := &server{
+			onDeleteCalled: func(req *proto.DeleteRequest) {
+				assert.Equal(t, req.Key, fakeKey)
+			},
+			deleteErr: fakeErr,
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+		err = stStore.Delete(context.Background(), &state.DeleteRequest{
+			Key: fakeKey,
+		})
+
+		assert.NotNil(t, err)
+		etag, ok := err.(*state.ETagError)
+		require.True(t, ok)
+		assert.Equal(t, etag.Kind(), state.ETagMismatch)
+		assert.Equal(t, int64(1), svc.deleteCalled.Load())
+	})
+
+	t.Run("delete should return etag invalid err when grpc delete returns etag invalid code", func(t *testing.T) {
+		const fakeKey = "fakeKey"
+		fakeErr := status.Error(GRPCCodeETagInvalid, "fake-err-msg")
+
+		svc := &server{
+			onDeleteCalled: func(req *proto.DeleteRequest) {
+				assert.Equal(t, req.Key, fakeKey)
+			},
+			deleteErr: fakeErr,
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+		err = stStore.Delete(context.Background(), &state.DeleteRequest{
+			Key: fakeKey,
+		})
+
+		assert.NotNil(t, err)
+		etag, ok := err.(*state.ETagError)
+		require.True(t, ok)
+		assert.Equal(t, etag.Kind(), state.ETagInvalid)
 		assert.Equal(t, int64(1), svc.deleteCalled.Load())
 	})
 
@@ -852,4 +906,16 @@ func TestMappers(t *testing.T) {
 			assert.IsType(t, &proto.TransactionalStateOperation_Delete{}, req.Request)
 		})
 	})
+}
+
+func TestTargetErrorsMethodsShouldExists(t *testing.T) {
+	methodMap := map[string]bool{}
+	for _, method := range proto.StateStore_ServiceDesc.Methods {
+		methodMap[method.MethodName] = true
+	}
+
+	for _, targetMethod := range targetMethods {
+		_, ok := methodMap[targetMethod]
+		assert.True(t, ok)
+	}
 }
