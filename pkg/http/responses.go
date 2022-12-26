@@ -66,22 +66,16 @@ type ComponentsHealthResponse struct {
 }
 
 type ComponentHealthItem struct {
-	Component string `json:"componentName"`
-	Type      string `json:"type"`
-	Status    string `json:"status"`
-	ErrorCode string `json:"errorCode,omitempty"`
-	Message   string `json:"message,omitempty"`
-}
-
-type ComponentHealth struct {
-	Status    string `json:"status"`
+	Component string `json:"componentName,omitempty"`
+	Type      string `json:"type,omitempty"`
+	Status    string `json:"status,omitempty"`
 	ErrorCode string `json:"errorCode,omitempty"`
 	Message   string `json:"message,omitempty"`
 }
 
 // NewComponentHealth returns Single ComponentHealth with given status and error code, if any.
-func NewComponentHealth(status, errorCode, message string) ComponentHealth {
-	return ComponentHealth{
+func NewComponentHealth(status, errorCode, message string) ComponentHealthItem {
+	return ComponentHealthItem{
 		Status:    status,
 		ErrorCode: errorCode,
 		Message:   message,
@@ -89,7 +83,7 @@ func NewComponentHealth(status, errorCode, message string) ComponentHealth {
 }
 
 // withHealthStatus sets error code and jsonized error message.
-func withHealthStatus(statusCode int, health ComponentHealth) option {
+func withHealthStatus(statusCode int, health ComponentHealthItem) option {
 	b, _ := json.Marshal(&health)
 	return withJSON(statusCode, b)
 }

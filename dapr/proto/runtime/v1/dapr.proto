@@ -31,7 +31,7 @@ service Dapr {
   rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
 
   // Get health of a component
-  rpc GetComponentHealthAlpha1(ComponentHealthRequest) returns (ComponentHealthResponse) {}
+  rpc GetComponentHealthAlpha1(ComponentHealthRequest) returns (ComponentHealthResponseItem) {}
 
   // Get health of all registered components
   rpc GetAllComponentsHealthAlpha1(AllComponentsHealthRequest) returns (AllComponentsHealthResponse) {}
@@ -161,19 +161,19 @@ message AllComponentsHealthRequest {}
 // health of all components.
 message ComponentHealthResponseItem {
   // The name of component
-    string componentName = 1;
+  optional string componentName = 1;
 
   // Type of component
-    string type = 2;
+  optional string type = 2;
 
   // Status of component, OK or NOT OK or UNDEFINED
-    string status = 3;
+  optional string status = 3;
 
   // error that is returned in case of health check failure
-    string errorCode = 4;
+  optional string errorCode = 4;
 
   // message that may provide more insight for error, if any
-    string message = 5;
+  optional string message = 5;
 }
 
 // AllComponentsHealthResponse is the response that would comprise of HealthItems per component basis
@@ -185,18 +185,6 @@ message AllComponentsHealthResponse {
 message ComponentHealthRequest {
   // The name of component.
   string component_name = 1;
-}
-
-// ComponentHealthResponse is the response for health enquiry of a single component.
-message ComponentHealthResponse {
-    // Status of component, OK or NOT OK or UNDEFINED
-    string status = 1;
-
-  // error that is returned in case of health check failure
-    string errorCode = 2;
-
-  // message that may provide more insight for error, if any
-    string message = 3;
 }
 
 // GetBulkStateRequest is the message to get a list of key-value states from specific state store.

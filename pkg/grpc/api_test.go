@@ -1538,35 +1538,35 @@ func TestGetComponentHealth(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	testCases := []struct {
-		testName      string
-		componentKind string
-		componentName string
-		errorExcepted bool
-		expectedError codes.Code
+		testName           string
+		componentKind      string
+		componentName      string
+		errorExcepted      bool
+		expectedStatusCode codes.Code
 	}{
 		{
-			testName:      "statestore success health check",
-			componentName: "store1",
-			errorExcepted: false,
-			expectedError: codes.OK,
+			testName:           "statestore success health check",
+			componentName:      "store1",
+			errorExcepted:      false,
+			expectedStatusCode: codes.OK,
 		},
 		{
-			testName:      "not found store",
-			componentName: "no-store",
-			errorExcepted: true,
-			expectedError: codes.InvalidArgument,
+			testName:           "not found store",
+			componentName:      "no-store",
+			errorExcepted:      true,
+			expectedStatusCode: codes.InvalidArgument,
 		},
 		{
-			testName:      "pubsub success health check",
-			componentName: "pubsubname",
-			errorExcepted: false,
-			expectedError: codes.OK,
+			testName:           "pubsub success health check",
+			componentName:      "pubsubname",
+			errorExcepted:      false,
+			expectedStatusCode: codes.OK,
 		},
 		{
-			testName:      "secretstore success health check",
-			componentName: "secretstore1",
-			errorExcepted: false,
-			expectedError: codes.OK,
+			testName:           "secretstore success health check",
+			componentName:      "secretstore1",
+			errorExcepted:      false,
+			expectedStatusCode: codes.OK,
 		},
 	}
 
@@ -1583,7 +1583,7 @@ func TestGetComponentHealth(t *testing.T) {
 				assert.Nil(t, err)
 			} else {
 				assert.Error(t, err, "Expected error")
-				assert.Equal(t, tt.expectedError, status.Code(err))
+				assert.Equal(t, tt.expectedStatusCode, status.Code(err))
 			}
 		})
 	}

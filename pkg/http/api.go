@@ -134,6 +134,13 @@ type metadata struct {
 	Subscriptions        []pubsubSubscription       `json:"subscriptions"`
 }
 
+type componentHealth struct {
+	HttpStatusCode int    `json:"httpStatusCode,omitempty"`
+	HealthStatus   string `json:"healthStatus,omitempty"`
+	ErrorCode      string `json:"errorCode,omitempty"`
+	ErrorMessage   string `json:"errorMessage,omitempty"`
+}
+
 const (
 	apiVersionV1             = "v1.0"
 	apiVersionV1alpha1       = "v1.0-alpha1"
@@ -2588,25 +2595,21 @@ func (a *api) onGetAllComponentsHealthz(reqCtx *fasthttp.RequestCtx) {
 	hresp := ComponentsHealthResponse{
 		Results: make([]ComponentHealthItem, len(components)),
 	}
-	i := 0
-	for _, comp := range components {
-		a.allComponentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
-		i++
+	for i, comp := range components {
+		a.componentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
 	}
 	b, _ := json.Marshal(hresp)
 	respond(reqCtx, withJSON(fasthttp.StatusOK, b))
 }
 
-func (a *api) allComponentsHealthResponsePopulator(componentType string, hresp ComponentsHealthResponse, ind int, name string) {
-	status, errStr, message := a.onGetComponentHealthzUtil(nil, componentType, name)
-	hresp.Results[ind].Component = name
-	hresp.Results[ind].Type = componentType
-	hresp.Results[ind].Status = status
-	if errStr != "" {
-		hresp.Results[ind].ErrorCode = errStr
-	}
-	if message != "" {
-		hresp.Results[ind].Message = message
+func (a *api) componentsHealthResponsePopulator(componentType string, hresp ComponentsHealthResponse, ind int, name string) {
+	compHealth := a.onGetComponentHealthzUtil(nil, componentType, name)
+	hresp.Results[ind] = ComponentHealthItem{
+		Component: name,
+		Type:      componentType,
+		Status:    compHealth.HealthStatus,
+		ErrorCode: compHealth.ErrorCode,
+		Message:   compHealth.ErrorMessage,
 	}
 }
 
@@ -2617,55 +2620,53 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 	for _, comp := range components {
 		if componentName == comp.Name {
 			found = true
-			a.onGetComponentHealthzUtil(reqCtx, strings.Split(comp.Spec.Type, ".")[0], comp.Name)
+			comphealth := a.onGetComponentHealthzUtil(reqCtx, strings.Split(comp.Spec.Type, ".")[0], comp.Name)
+			msg := NewComponentHealth(comphealth.HealthStatus, comphealth.ErrorCode, comphealth.ErrorMessage)
+			if comphealth.ErrorMessage != "" {
+				log.Debug(msg)
+			}
+			respond(reqCtx, withHealthStatus(comphealth.HttpStatusCode, msg))
 			break
 		}
 	}
 	if !found {
 		msg := NewComponentHealth(utils.StatusUndefined, messages.ErrComponentNotFound, "")
-		if reqCtx != nil {
-			respond(reqCtx, withHealthStatus(fasthttp.StatusBadRequest, msg))
-		}
 		log.Debug(msg)
+		respond(reqCtx, withHealthStatus(fasthttp.StatusBadRequest, msg))
 	}
 }
 
 func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKind string,
 	componentName string,
-) (healthStatus string, errStr string, message string) {
+) componentHealth {
 	component := a.getComponent(componentKind, componentName)
-
 	if component == nil {
-		msg := NewComponentHealth(utils.StatusUndefined, messages.ErrComponentNotFound, "")
-		if reqCtx != nil {
-			respond(reqCtx, withHealthStatus(fasthttp.StatusBadRequest, msg))
+		return componentHealth{
+			HttpStatusCode: fasthttp.StatusBadRequest,
+			HealthStatus:   utils.StatusUndefined,
+			ErrorCode:      messages.ErrComponentNotFound,
 		}
-		log.Debug(msg)
-		return utils.StatusUndefined, messages.ErrComponentNotFound, ""
 	}
-
 	if pinger, ok := component.(health.Pinger); ok {
 		err := pinger.Ping()
 		if err != nil {
-			msg := NewComponentHealth(utils.StatusNotOk, messages.ErrHealthNotOk, err.Error())
-			if reqCtx != nil {
-				respond(reqCtx, withHealthStatus(fasthttp.StatusInternalServerError, msg))
+			return componentHealth{
+				HttpStatusCode: fasthttp.StatusInternalServerError,
+				HealthStatus:   utils.StatusNotOk,
+				ErrorCode:      messages.ErrHealthNotOk,
+				ErrorMessage:   err.Error(),
 			}
-			log.Debug(msg)
-			return utils.StatusNotOk, messages.ErrHealthNotOk, err.Error()
 		}
-		msg := NewComponentHealth(utils.StatusOk, "", "")
-		if reqCtx != nil {
-			respond(reqCtx, withHealthStatus(fasthttp.StatusOK, msg))
+		return componentHealth{
+			HttpStatusCode: fasthttp.StatusOK,
+			HealthStatus:   utils.StatusOk,
 		}
-		return utils.StatusOk, "", ""
 	}
-	msg := NewComponentHealth(utils.StatusUndefined, messages.ErrPingNotImplemented, "")
-	if reqCtx != nil {
-		respond(reqCtx, withHealthStatus(fasthttp.StatusMethodNotAllowed, msg))
+	return componentHealth{
+		HttpStatusCode: fasthttp.StatusMethodNotAllowed,
+		HealthStatus:   utils.StatusUndefined,
+		ErrorCode:      messages.ErrPingNotImplemented,
 	}
-	log.Debug(msg)
-	return utils.StatusUndefined, messages.ErrPingNotImplemented, ""
 }
 
 func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {

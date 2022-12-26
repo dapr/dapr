@@ -27,7 +27,7 @@ type DaprClient interface {
 	// Invokes a method on a remote Dapr app.
 	InvokeService(ctx context.Context, in *InvokeServiceRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error)
 	// Get health of a component
-	GetComponentHealthAlpha1(ctx context.Context, in *ComponentHealthRequest, opts ...grpc.CallOption) (*ComponentHealthResponse, error)
+	GetComponentHealthAlpha1(ctx context.Context, in *ComponentHealthRequest, opts ...grpc.CallOption) (*ComponentHealthResponseItem, error)
 	// Get health of all registered components
 	GetAllComponentsHealthAlpha1(ctx context.Context, in *AllComponentsHealthRequest, opts ...grpc.CallOption) (*AllComponentsHealthResponse, error)
 	// Gets the state for a specific key.
@@ -111,8 +111,8 @@ func (c *daprClient) InvokeService(ctx context.Context, in *InvokeServiceRequest
 	return out, nil
 }
 
-func (c *daprClient) GetComponentHealthAlpha1(ctx context.Context, in *ComponentHealthRequest, opts ...grpc.CallOption) (*ComponentHealthResponse, error) {
-	out := new(ComponentHealthResponse)
+func (c *daprClient) GetComponentHealthAlpha1(ctx context.Context, in *ComponentHealthRequest, opts ...grpc.CallOption) (*ComponentHealthResponseItem, error) {
+	out := new(ComponentHealthResponseItem)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetComponentHealthAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -438,7 +438,7 @@ type DaprServer interface {
 	// Invokes a method on a remote Dapr app.
 	InvokeService(context.Context, *InvokeServiceRequest) (*v1.InvokeResponse, error)
 	// Get health of a component
-	GetComponentHealthAlpha1(context.Context, *ComponentHealthRequest) (*ComponentHealthResponse, error)
+	GetComponentHealthAlpha1(context.Context, *ComponentHealthRequest) (*ComponentHealthResponseItem, error)
 	// Get health of all registered components
 	GetAllComponentsHealthAlpha1(context.Context, *AllComponentsHealthRequest) (*AllComponentsHealthResponse, error)
 	// Gets the state for a specific key.
@@ -512,7 +512,7 @@ type UnimplementedDaprServer struct {
 func (UnimplementedDaprServer) InvokeService(context.Context, *InvokeServiceRequest) (*v1.InvokeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeService not implemented")
 }
-func (UnimplementedDaprServer) GetComponentHealthAlpha1(context.Context, *ComponentHealthRequest) (*ComponentHealthResponse, error) {
+func (UnimplementedDaprServer) GetComponentHealthAlpha1(context.Context, *ComponentHealthRequest) (*ComponentHealthResponseItem, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetComponentHealthAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetAllComponentsHealthAlpha1(context.Context, *AllComponentsHealthRequest) (*AllComponentsHealthResponse, error) {
