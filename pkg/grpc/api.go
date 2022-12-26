@@ -306,29 +306,6 @@ type APIOpts struct {
 }
 
 // NewAPI returns a new gRPC API.
-// func NewAPI(
-//
-//	appID string, appChannel channel.AppChannel,
-//	resiliency resiliency.Provider,
-//	stateStores map[string]state.Store,
-//	secretStores map[string]secretstores.SecretStore,
-//	inputBindings map[string]bindings.InputBinding,
-//	outputBindings map[string]bindings.OutputBinding,
-//	secretsConfiguration map[string]config.SecretsScope,
-//	configurationStores map[string]configuration.Store,
-//	lockStores map[string]lock.Store,
-//	pubsubAdapter runtimePubsub.Adapter,
-//	directMessaging messaging.DirectMessaging,
-//	actor actors.Actors,
-//	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-//	tracingSpec config.TracingSpec,
-//	accessControlList *config.AccessControlList,
-//	appProtocol string,
-//	getComponentsFn func() []componentsV1alpha.Component,
-//	shutdown func(),
-//	getComponentsCapabilitiesFn func() map[string][]string,
-//
-// ) API {
 func NewAPI(opts APIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range opts.StateStores {
