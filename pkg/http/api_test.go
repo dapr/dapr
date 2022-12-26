@@ -311,15 +311,9 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					for _, entry := range req.Entries {
 						_, shouldErr := entry.Metadata["shouldErr"]
 						if shouldErr {
-							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+							res.FailedEntries = append(res.FailedEntries, pubsub.BulkPublishResponseFailedEntry{
 								EntryId: entry.EntryId,
-								Status:  pubsub.PublishFailed,
 								Error:   err,
-							})
-						} else {
-							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-								EntryId: entry.EntryId,
-								Status:  pubsub.PublishSucceeded,
 							})
 						}
 					}
@@ -329,14 +323,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				case "errnotallowed":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				default:
-					res := pubsub.BulkPublishResponse{}
-					for _, entry := range req.Entries {
-						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-							EntryId: entry.EntryId,
-							Status:  pubsub.PublishSucceeded,
-						})
-					}
-					return res, nil
+					return pubsub.BulkPublishResponse{}, nil
 				}
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
@@ -420,20 +407,17 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 
 		errBulkResponse := pubsub.BulkPublishResponse{
-			Statuses: []pubsub.BulkPublishResponseEntry{
+			FailedEntries: []pubsub.BulkPublishResponseFailedEntry{
 				{
 					EntryId: "1",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "2",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "3",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 			},
@@ -450,11 +434,10 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 			bulkResp := BulkPublishResponse{}
 			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
-			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
-			for i, entry := range bulkResp.Statuses {
-				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
-				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
-				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
+			for i, entry := range bulkResp.FailedEntries {
+				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
+				assert.Equal(t, errBulkResponse.FailedEntries[i].Error.Error(), entry.Error)
 			}
 		}
 	})
@@ -476,15 +459,13 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 
 		errBulkResponse := pubsub.BulkPublishResponse{
-			Statuses: []pubsub.BulkPublishResponseEntry{
+			FailedEntries: []pubsub.BulkPublishResponseFailedEntry{
 				{
 					EntryId: "2",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "3",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 			},
@@ -501,11 +482,10 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 			bulkResp := BulkPublishResponse{}
 			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
-			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
-			for i, entry := range bulkResp.Statuses {
-				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
-				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
-				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
+			for i, entry := range bulkResp.FailedEntries {
+				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
+				assert.Equal(t, errBulkResponse.FailedEntries[i].Error.Error(), entry.Error)
 			}
 		}
 	})

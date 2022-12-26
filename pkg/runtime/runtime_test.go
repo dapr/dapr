@@ -1718,9 +1718,7 @@ func TestInitPubSub(t *testing.T) {
 		})
 
 		assert.Nil(t, err)
-		assert.Equal(t, 1, len(res.Statuses))
-		assert.Equal(t, "1", res.Statuses[0].EntryId)
-		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+		assert.Empty(t, res.FailedEntries)
 
 		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
@@ -1741,12 +1739,7 @@ func TestInitPubSub(t *testing.T) {
 		})
 
 		assert.Nil(t, err)
-		assert.Equal(t, 2, len(res.Statuses))
-		expectedIds := []string{"1", "2"}
-		assert.Contains(t, expectedIds, res.Statuses[0].EntryId)
-		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
-		assert.Contains(t, expectedIds, res.Statuses[1].EntryId)
-		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[1].Status)
+		assert.Empty(t, res.FailedEntries)
 	})
 
 	t.Run("test bulk publish, topic not allowed", func(t *testing.T) {
@@ -3732,10 +3725,6 @@ func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPub
 				Topic: req.Topic,
 			}
 			handler(context.Background(), pubsubMsg)
-			res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-				EntryId: entry.EntryId,
-				Status:  pubsub.PublishSucceeded,
-			})
 		}
 	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
 		nbm := &pubsub.BulkMessage{
@@ -4513,17 +4502,7 @@ func (m *mockPublishPubSub) Publish(ctx context.Context, req *pubsub.PublishRequ
 
 // BulkPublish is a mock bulk publish method returning a success all the time.
 func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	res := pubsub.BulkPublishResponse{}
-
-	for _, entry := range req.Entries {
-		e := pubsub.BulkPublishResponseEntry{
-			EntryId: entry.EntryId,
-			Status:  pubsub.PublishSucceeded,
-			Error:   nil,
-		}
-		res.Statuses = append(res.Statuses, e)
-	}
-	return res, nil
+	return pubsub.BulkPublishResponse{}, nil
 }
 
 func (m *mockPublishPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
