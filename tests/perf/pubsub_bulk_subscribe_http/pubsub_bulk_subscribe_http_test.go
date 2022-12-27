@@ -32,7 +32,6 @@ import (
 
 const (
 	numHealthChecks = 60 // Number of times to check for endpoint health per app.
-	numberOfActors  = 100
 	testAppName     = "testapp"
 	bulkTestAppName = "testapp-bulk"
 	testLabel       = "pubsub_bulk_subscribe_http"

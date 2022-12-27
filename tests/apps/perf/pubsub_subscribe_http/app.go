@@ -16,22 +16,25 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 const (
-	pubSubName  = "kafka-messagebus"
-	topic       = "perf-test"
-	route       = "perf-test"
-	numMessages = 100
+	pubSubName = "kafka-messagebus"
+	topic      = "perf-test"
+	route      = "perf-test"
 )
+
+var numMessages = 100
 
 var upgrader = websocket.Upgrader{}
 
 // messagesCh contains the number of messages received
-var messagesCh = make(chan int, 100)
+var messagesCh chan int
 
 // notifyCh is used to notify completion of receiving messages
 var notifyCh = make(chan struct{})
@@ -74,6 +77,18 @@ func notify(msgRecvCh chan int, notifySendCh chan struct{}) {
 }
 
 func main() {
+	val, ok := os.LookupEnv("TEST_NUM_MESSAGES")
+	if ok {
+		ival, err := strconv.Atoi(val)
+		if err != nil {
+			log.Printf("warning: error parsing TEST_NUM_MESSAGES: %s, falling back to: %d", err, numMessages)
+		} else {
+			numMessages = ival
+		}
+	}
+
+	messagesCh = make(chan int, numMessages)
+
 	go notify(messagesCh, notifyCh)
 
 	http.HandleFunc("/dapr/subscribe", subscribeHandler)
