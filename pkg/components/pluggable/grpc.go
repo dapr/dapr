@@ -58,10 +58,10 @@ func unaryErrorConverterInterceptor(errorsConverters ErrorsConverters) grpc.Unar
 
 type GRPCConnectionDialer func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error)
 
-// MapErrors return a new connection dialer that adds a mapping errors interceptor into it.
-func (g GRPCConnectionDialer) MapErrors(converrters ErrorsConverters) GRPCConnectionDialer {
+// MapErrors returns a new connection dialer that adds a mapping errors interceptor into it.
+func (g GRPCConnectionDialer) MapErrors(converters ErrorsConverters) GRPCConnectionDialer {
 	return func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-		return g(ctx, name, append(opts, grpc.WithChainUnaryInterceptor(unaryErrorConverterInterceptor(converrters)))...)
+		return g(ctx, name, append(opts, grpc.WithChainUnaryInterceptor(unaryErrorConverterInterceptor(converters)))...)
 	}
 }
 

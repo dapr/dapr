@@ -594,7 +594,7 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 
-		st := status.New(GRPCCodeBulkDeleteRowMismatchError, "fake-err-msg")
+		st := status.New(GRPCCodeBulkDeleteRowMismatch, "fake-err-msg")
 		br := &errdetails.ErrorInfo{}
 		br.Metadata = map[string]string{
 			affectedRowsMetadataKey: "100",

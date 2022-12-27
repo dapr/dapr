@@ -42,9 +42,9 @@ var (
 
 // errors code
 var (
-	GRPCCodeETagMismatch               = codes.FailedPrecondition
-	GRPCCodeETagInvalid                = codes.InvalidArgument
-	GRPCCodeBulkDeleteRowMismatchError = codes.Internal
+	GRPCCodeETagMismatch          = codes.FailedPrecondition
+	GRPCCodeETagInvalid           = codes.InvalidArgument
+	GRPCCodeBulkDeleteRowMismatch = codes.Internal
 )
 
 const (
@@ -97,7 +97,7 @@ var etagErrorsConverters = pluggable.MethodErrorConverter{
 }
 
 var bulkDeleteErrors = pluggable.MethodErrorConverter{
-	GRPCCodeBulkDeleteRowMismatchError: func(s status.Status) error {
+	GRPCCodeBulkDeleteRowMismatch: func(s status.Status) error {
 		details := s.Details()
 		if len(details) != 1 {
 			return s.Err()

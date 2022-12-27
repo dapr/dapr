@@ -23,12 +23,12 @@ import (
 type ErrorConverter func(status.Status) error
 
 // Compose together two errors converters by applying the inner first and if the error was not converted, then it applies to the outer.
-func (e ErrorConverter) Compose(other ErrorConverter) ErrorConverter {
+func (outer ErrorConverter) Compose(inner ErrorConverter) ErrorConverter {
 	return func(s status.Status) error {
-		err := other(s)
+		err := inner(s)
 		st, ok := status.FromError(err)
 		if ok {
-			return e(*st)
+			return outer(*st)
 		}
 		return err
 	}
