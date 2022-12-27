@@ -45,7 +45,7 @@ func TestGRPCConnector(t *testing.T) {
 		return
 	}
 
-	t.Run("grpc connection should be idle or transient-failure when the process is listening to the socket", func(t *testing.T) {
+	t.Run("grpc connection should be idle or ready when the process is listening to the socket due to withblock usage", func(t *testing.T) {
 		fakeFactoryCalled := 0
 		clientFake := &fakeClient{}
 		fakeFactory := func(grpc.ClientConnInterface) *fakeClient {
@@ -55,13 +55,13 @@ func TestGRPCConnector(t *testing.T) {
 		connector := NewGRPCConnector("/tmp/socket.sock", fakeFactory)
 		require.NoError(t, connector.Dial(""))
 		acceptedStatus := []connectivity.State{
-			connectivity.TransientFailure,
+			connectivity.Ready,
 			connectivity.Idle,
 		}
 
 		assert.Contains(t, acceptedStatus, connector.conn.GetState())
 		assert.Equal(t, 1, fakeFactoryCalled)
-		assert.Equal(t, int64(1), clientFake.pingCalled.Load())
+		assert.Equal(t, int64(0), clientFake.pingCalled.Load())
 		connector.Close()
 	})
 
