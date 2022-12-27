@@ -36,11 +36,11 @@ type GRPCClient interface {
 	Ping(ctx context.Context, in *proto.PingRequest, opts ...grpc.CallOption) (*proto.PingResponse, error)
 }
 
-// unaryErrorMappingInterceptor receives a target method and a mapping error that will be used to map from grpc errors to business level errors.
-func unaryErrorMappingInterceptor(errorsMapping ErrorsMapping) grpc.UnaryClientInterceptor {
+// unaryErrorConverterInterceptor receives a target method and a mapping error that will be used to map from grpc errors to business level errors.
+func unaryErrorConverterInterceptor(errorsConverters ErrorsConverters) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		err := invoker(ctx, method, req, reply, cc, opts...)
-		mapping, ok := errorsMapping[method]
+		converters, ok := errorsConverters[method]
 		if !ok {
 			return err
 		}
@@ -48,20 +48,20 @@ func unaryErrorMappingInterceptor(errorsMapping ErrorsMapping) grpc.UnaryClientI
 		if !ok {
 			return err
 		}
-		mapper, ok := mapping[s.Code()]
+		convert, ok := converters[s.Code()]
 		if !ok {
 			return err
 		}
-		return mapper(*s)
+		return convert(*s)
 	}
 }
 
 type GRPCConnectionDialer func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error)
 
 // MapErrors return a new connection dialer that adds a mapping errors interceptor into it.
-func (g GRPCConnectionDialer) MapErrors(mapping ErrorsMapping) GRPCConnectionDialer {
+func (g GRPCConnectionDialer) MapErrors(converrters ErrorsConverters) GRPCConnectionDialer {
 	return func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-		return g(ctx, name, append(opts, grpc.WithChainUnaryInterceptor(unaryErrorMappingInterceptor(mapping)))...)
+		return g(ctx, name, append(opts, grpc.WithChainUnaryInterceptor(unaryErrorConverterInterceptor(converrters)))...)
 	}
 }
 

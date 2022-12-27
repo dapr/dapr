@@ -967,7 +967,7 @@ func TestTargetErrorsMethodsShouldExists(t *testing.T) {
 		methodMap[fmt.Sprintf("/%s/%s", proto.StateStore_ServiceDesc.ServiceName, method.MethodName)] = true
 	}
 
-	for targetMethod := range errorsMapping {
+	for targetMethod := range errorsConverters {
 		assert.Contains(t, methodMap, targetMethod)
 	}
 }

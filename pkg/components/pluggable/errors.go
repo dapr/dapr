@@ -20,30 +20,49 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// MethodErrorMapping represents a simple map that maps from a grpc statuscode to a domain-level error.
-type MethodErrorMapping map[codes.Code]func(status.Status) error
+type ErrorConverter func(status.Status) error
 
-func (m MethodErrorMapping) Merge(other MethodErrorMapping) MethodErrorMapping {
-	n := MethodErrorMapping{}
+// Compose together two errors converters by applying the inner first and if the error was not converted, then it applies to the outer.
+func (e ErrorConverter) Compose(other ErrorConverter) ErrorConverter {
+	return func(s status.Status) error {
+		err := other(s)
+		st, ok := status.FromError(err)
+		if ok {
+			return e(*st)
+		}
+		return err
+	}
+}
+
+// MethodErrorConverter represents a simple map that maps from a grpc statuscode to a domain-level error.
+type MethodErrorConverter map[codes.Code]ErrorConverter
+
+func (m MethodErrorConverter) Merge(other MethodErrorConverter) MethodErrorConverter {
+	n := MethodErrorConverter{}
 
 	for k, v := range m {
 		n[k] = v
 	}
 
 	for k, v := range other {
-		n[k] = v
+		converter, ok := n[k]
+		if !ok {
+			n[k] = v
+		} else { // compose converter in case of two errors has the same grpc status code.
+			n[k] = converter.Compose(v)
+		}
 	}
 	return n
 }
 
-// ErrorMapping represents a simple map that maps from a method name to all grpc statuscode to a domain-level error.
-type ErrorsMapping map[string]MethodErrorMapping
+// ErrorsConverters represents a simple map that maps from a method name to all grpc statuscode to a domain-level error.
+type ErrorsConverters map[string]MethodErrorConverter
 
-// NewErrorsMapping create a new error mapping for the given protoref.
-func NewErrorsMapping(protoRef string, m map[string]MethodErrorMapping) ErrorsMapping {
-	prefixed := ErrorsMapping{}
-	for method, mapping := range m {
-		prefixed[fmt.Sprintf("/%s/%s", protoRef, method)] = mapping
+// NewErrorsConverter create a new error converters for the given protoref.
+func NewErrorsConverter(protoRef string, m map[string]MethodErrorConverter) ErrorsConverters {
+	prefixed := ErrorsConverters{}
+	for method, methodConverter := range m {
+		prefixed[fmt.Sprintf("/%s/%s", protoRef, method)] = methodConverter
 	}
 	return prefixed
 }

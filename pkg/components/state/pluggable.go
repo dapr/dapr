@@ -79,7 +79,7 @@ func etagErrFromStatus(s status.Status) (error, bool) {
 	return errors.New(maybeETagViolation.GetDescription()), true
 }
 
-var etagErrorsMapping = pluggable.MethodErrorMapping{
+var etagErrorsConverters = pluggable.MethodErrorConverter{
 	GRPCCodeETagInvalid: func(s status.Status) error {
 		sourceErr, ok := etagErrFromStatus(s)
 		if !ok {
@@ -96,7 +96,7 @@ var etagErrorsMapping = pluggable.MethodErrorMapping{
 	},
 }
 
-var bulkDeleteErrors = pluggable.MethodErrorMapping{
+var bulkDeleteErrors = pluggable.MethodErrorConverter{
 	GRPCCodeBulkDeleteRowMismatchError: func(s status.Status) error {
 		details := s.Details()
 		if len(details) != 1 {
@@ -132,11 +132,11 @@ var bulkDeleteErrors = pluggable.MethodErrorMapping{
 	},
 }
 
-var errorsMapping = pluggable.NewErrorsMapping(proto.StateStore_ServiceDesc.ServiceName, map[string]pluggable.MethodErrorMapping{
-	"Set":        etagErrorsMapping,
-	"Delete":     etagErrorsMapping,
-	"BulkSet":    etagErrorsMapping,
-	"BulkDelete": etagErrorsMapping.Merge(bulkDeleteErrors),
+var errorsConverters = pluggable.NewErrorsConverter(proto.StateStore_ServiceDesc.ServiceName, map[string]pluggable.MethodErrorConverter{
+	"Set":        etagErrorsConverters,
+	"Delete":     etagErrorsConverters,
+	"BulkSet":    etagErrorsConverters,
+	"BulkDelete": etagErrorsConverters.Merge(bulkDeleteErrors),
 })
 
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
@@ -557,20 +557,20 @@ func fromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[stateStor
 	}
 }
 
-// useErrorsMapping receives a grpc connection dialer and apply the errors mapping intercetor to the target methods
-func useErrorsMapping(dialer pluggable.GRPCConnectionDialer) pluggable.GRPCConnectionDialer {
-	return dialer.MapErrors(errorsMapping)
+// useErrorsConverters receives a grpc connection dialer and apply the errors converters intercetor to the target methods
+func useErrorsConverters(dialer pluggable.GRPCConnectionDialer) pluggable.GRPCConnectionDialer {
+	return dialer.MapErrors(errorsConverters)
 }
 
 // NewGRPCStateStore creates a new grpc state store using the given socket factory.
 func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
-	return fromConnector(l, pluggable.NewGRPCConnectorUseDialer(socket, newStateStoreClient, useErrorsMapping))
+	return fromConnector(l, pluggable.NewGRPCConnectorUseDialer(socket, newStateStoreClient, useErrorsConverters))
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
 func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) state.Store {
 	return func(l logger.Logger) state.Store {
-		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(useErrorsMapping(dialer), newStateStoreClient))
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(useErrorsConverters(dialer), newStateStoreClient))
 	}
 }
 
