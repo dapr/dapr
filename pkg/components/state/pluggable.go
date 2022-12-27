@@ -43,8 +43,7 @@ var (
 	GRPCCodeETagInvalid  = codes.InvalidArgument
 )
 
-// errors mapping
-var mapping = pluggable.ErrorMapping{
+var etagErrorsMapping = pluggable.MethodErrorMapping{
 	GRPCCodeETagInvalid: func(s status.Status) error {
 		return state.NewETagError(state.ETagInvalid, s.Err())
 	},
@@ -53,13 +52,12 @@ var mapping = pluggable.ErrorMapping{
 	},
 }
 
-// targetMethods that should be used for mapping errors.
-var targetMethods = []string{
-	"Set",
-	"Delete",
-	"BulkSet",
-	"BulkDelete",
-}
+var errorsMapping = pluggable.NewErrorsMapping(proto.StateStore_ServiceDesc.ServiceName, map[string]pluggable.MethodErrorMapping{
+	"Set":        etagErrorsMapping,
+	"Delete":     etagErrorsMapping,
+	"BulkSet":    etagErrorsMapping,
+	"BulkDelete": etagErrorsMapping,
+})
 
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
 type grpcStateStore struct {
@@ -481,7 +479,7 @@ func fromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[stateStor
 
 // useErrorsMapping receives a grpc connection dialer and apply the errors mapping intercetor to the target methods
 func useErrorsMapping(dialer pluggable.GRPCConnectionDialer) pluggable.GRPCConnectionDialer {
-	return mapping.ForMethod(dialer, proto.StateStore_ServiceDesc.ServiceName, targetMethods...)
+	return dialer.MapErrors(errorsMapping)
 }
 
 // NewGRPCStateStore creates a new grpc state store using the given socket factory.

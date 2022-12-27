@@ -37,30 +37,31 @@ type GRPCClient interface {
 }
 
 // unaryErrorMappingInterceptor receives a target method and a mapping error that will be used to map from grpc errors to business level errors.
-func unaryErrorMappingInterceptor(targetMethod string, mapping ErrorMapping) grpc.UnaryClientInterceptor {
+func unaryErrorMappingInterceptor(errorsMapping ErrorsMapping) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		err := invoker(ctx, method, req, reply, cc, opts...)
-		if targetMethod != method {
+		mapping, ok := errorsMapping[method]
+		if !ok {
 			return err
 		}
 		s, ok := status.FromError(err)
 		if !ok {
 			return err
 		}
-		mapping, ok := mapping[s.Code()]
+		mapper, ok := mapping[s.Code()]
 		if !ok {
 			return err
 		}
-		return mapping(*s)
+		return mapper(*s)
 	}
 }
 
 type GRPCConnectionDialer func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error)
 
 // MapErrors return a new connection dialer that adds a mapping errors interceptor into it.
-func (g GRPCConnectionDialer) MapErrors(method string, mapping ErrorMapping) GRPCConnectionDialer {
+func (g GRPCConnectionDialer) MapErrors(mapping ErrorsMapping) GRPCConnectionDialer {
 	return func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-		return g(ctx, name, append(opts, grpc.WithChainUnaryInterceptor(unaryErrorMappingInterceptor(method, mapping)))...)
+		return g(ctx, name, append(opts, grpc.WithChainUnaryInterceptor(unaryErrorMappingInterceptor(mapping)))...)
 	}
 }
 

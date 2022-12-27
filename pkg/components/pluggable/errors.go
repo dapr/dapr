@@ -20,14 +20,30 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ErrorMapping represents a simple map that maps from a grpc statuscode to a domain-level error.
-type ErrorMapping map[codes.Code]func(status.Status) error
+// MethodErrorMapping represents a simple map that maps from a grpc statuscode to a domain-level error.
+type MethodErrorMapping map[codes.Code]func(status.Status) error
 
-// ForMethod apply the error mapping using the dialer for the given methods.
-func (e ErrorMapping) ForMethod(dialer GRPCConnectionDialer, protoRef string, methods ...string) GRPCConnectionDialer {
-	nDialer := dialer
-	for _, method := range methods {
-		nDialer = nDialer.MapErrors(fmt.Sprintf("/%s/%s", protoRef, method), e)
+func (m MethodErrorMapping) Merge(other MethodErrorMapping) MethodErrorMapping {
+	n := MethodErrorMapping{}
+
+	for k, v := range m {
+		n[k] = v
 	}
-	return nDialer
+
+	for k, v := range other {
+		n[k] = v
+	}
+	return n
+}
+
+// ErrorMapping represents a simple map that maps from a method name to all grpc statuscode to a domain-level error.
+type ErrorsMapping map[string]MethodErrorMapping
+
+// NewErrorsMapping create a new error mapping for the given protoref.
+func NewErrorsMapping(protoRef string, m map[string]MethodErrorMapping) ErrorsMapping {
+	prefixed := ErrorsMapping{}
+	for method, mapping := range m {
+		prefixed[fmt.Sprintf("/%s/%s", protoRef, method)] = mapping
+	}
+	return prefixed
 }

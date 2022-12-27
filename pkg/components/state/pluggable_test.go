@@ -914,8 +914,7 @@ func TestTargetErrorsMethodsShouldExists(t *testing.T) {
 		methodMap[method.MethodName] = true
 	}
 
-	for _, targetMethod := range targetMethods {
-		_, ok := methodMap[targetMethod]
-		assert.True(t, ok)
+	for targetMethod := range errorsMapping {
+		assert.Contains(t, methodMap, targetMethod)
 	}
 }
