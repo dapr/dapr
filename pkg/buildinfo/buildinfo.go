@@ -11,14 +11,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package version
+package buildinfo
+
+import (
+	"strings"
+)
 
 // Values for these are injected by the build.
 var (
 	version = "edge"
 
 	gitcommit, gitversion string
+	features              string
+	featuresSlice         []string
 )
+
+func init() {
+	// At initialization, parse the value of "features" into a slice
+	if features == "" {
+		featuresSlice = []string{}
+	} else {
+		featuresSlice = strings.Split(features, ",")
+	}
+	features = ""
+}
 
 // Version returns the Dapr version. This is either a semantic version
 // number or else, in the case of unreleased code, the string "edge".
@@ -34,4 +50,9 @@ func Commit() string {
 // GitVersion returns the git version for the code that Dapr was built from.
 func GitVersion() string {
 	return gitversion
+}
+
+// Features returns the list of features enabled for this build.
+func Features() []string {
+	return featuresSlice
 }

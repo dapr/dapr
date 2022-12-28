@@ -285,7 +285,6 @@ func (f *fakeStateStore) Multi(ctx context.Context, request *state.Transactional
 type runtimeBuilder struct {
 	appChannel     channel.AppChannel
 	config         *Config
-	featureSpec    []config.FeatureSpec
 	actorStore     state.Store
 	actorStoreName string
 }
@@ -307,10 +306,6 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		b.config = &config
 	}
 
-	if b.featureSpec == nil {
-		b.featureSpec = []config.FeatureSpec{}
-	}
-
 	tracingSpec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	storeName := "actorStore"
@@ -324,7 +319,6 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		AppChannel:     b.appChannel,
 		Config:         *b.config,
 		TracingSpec:    tracingSpec,
-		Features:       b.featureSpec,
 		Resiliency:     resiliency.FromConfigurations(log, testResiliency),
 		StateStoreName: storeName,
 	})
@@ -414,7 +408,6 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 		AppChannel:     appChannel,
 		Config:         c,
 		TracingSpec:    spec,
-		Features:       []config.FeatureSpec{},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
 	})
@@ -2200,9 +2193,8 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2232,9 +2224,8 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2264,9 +2255,8 @@ func TestReentrancyStackLimit(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2299,9 +2289,8 @@ func TestReentrancyPerActor(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2339,9 +2328,8 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime

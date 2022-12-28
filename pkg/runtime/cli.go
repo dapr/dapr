@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
@@ -41,7 +42,6 @@ import (
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -111,12 +111,12 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if *runtimeVersion {
-		fmt.Println(version.Version())
+		fmt.Println(buildinfo.Version())
 		os.Exit(0)
 	}
 
 	if *buildInfo {
-		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", version.Version(), version.Commit(), version.GitVersion())
+		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", buildinfo.Version(), buildinfo.Commit(), buildinfo.GitVersion())
 		os.Exit(0)
 	}
 
@@ -137,7 +137,7 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	// Initialize dapr metrics exporter
@@ -363,13 +363,18 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
 
+	globalConfig.LoadFeatures()
+	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
+		log.Info("Enabled features: " + strings.Join(enabledFeatures, " "))
+	}
+
 	// TODO: Remove once AppHealthCheck feature is finalized
-	if !daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
+	if !globalConfig.IsFeatureEnabled(daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
 		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
 		runtimeConfig.AppHealthCheck = nil
 	}
 
-	resiliencyEnabled := daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.Resiliency)
+	resiliencyEnabled := globalConfig.IsFeatureEnabled(daprGlobalConfig.Resiliency)
 	var resiliencyProvider resiliencyConfig.Provider
 
 	if resiliencyEnabled {
