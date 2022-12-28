@@ -15,46 +15,53 @@ import http from "k6/http";
 import { check } from "k6";
 import crypto from "k6/crypto";
 
-const KB = 1024
-const toString = (bytes) => {
-    var result = '';
-    for (var i = 0; i < bytes.length; ++i) {
-        const byte = bytes[i];
-        const text = byte.toString(16);
-        result += (byte < 16 ? '%0' : '%') + text;
-    }
-    return decodeURIComponent(result);
-};
+const KB = 1000
+// padd with leading 0 if <16
+function i2hex(i) {
+    return ('0' + i.toString(16)).slice(-2);
+}
+
+function randomStringOfSize(size) {
+    const bytes = crypto.randomBytes(size);
+    const view = new Uint8Array(bytes);
+    return view.reduce(function (memo, i) { return memo + i2hex(i) }, '')
+}
 
 const scenarioBase = {
     executor: "constant-arrival-rate",
     rate: 1,
     preAllocatedVUs: 1,
 }
-const delaysMs = [50, 1000, 5000, 10000]
+const delaysMs = [1, 5, 50, 100, 1000]
 const messageSizeKb = [2, 31]
 const brokers = __ENV.BROKERS.split(",")
 const samples = [200]
 
 let scenarios = {}
+let thresholds = {
+    checks: ['rate==1'],
+}
 
-for (const delayMsIdx in delaysMs) {
-    const delay = delaysMs[delayMsIdx]
-    for (const messageSizeKbIdx in messageSizeKb) {
-        const msgSize = messageSizeKb[messageSizeKbIdx]
+for (const messageSizeKbIdx in messageSizeKb) {
+    const msgSize = messageSizeKb[messageSizeKbIdx]
+    const msgStr = randomStringOfSize(msgSize * KB)
+    for (const delayMsIdx in delaysMs) {
+        const delay = delaysMs[delayMsIdx]
         for (const brokerIdx in brokers) {
             const broker = brokers[brokerIdx]
             for (const sampleIdx in samples) {
                 const sample = samples[sampleIdx]
-                const msgBytes = crypto.randomBytes(msgSize * KB);
-                scenarios[`${delay}ms_${msgSize}kb_${broker}_${sample}`] = Object.assign(
+                const scenario = `${delay}ms_${msgSize}kb_${broker}_${sample}`
+                thresholds[`http_req_duration{scenario:${scenario}}`] = ['avg<7.5']
+                scenarios[scenario] = Object.assign(
                     scenarioBase,
                     {
                         timeUnit: `${delay}ms`,
                         duration: `${delay * sample}ms`,
                         env: {
-                            MSG: toString(msgBytes),
+                            MSG: msgStr,
                             BROKER: broker,
+                            TOPIC: "my-topic"
                         }
                     })
             }
@@ -64,10 +71,7 @@ for (const delayMsIdx in delaysMs) {
 
 export const options = {
     discardResponseBodies: true,
-    thresholds: {
-        checks: ['rate==1'],
-        http_req_duration: ['avg<5'], // avg of requests should be below 1ms
-    },
+    thresholds,
     scenarios,
 };
 
@@ -80,7 +84,7 @@ function publishRawMsg(broker, topic, msg) {
     );
 }
 export default function () {
-    const result = publishRawMsg(__ENV.BROKER, __ENV.MSG, __ENV.TOPIC);
+    const result = publishRawMsg(__ENV.BROKER, __ENV.TOPIC, __ENV.MSG);
     check(result, {
         "response code was 2xx": (result) => result.status >= 200 && result.status < 300,
     })

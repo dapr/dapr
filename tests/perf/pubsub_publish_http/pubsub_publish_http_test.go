@@ -41,7 +41,7 @@ const (
 
 var brokers = []kube.ComponentDescription{
 	{
-		Name:      "redis-p6-broker",
+		Name:      "redis-broker",
 		Namespace: &kube.DaprTestNamespace,
 		TypeName:  "pubsub.redis",
 		MetaData: map[string]kube.MetadataValue{
@@ -58,7 +58,7 @@ var brokers = []kube.ComponentDescription{
 		Scopes: []string{k6AppName},
 	},
 	{
-		Name:      "kafka-p6-broker",
+		Name:      "kafka-broker",
 		Namespace: &kube.DaprTestNamespace,
 		TypeName:  "pubsub.kafka",
 		MetaData: map[string]kube.MetadataValue{
@@ -92,11 +92,11 @@ func TestMain(m *testing.M) {
 }
 
 func TestPubsubPublishHttpPerformance(t *testing.T) {
-	k6Test := loadtest.NewK6("./test.js", loadtest.WithName(k6AppName), loadtest.WithParallelism(1), loadtest.WithRunnerEnvVar(brokersEnvVar, brokersNames))
+	k6Test := loadtest.NewK6("./test.js", loadtest.WithAppID(k6AppName), loadtest.WithName(k6AppName), loadtest.WithParallelism(1), loadtest.WithRunnerEnvVar(brokersEnvVar, brokersNames))
 	defer k6Test.Dispose()
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
-	summary, err := loadtest.K6ResultDefault(k6Test)
+	summary, err := loadtest.K6Result[json.RawMessage](k6Test)
 	require.NoError(t, err)
 	require.NotNil(t, summary)
 	bts, err := json.MarshalIndent(summary, "", " ")
