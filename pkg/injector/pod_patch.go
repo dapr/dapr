@@ -101,15 +101,6 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	// Projected volume with the token
 	tokenVolume := sidecar.GetTokenVolume()
 
-	// Pod annotations
-	podPatchOps := []common.PatchOperation{
-		{
-			Op:    "add",
-			Path:  patchPathAnnotations,
-			Value: i.config.GetAppPodAnnotations(),
-		},
-	}
-
 	// Get the sidecar container
 	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 		AppID:                        appID,
@@ -146,6 +137,16 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		})
 	}
 
+	// Pod annotations
+	podAnnotations := i.config.GetAppPodAnnotations()
+	if len(podAnnotations) > 0 {
+		patchOps = append(patchOps, common.PatchOperation{
+			Op:    "add",
+			Path:  patchPathAnnotations,
+			Value: podAnnotations,
+		})
+	}
+
 	patchOps = append(patchOps, common.PatchOperation{
 		Op:    "add",
 		Path:  sidecar.PatchPathContainers + "/-",
@@ -162,7 +163,6 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	)
 	patchOps = append(patchOps, volumePatchOps...)
 	patchOps = append(patchOps, componentPatchOps...)
-	patchOps = append(patchOps, podPatchOps...)
 
 	return patchOps, nil
 }
