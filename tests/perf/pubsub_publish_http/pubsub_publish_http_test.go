@@ -41,36 +41,11 @@ const (
 
 var brokers = []kube.ComponentDescription{
 	{
-		Name:      "redis-broker",
+		Name:      "memory-broker",
 		Namespace: &kube.DaprTestNamespace,
-		TypeName:  "pubsub.redis",
-		MetaData: map[string]kube.MetadataValue{
-			"redisHost": {
-				FromSecretRef: &kube.SecretRef{
-					Name: "redissecret",
-					Key:  "host",
-				},
-			},
-			"redisPassword": {Raw: `""`},
-			"consumerID":    {Raw: `"myGroup"`},
-			"enableTLS":     {Raw: `"false"`},
-		},
-		Scopes: []string{k6AppName},
-	},
-	{
-		Name:      "kafka-broker",
-		Namespace: &kube.DaprTestNamespace,
-		TypeName:  "pubsub.kafka",
-		MetaData: map[string]kube.MetadataValue{
-			"brokers":              {Raw: `"dapr-kafka:9092"`},
-			"authType":             {Raw: `"none"`},
-			"maxMessageBytes":      {Raw: `"1000000"`},
-			"consumeRetryInterval": {Raw: `"200ms"`},
-			"disableTls":           {Raw: `"true"`},
-			"skipVerify":           {Raw: `"true"`},
-			"initialOffset":        {Raw: `"oldest"`},
-		},
-		Scopes: []string{k6AppName},
+		TypeName:  "pubsub.in-memory",
+		MetaData:  map[string]kube.MetadataValue{},
+		Scopes:    []string{k6AppName},
 	},
 }
 

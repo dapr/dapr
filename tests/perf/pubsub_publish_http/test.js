@@ -16,6 +16,7 @@ import { check } from "k6";
 import crypto from "k6/crypto";
 
 const KB = 1000
+const MAX_MS_ALLOWED = 1
 // padd with leading 0 if <16
 function i2hex(i) {
     return ('0' + i.toString(16)).slice(-2);
@@ -53,7 +54,7 @@ for (const messageSizeKbIdx in messageSizeKb) {
             for (const sampleIdx in samples) {
                 const sample = samples[sampleIdx]
                 const scenario = `${delay}ms_${msgSize}kb_${broker}_${sample}`
-                thresholds[`http_req_duration{scenario:${scenario}}`] = ['avg<7.5']
+                thresholds[`http_req_duration{scenario:${scenario}}`] = [`avg<${MAX_MS_ALLOWED}`]
                 scenarios[scenario] = Object.assign(
                     scenarioBase,
                     {
