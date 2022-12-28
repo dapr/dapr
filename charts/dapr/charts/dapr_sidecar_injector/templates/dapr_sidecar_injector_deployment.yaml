@@ -144,7 +144,7 @@ spec:
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
           value: "{{ .Values.sidecarReadOnlyRootFilesystem }}"
 {{- end }}
-{{ if .Values.appPodAnnotations }}
+{{- if .Values.appPodAnnotations }}
         - name: APP_POD_ANNOTATIONS
           value: "{{ .Values.appPodAnnotations }}"
 {{- end }}
