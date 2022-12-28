@@ -188,3 +188,51 @@ func TestTolerationsParsing(t *testing.T) {
 		})
 	}
 }
+
+func TestParseAppPodAnnotations(t *testing.T) {
+	testCases := []struct {
+		name   string
+		expect map[string]string
+		input  string
+	}{
+		{
+			"empty annotations",
+			map[string]string{},
+			"",
+		},
+		{
+			"single annotation",
+			map[string]string{
+				"foo.com/bar": "baz",
+			},
+			`{"foo.com/bar":"baz"}`,
+		},
+		{
+			"multiple annotations",
+			map[string]string{
+				"foo.com/bar": "baz",
+				"foo.com/baz": "bar",
+			},
+			`{"foo.com/bar":"baz","foo.com/baz":"bar"}`,
+		},
+		{
+			"invalid JSON",
+			map[string]string{},
+			`hi`,
+		},
+		{
+			"invalid JSON structure",
+			map[string]string{},
+			`{}`,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Config{
+				AppPodAnnotations: tc.input,
+			}
+			c.parseAppPodAnnotations()
+			assert.EqualValues(t, tc.expect, c.GetAppPodAnnotations())
+		})
+	}
+}

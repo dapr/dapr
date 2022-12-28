@@ -25,6 +25,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/common"
 	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/pkg/validation"
@@ -33,11 +34,13 @@ import (
 const (
 	defaultConfig      = "daprsystem"
 	defaultMtlsEnabled = true
+
+	patchPathAnnotations = "/metadata/annotations"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
-) (patchOps []sidecar.PatchOperation, err error) {
+) (patchOps []common.PatchOperation, err error) {
 	req := ar.Request
 	var pod corev1.Pod
 	err = json.Unmarshal(req.Object.Raw, &pod)
@@ -99,10 +102,10 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	tokenVolume := sidecar.GetTokenVolume()
 
 	// Pod annotations
-	podPatchOps := []sidecar.PatchOperation{
+	podPatchOps := []common.PatchOperation{
 		{
 			Op:    "add",
-			Path:  sidecar.PatchPathAnnotations,
+			Path:  patchPathAnnotations,
 			Value: i.config.GetAppPodAnnotations(),
 		},
 	}
@@ -134,16 +137,16 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 
 	// Create the list of patch operations
-	patchOps = []sidecar.PatchOperation{}
+	patchOps = []common.PatchOperation{}
 	if len(pod.Spec.Containers) == 0 { // set to empty to support add operations individually
-		patchOps = append(patchOps, sidecar.PatchOperation{
+		patchOps = append(patchOps, common.PatchOperation{
 			Op:    "add",
 			Path:  sidecar.PatchPathContainers,
 			Value: []corev1.Container{},
 		})
 	}
 
-	patchOps = append(patchOps, sidecar.PatchOperation{
+	patchOps = append(patchOps, common.PatchOperation{
 		Op:    "add",
 		Path:  sidecar.PatchPathContainers + "/-",
 		Value: sidecarContainer,

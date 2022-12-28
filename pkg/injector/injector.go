@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/injector/common"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/utils"
@@ -226,7 +227,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var patchOps []sidecar.PatchOperation
+	var patchOps []common.PatchOperation
 	patchedSuccessfully := false
 
 	ar := v1.AdmissionReview{}

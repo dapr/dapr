@@ -175,6 +175,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 | `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |
 | `dapr_sidecar_injector.ignoreEntrypointTolerations` | JSON array of Kubernetes tolerations. If pod contains any of these tolerations, it will ignore the Docker image ENTRYPOINT for Dapr sidecar. | `[{\"effect\":\"NoSchedule\",\"key\":\"alibabacloud.com/eci\"},{\"effect\":\"NoSchedule\",\"key\":\"azure.com/aci\"},{\"effect\":\"NoSchedule\",\"key\":\"aws\"},{\"effect\":\"NoSchedule\",\"key\":\"huawei.com/cci\"}]` |
+| `dapr_sidecar_injector.appPodAnnotations` | JSON object of Kubernetes annotations to add to the application pod, e.g., `{\"foo\": \"bar\"}` | `{}` |
 | `dapr_sidecar_injector.hostNetwork` | Enable hostNetwork mode. This is helpful when working with overlay networks such as Calico CNI and admission webhooks fail | `false` |
 | `dapr_sidecar_injector.healthzPort` | The port used for health checks. Helpful in combination with hostNetwork to avoid port collisions | `8080` |
 

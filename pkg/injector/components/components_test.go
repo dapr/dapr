@@ -18,6 +18,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/common"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
 	"github.com/stretchr/testify/assert"
@@ -37,7 +38,7 @@ func TestComponentsPatch(t *testing.T) {
 		appID          string
 		componentsList []componentsapi.Component
 		pod            *corev1.Pod
-		expPatch       []sidecar.PatchOperation
+		expPatch       []common.PatchOperation
 		expMount       *corev1.VolumeMount
 	}{
 		{
@@ -52,7 +53,7 @@ func TestComponentsPatch(t *testing.T) {
 					Containers: []corev1.Container{appContainer},
 				},
 			},
-			[]sidecar.PatchOperation{},
+			[]common.PatchOperation{},
 			nil,
 		},
 		{
@@ -71,7 +72,7 @@ func TestComponentsPatch(t *testing.T) {
 					}},
 				},
 			},
-			[]sidecar.PatchOperation{
+			[]common.PatchOperation{
 				{
 					Op:    "add",
 					Path:  sidecar.PatchPathVolumes,
@@ -111,7 +112,7 @@ func TestComponentsPatch(t *testing.T) {
 					}},
 				},
 			},
-			[]sidecar.PatchOperation{
+			[]common.PatchOperation{
 				{
 					Op:    "add",
 					Path:  sidecar.PatchPathVolumes,
@@ -160,7 +161,7 @@ func TestComponentsPatch(t *testing.T) {
 					}},
 				},
 			},
-			[]sidecar.PatchOperation{
+			[]common.PatchOperation{
 				{
 					Op:    "add",
 					Path:  sidecar.PatchPathVolumes,
@@ -250,7 +251,7 @@ func TestComponentsPatch(t *testing.T) {
 					}},
 				},
 			},
-			[]sidecar.PatchOperation{
+			[]common.PatchOperation{
 				{
 					Op:    "add",
 					Path:  sidecar.PatchPathVolumes + "/-",

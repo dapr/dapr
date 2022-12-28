@@ -93,6 +93,9 @@ func (c *Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
 }
 
 func (c *Config) GetAppPodAnnotations() map[string]string {
+	if c.parsedAppPodAnnotations == nil {
+		return map[string]string{}
+	}
 	return c.parsedAppPodAnnotations
 }
 

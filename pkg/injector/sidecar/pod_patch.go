@@ -24,16 +24,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/common"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/kit/ptr"
 )
-
-// PatchOperation represents a discreet change to be applied to a Kubernetes resource.
-type PatchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
-}
 
 // DaprPortEnv contains the env vars that are set in containers to pass the ports used by Dapr.
 var DaprPortEnv = []corev1.EnvVar{
@@ -49,8 +43,8 @@ var DaprPortEnv = []corev1.EnvVar{
 
 // AddDaprEnvVarsToContainers adds Dapr environment variables to all the containers in any Dapr-enabled pod.
 // The containers can be injected or user-defined.
-func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []PatchOperation {
-	envPatchOps := make([]PatchOperation, 0, len(containers))
+func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []common.PatchOperation {
+	envPatchOps := make([]common.PatchOperation, 0, len(containers))
 	for i, container := range containers {
 		patchOps := GetEnvPatchOperations(container.Env, DaprPortEnv, i)
 		envPatchOps = append(envPatchOps, patchOps...)
@@ -60,11 +54,11 @@ func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []PatchOper
 
 // GetEnvPatchOperations adds new environment variables only if they do not exist.
 // It does not override existing values for those variables if they have been defined already.
-func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, containerIdx int) []PatchOperation {
+func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, containerIdx int) []common.PatchOperation {
 	path := fmt.Sprintf("%s/%d/env", PatchPathContainers, containerIdx)
 	if len(envs) == 0 {
 		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
-		return []PatchOperation{
+		return []common.PatchOperation{
 			{
 				Op:    "add",
 				Path:  path,
@@ -76,7 +70,7 @@ func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, contain
 	// If there are existing env vars, then we are adding to an existing slice of env vars.
 	path += "/-"
 
-	patchOps := make([]PatchOperation, len(addEnv))
+	patchOps := make([]common.PatchOperation, len(addEnv))
 	n := 0
 	for _, env := range addEnv {
 		isConflict := false
@@ -92,7 +86,7 @@ func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, contain
 			continue
 		}
 
-		patchOps[n] = PatchOperation{
+		patchOps[n] = common.PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: env,
@@ -103,17 +97,17 @@ func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, contain
 }
 
 // AddSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
-func AddSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
+func AddSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) []common.PatchOperation {
 	if socketVolumeMount == nil {
-		return []PatchOperation{}
+		return []common.PatchOperation{}
 	}
 
 	return addVolumeMountToContainers(containers, *socketVolumeMount)
 }
 
-func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
+func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts corev1.VolumeMount) []common.PatchOperation {
 	volumeMount := []corev1.VolumeMount{addMounts}
-	volumeMountPatchOps := make([]PatchOperation, 0, len(containers))
+	volumeMountPatchOps := make([]common.PatchOperation, 0, len(containers))
 	for i, container := range containers {
 		patchOps := GetVolumeMountPatchOperations(container.VolumeMounts, volumeMount, i)
 		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
@@ -122,11 +116,11 @@ func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts c
 }
 
 // GetVolumeMountPatchOperations gets the patch operations for volume mounts
-func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, containerIdx int) []PatchOperation {
+func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, containerIdx int) []common.PatchOperation {
 	path := fmt.Sprintf("%s/%d/volumeMounts", PatchPathContainers, containerIdx)
 	if len(volumeMounts) == 0 {
 		// If there are no volume mounts defined in the container, we initialize a slice of volume mounts.
-		return []PatchOperation{
+		return []common.PatchOperation{
 			{
 				Op:    "add",
 				Path:  path,
@@ -138,7 +132,7 @@ func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 	// If there are existing volume mounts, then we are adding to an existing slice of volume mounts.
 	path += "/-"
 
-	patchOps := make([]PatchOperation, len(addMounts))
+	patchOps := make([]common.PatchOperation, len(addMounts))
 	n := 0
 	for _, addMount := range addMounts {
 		isConflict := false
@@ -154,7 +148,7 @@ func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 			continue
 		}
 
-		patchOps[n] = PatchOperation{
+		patchOps[n] = common.PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: addMount,
@@ -167,8 +161,8 @@ func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 
 // AddServiceAccountTokenVolume adds the projected volume for the service account token to the daprd
 // The containers can be injected or user-defined.
-func AddServiceAccountTokenVolume(containers []corev1.Container) []PatchOperation {
-	envPatchOps := make([]PatchOperation, 0, len(containers))
+func AddServiceAccountTokenVolume(containers []corev1.Container) []common.PatchOperation {
+	envPatchOps := make([]common.PatchOperation, 0, len(containers))
 	for i, container := range containers {
 		patchOps := GetEnvPatchOperations(container.Env, DaprPortEnv, i)
 		envPatchOps = append(envPatchOps, patchOps...)
@@ -176,10 +170,10 @@ func AddServiceAccountTokenVolume(containers []corev1.Container) []PatchOperatio
 	return envPatchOps
 }
 
-func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) []PatchOperation {
+func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) []common.PatchOperation {
 	if len(volumes) == 0 {
 		// If there are no volumes defined in the container, we initialize a slice of volumes.
-		return []PatchOperation{
+		return []common.PatchOperation{
 			{
 				Op:    "add",
 				Path:  path,
@@ -191,7 +185,7 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 	// If there are existing volumes, then we are adding to an existing slice of volumes.
 	path += "/-"
 
-	patchOps := make([]PatchOperation, len(addVolumes))
+	patchOps := make([]common.PatchOperation, len(addVolumes))
 	n := 0
 	for _, addVolume := range addVolumes {
 		isConflict := false
@@ -207,7 +201,7 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 			continue
 		}
 
-		patchOps[n] = PatchOperation{
+		patchOps[n] = common.PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: addVolume,
