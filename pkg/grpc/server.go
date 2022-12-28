@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -23,7 +24,6 @@ import (
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/pkg/errors"
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -140,7 +140,7 @@ func (s *server) StartNonBlocking() error {
 	}
 
 	if len(listeners) == 0 {
-		return errors.Errorf("could not listen on any endpoint")
+		return errors.New("could not listen on any endpoint")
 	}
 
 	for _, listener := range listeners {
@@ -186,13 +186,13 @@ func (s *server) generateWorkloadCert() error {
 	s.logger.Info("sending workload csr request to sentry")
 	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
 	if err != nil {
-		return errors.Wrap(err, "error from authenticator CreateSignedWorkloadCert")
+		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %w", err)
 	}
 	s.logger.Info("certificate signed successfully")
 
 	tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 	if err != nil {
-		return errors.Wrap(err, "error creating x509 Key Pair")
+		return fmt.Errorf("error creating x509 Key Pair: %w", err)
 	}
 
 	s.signedCert = signedCert

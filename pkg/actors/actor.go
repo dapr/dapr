@@ -14,12 +14,10 @@ limitations under the License.
 package actors
 
 import (
+	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"go.uber.org/atomic"
-
-	"github.com/pkg/errors"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
@@ -91,7 +89,7 @@ func (a *actor) channel() chan struct{} {
 
 // lock holds the lock for turn-based concurrency.
 func (a *actor) lock(reentrancyID *string) error {
-	pending := a.pendingActorCalls.Inc()
+	pending := a.pendingActorCalls.Add(1)
 	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
 
 	err := a.actorLock.Lock(reentrancyID)
@@ -113,7 +111,7 @@ func (a *actor) lock(reentrancyID *string) error {
 // unlock releases the lock for turn-based concurrency. If disposeCh is available,
 // it will close the channel to notify runtime to dispose actor.
 func (a *actor) unlock() {
-	pending := a.pendingActorCalls.Dec()
+	pending := a.pendingActorCalls.Add(-1)
 	if pending == 0 {
 		func() {
 			a.disposeLock.Lock()
