@@ -30,7 +30,8 @@ function randomStringOfSize(size) {
 const scenarioBase = {
     executor: "constant-arrival-rate",
     rate: 1,
-    preAllocatedVUs: 1,
+    preAllocatedVUs: 2,
+    maxVUs: 50,
 }
 const delaysMs = [1, 5, 50, 100, 1000]
 const messageSizeKb = [2, 31]
