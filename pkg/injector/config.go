@@ -34,8 +34,10 @@ type Config struct {
 	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
 	RunAsNonRoot                string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
 	ReadOnlyRootFilesystem      string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
+	AppPodAnnotations           string `envconfig:"APP_POD_ANNOTATIONS"`
 
 	parsedEntrypointTolerations []corev1.Toleration
+	parsedAppPodAnnotations     map[string]string
 }
 
 // NewConfigWithDefaults returns a Config object with default values already
@@ -68,6 +70,7 @@ func GetConfig() (Config, error) {
 	}
 
 	c.parseTolerationsJSON()
+	c.parseAppPodAnnotations()
 
 	return c, nil
 }
@@ -87,6 +90,10 @@ func (c Config) GetPullPolicy() corev1.PullPolicy {
 
 func (c *Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
 	return c.parsedEntrypointTolerations
+}
+
+func (c *Config) GetAppPodAnnotations() map[string]string {
+	return c.parsedAppPodAnnotations
 }
 
 func (c *Config) GetRunAsNonRoot() bool {
@@ -119,4 +126,20 @@ func (c *Config) parseTolerationsJSON() {
 	}
 
 	c.parsedEntrypointTolerations = ts
+}
+
+func (c *Config) parseAppPodAnnotations() {
+	if c.AppPodAnnotations == "" {
+		return
+	}
+
+	// If the string contains an invalid value, log a warning and continue.
+	ts := map[string]string{}
+	err := json.Unmarshal([]byte(c.AppPodAnnotations), &ts)
+	if err != nil {
+		log.Warnf("couldn't parse app pod annotations (%s): %v", c.AppPodAnnotations, err)
+		return
+	}
+
+	c.parsedAppPodAnnotations = ts
 }
