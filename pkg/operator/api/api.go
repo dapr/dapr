@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"strconv"
 	"sync"
 	"time"
 
@@ -85,7 +84,7 @@ func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChai
 	s := grpc.NewServer(opts...)
 	operatorv1pb.RegisterOperatorServer(s, a)
 
-	lis, err := net.Listen("tcp", strconv.Itoa(serverPort))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
 	if err != nil {
 		log.Fatalf("error starting tcp listener: %v", err)
 	}
