@@ -13,51 +13,60 @@ limitations under the License.
 
 import http from "k6/http";
 import { check } from "k6";
-import crypto from 'k6/crypto';
+import crypto from "k6/crypto";
 
-const decoder = new TextDecoder('UTF-8');
 const KB = 1024
 const toString = (bytes) => {
-    const array = new Uint8Array(bytes);
-    return decoder.decode(array);
+    var result = '';
+    for (var i = 0; i < bytes.length; ++i) {
+        const byte = bytes[i];
+        const text = byte.toString(16);
+        result += (byte < 16 ? '%0' : '%') + text;
+    }
+    return decodeURIComponent(result);
 };
 
 const scenarioBase = {
     executor: "constant-arrival-rate",
     rate: 1,
-    vus: 1,
+    preAllocatedVUs: 1,
 }
-const delaysMs = [50, 1_000, 5_000, 10_000]
+const delaysMs = [50, 1000, 5000, 10000]
 const messageSizeKb = [2, 31]
 const brokers = __ENV.BROKERS.split(",")
 const samples = [200]
 
 let scenarios = {}
 
-delaysMs.forEach(delay => {
-    messageSizeKb.forEach(msgSize => {
-        brokers.forEach(broker => {
-            samples.forEach(sample => {
+for (const delayMsIdx in delaysMs) {
+    const delay = delaysMs[delayMsIdx]
+    for (const messageSizeKbIdx in messageSizeKb) {
+        const msgSize = messageSizeKb[messageSizeKbIdx]
+        for (const brokerIdx in brokers) {
+            const broker = brokers[brokerIdx]
+            for (const sampleIdx in samples) {
+                const sample = samples[sampleIdx]
                 const msgBytes = crypto.randomBytes(msgSize * KB);
-                scenarios[`${delay}ms_${msgSize}kb_${broker}_${sample}`] = {
-                    ...scenarioBase,
-                    timeUnit: `${delay}ms`,
-                    duration: `${delay * sample}ms`,
-                    env: {
-                        MSG: toString(msgBytes),
-                        BROKER: broker,
-                    }
-                }
-            })
-        })
-    })
-})
+                scenarios[`${delay}ms_${msgSize}kb_${broker}_${sample}`] = Object.assign(
+                    scenarioBase,
+                    {
+                        timeUnit: `${delay}ms`,
+                        duration: `${delay * sample}ms`,
+                        env: {
+                            MSG: toString(msgBytes),
+                            BROKER: broker,
+                        }
+                    })
+            }
+        }
+    }
+}
 
 export const options = {
     discardResponseBodies: true,
     thresholds: {
         checks: ['rate==1'],
-        http_req_duration: ['avg<5ms'], // avg of requests should be below 1ms
+        http_req_duration: ['avg<5'], // avg of requests should be below 1ms
     },
     scenarios,
 };

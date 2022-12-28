@@ -41,7 +41,7 @@ const (
 
 var brokers = []kube.ComponentDescription{
 	{
-		Name:      "redis-broker",
+		Name:      "redis-p6-broker",
 		Namespace: &kube.DaprTestNamespace,
 		TypeName:  "pubsub.redis",
 		MetaData: map[string]kube.MetadataValue{
@@ -58,7 +58,7 @@ var brokers = []kube.ComponentDescription{
 		Scopes: []string{k6AppName},
 	},
 	{
-		Name:      "kafka-broker",
+		Name:      "kafka-p6-broker",
 		Namespace: &kube.DaprTestNamespace,
 		TypeName:  "pubsub.kafka",
 		MetaData: map[string]kube.MetadataValue{
