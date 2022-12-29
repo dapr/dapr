@@ -15,12 +15,10 @@ package pubsub
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -35,6 +33,7 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 		resiliency.RunnerOpts[contribPubsub.BulkPublishResponse]{
 			Accumulator: func(res contribPubsub.BulkPublishResponse) {
 				if len(res.FailedEntries) > 0 {
+					// requestEntries can be modified here as Accumulator is executed synchronously
 					failedEntryIds := extractEntryIds(res.FailedEntries)
 					filteredEntries := utils.Filter(*requestEntries.Load(), func(item contribPubsub.BulkMessageEntry) bool {
 						_, ok := failedEntryIds[item.EntryId]
@@ -57,9 +56,8 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 	// If final error is timeout, CB open or CB too many requests, return the current request entries as failed
 	if err != nil &&
 		(len(res.FailedEntries) == 0 ||
-			errors.Is(err, context.DeadlineExceeded) ||
-			errors.Is(err, breaker.ErrOpenState) ||
-			errors.Is(err, breaker.ErrTooManyRequests)) {
+			resiliency.IsTimeoutExeceeded(err) ||
+			resiliency.IsCircuitBreakerError(err)) {
 		return contribPubsub.NewBulkPublishResponse(*requestEntries.Load(), err), err
 	}
 	// Otherwise, retry has exhausted, return the final response got from the bulk publisher
