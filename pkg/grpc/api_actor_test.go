@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actors_testing "github.com/dapr/dapr/pkg/actors/testing"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -123,7 +124,7 @@ func TestGetActorState(t *testing.T) {
 
 	t.Run("Get actor state - OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -182,7 +183,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 
 	t.Run("Save actor state - Upsert and Delete OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -280,7 +281,7 @@ func TestInvokeActor(t *testing.T) {
 }
 
 func TestInvokeActorWithResiliency(t *testing.T) {
-	failingActors := actors.FailingActors{
+	failingActors := actors_testing.FailingActors{
 		Failure: daprt.NewFailure(
 			map[string]int{
 				"failingActor": 1,

@@ -19,3 +19,4 @@ coverage.txt
 
 # Go Workspaces (introduced in Go 1.18+)
 go.work
+go.work.sum

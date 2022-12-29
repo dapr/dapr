@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	actors_testing "github.com/dapr/dapr/pkg/actors/testing"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
@@ -2280,7 +2281,7 @@ func TestGetMetadata(t *testing.T) {
 	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 
-	mockActors := new(actors.MockActors)
+	mockActors := new(actors_testing.MockActors)
 	mockActors.On("GetActiveActorsCount").Return(actors.ActiveActorsCount{
 		Count: 10,
 		Type:  "abcd",

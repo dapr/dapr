@@ -281,7 +281,7 @@ test: test-deps
 			--format standard-quiet \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
-				$(COVERAGE_OPTS) --tags=unit
+				$(COVERAGE_OPTS)
 	CGO_ENABLED=$(CGO) \
 		go test ./tests/...
 
@@ -321,7 +321,7 @@ TEST_WITH_RACE=./pkg/acl/... \
 .PHONY: test-race
 test-race:
 	echo "$(TEST_WITH_RACE)" | xargs \
-		go test -tags=unit -race
+		go test -race
 
 ################################################################################
 # Target: lint                                                                 #

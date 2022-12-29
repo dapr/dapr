@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	actors_testing "github.com/dapr/dapr/pkg/actors/testing"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -1406,7 +1407,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("All PUT/POST APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.actor = new(actors.MockActors)
+		testAPI.actor = new(actors_testing.MockActors)
 		apiPaths := []string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
 			"v1.0/actors/fakeActorType/fakeActorID/state",
@@ -1429,7 +1430,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("All PATCH APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.actor = new(actors.MockActors)
+		testAPI.actor = new(actors_testing.MockActors)
 		apiPaths := []string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
 		}
@@ -1448,7 +1449,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1475,7 +1476,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1500,7 +1501,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 500 on GetState failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1525,7 +1526,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 400 for missing actor instace", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1569,7 +1570,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
@@ -1615,7 +1616,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1654,7 +1655,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
@@ -1692,7 +1693,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
 
@@ -1722,7 +1723,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1749,7 +1750,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			NewName:   "reminder2",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
 
@@ -1775,7 +1776,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			NewName:   "reminder2",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1801,7 +1802,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("DeleteReminder", &reminderRequest).Return(nil)
 
@@ -1824,7 +1825,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1847,7 +1848,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("GetReminder", &reminderRequest).Return(nil, nil)
 
@@ -1869,7 +1870,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
 
@@ -1897,7 +1898,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Data: func() {},
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
 
@@ -1924,7 +1925,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Period:    "0h0m7s0ms",
 			Callback:  "",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("CreateTimer", &timerRequest).Return(nil)
 
@@ -1954,7 +1955,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1980,7 +1981,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("DeleteTimer", &timerRequest).Return(nil)
 
@@ -2003,7 +2004,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -2020,7 +2021,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Direct Message - Forwards downstream status", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		fakeData := []byte("fakeData")
 
 		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
@@ -2055,7 +2056,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			"Host":            {"localhost"},
 			"User-Agent":      {"Go-http-client/1.1"},
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		invokeRequest := invokev1.NewInvokeMethodRequest("method1")
 		invokeRequest.WithActor("fakeActorType", "fakeActorID")
 		fakeData := []byte("fakeData")
@@ -2076,7 +2077,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "Call", 1)
 	})
 
-	failingActors := &actors.FailingActors{
+	failingActors := &actors_testing.FailingActors{
 		Failure: daprt.NewFailure(
 			map[string]int{
 				"failingId": 1,
@@ -2224,7 +2225,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	t.Run("Metadata - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/metadata"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 
 		mockActors.On("GetActiveActorsCount")
 
@@ -2286,7 +2287,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -2331,7 +2332,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actors_testing.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
