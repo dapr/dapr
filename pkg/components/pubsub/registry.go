@@ -14,9 +14,8 @@ limitations under the License.
 package pubsub
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/components"
@@ -50,7 +49,7 @@ func (p *Registry) Create(name, version string) (pubsub.PubSub, error) {
 	if method, ok := p.getPubSub(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find message bus %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find message bus %s/%s", name, version)
 }
 
 func (p *Registry) getPubSub(name, version string) (func() pubsub.PubSub, bool) {

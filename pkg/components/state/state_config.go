@@ -18,8 +18,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -113,7 +111,7 @@ func getStateConfiguration(storeName string) *StoreConfiguration {
 
 func checkKeyIllegal(key string) error {
 	if strings.Contains(key, daprSeparator) {
-		return errors.Errorf("input key/keyPrefix '%s' can't contain '%s'", key, daprSeparator)
+		return fmt.Errorf("input key/keyPrefix '%s' can't contain '%s'", key, daprSeparator)
 	}
 	return nil
 }

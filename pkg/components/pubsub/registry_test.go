@@ -14,10 +14,10 @@ limitations under the License.
 package pubsub
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/components-contrib/pubsub"
@@ -90,7 +90,7 @@ func TestCreatePubSub(t *testing.T) {
 
 		// act
 		p, actualError := testRegistry.Create(createFullName(PubSubName), "v1")
-		expectedError := errors.Errorf("couldn't find message bus %s/v1", createFullName(PubSubName))
+		expectedError := fmt.Errorf("couldn't find message bus %s/v1", createFullName(PubSubName))
 		// assert
 		assert.Nil(t, p)
 		assert.Equal(t, expectedError.Error(), actualError.Error())
