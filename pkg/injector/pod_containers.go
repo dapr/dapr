@@ -14,6 +14,9 @@ limitations under the License.
 package injector
 
 import (
+	"fmt"
+
+	"golang.org/x/sync/singleflight"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -21,10 +24,6 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
-
-	"github.com/pkg/errors"
-
-	"golang.org/x/sync/singleflight"
 )
 
 // namespaceFlight deduplicates requests for the same namespace
@@ -47,7 +46,7 @@ func (i *injector) splitContainers(pod corev1.Pod) (appContainers map[int]corev1
 			return i.daprClient.ComponentsV1alpha1().Components(pod.Namespace).List(metav1.ListOptions{})
 		})
 		if err != nil {
-			return nil, nil, nil, errors.Wrap(err, "error reading components")
+			return nil, nil, nil, fmt.Errorf("error reading components: %w", err)
 		}
 		injectedComponentContainers = components.Injectable(an.GetString(annotations.KeyAppID), componentsList.(*v1alpha1.ComponentList).Items)
 	}

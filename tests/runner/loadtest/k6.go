@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 
 	k6api "github.com/grafana/k6-operator/api/v1alpha1"
-	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -173,7 +172,7 @@ func collectResult[T any](k6 *K6, podName string) (*T, error) {
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, podLogs)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to copy logs from the pod")
+		return nil, fmt.Errorf("unable to copy logs from the pod: %w", err)
 	}
 
 	bts := buf.Bytes()
@@ -185,7 +184,7 @@ func collectResult[T any](k6 *K6, podName string) (*T, error) {
 	var k6Result K6RunnerSummary[T]
 	if err := json.Unmarshal(bts, &k6Result); err != nil {
 		// this shouldn't normally happen but if it does, let's log output by default
-		return nil, errors.Wrap(err, fmt.Sprintf("unable to marshal: `%s`", string(bts)))
+		return nil, fmt.Errorf("unable to marshal `%s`: %w", string(bts), err)
 	}
 
 	return &k6Result.Metrics, nil

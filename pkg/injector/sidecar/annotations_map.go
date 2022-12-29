@@ -14,9 +14,8 @@ limitations under the License.
 package sidecar
 
 import (
+	"fmt"
 	"strconv"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/dapr/utils"
 )
@@ -67,7 +66,7 @@ func (a Annotations) GetInt32(key string) (int32, error) {
 	}
 	value, err := strconv.ParseInt(s, 10, 32)
 	if err != nil {
-		return -1, errors.Wrapf(err, "error parsing %s int value %s ", key, s)
+		return -1, fmt.Errorf("error parsing %s int value %s: %w", key, s, err)
 	}
 	return int32(value), nil
 }
