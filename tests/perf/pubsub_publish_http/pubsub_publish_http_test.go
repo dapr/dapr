@@ -67,7 +67,12 @@ func TestMain(m *testing.M) {
 }
 
 func TestPubsubPublishHttpPerformance(t *testing.T) {
-	k6Test := loadtest.NewK6("./test.js", loadtest.WithAppID(k6AppName), loadtest.WithName(k6AppName), loadtest.WithParallelism(1), loadtest.WithRunnerEnvVar(brokersEnvVar, brokersNames))
+	k6Test := loadtest.NewK6(
+		"./test.js",
+		loadtest.WithAppID(k6AppName),
+		loadtest.WithName(k6AppName),
+		loadtest.WithRunnerEnvVar(brokersEnvVar, brokersNames),
+	)
 	defer k6Test.Dispose()
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
