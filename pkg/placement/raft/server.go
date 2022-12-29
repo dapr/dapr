@@ -14,13 +14,14 @@ limitations under the License.
 package raft
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"path/filepath"
 	"time"
 
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -131,7 +132,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		s.snapStore = raft.NewInmemSnapshotStore()
 	} else {
 		if err = ensureDir(s.raftStorePath()); err != nil {
-			return errors.Wrap(err, "failed to create log store directory")
+			return fmt.Errorf("failed to create log store directory: %w", err)
 		}
 
 		// Create the backend raft store for logs and stable storage.

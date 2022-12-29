@@ -20,9 +20,9 @@ import (
 	"crypto/rand"
 	b64 "encoding/base64"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -93,7 +93,7 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 
 		key, err := tryGetEncryptionKeyFromMetadataItem(component.Namespace, m, secretStore)
 		if err != nil {
-			return ComponentEncryptionKeys{}, errors.Wrap(err, errPrefix)
+			return ComponentEncryptionKeys{}, fmt.Errorf("%s: %w", errPrefix, err)
 		}
 
 		if m.Name == primaryEncryptionKey {
@@ -125,7 +125,7 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 
 func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.MetadataItem, secretStore secretstores.SecretStore) (Key, error) {
 	if item.SecretKeyRef.Name == "" {
-		return Key{}, errors.Errorf("%s: secretKeyRef cannot be empty", errPrefix)
+		return Key{}, fmt.Errorf("%s: secretKeyRef cannot be empty", errPrefix)
 	}
 
 	// TODO: cascade context.
@@ -136,7 +136,7 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.Metadat
 		},
 	})
 	if err != nil {
-		return Key{}, errors.Wrap(err, errPrefix)
+		return Key{}, fmt.Errorf("%s: %w", errPrefix, err)
 	}
 
 	key := item.SecretKeyRef.Key
@@ -146,7 +146,7 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.Metadat
 
 	if val, ok := r.Data[key]; ok {
 		if val == "" {
-			return Key{}, errors.Errorf("%s: encryption key cannot be empty", errPrefix)
+			return Key{}, fmt.Errorf("%s: encryption key cannot be empty", errPrefix)
 		}
 
 		return Key{
