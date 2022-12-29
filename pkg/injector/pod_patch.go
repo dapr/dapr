@@ -16,8 +16,8 @@ package injector
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,8 +42,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	var pod corev1.Pod
 	err = json.Unmarshal(req.Object.Raw, &pod)
 	if err != nil {
-		errors.Wrap(err, "could not unmarshal raw object")
-		return nil, err
+		return nil, fmt.Errorf("could not unmarshal raw object: %w", err)
 	}
 
 	log.Infof(
