@@ -25,9 +25,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	"github.com/dapr/components-contrib/lock"
-
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +43,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -60,6 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -746,7 +745,12 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 
 func TestSecretStoreNotConfigured(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	server := startDaprAPIServer(port, &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger: logger.NewLogger("grpc.api.test"),
+		},
+		id: "fakeAPI",
+	}, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -858,10 +862,13 @@ func TestGetSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                   "fakeAPI",
-		secretStores:         fakeStores,
-		secretsConfiguration: secretsConfiguration,
-		resiliency:           resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           resiliency.New(nil),
+			SecretStores:         fakeStores,
+			SecretsConfiguration: secretsConfiguration,
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -925,10 +932,13 @@ func TestGetBulkSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                   "fakeAPI",
-		secretStores:         fakeStores,
-		secretsConfiguration: secretsConfiguration,
-		resiliency:           resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           resiliency.New(nil),
+			SecretStores:         fakeStores,
+			SecretsConfiguration: secretsConfiguration,
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -3152,9 +3162,12 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:           "fakeAPI",
-		secretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
-		resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:       logger.NewLogger("grpc.api.test"),
+			Resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			SecretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()

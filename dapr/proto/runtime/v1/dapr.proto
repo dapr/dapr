@@ -17,7 +17,6 @@ package dapr.proto.runtime.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
-import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
@@ -380,7 +379,7 @@ message InvokeBindingResponse {
 // GetSecretRequest is the message to get secret from secret store.
 message GetSecretRequest {
   // The name of secret store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The name of secret key.
   string key = 2;
@@ -399,7 +398,7 @@ message GetSecretResponse {
 // GetBulkSecretRequest is the message to get the secrets from secret store.
 message GetBulkSecretRequest {
   // The name of secret store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The metadata which will be sent to secret store components.
   map<string, string> metadata = 2;

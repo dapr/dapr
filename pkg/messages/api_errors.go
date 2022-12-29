@@ -1,5 +1,13 @@
 package messages
 
+import (
+	"fmt"
+	"net/http"
+
+	grpcCodes "google.golang.org/grpc/codes"
+	grpcStatus "google.golang.org/grpc/status"
+)
+
 const (
 	// Http.
 	ErrNotFound             = "method %q is not found"
@@ -56,13 +64,6 @@ const (
 	ErrActorStateGet             = "error getting actor state: %s"
 	ErrActorStateTransactionSave = "error saving actor transaction state: %s"
 
-	// Secret.
-	ErrSecretStoreNotConfigured = "secret store is not configured"
-	ErrSecretStoreNotFound      = "failed finding secret store with key %s"
-	ErrPermissionDenied         = "access denied by policy to get %q from %q"
-	ErrSecretGet                = "failed getting secret with key %s from secret store %s: %s"
-	ErrBulkSecretGet            = "failed getting secrets from secret store %s: %s"
-
 	// DirectMessaging.
 	ErrDirectInvoke         = "fail to invoke, id: %s, err: %s"
 	ErrDirectInvokeNoAppID  = "failed getting app id either from the URL path or the header dapr-app-id"
@@ -100,3 +101,75 @@ const (
 	ErrTerminateWorkflow             = "error terminating workflow %s"
 	ErrTimerParse                    = "error parsing time - %s"
 )
+
+var (
+	// Secrets.
+	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
+	ErrSecretStoreNotFound      = APIError{"failed finding secret store with key %s", "ERR_SECRET_STORE_NOT_FOUND", http.StatusUnauthorized, grpcCodes.InvalidArgument}
+	ErrSecretPermissionDenied   = APIError{"access denied by policy to get %q from %q", "ERR_PERMISSION_DENIED", http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrSecretGet                = APIError{"failed getting secret with key %s from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrBulkSecretGet            = APIError{"failed getting secrets from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
+)
+
+// APIError implements the Error interface and the interface that complies with "google.golang.org/grpc/status".FromError().
+// It can be used to send errors to HTTP and gRPC servers, indicating the correct status code for each.
+type APIError struct {
+	// Message is the human-readable error message.
+	message string
+	// Tag is a string identifying the error, used with HTTP responses only.
+	tag string
+	// Status code for HTTP responses.
+	httpCode int
+	// Status code for gRPC responses.
+	grpcCode grpcCodes.Code
+}
+
+// WithFormat returns a copy of the error with the message going through fmt.Sprintf with the arguments passed to this method.
+func (e APIError) WithFormat(a ...any) APIError {
+	return APIError{
+		message:  fmt.Sprintf(e.message, a...),
+		tag:      e.tag,
+		httpCode: e.httpCode,
+		grpcCode: e.grpcCode,
+	}
+}
+
+// Message returns the value of the message property.
+func (e APIError) Message() string {
+	if e.message == "" {
+		return "unknown error"
+	}
+	return e.message
+}
+
+// Tag returns the value of the tag property.
+func (e APIError) Tag() string {
+	if e.tag == "" {
+		return "ERROR"
+	}
+	return e.tag
+}
+
+// HTTPCode returns the value of the HTTPCode property.
+func (e APIError) HTTPCode() int {
+	if e.httpCode == 0 {
+		return http.StatusInternalServerError
+	}
+	return e.httpCode
+}
+
+// GRPCStatus returns the gRPC status.Status object.
+// This method allows APIError to comply with the interface expected by status.FromError().
+func (e APIError) GRPCStatus() *grpcStatus.Status {
+	return grpcStatus.New(e.grpcCode, e.message)
+}
+
+// Error implements the error interface.
+func (e APIError) Error() string {
+	return e.String()
+}
+
+// String returns the string representation, useful for debugging.
+func (e APIError) String() string {
+	return fmt.Sprintf("error: code = %s desc = %s", e.grpcCode, e.message)
+}
