@@ -14,8 +14,9 @@ limitations under the License.
 import http from "k6/http";
 import { check } from "k6";
 import crypto from "k6/crypto";
+import { SharedArray } from 'k6/data';
 
-const KB = 1000
+const KB = 1024
 const MAX_MS_ALLOWED = 1
 // padd with leading 0 if <16
 function i2hex(i) {
@@ -23,54 +24,64 @@ function i2hex(i) {
 }
 
 function randomStringOfSize(size) {
-    const bytes = crypto.randomBytes(size);
+    const bytes = crypto.randomBytes(Math.round(size / 2)); // because of hex transformation
     const view = new Uint8Array(bytes);
     return view.reduce(function (memo, i) { return memo + i2hex(i) }, '')
 }
 
-const scenarioBase = {
-    executor: "constant-arrival-rate",
-    rate: 1,
-    preAllocatedVUs: 2,
-    maxVUs: 50,
-}
-const delaysMs = [1, 5, 50, 100, 1000]
-const messageSizeKb = [2, 31]
-const brokers = __ENV.BROKERS.split(",")
-const samples = [200]
+const data = new SharedArray('scenarios', function () {
+    const scenarioBase = {
+        executor: "constant-arrival-rate",
+        rate: 1,
+        preAllocatedVUs: 2,
+        maxVUs: 50,
+    }
+    const delaysMs = [5, 50, 100, 1000]
+    const messageSizeKb = [2, 31]
+    const brokers = __ENV.BROKERS.split(",")
+    const samples = [200]
 
-let scenarios = {}
-let thresholds = {
-    checks: ['rate==1'],
-}
+    let scenarios = {}
+    let thresholds = {
+        checks: ['rate==1'],
+    }
 
-for (const messageSizeKbIdx in messageSizeKb) {
-    const msgSize = messageSizeKb[messageSizeKbIdx]
-    const msgStr = randomStringOfSize(msgSize * KB)
-    for (const delayMsIdx in delaysMs) {
-        const delay = delaysMs[delayMsIdx]
-        for (const brokerIdx in brokers) {
-            const broker = brokers[brokerIdx]
-            for (const sampleIdx in samples) {
-                const sample = samples[sampleIdx]
-                const scenario = `${delay}ms_${msgSize}kb_${broker}_${sample}`
-                thresholds[`http_req_duration{scenario:${scenario}}`] = [`avg<${MAX_MS_ALLOWED}`]
-                scenarios[scenario] = Object.assign(
-                    scenarioBase,
-                    {
-                        timeUnit: `${delay}ms`,
-                        duration: `${delay * sample}ms`,
-                        env: {
-                            MSG: msgStr,
-                            BROKER: broker,
-                            TOPIC: "my-topic"
-                        }
-                    })
+    let startTime = 0
+    for (const messageSizeKbIdx in messageSizeKb) {
+        const msgSize = messageSizeKb[messageSizeKbIdx]
+        const msgStr = randomStringOfSize(msgSize * KB)
+        for (const delayMsIdx in delaysMs) {
+            const delay = delaysMs[delayMsIdx]
+            for (const brokerIdx in brokers) {
+                const broker = brokers[brokerIdx]
+                for (const sampleIdx in samples) {
+                    const sample = samples[sampleIdx]
+                    const scenario = `${delay}ms_${msgSize}kb_${broker}_${sample}`
+                    thresholds[`http_req_duration{scenario:${scenario}}`] = [`avg<${MAX_MS_ALLOWED}`]
+                    const duration = delay * sample
+                    scenarios[scenario] = Object.assign(
+                        {
+                            timeUnit: `${delay}ms`,
+                            duration: `${duration}ms`,
+                            env: {
+                                MSG: msgStr,
+                                BROKER: broker,
+                                TOPIC: "my-topic"
+                            },
+                            startTime: `${startTime}ms`
+                        },
+                        scenarioBase,
+                    )
+                    startTime += duration
+                }
             }
         }
     }
-}
+    // more operations
+    return [{ scenarios, thresholds }]; // must be an array
+});
 
+const { scenarios, thresholds } = data[0]
 export const options = {
     discardResponseBodies: true,
     thresholds,
