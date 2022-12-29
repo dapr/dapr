@@ -15,18 +15,16 @@ package pluggable
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
-
-	"github.com/pkg/errors"
-
 	"github.com/jhump/protoreflect/grpcreflect"
-
 	"google.golang.org/grpc"
 	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 var (
@@ -94,7 +92,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 
 	files, err := os.ReadDir(componentsSocketPath)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not list pluggable components unix sockets")
+		return nil, fmt.Errorf("could not list pluggable components unix sockets: %w", err)
 	}
 
 	for _, dirEntry := range files {
@@ -121,7 +119,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 
 		serviceList, err := refctClient.ListServices()
 		if err != nil {
-			return nil, errors.Wrap(err, "unable to list services")
+			return nil, fmt.Errorf("unable to list services: %w", err)
 		}
 		dialer := socketDialer(socket, grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
 

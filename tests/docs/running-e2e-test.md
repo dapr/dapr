@@ -183,8 +183,13 @@ To completely remove Dapr, test dependencies, and any lingering e2e test apps:
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 
 ```bash
-# Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb, dapr-temporal services
-helm uninstall dapr dapr-kafka dapr-redis dapr-mongodb dapr-temporal -n $DAPR_NAMESPACE
+# Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb, dapr-temporal services, then remove dapr-zipkin
+helm uninstall dapr -n $DAPR_NAMESPACE || true
+helm uninstall dapr-kafka  -n $DAPR_NAMESPACE || true
+helm uninstall dapr-redis  -n $DAPR_NAMESPACE || true
+helm uninstall dapr-mongodb  -n $DAPR_NAMESPACE || true
+helm uninstall dapr-temporal -n $DAPR_NAMESPACE || true
+kubectl delete deployment dapr-zipkin -n $DAPR_NAMESPACE || true
 
 # Remove the test namespace
 make delete-test-namespace

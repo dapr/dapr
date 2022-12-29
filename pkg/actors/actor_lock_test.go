@@ -92,7 +92,7 @@ func TestStackDepthLimit(t *testing.T) {
 	err = lock.Lock(requestID)
 
 	assert.NotNil(t, err)
-	assert.Equal(t, "Maximum stack depth exceeded", err.Error())
+	assert.Equal(t, "maximum stack depth exceeded", err.Error())
 }
 
 func TestLockBlocksForNonMatchingID(t *testing.T) {

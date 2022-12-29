@@ -14,13 +14,12 @@ limitations under the License.
 package actors
 
 import (
+	"errors"
 	"sync"
-
-	"github.com/pkg/errors"
-	"go.uber.org/atomic"
+	"sync/atomic"
 )
 
-var ErrMaxStackDepthExceeded = errors.New("Maximum stack depth exceeded")
+var ErrMaxStackDepthExceeded = errors.New("maximum stack depth exceeded")
 
 type ActorLock struct {
 	methodLock    *sync.Mutex
@@ -35,7 +34,7 @@ func NewActorLock(maxStackDepth int32) ActorLock {
 		methodLock:    &sync.Mutex{},
 		requestLock:   &sync.Mutex{},
 		activeRequest: nil,
-		stackDepth:    atomic.NewInt32(int32(0)),
+		stackDepth:    &atomic.Int32{},
 		maxStackDepth: maxStackDepth,
 	}
 }
@@ -50,16 +49,16 @@ func (a *ActorLock) Lock(requestID *string) error {
 	if currentRequest == nil || *currentRequest != *requestID {
 		a.methodLock.Lock()
 		a.setCurrentID(requestID)
-		a.stackDepth.Inc()
+		a.stackDepth.Add(1)
 	} else {
-		a.stackDepth.Inc()
+		a.stackDepth.Add(1)
 	}
 
 	return nil
 }
 
 func (a *ActorLock) Unlock() {
-	a.stackDepth.Dec()
+	a.stackDepth.Add(-1)
 	if a.stackDepth.Load() == 0 {
 		a.clearCurrentID()
 		a.methodLock.Unlock()

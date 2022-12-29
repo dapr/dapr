@@ -14,9 +14,8 @@ limitations under the License.
 package state
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/components"
@@ -50,7 +49,7 @@ func (s *Registry) Create(name, version string) (state.Store, error) {
 	if method, ok := s.getStateStore(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find state store %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find state store %s/%s", name, version)
 }
 
 func (s *Registry) getStateStore(name, version string) (func() state.Store, bool) {
