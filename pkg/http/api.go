@@ -1375,20 +1375,22 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.GetSecret,
-		func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetSecretRequest) error {
-			in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
-			in.Key = reqCtx.UserValue(secretNameParam).(string)
-			in.Metadata = getMetadataFromRequest(reqCtx)
-			return nil
-		},
-		func(out *runtimev1pb.GetSecretResponse) (any, error) {
-			if out == nil || out.Data == nil {
-				// Should never happen, but…
-				return nil, nil
-			}
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetSecretRequest, *runtimev1pb.GetSecretResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretRequest, error) {
+				in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
+				in.Key = reqCtx.UserValue(secretNameParam).(string)
+				in.Metadata = getMetadataFromRequest(reqCtx)
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.GetSecretResponse) (any, error) {
+				// If the data is nil, return nil
+				if out == nil || out.Data == nil {
+					return nil, nil
+				}
 
-			// Return just the data property
-			return out.Data, nil
+				// Return just the data property
+				return out.Data, nil
+			},
 		},
 	)
 }
@@ -1396,12 +1398,13 @@ func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
 func (a *api) onBulkGetSecretHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.GetBulkSecret,
-		func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetBulkSecretRequest) error {
-			in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
-			in.Metadata = getMetadataFromRequest(reqCtx)
-			return nil
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetBulkSecretRequest, *runtimev1pb.GetBulkSecretResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretRequest, error) {
+				in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
+				in.Metadata = getMetadataFromRequest(reqCtx)
+				return in, nil
+			},
 		},
-		nil,
 	)
 }
 

@@ -26,11 +26,24 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 )
 
+// Object containing options for the UniversalFastHTTPHandler method.
+type UniversalFastHTTPHandlerOpts[T proto.Message, U proto.Message] struct {
+	// This modifier allows modifying the input proto object before the handler is called. This property is optional.
+	// The input proto object contantains all properties parsed from the request's body (for non-GET requests), and this modifier can alter it for example with properties from the URL (to make APIs RESTful).
+	// The modifier should return the modified object.
+	InModifier func(reqCtx *fasthttp.RequestCtx, in T) (T, error)
+
+	// This modifier allows modifying the output proto object before the response is sent to the client. This property is optional.
+	// This is primarily meant to ensure that existing APIs can be migrated to Universal ones while preserving the same response in case of small differences.
+	// The response could be a proto object (which will be serialized with protojson) or any other object (serialized with the standard JSON package). If the response is nil, a 204 (no content) response is sent to the client, with no data in the body.
+	// NOTE: Newly-implemented APIs should ensure that on the HTTP endpoint the response matches the protos to offer a consistent experience, and should NOT modify the output before it's sent to the client.
+	OutModifier func(out U) (any, error)
+}
+
 // UniversalFastHTTPHandler wraps a UniversalAPI method into a FastHTTP handler.
 func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
-	method func(ctx context.Context, in T) (U, error),
-	inModifier func(reqCtx *fasthttp.RequestCtx, in T) error,
-	outModifier func(out U) (any, error),
+	handler func(ctx context.Context, in T) (U, error),
+	opts UniversalFastHTTPHandlerOpts[T, U],
 ) fasthttp.RequestHandler {
 	var zero T
 	rt := reflect.ValueOf(zero).Type().Elem()
@@ -54,9 +67,11 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 			}
 		}
 
+		var err error
+
 		// If we have an inModifier function, invoke it now
-		if inModifier != nil {
-			err := inModifier(reqCtx, in)
+		if opts.InModifier != nil {
+			in, err = opts.InModifier(reqCtx, in)
 			if err != nil {
 				universalFastHTTPErrorResponder(reqCtx, err)
 				return
@@ -64,7 +79,7 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 		}
 
 		// Invoke the gRPC handler
-		res, err := method(reqCtx, in)
+		res, err := handler(reqCtx, in)
 		if err != nil {
 			// Error is already logged by the handlers, we won't log it again
 			universalFastHTTPErrorResponder(reqCtx, err)
@@ -77,13 +92,13 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 		}
 
 		// If we do not have an output modifier, respond right away
-		if outModifier == nil {
+		if opts.OutModifier == nil {
 			universalFastHTTPProtoResponder(reqCtx, res)
 			return
 		}
 
 		// Invoke the modifier
-		newRes, err := outModifier(res)
+		newRes, err := opts.OutModifier(res)
 		if err != nil {
 			universalFastHTTPErrorResponder(reqCtx, err)
 			return
