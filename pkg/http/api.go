@@ -1373,18 +1373,36 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(a.universal.GetSecret, func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetSecretRequest) {
-		in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
-		in.Key = reqCtx.UserValue(secretNameParam).(string)
-		in.Metadata = getMetadataFromRequest(reqCtx)
-	})
+	return UniversalFastHTTPHandler(
+		a.universal.GetSecret,
+		func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetSecretRequest) error {
+			in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
+			in.Key = reqCtx.UserValue(secretNameParam).(string)
+			in.Metadata = getMetadataFromRequest(reqCtx)
+			return nil
+		},
+		func(out *runtimev1pb.GetSecretResponse) (any, error) {
+			if out == nil || out.Data == nil {
+				// Should never happen, but…
+				return nil, nil
+			}
+
+			// Return just the data property
+			return out.Data, nil
+		},
+	)
 }
 
 func (a *api) onBulkGetSecretHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(a.universal.GetBulkSecret, func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetBulkSecretRequest) {
-		in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
-		in.Metadata = getMetadataFromRequest(reqCtx)
-	})
+	return UniversalFastHTTPHandler(
+		a.universal.GetBulkSecret,
+		func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetBulkSecretRequest) error {
+			in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
+			in.Metadata = getMetadataFromRequest(reqCtx)
+			return nil
+		},
+		nil,
+	)
 }
 
 func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {

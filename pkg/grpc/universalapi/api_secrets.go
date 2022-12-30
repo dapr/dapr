@@ -61,7 +61,7 @@ func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretR
 		return response, err
 	}
 
-	if getResponse != nil && len(getResponse.Data) > 0 {
+	if getResponse != nil {
 		response = &runtimev1pb.GetSecretResponse{
 			Data: getResponse.Data,
 		}
