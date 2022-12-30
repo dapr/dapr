@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	defaultMessage  = "unknwon error"
+	defaultMessage  = "unknown error"
 	defaultTag      = "ERROR"
 	errStringFormat = "api error: code = %s desc = %s"
 )
