@@ -92,7 +92,7 @@ func (rr *replayableRequest) RawData() (r io.Reader) {
 		if rr.currentData == nil {
 			rr.currentData = bsPool.Get(l)
 		}
-		bsPool.Resize(rr.currentData, l)
+		rr.currentData = bsPool.Resize(rr.currentData, l)
 
 		// Copy the data from the replay buffer into the byte slice
 		copy(rr.currentData[0:l], rr.replay.Bytes())
