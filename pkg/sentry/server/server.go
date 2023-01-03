@@ -3,16 +3,14 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"time"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"github.com/dapr/kit/logger"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/ca"
@@ -20,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -52,10 +51,10 @@ func NewCAServer(ca ca.CertificateAuthority, validator identity.Validator) CASer
 // Run starts a secured gRPC server for the Sentry Certificate Authority.
 // It enforces client side cert validation using the trust root cert.
 func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
-	addr := fmt.Sprintf(":%v", port)
+	addr := fmt.Sprintf(":%d", port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		return errors.Wrapf(err, "could not listen on %s", addr)
+		return fmt.Errorf("could not listen on %s: %w", addr, err)
 	}
 
 	tlsOpt := s.tlsServerOption(trustBundler)
@@ -63,7 +62,7 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 	sentryv1pb.RegisterCAServer(s.srv, s)
 
 	if err := s.srv.Serve(lis); err != nil {
-		return errors.Wrap(err, "grpc serve error")
+		return fmt.Errorf("grpc serve error: %w", err)
 	}
 	return nil
 }
@@ -82,7 +81,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 				if err != nil {
 					monitoring.ServerCertIssueFailed("server_cert")
 					log.Error(err)
-					return nil, errors.Wrap(err, "failed to get TLS server certificate")
+					return nil, fmt.Errorf("failed to get TLS server certificate: %w", err)
 				}
 				s.certificate = cert
 			}
@@ -134,7 +133,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	csr, err := certs.ParsePemCSR(csrPem)
 	if err != nil {
-		err = errors.Wrap(err, "cannot parse certificate signing request pem")
+		err = fmt.Errorf("cannot parse certificate signing request pem: %w", err)
 		log.Error(err)
 		monitoring.CertSignFailed("cert_parse")
 		return nil, err
@@ -142,7 +141,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	err = s.certAuth.ValidateCSR(csr)
 	if err != nil {
-		err = errors.Wrap(err, "error validating csr")
+		err = fmt.Errorf("error validating csr: %w", err)
 		log.Error(err)
 		monitoring.CertSignFailed("cert_validation")
 		return nil, err
@@ -150,7 +149,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	err = s.validator.Validate(req.GetId(), req.GetToken(), req.GetNamespace())
 	if err != nil {
-		err = errors.Wrap(err, "error validating requester identity")
+		err = fmt.Errorf("error validating requester identity: %w", err)
 		log.Error(err)
 		monitoring.CertSignFailed("req_id_validation")
 		return nil, err
@@ -159,7 +158,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	identity := identity.NewBundle(csr.Subject.CommonName, req.GetNamespace(), req.GetTrustDomain())
 	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, identity, -1, false)
 	if err != nil {
-		err = errors.Wrap(err, "error signing csr")
+		err = fmt.Errorf("error signing csr: %w", err)
 		log.Error(err)
 		monitoring.CertSignFailed("cert_sign")
 		return nil, err
@@ -183,7 +182,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	expiry := timestamppb.New(signed.Certificate.NotAfter)
 	if err = expiry.CheckValid(); err != nil {
-		return nil, errors.Wrap(err, "could not validate certificate validity")
+		return nil, fmt.Errorf("could not validate certificate validity: %w", err)
 	}
 
 	resp := &sentryv1pb.SignCertificateResponse{

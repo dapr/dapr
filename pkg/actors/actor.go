@@ -20,7 +20,6 @@ import (
 	"time"
 
 	clocklib "github.com/benbjohnson/clock"
-
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 

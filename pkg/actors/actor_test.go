@@ -14,11 +14,11 @@ limitations under the License.
 package actors
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/atomic"
 )
 
 var reentrancyStackDepth = 32
@@ -117,7 +117,7 @@ func TestPendingActorCalls(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 		testActor.lock(nil)
 
-		channelClosed := atomic.NewBool(false)
+		channelClosed := atomic.Bool{}
 		go func() {
 			select {
 			case <-time.After(200 * time.Millisecond):
