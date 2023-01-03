@@ -970,11 +970,6 @@ func (e *circuitBreakerInstances) Remove(name string) {
 	e.Unlock()
 }
 
-// HasRetries returns true if the policy is configured to have more than 1 retry.
-func (p PolicyDescription) HasRetries() bool {
-	return p.RetryPolicy != nil && p.RetryPolicy.MaxRetries != 0
-}
-
 func toMap(val interface{}) (interface{}, error) {
 	jsonBytes, err := json.Marshal(val)
 	if err != nil {
