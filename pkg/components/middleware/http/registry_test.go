@@ -14,19 +14,18 @@ limitations under the License.
 package http_test
 
 import (
+	"fmt"
 	nethttp "net/http"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	h "github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/kit/logger"
 )
 
 func TestRegistry(t *testing.T) {
@@ -94,7 +93,7 @@ func TestRegistry(t *testing.T) {
 
 		// act
 		p, actualError := testRegistry.Create(componentName, "v1", metadata)
-		expectedError := errors.Errorf("HTTP middleware %s/v1 has not been registered", componentName)
+		expectedError := fmt.Errorf("HTTP middleware %s/v1 has not been registered", componentName)
 
 		// assert
 		assert.Nil(t, p)

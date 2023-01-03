@@ -1983,7 +1983,7 @@ func TestPublishTopic(t *testing.T) {
 func TestBulkPublish(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	srv := &api{
+	fakeAPI := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
 				mock := daprt.MockPubSub{}
@@ -1991,36 +1991,34 @@ func TestBulkPublish(t *testing.T) {
 				return &mock
 			},
 			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-				entries := []pubsub.BulkPublishResponseEntry{}
-
+				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
-				for i, e := range req.Entries {
-					entry := pubsub.BulkPublishResponseEntry{
-						EntryId: e.EntryId,
-					}
-					if req.Topic == "error-topic" {
-						entry.Error = errors.New("error when publish")
-						entry.Status = pubsub.PublishFailed
-					} else if req.Topic == "even-error-topic" {
-						if i%2 == 0 {
-							entry.Error = errors.New("error when publish")
-							entry.Status = pubsub.PublishFailed
-						} else {
-							entry.Status = pubsub.PublishSucceeded
+				if req.Topic == "error-topic" {
+					for _, e := range req.Entries {
+						entry := pubsub.BulkPublishResponseFailedEntry{
+							EntryId: e.EntryId,
 						}
-					} else {
-						entry.Status = pubsub.PublishSucceeded
+						entry.Error = errors.New("error on publish")
+						entries = append(entries, entry)
 					}
-
-					entries = append(entries, entry)
+				} else if req.Topic == "even-error-topic" {
+					for i, e := range req.Entries {
+						if i%2 == 0 {
+							entry := pubsub.BulkPublishResponseFailedEntry{
+								EntryId: e.EntryId,
+							}
+							entry.Error = errors.New("error on publish")
+							entries = append(entries, entry)
+						}
+					}
 				}
-
-				return pubsub.BulkPublishResponse{Statuses: entries}, nil
+				// Mock simulates only partial failures or total success, so error is always nil.
+				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
 	}
 
-	server := startTestServerAPI(port, srv)
+	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -2041,29 +2039,27 @@ func TestBulkPublish(t *testing.T) {
 		Entries:    sampleEntries,
 	})
 	assert.Nil(t, err)
-	assert.Empty(t, res.Statuses)
+	assert.Empty(t, res.FailedEntries)
 
 	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 		PubsubName: "pubsub",
 		Topic:      "error-topic",
 		Entries:    sampleEntries,
 	})
+	t.Log(res)
+	// Partial failure, so expecting no error
 	assert.Nil(t, err)
-	assert.Equal(t, 4, len(res.Statuses))
-	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
-	}
-
+	assert.NotNil(t, res)
+	assert.Equal(t, 4, len(res.FailedEntries))
 	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 		PubsubName: "pubsub",
 		Topic:      "even-error-topic",
 		Entries:    sampleEntries,
 	})
+	// Partial failure, so expecting no error
 	assert.Nil(t, err)
-	assert.Equal(t, 2, len(res.Statuses))
-	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
-	}
+	assert.NotNil(t, res)
+	assert.Equal(t, 2, len(res.FailedEntries))
 }
 
 func TestShutdownEndpoints(t *testing.T) {
@@ -2104,7 +2100,7 @@ func TestInvokeBinding(t *testing.T) {
 	srv := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "error-binding" {
-				return nil, errors.New("error when invoke binding")
+				return nil, errors.New("error invoking binding")
 			}
 			return &bindings.InvokeResponse{Data: []byte("ok"), Metadata: req.Metadata}, nil
 		},
@@ -3517,7 +3513,7 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().TryLock(gomock.Any()).DoAndReturn(func(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+		mockLockStore.EXPECT().TryLock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			assert.Equal(t, int32(1), req.ExpiryInSeconds)
@@ -3613,7 +3609,7 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().Unlock(gomock.Any()).DoAndReturn(func(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+		mockLockStore.EXPECT().Unlock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			return &lock.UnlockResponse{

@@ -14,15 +14,13 @@ limitations under the License.
 package http
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	middleware "github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/kit/logger"
 )
 
 type (
@@ -62,11 +60,11 @@ func (p *Registry) Create(name, version string, metadata middleware.Metadata) (h
 	if method, ok := p.getMiddleware(name, version); ok {
 		mid, err := method(metadata)
 		if err != nil {
-			return nil, errors.Errorf("error creating HTTP middleware %s/%s: %s", name, version, err)
+			return nil, fmt.Errorf("error creating HTTP middleware %s/%s: %w", name, version, err)
 		}
 		return mid, nil
 	}
-	return nil, errors.Errorf("HTTP middleware %s/%s has not been registered", name, version)
+	return nil, fmt.Errorf("HTTP middleware %s/%s has not been registered", name, version)
 }
 
 func (p *Registry) getMiddleware(name, version string) (FactoryMethod, bool) {

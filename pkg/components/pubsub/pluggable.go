@@ -15,17 +15,14 @@ package pubsub
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
 	"github.com/dapr/components-contrib/pubsub"
-
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
-
 	"github.com/dapr/kit/logger"
-
-	"github.com/pkg/errors"
 )
 
 // grpcPubSub is a implementation of a pubsub over a gRPC Protocol.
@@ -75,8 +72,8 @@ func (p *grpcPubSub) Features() []pubsub.Feature {
 }
 
 // Publish publishes data to a topic.
-func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
-	_, err := p.Client.Publish(p.Context, &proto.PublishRequest{
+func (p *grpcPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
+	_, err := p.Client.Publish(ctx, &proto.PublishRequest{
 		Topic:      req.Topic,
 		PubsubName: req.PubsubName,
 		Data:       req.Data,
@@ -131,7 +128,7 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, topic *proto.Topic, handl
 	// first pull should be sync and subsequent connections can be made in background if necessary
 	pull, err := p.Client.PullMessages(ctx)
 	if err != nil {
-		return errors.Wrapf(err, "unable to subscribe")
+		return fmt.Errorf("unable to subscribe: %w", err)
 	}
 
 	streamCtx, cancel := context.WithCancel(pull.Context())
@@ -149,7 +146,7 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, topic *proto.Topic, handl
 
 	if err != nil {
 		cleanup()
-		return errors.Wrapf(err, "unable to subscribe")
+		return fmt.Errorf("unable to subscribe: %w", err)
 	}
 
 	handle := p.adaptHandler(streamCtx, pull, handler)
