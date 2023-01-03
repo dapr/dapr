@@ -126,13 +126,14 @@ func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, tim
 }
 
 func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.InvokeMethodResponse {
-	var data map[string]interface{}
-	e := json.Unmarshal(req.Message().Data.Value, &data)
+	var data map[string]any
+	v, _ := req.RawDataFull()
+	e := json.Unmarshal(v, &data)
 	appResponses := []pubsub.AppBulkResponseEntry{}
 	if e == nil {
-		entries := data["entries"].([]interface{})
+		entries, _ := data["entries"].([]any)
 		for j := 1; j <= len(entries); j++ {
-			entryId := entries[j-1].(map[string]interface{})["entryId"].(string) //nolint:stylecheck
+			entryId, _ := entries[j-1].(map[string]any)["entryId"].(string) //nolint:stylecheck
 			abre := pubsub.AppBulkResponseEntry{
 				EntryId: entryId,
 			}
@@ -155,9 +156,10 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 	re := pubsub.AppBulkResponse{
 		AppResponses: appResponses,
 	}
-	resp, _ := json.Marshal(re)
-	respInvoke := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	respInvoke.WithRawData(resp, "application/json")
+	v, _ = json.Marshal(re)
+	respInvoke := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataBytes(v).
+		WithContentType("application/json")
 	return respInvoke
 }
 
@@ -209,12 +211,16 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		// After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
@@ -271,12 +277,16 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    true,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		// After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
@@ -333,12 +343,16 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    true,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		// After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
@@ -395,12 +409,16 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		// After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
@@ -457,12 +475,17 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 })).
+		mockee := mockAppChannel.
+			On(
+				"InvokeMethod",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+					return req.Message().Method == orders1
+				}),
+			).
 			After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
@@ -507,11 +530,15 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    true,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		// set a circuit breaker with 1 consecutive failure
@@ -585,11 +612,15 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		// set a circuit breaker with 1 consecutive failure
@@ -663,11 +694,15 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		// set a circuit breaker with 1 consecutive failure
@@ -732,11 +767,15 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		// set a circuit breaker with 1 consecutive failure
@@ -838,12 +877,17 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 })).
+		mockee := mockAppChannel.
+			On(
+				"InvokeMethod",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+					return req.Message().Method == orders1
+				}),
+			).
 			After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		// set a circuit breaker with 1 consecutive failure
@@ -903,11 +947,15 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 }))
+		mockee := mockAppChannel.On(
+			"InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+				return req.Message().Method == orders1
+			}),
+		)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		// set a circuit breaker with 1 consecutive failure
@@ -1063,12 +1111,17 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 			failAllEntries:    false,
 		}
 
-		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		mockee := mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
-			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == orders1 })).
+		mockee := mockAppChannel.
+			On(
+				"InvokeMethod",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+					return req.Message().Method == orders1
+				}),
+			).
 			After(3 * time.Second)
 		mockee.RunFn = func(args mock.Arguments) {
-			respInvoke1 = getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
+			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
 		// set a circuit breaker with 1 consecutive failure

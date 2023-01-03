@@ -280,7 +280,7 @@ type InvokeRequest struct {
 
 	// Required. method is a method name which will be invoked by caller.
 	Method string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
-	// Required. Bytes value or Protobuf message which caller sent.
+	// Required in unary RPCs. Bytes value or Protobuf message which caller sent.
 	// Dapr treats Any.value as bytes type if Any.type_url is unset.
 	Data *anypb.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	// The type of data content.
@@ -364,7 +364,7 @@ type InvokeResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Required. The content body of InvokeService response.
+	// Required in unary RPCs. The content body of InvokeService response.
 	Data *anypb.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	// Required. The type of data content.
 	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`

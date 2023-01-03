@@ -2,10 +2,10 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
