@@ -14,16 +14,15 @@ limitations under the License.
 package secretstores_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	ss "github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/kit/logger"
 )
 
 type mockSecretStore struct {
@@ -79,7 +78,7 @@ func TestRegistry(t *testing.T) {
 
 		// act
 		p, actualError := testRegistry.Create(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find secret store %s/v1", componentName)
+		expectedError := fmt.Errorf("couldn't find secret store %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)

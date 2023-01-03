@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -191,7 +190,7 @@ func (g *Manager) connectRemote(
 		var cert tls.Certificate
 		cert, err = tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 		if err != nil {
-			return nil, errors.Errorf("error loading x509 Key Pair: %s", err)
+			return nil, fmt.Errorf("error loading x509 Key Pair: %w", err)
 		}
 
 		var serverName string

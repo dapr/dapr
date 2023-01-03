@@ -254,7 +254,7 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 
 						// ApplyCommand returns true only if the command changes hashing table.
 						if updated {
-							p.memberUpdateCount.Inc()
+							p.memberUpdateCount.Add(1)
 							// disseminateNextTime will be updated whenever apply is done, so that
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.

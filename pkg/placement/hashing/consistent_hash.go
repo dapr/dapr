@@ -23,6 +23,7 @@ package hashing
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -30,7 +31,6 @@ import (
 	"sync/atomic"
 
 	blake2b "github.com/minio/blake2b-simd"
-	"github.com/pkg/errors"
 )
 
 var replicationFactor int
