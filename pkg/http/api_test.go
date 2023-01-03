@@ -2219,6 +2219,21 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			},
 		},
+		"subscriptions": []map[string]interface{}{
+			{
+				"pubsubname":      "test",
+				"topic":           "topic",
+				"deadLetterQueue": "dead",
+				"metadata":        "{}",
+				"rules": []map[string]interface{}{
+					{
+						"match": "",
+						"path":  "path",
+					},
+				},
+				"programmaticSubscription": true,
+			},
+		},
 	}
 	expectedBodyBytes, _ := json.Marshal(expectedBody)
 

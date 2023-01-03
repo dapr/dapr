@@ -12,6 +12,12 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
+const (
+	SuccessClass = "success"
+	FailureClass = "failure"
+	UnknownClass = "unknown"
+)
+
 // Tag keys.
 var (
 	componentKey        = tag.MustNewKey("component")

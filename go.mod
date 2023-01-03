@@ -70,6 +70,8 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.1
 )
 
+require github.com/PaesslerAG/gval v1.0.0 // indirect
+
 require (
 	cloud.google.com/go v0.105.0 // indirect
 	cloud.google.com/go/compute v1.13.0 // indirect
@@ -423,6 +425,7 @@ replace (
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
+
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
