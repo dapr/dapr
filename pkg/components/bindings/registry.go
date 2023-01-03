@@ -14,9 +14,8 @@ limitations under the License.
 package bindings
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/components"
@@ -60,7 +59,7 @@ func (b *Registry) CreateInputBinding(name, version string) (bindings.InputBindi
 	if method, ok := b.getInputBinding(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find input binding %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find input binding %s/%s", name, version)
 }
 
 // CreateOutputBinding Create instantiates an output binding based on `name`.
@@ -68,7 +67,7 @@ func (b *Registry) CreateOutputBinding(name, version string) (bindings.OutputBin
 	if method, ok := b.getOutputBinding(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find output binding %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find output binding %s/%s", name, version)
 }
 
 // HasInputBinding checks if an input binding based on `name` exists in the registry.
