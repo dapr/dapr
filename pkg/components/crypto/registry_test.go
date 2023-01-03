@@ -14,16 +14,15 @@ limitations under the License.
 package crypto_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	cp "github.com/dapr/components-contrib/crypto"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/crypto"
+	"github.com/dapr/kit/logger"
 )
 
 type mockCryptoProvider struct {
@@ -79,7 +78,7 @@ func TestRegistry(t *testing.T) {
 
 		// act
 		p, actualError := testRegistry.Create(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find crypto provider %s/v1", componentName)
+		expectedError := fmt.Errorf("couldn't find crypto provider %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)

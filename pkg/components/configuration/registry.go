@@ -14,9 +14,8 @@ limitations under the License.
 package configuration
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/dapr/pkg/components"
@@ -53,7 +52,7 @@ func (s *Registry) Create(name, version string) (configuration.Store, error) {
 	if method, ok := s.getConfigurationStore(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find configuration store %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find configuration store %s/%s", name, version)
 }
 
 func (s *Registry) getConfigurationStore(name, version string) (func() configuration.Store, bool) {

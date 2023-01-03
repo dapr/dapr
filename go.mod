@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20221219224748-4a983f3cafac
+	github.com/dapr/components-contrib v1.9.1-0.20221222230611-870ff8dc2e34
 	github.com/dapr/kit v0.0.3
 	github.com/fasthttp/router v1.4.13
 	github.com/ghodss/yaml v1.0.0
@@ -34,7 +34,6 @@ require (
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
-	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.37.0
@@ -52,7 +51,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.11.1
 	go.temporal.io/api v1.13.0
 	go.temporal.io/sdk v1.19.0
-	go.uber.org/atomic v1.10.0
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/ratelimit v0.2.0
 	golang.org/x/exp v0.0.0-20221028150844-83b7d23a625f
@@ -325,6 +323,7 @@ require (
 	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
+	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
@@ -377,6 +376,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.11.1 // indirect
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
+	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.4.0 // indirect
@@ -433,4 +433,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // TEMP until https://github.com/dapr/components-contrib/pull/2237 is merged
-replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20221220225001-af1b37d9de08
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20230103174956-c8cfb295cba8

@@ -3,8 +3,6 @@ package lock
 import (
 	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -76,7 +74,7 @@ func getConfiguration(storeName string) *StoreConfiguration {
 
 func checkKeyIllegal(key string) error {
 	if strings.Contains(key, separator) {
-		return errors.Errorf("input key/keyPrefix '%s' can't contain '%s'", key, separator)
+		return fmt.Errorf("input key/keyPrefix '%s' can't contain '%s'", key, separator)
 	}
 	return nil
 }
