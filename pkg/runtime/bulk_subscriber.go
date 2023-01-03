@@ -323,19 +323,20 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 ) error {
 	spans := make([]trace.Span, len(msg.entries))
 
-	req := invokev1.NewInvokeMethodRequest(msg.path)
-	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.data, contenttype.CloudEventContentType)
-	req.WithCustomHTTPMetadata(msg.metadata)
+	req := invokev1.NewInvokeMethodRequest(msg.path).
+		WithHTTPExtension(nethttp.MethodPost, "").
+		WithRawDataBytes(msg.data).
+		WithContentType(contenttype.CloudEventContentType).
+		WithCustomHTTPMetadata(msg.metadata)
+	defer req.Close()
 
 	n := 0
 	for _, cloudEvent := range msg.cloudEvents {
 		if cloudEvent[pubsub.TraceIDField] != nil {
 			traceID := cloudEvent[pubsub.TraceIDField].(string)
 			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 			var span trace.Span
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.topic, sc, a.globalConfig.Spec.TracingSpec)
 			spans[n] = span
 			n++
 		}
@@ -345,13 +346,13 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 	start := time.Now()
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	elapsed := diag.ElapsedSince(start)
-
 	if err != nil {
 		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.entries))
 		bulkSubDiag.elapsed = elapsed
 		populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIdIndexMap, err)
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
 	}
+	defer resp.Close()
 
 	statusCode := int(resp.Status().Code)
 
@@ -363,12 +364,10 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 		}
 	}
 
-	_, body := resp.RawData()
-
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
 		var appBulkResponse pubsub.AppBulkResponse
-		err := json.Unmarshal(body, &appBulkResponse)
+		err := json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
 			bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += int64(len(msg.entries))
 			bulkSubDiag.elapsed = elapsed
@@ -534,11 +533,10 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 		if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 			if traceID, ok := iTraceID.(string); ok {
 				sc, _ := diag.SpanContextFromW3CString(traceID)
-				spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
 				// no ops if trace is off
 				var span trace.Span
-				ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.topic, sc, a.globalConfig.Spec.TracingSpec)
 				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 				spans[n] = span
 				n++
