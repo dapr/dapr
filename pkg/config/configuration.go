@@ -16,13 +16,13 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -35,7 +35,9 @@ import (
 type Feature string
 
 const (
-	Resiliency     Feature = "Resiliency"
+	// Enable support for resiliency
+	Resiliency Feature = "Resiliency"
+	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
 )
 
@@ -99,6 +101,7 @@ type ConfigurationSpec struct {
 	Features            []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
 	APISpec             APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
 	ComponentsSpec      ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
+	LoggingSpec         LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -223,6 +226,22 @@ type ComponentsSpec struct {
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
 }
 
+// LoggingSpec defines the configuration for logging.
+type LoggingSpec struct {
+	// Configure API logging.
+	APILogging APILoggingSpec `json:"apiLogging,omitempty" yaml:"apiLogging,omitempty"`
+}
+
+// APILoggingSpec defines the configuration for API logging.
+type APILoggingSpec struct {
+	// Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly.
+	// The default value is false.
+	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	// If true, health checks are not reported in API logs. Default: false.
+	// This option has no effect if API logging is disabled.
+	OmitHealthChecks bool `json:"omitHealthChecks,omitempty" yaml:"omitHealthChecks,omitempty"`
+}
+
 // LoadDefaultConfiguration returns the default config.
 func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
@@ -283,7 +302,7 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 		return nil, err
 	}
 	if resp.GetConfiguration() == nil {
-		return nil, errors.Errorf("configuration %s not found", config)
+		return nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
 	err = json.Unmarshal(resp.GetConfiguration(), conf)
@@ -306,12 +325,12 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 	for _, scope := range scopes {
 		// validate scope
 		if set.Has(scope.StoreName) {
-			return errors.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
+			return fmt.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
 		}
 		if scope.DefaultAccess != "" &&
 			!strings.EqualFold(scope.DefaultAccess, AllowAccess) &&
 			!strings.EqualFold(scope.DefaultAccess, DenyAccess) {
-			return errors.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
+			return fmt.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
 		}
 		set.Insert(scope.StoreName)
 
@@ -354,7 +373,12 @@ func containsKey(s []string, key string) bool {
 	return index < len(s) && s[index] == key
 }
 
+// IsFeatureEnabled returns true if a Feature (such as a preview) is enabled.
 func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
+	// TODO @ItalyPaleAle: Temporary change to validate Resiliency
+	if target == Resiliency {
+		return true
+	}
 	for _, feature := range features {
 		if feature.Name == target {
 			return feature.Enabled

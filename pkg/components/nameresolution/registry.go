@@ -14,14 +14,12 @@ limitations under the License.
 package nameresolution
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/kit/logger"
 )
 
 type (
@@ -60,7 +58,7 @@ func (s *Registry) Create(name, version string) (nr.Resolver, error) {
 	if method, ok := s.getResolver(createFullName(name), version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find name resolver %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find name resolver %s/%s", name, version)
 }
 
 func (s *Registry) getResolver(name, version string) (func() nr.Resolver, bool) {

@@ -6,7 +6,9 @@ Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -82,11 +84,11 @@ func TestMain(m *testing.M) {
 		{
 			Name:     "runtime-bindings-http",
 			TypeName: "bindings.kafka",
-			MetaData: map[string]string{
-				"brokers":       `"dapr-kafka:9092"`,
-				"topics":        `"runtime-bindings-http"`,
-				"consumerGroup": `"group1"`,
-				"authRequired":  `"false"`,
+			MetaData: map[string]kube.MetadataValue{
+				"brokers":       {Raw: `"dapr-kafka:9092"`},
+				"topics":        {Raw: `"runtime-bindings-http"`},
+				"consumerGroup": {Raw: `"group1"`},
+				"authRequired":  {Raw: `"false"`},
 			},
 		},
 	}

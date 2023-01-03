@@ -1,10 +1,9 @@
 package identity
 
 import (
+	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // CreateSPIFFEID returns a SPIFFE standard unique id for the given trust domain, namespace and appID.

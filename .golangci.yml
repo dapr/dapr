@@ -121,13 +121,16 @@ linters-settings:
     # minimal occurrences count to trigger, 3 by default
     min-occurrences: 5
   depguard:
-    list-type: blacklist
+    list-type: denylist
     include-go-root: false
-    packages:
-      - github.com/Sirupsen/logrus
-    packages-with-error-messages:
-      # specify an error message to output when a blacklisted package is used
-      github.com/Sirupsen/logrus: "must use github.com/dapr/kit/logger"
+    packages-with-error-message:
+      - "github.com/Sirupsen/logrus": "must use github.com/dapr/kit/logger"
+      - "github.com/agrea/ptr": "must use github.com/dapr/kit/ptr"
+      - "go.uber.org/atomic": "must use sync/atomic"
+      - "github.com/pkg/errors": "must use standard library (errors package and/or fmt.Errorf)"
+      - "github.com/cenkalti/backoff": "must use github.com/cenkalti/backoff/v4"
+      - "github.com/cenkalti/backoff/v2": "must use github.com/cenkalti/backoff/v4"
+      - "github.com/cenkalti/backoff/v3": "must use github.com/cenkalti/backoff/v4"
   misspell:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.
@@ -228,6 +231,7 @@ linters:
   enable-all: true
   disable:
     # TODO Enforce the below linters later
+    - nosnakecase
     - dupl
     - errcheck
     - funlen
@@ -280,3 +284,5 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - structcheck
+    - varcheck
+    - deadcode

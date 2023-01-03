@@ -15,18 +15,17 @@ package http_test
 
 import (
 	"fmt"
+	nethttp "net/http"
+	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/valyala/fasthttp"
 
 	h "github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/kit/logger"
 )
 
 func TestRegistry(t *testing.T) {
@@ -40,12 +39,12 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// Initiate mock object
-		mock := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+		mock := func(next nethttp.Handler) nethttp.Handler {
 			return nil
-		})
-		mockV2 := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+		}
+		mockV2 := func(next nethttp.Handler) nethttp.Handler {
 			return nil
-		})
+		}
 		metadata := h.Metadata{}
 
 		// act
@@ -68,20 +67,20 @@ func TestRegistry(t *testing.T) {
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p))
+		assert.True(t, reflect.ValueOf(mock) == reflect.ValueOf(p))
 		p, e = testRegistry.Create(componentName, "v1", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p))
+		assert.True(t, reflect.ValueOf(mock) == reflect.ValueOf(p))
 
 		// assert v2
 		pV2, e := testRegistry.Create(componentName, "v2", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2))
+		assert.True(t, reflect.ValueOf(mockV2) == reflect.ValueOf(pV2))
 
 		// check case-insensitivity
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2))
+		assert.True(t, reflect.ValueOf(mockV2) == reflect.ValueOf(pV2))
 	})
 
 	t.Run("middleware is not registered", func(t *testing.T) {
@@ -94,7 +93,7 @@ func TestRegistry(t *testing.T) {
 
 		// act
 		p, actualError := testRegistry.Create(componentName, "v1", metadata)
-		expectedError := errors.Errorf("HTTP middleware %s/v1 has not been registered", componentName)
+		expectedError := fmt.Errorf("HTTP middleware %s/v1 has not been registered", componentName)
 
 		// assert
 		assert.Nil(t, p)

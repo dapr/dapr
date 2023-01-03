@@ -63,7 +63,7 @@ This command will:
 - format, test and lint all the code 
 - check if you forgot to `git commit` something
 
-Note: To run linter locally, please use golangci-lint version v1.45.2, otherwise you might encounter errors. You can download version v1.45.2 [here](https://github.com/golangci/golangci-lint/releases/tag/v1.45.2).
+Note: To run linter locally, please use golangci-lint version v1.50.1, otherwise you might encounter errors. You can download version v1.50.1 [here](https://github.com/golangci/golangci-lint/releases/tag/v1.50.1).
 
 ## Debug Dapr
 
@@ -121,6 +121,7 @@ dlv test ./pkg/actors
 
 - **DAPR_REGISTRY** : should be set to `docker.io/<your_docker_hub_account>`.
 - **DAPR_TAG** : should be set to whatever value you wish to use for a container image tag (`dev` is a common choice).
+- **ONLY_DAPR_IMAGE**: should be set to `true` to use a single `dapr` image instead of individual images (like sentry, injector, daprd, etc.).
 
 On Linux/macOS:
 

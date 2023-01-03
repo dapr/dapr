@@ -41,6 +41,9 @@ var endpoints = map[string][]string{
 	"publish.v1": {
 		"/dapr.proto.runtime.v1.Dapr/PublishEvent",
 	},
+	"publish.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1",
+	},
 	"bindings.v1": {
 		"/dapr.proto.runtime.v1.Dapr/InvokeBinding",
 	},
@@ -72,6 +75,11 @@ var endpoints = map[string][]string{
 	},
 	"unlock.v1alpha1": {
 		"/dapr.proto.runtime.v1.Dapr/UnlockAlpha1",
+	},
+	"workflows.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/StartWorkflowAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/GetWorkflowAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/TerminateWorkflowAlpha1",
 	},
 	"shutdown.v1": {
 		"/dapr.proto.runtime.v1.Dapr/Shutdown",

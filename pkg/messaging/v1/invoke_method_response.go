@@ -58,14 +58,21 @@ func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *Inv
 func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *InvokeMethodResponse {
 	imr.r.Message.ContentType = contentType
 
-	// Clone data to prevent GC from deallocating data
-	imr.r.Message.Data = &anypb.Any{Value: cloneBytes(data)}
+	imr.r.Message.Data = &anypb.Any{
+		Value: data,
+	}
 
 	return imr
 }
 
 // WithHeaders sets gRPC response header metadata.
 func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodResponse {
+	imr.r.Headers = MetadataToInternalMetadata(headers)
+	return imr
+}
+
+// WithFastHTTPHeaders populates HTTP response header to gRPC header metadata.
+func (imr *InvokeMethodResponse) WithHTTPHeaders(headers map[string][]string) *InvokeMethodResponse {
 	imr.r.Headers = MetadataToInternalMetadata(headers)
 	return imr
 }
@@ -92,50 +99,64 @@ func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethod
 
 // Status gets Response status.
 func (imr *InvokeMethodResponse) Status() *internalv1pb.Status {
-	return imr.r.GetStatus()
+	if imr.r == nil {
+		return nil
+	}
+	return imr.r.Status
 }
 
 // IsHTTPResponse returns true if response status code is http response status.
 func (imr *InvokeMethodResponse) IsHTTPResponse() bool {
+	if imr.r == nil {
+		return false
+	}
 	// gRPC status code <= 15 - https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 	// HTTP status code >= 100 - https://tools.ietf.org/html/rfc2616#section-10
-	return imr.r.GetStatus().Code >= 100
+	return imr.r.Status.Code >= 100
 }
 
-// Proto clones the internal InvokeMethodResponse pb object.
+// Proto returns the internal InvokeMethodResponse Proto object.
 func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 	return imr.r
 }
 
 // Headers gets Headers metadata.
 func (imr *InvokeMethodResponse) Headers() DaprInternalMetadata {
+	if imr.r == nil {
+		return nil
+	}
 	return imr.r.Headers
 }
 
 // Trailers gets Trailers metadata.
 func (imr *InvokeMethodResponse) Trailers() DaprInternalMetadata {
+	if imr.r == nil {
+		return nil
+	}
 	return imr.r.Trailers
 }
 
 // Message returns message field in InvokeMethodResponse.
 func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
+	if imr.r == nil {
+		return nil
+	}
 	return imr.r.Message
 }
 
 // RawData returns content_type and byte array body.
 func (imr *InvokeMethodResponse) RawData() (string, []byte) {
-	m := imr.r.Message
-	if m == nil || m.GetData() == nil {
+	m := imr.Message()
+	if m == nil || m.Data == nil {
 		return "", nil
 	}
 
-	contentType := m.GetContentType()
-	dataTypeURL := m.GetData().GetTypeUrl()
-	dataValue := m.GetData().GetValue()
+	contentType := m.ContentType
+	dataTypeURL := m.Data.TypeUrl
 
 	if dataTypeURL != "" {
 		contentType = ProtobufContentType
 	}
 
-	return contentType, dataValue
+	return contentType, m.Data.Value
 }

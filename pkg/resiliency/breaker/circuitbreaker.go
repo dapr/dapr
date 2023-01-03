@@ -103,20 +103,18 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 
 // Execute invokes `oper` if the circuit breaker is in an closed state
 // or for an allowed call in the half-open state.
-func (c *CircuitBreaker) Execute(oper func() error) error {
-	_, err := c.breaker.Execute(func() (interface{}, error) {
-		err := oper()
-
-		return nil, err
-	})
+func (c *CircuitBreaker) Execute(oper func() (any, error)) (any, error) {
+	res, err := c.breaker.Execute(oper)
 
 	// Wrap the error so we don't have to reference the external package in other places.
 	switch {
+	case err == nil:
+		return res, nil
 	case errors.Is(err, gobreaker.ErrOpenState):
-		return ErrOpenState
+		return res, ErrOpenState
 	case errors.Is(err, gobreaker.ErrTooManyRequests):
-		return ErrTooManyRequests
+		return res, ErrTooManyRequests
 	default:
-		return err //nolint:wrapcheck
+		return res, err //nolint:wrapcheck
 	}
 }

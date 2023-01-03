@@ -18,40 +18,56 @@
 # Source code from
 #     https://github.com/tailscale/tailscale/tree/main/docs/k8s
 
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: subnet-router
+  name: tailscale-subnet-router
   labels:
-    app: tailscale
+    app: tailscale-subnet-router
 spec:
-  serviceAccountName: "tailscale"
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-          - matchExpressions:
-              - key: kubernetes.io/os
-                operator: In
-                values:
-                  - linux
-  containers:
-    - name: tailscale
-      imagePullPolicy: Always
-      image: "ghcr.io/tailscale/tailscale:latest"
-      env:
-        # Store the state in a k8s secret
-        - name: TS_KUBE_SECRET
-          value: "tailscale-auth"
-        - name: TS_USERSPACE
-          value: "true"
-        - name: TS_AUTH_KEY
-          valueFrom:
-            secretKeyRef:
-              name: tailscale-auth
-              key: TS_AUTH_KEY
-        - name: TS_ROUTES
-          value: "{{TS_ROUTES}}"
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tailscale-subnet-router
+  template:
+    metadata:
+      labels:
+        app: tailscale-subnet-router
+    spec:
+      serviceAccountName: tailscale
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+      containers:
+        - name: tailscale
+          imagePullPolicy: Always
+          image: "ghcr.io/tailscale/tailscale:latest"
+          env:
+            # Store the state in a k8s secret
+            - name: TS_KUBE_SECRET
+              value: "tailscale-auth"
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_AUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-auth
+                  key: TS_AUTH_KEY
+            - name: TS_ROUTES
+              value: "{{TS_ROUTES}}"
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "256Mi"
+            requests:
+              cpu: "700m"
+              memory: "128Mi"

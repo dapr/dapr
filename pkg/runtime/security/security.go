@@ -5,16 +5,15 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"os"
-
-	"github.com/pkg/errors"
-
-	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -35,15 +34,15 @@ func CertPool(certPem []byte) (*x509.CertPool, error) {
 func GetCertChain() (*credentials.CertChain, error) {
 	trustAnchors := os.Getenv(sentryConsts.TrustAnchorsEnvVar)
 	if trustAnchors == "" {
-		return nil, errors.Errorf("couldn't find trust anchors in environment variable %s", sentryConsts.TrustAnchorsEnvVar)
+		return nil, fmt.Errorf("couldn't find trust anchors in environment variable %s", sentryConsts.TrustAnchorsEnvVar)
 	}
 	cert := os.Getenv(sentryConsts.CertChainEnvVar)
 	if cert == "" {
-		return nil, errors.Errorf("couldn't find cert chain in environment variable %s", sentryConsts.CertChainEnvVar)
+		return nil, fmt.Errorf("couldn't find cert chain in environment variable %s", sentryConsts.CertChainEnvVar)
 	}
 	key := os.Getenv(sentryConsts.CertKeyEnvVar)
 	if cert == "" {
-		return nil, errors.Errorf("couldn't find cert key in environment variable %s", sentryConsts.CertKeyEnvVar)
+		return nil, fmt.Errorf("couldn't find cert key in environment variable %s", sentryConsts.CertKeyEnvVar)
 	}
 	return &credentials.CertChain{
 		RootCA: []byte(trustAnchors),
@@ -71,7 +70,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
 		diag.DefaultMonitoring.MTLSInitFailed("prikeygen")
-		return nil, nil, errors.Wrap(err, "failed to generate private key")
+		return nil, nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
 	encodedKey, err := x509.MarshalECPrivateKey(key)
@@ -88,7 +87,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 	csrb, err := x509.CreateCertificateRequest(rand.Reader, &csr, key)
 	if err != nil {
 		diag.DefaultMonitoring.MTLSInitFailed("csr")
-		return nil, nil, errors.Wrap(err, "failed to create sidecar csr")
+		return nil, nil, fmt.Errorf("failed to create sidecar csr: %w", err)
 	}
 	return csrb, keyPem, nil
 }
