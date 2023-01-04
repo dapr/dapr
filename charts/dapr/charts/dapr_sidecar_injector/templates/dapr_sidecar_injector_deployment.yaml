@@ -111,6 +111,14 @@ spec:
 {{- end }}
         - "--healthz-port"
         - "{{ .Values.healthzPort }}"
+{{- with .Values.global.issuerFilenames }}
+        - "--issuer-ca-secret-key"
+        - "{{ .ca }}"
+        - "--issuer-certificate-secret-key"
+        - "{{ .cert }}"
+        - "--issuer-key-secret-key"
+        - "{{ .key }}"
+{{- end }}
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt
