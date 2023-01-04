@@ -242,6 +242,6 @@ func HelloTemporalWF(ctx workflow.Context) (string, error) {
 }
 
 func HelloTemporalAct(ctx context.Context) (result string, err error) {
-	time.Sleep(8 * time.Second) // This 5s sleep is to allow for terminate to be called
+	time.Sleep(5 * time.Second) // This 5s sleep is to allow for terminate to be called
 	return "Hello Temporal", nil
 }
