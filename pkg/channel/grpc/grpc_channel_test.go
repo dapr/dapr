@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -98,21 +99,39 @@ func TestInvokeMethod(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	req := invokev1.NewInvokeMethodRequest("method")
-	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
-	response, err := c.InvokeMethod(ctx, req)
-	assert.NoError(t, err)
-	contentType, body := response.RawData()
+	t.Run("successful request", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		defer req.Close()
+		response, err := c.InvokeMethod(ctx, req)
+		assert.NoError(t, err)
+		defer response.Close()
 
-	assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, "application/json", response.ContentType())
 
-	actual := map[string]string{}
-	json.Unmarshal(body, &actual)
+		actual := map[string]string{}
+		err = json.NewDecoder(response.RawData()).Decode(&actual)
 
-	assert.Equal(t, "POST", actual["httpverb"])
-	assert.Equal(t, "method", actual["method"])
-	assert.Equal(t, "token1", actual[authConsts.APITokenHeader])
-	assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
+		require.NoError(t, err)
+		assert.Equal(t, "POST", actual["httpverb"])
+		assert.Equal(t, "method", actual["method"])
+		assert.Equal(t, "token1", actual[authConsts.APITokenHeader])
+		assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
+	})
+
+	t.Run("request body stream errors", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawData(&ErrorReader{})
+		defer req.Close()
+
+		response, err := c.InvokeMethod(ctx, req)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, io.ErrClosedPipe)
+		if response != nil {
+			defer response.Close()
+		}
+	})
 }
 
 func TestHealthProbe(t *testing.T) {
@@ -148,4 +167,13 @@ func TestHealthProbe(t *testing.T) {
 	success, err = c.HealthProbe(ctx)
 	assert.NoError(t, err)
 	assert.False(t, success)
+}
+
+// ErrorReader implements an io.Reader that returns an error after reading a few bytes.
+type ErrorReader struct{}
+
+func (r ErrorReader) Read(p []byte) (n int, err error) {
+	data := []byte("non ti scordar di me")
+	l := copy(p, data)
+	return l, io.ErrClosedPipe
 }

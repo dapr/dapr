@@ -18,7 +18,7 @@ import (
 	"errors"
 
 	"github.com/dapr/dapr/pkg/actors"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -26,8 +26,11 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
-	proto := req.Proto()
+func (f *FailingActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	proto, err := req.ProtoWithData()
+	if err != nil {
+		return nil, err
+	}
 	if proto == nil || proto.Actor == nil {
 		return nil, errors.New("proto.Actor is nil")
 	}
@@ -38,8 +41,8 @@ func (f *FailingActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (
 	if proto.Message != nil && proto.Message.Data != nil {
 		data = proto.Message.Data.Value
 	}
-	resp := v1.NewInvokeMethodResponse(200, "Success", nil).
-		WithRawData(data, "")
+	resp := invokev1.NewInvokeMethodResponse(200, "Success", nil).
+		WithRawDataBytes(data)
 	return resp, nil
 }
 
