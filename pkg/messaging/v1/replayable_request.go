@@ -22,12 +22,14 @@ import (
 	streamutils "github.com/dapr/dapr/utils/streams"
 )
 
+// Minimum capacity for the slices is 2KB
+const minByteSliceCapacity = 2 << 10
+
 // Contain pools of *bytes.Buffer and []byte objects.
 // Used to reduce the number of allocations in replayableRequest for buffers and relieve pressure on the GC.
 var (
 	bufPool = sync.Pool{New: newBuffer}
-	// Minimum capacity for the slices is 2KB
-	bsPool = utils.NewByteSlicePool(2 << 10)
+	bsPool  = utils.NewByteSlicePool(minByteSliceCapacity)
 )
 
 func newBuffer() any {
@@ -92,7 +94,7 @@ func (rr *replayableRequest) RawData() (r io.Reader) {
 		if rr.currentData == nil {
 			rr.currentData = bsPool.Get(l)
 		}
-		bsPool.Resize(rr.currentData, l)
+		rr.currentData = bsPool.Resize(rr.currentData, l)
 
 		// Copy the data from the replay buffer into the byte slice
 		copy(rr.currentData[0:l], rr.replay.Bytes())
