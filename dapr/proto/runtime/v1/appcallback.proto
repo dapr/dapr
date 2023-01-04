@@ -152,7 +152,7 @@ message TopicEventBulkRequestEntry {
     bytes bytes = 2;
     TopicEventCERequest cloud_event = 3;
   }
-  
+
   // content type of the event contained.
   string content_type = 4;
   

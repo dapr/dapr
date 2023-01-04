@@ -7,10 +7,9 @@ package codec
 import (
 	"fmt"
 
+	protoV1 "github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/protobuf/proto"
-
-	protoV1 "github.com/golang/protobuf/proto"
 )
 
 // Name is the name by which the proxy codec is registered in the encoding codec registry

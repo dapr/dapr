@@ -311,15 +311,9 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					for _, entry := range req.Entries {
 						_, shouldErr := entry.Metadata["shouldErr"]
 						if shouldErr {
-							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+							res.FailedEntries = append(res.FailedEntries, pubsub.BulkPublishResponseFailedEntry{
 								EntryId: entry.EntryId,
-								Status:  pubsub.PublishFailed,
 								Error:   err,
-							})
-						} else {
-							res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-								EntryId: entry.EntryId,
-								Status:  pubsub.PublishSucceeded,
 							})
 						}
 					}
@@ -329,14 +323,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				case "errnotallowed":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				default:
-					res := pubsub.BulkPublishResponse{}
-					for _, entry := range req.Entries {
-						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-							EntryId: entry.EntryId,
-							Status:  pubsub.PublishSucceeded,
-						})
-					}
-					return res, nil
+					return pubsub.BulkPublishResponse{}, nil
 				}
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
@@ -420,20 +407,17 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 
 		errBulkResponse := pubsub.BulkPublishResponse{
-			Statuses: []pubsub.BulkPublishResponseEntry{
+			FailedEntries: []pubsub.BulkPublishResponseFailedEntry{
 				{
 					EntryId: "1",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "2",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "3",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 			},
@@ -450,11 +434,10 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 			bulkResp := BulkPublishResponse{}
 			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
-			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
-			for i, entry := range bulkResp.Statuses {
-				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
-				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
-				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
+			for i, entry := range bulkResp.FailedEntries {
+				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
+				assert.Equal(t, errBulkResponse.FailedEntries[i].Error.Error(), entry.Error)
 			}
 		}
 	})
@@ -476,15 +459,13 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 
 		errBulkResponse := pubsub.BulkPublishResponse{
-			Statuses: []pubsub.BulkPublishResponseEntry{
+			FailedEntries: []pubsub.BulkPublishResponseFailedEntry{
 				{
 					EntryId: "2",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 				{
 					EntryId: "3",
-					Status:  pubsub.PublishFailed,
 					Error:   errors.New("Error from pubsub errorpubsub"),
 				},
 			},
@@ -501,11 +482,10 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 			bulkResp := BulkPublishResponse{}
 			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
-			assert.Equal(t, len(errBulkResponse.Statuses), len(bulkResp.Statuses))
-			for i, entry := range bulkResp.Statuses {
-				assert.Equal(t, errBulkResponse.Statuses[i].EntryId, entry.EntryId)
-				assert.Equal(t, string(errBulkResponse.Statuses[i].Status), entry.Status)
-				assert.Equal(t, errBulkResponse.Statuses[i].Error.Error(), entry.Error)
+			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
+			for i, entry := range bulkResp.FailedEntries {
+				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
+				assert.Equal(t, errBulkResponse.FailedEntries[i].Error.Error(), entry.Error)
 			}
 		}
 	})
@@ -945,10 +925,13 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
-func TestV1DirectMessagingEndpoints(t *testing.T) {
-	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	fakeDirectMessageResponse.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+func getFakeDirectMessageResponse() *invokev1.InvokeMethodResponse {
+	return invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataString("fakeDirectMessageResponse").
+		WithContentType("application/json")
+}
 
+func TestV1DirectMessagingEndpoints(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	fakeServer := newFakeHTTPServer()
@@ -959,6 +942,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -985,6 +971,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with dapr-app-id in header - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		apiPath := "fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -1009,6 +998,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with dapr-app-id in basic auth - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		apiPath := "fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -1044,6 +1036,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 			[]*anypb.Any{details})
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
+		defer fakeInternalErrorResponse.Close()
 
 		mockDirectMessaging.Calls = nil // reset call count
 
@@ -1073,6 +1066,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(int32(codes.Internal), "InternalError", []*anypb.Any{malformedDetails})
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
+		defer fakeInternalErrorResponse.Close()
 
 		mockDirectMessaging.Calls = nil // reset call count
 
@@ -1092,6 +1086,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
@@ -1118,6 +1115,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging - HEAD - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -1143,6 +1143,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging route '/' - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		apiPath := "v1.0/invoke/fakeAppID/method/"
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -1217,9 +1220,6 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 }
 
 func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
-	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	fakeDirectMessageResponse.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
-
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	fakeServer := newFakeHTTPServer()
@@ -1237,6 +1237,9 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		buffer = ""
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
@@ -1262,6 +1265,9 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with dapr-app-id - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		buffer = ""
 		apiPath := "fakeMethod"
 		fakeData := []byte("fakeData")
@@ -1287,6 +1293,9 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
 		buffer = ""
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
@@ -2044,8 +2053,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 		fakeData := []byte("fakeData")
 
 		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
+		defer response.Close()
 		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
-			m := imr.Proto()
+			m, err := imr.ProtoWithData()
+			if err != nil {
+				return false
+			}
+
 			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
 				return false
 			}
@@ -2068,27 +2082,27 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
-		headerMetadata := map[string][]string{
-			"Accept-Encoding": {"gzip"},
-			"Content-Length":  {"8"},
-			"Content-Type":    {"application/json"},
-			"Host":            {"localhost"},
-			"User-Agent":      {"Go-http-client/1.1"},
-		}
 		mockActors := new(actors.MockActors)
-		invokeRequest := invokev1.NewInvokeMethodRequest("method1")
-		invokeRequest.WithActor("fakeActorType", "fakeActorID")
-		fakeData := []byte("fakeData")
+		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
+			m, err := imr.ProtoWithData()
+			if err != nil {
+				return false
+			}
 
-		invokeRequest.WithHTTPExtension(gohttp.MethodPost, "")
-		invokeRequest.WithRawData(fakeData, "application/json")
-		invokeRequest.WithMetadata(headerMetadata)
-		mockActors.On("Call", invokeRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
+			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
+				return false
+			}
+
+			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, []byte("fakeData")) {
+				return false
+			}
+			return true
+		})).Return(nil, errors.New("UPSTREAM_ERROR"))
 
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		resp := fakeServer.DoRequest("POST", apiPath, []byte("fakeData"), nil)
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
@@ -2385,8 +2399,10 @@ func TestAPIToken(t *testing.T) {
 
 	t.Setenv("DAPR_API_TOKEN", token)
 
-	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	fakeDirectMessageResponse.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataString("fakeDirectMessageResponse").
+		WithContentType("application/json")
+	defer fakeDirectMessageResponse.Close()
 
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
@@ -2500,8 +2516,10 @@ func TestAPIToken(t *testing.T) {
 }
 
 func TestEmptyPipelineWithTracer(t *testing.T) {
-	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	fakeDirectMessageResponse.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataString("fakeDirectMessageResponse").
+		WithContentType("application/json")
+	defer fakeDirectMessageResponse.Close()
 
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
@@ -2898,8 +2916,10 @@ func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
 }
 
 func TestSinglePipelineWithTracer(t *testing.T) {
-	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	fakeDirectMessageResponse.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataString("fakeDirectMessageResponse").
+		WithContentType("application/json")
+	defer fakeDirectMessageResponse.Close()
 
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
@@ -2951,8 +2971,10 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 }
 
 func TestSinglePipelineWithNoTracing(t *testing.T) {
-	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	fakeDirectMessageResponse.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataString("fakeDirectMessageResponse").
+		WithContentType("application/json")
+	defer fakeDirectMessageResponse.Close()
 
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 

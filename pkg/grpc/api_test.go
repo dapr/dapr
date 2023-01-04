@@ -148,15 +148,19 @@ var testResiliency = &v1alpha1.Resiliency{
 type mockGRPCAPI struct{}
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
-	return resp.Proto(), nil
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(ctx)).
+		WithContentType("text/plain")
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
-	return resp.Proto(), nil
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(ctx)).
+		WithContentType("text/plain")
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -334,8 +338,9 @@ func TestCallActorWithTracing(t *testing.T) {
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)
 
-	request := invokev1.NewInvokeMethodRequest("method")
-	request.WithActor("test-actor", "actor-1")
+	request := invokev1.NewInvokeMethodRequest("method").
+		WithActor("test-actor", "actor-1")
+	defer request.Close()
 
 	resp, err := client.CallActor(context.Background(), request.Proto())
 	assert.NoError(t, err)
@@ -352,9 +357,10 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	defer clientConn.Close()
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)
-	request := invokev1.NewInvokeMethodRequest("method").Proto()
+	request := invokev1.NewInvokeMethodRequest("method")
+	defer request.Close()
 
-	resp, err := client.CallLocal(context.Background(), request)
+	resp, err := client.CallLocal(context.Background(), request.Proto())
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with app call")
 }
@@ -373,9 +379,10 @@ func TestCallLocal(t *testing.T) {
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
+		request := invokev1.NewInvokeMethodRequest("method")
+		defer request.Close()
 
-		_, err := client.CallLocal(context.Background(), request)
+		_, err := client.CallLocal(context.Background(), request.Proto())
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 
@@ -419,9 +426,10 @@ func TestCallLocal(t *testing.T) {
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
+		request := invokev1.NewInvokeMethodRequest("method")
+		defer request.Close()
 
-		_, err := client.CallLocal(context.Background(), request)
+		_, err := client.CallLocal(context.Background(), request.Proto())
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
@@ -447,8 +455,10 @@ func TestAPIToken(t *testing.T) {
 	t.Run("valid token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -495,8 +505,10 @@ func TestAPIToken(t *testing.T) {
 	t.Run("invalid token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -537,8 +549,10 @@ func TestAPIToken(t *testing.T) {
 	t.Run("missing token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -629,8 +643,10 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 
 	for _, tt := range httpResponseTests {
 		t.Run(fmt.Sprintf("handle http %d response code", tt.status), func(t *testing.T) {
-			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil)
-			fakeResp.WithRawData([]byte(tt.errHTTPMessage), "application/json")
+			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil).
+				WithRawDataString(tt.errHTTPMessage).
+				WithContentType("application/json")
+			defer fakeResp.Close()
 
 			// Set up direct messaging mock
 			mockDirectMessaging.Calls = nil // reset call count
@@ -699,8 +715,10 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 					Owner:        "Dapr",
 				}),
 			},
-		)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -1983,7 +2001,7 @@ func TestPublishTopic(t *testing.T) {
 func TestBulkPublish(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	srv := &api{
+	fakeAPI := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
 				mock := daprt.MockPubSub{}
@@ -1991,36 +2009,34 @@ func TestBulkPublish(t *testing.T) {
 				return &mock
 			},
 			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-				entries := []pubsub.BulkPublishResponseEntry{}
-
+				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
-				for i, e := range req.Entries {
-					entry := pubsub.BulkPublishResponseEntry{
-						EntryId: e.EntryId,
-					}
-					if req.Topic == "error-topic" {
-						entry.Error = errors.New("error when publish")
-						entry.Status = pubsub.PublishFailed
-					} else if req.Topic == "even-error-topic" {
-						if i%2 == 0 {
-							entry.Error = errors.New("error when publish")
-							entry.Status = pubsub.PublishFailed
-						} else {
-							entry.Status = pubsub.PublishSucceeded
+				if req.Topic == "error-topic" {
+					for _, e := range req.Entries {
+						entry := pubsub.BulkPublishResponseFailedEntry{
+							EntryId: e.EntryId,
 						}
-					} else {
-						entry.Status = pubsub.PublishSucceeded
+						entry.Error = errors.New("error on publish")
+						entries = append(entries, entry)
 					}
-
-					entries = append(entries, entry)
+				} else if req.Topic == "even-error-topic" {
+					for i, e := range req.Entries {
+						if i%2 == 0 {
+							entry := pubsub.BulkPublishResponseFailedEntry{
+								EntryId: e.EntryId,
+							}
+							entry.Error = errors.New("error on publish")
+							entries = append(entries, entry)
+						}
+					}
 				}
-
-				return pubsub.BulkPublishResponse{Statuses: entries}, nil
+				// Mock simulates only partial failures or total success, so error is always nil.
+				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
 	}
 
-	server := startTestServerAPI(port, srv)
+	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -2041,29 +2057,27 @@ func TestBulkPublish(t *testing.T) {
 		Entries:    sampleEntries,
 	})
 	assert.Nil(t, err)
-	assert.Empty(t, res.Statuses)
+	assert.Empty(t, res.FailedEntries)
 
 	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 		PubsubName: "pubsub",
 		Topic:      "error-topic",
 		Entries:    sampleEntries,
 	})
+	t.Log(res)
+	// Partial failure, so expecting no error
 	assert.Nil(t, err)
-	assert.Equal(t, 4, len(res.Statuses))
-	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
-	}
-
+	assert.NotNil(t, res)
+	assert.Equal(t, 4, len(res.FailedEntries))
 	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 		PubsubName: "pubsub",
 		Topic:      "even-error-topic",
 		Entries:    sampleEntries,
 	})
+	// Partial failure, so expecting no error
 	assert.Nil(t, err)
-	assert.Equal(t, 2, len(res.Statuses))
-	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
-	}
+	assert.NotNil(t, res)
+	assert.Equal(t, 2, len(res.FailedEntries))
 }
 
 func TestShutdownEndpoints(t *testing.T) {
@@ -2104,7 +2118,7 @@ func TestInvokeBinding(t *testing.T) {
 	srv := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "error-binding" {
-				return nil, errors.New("error when invoke binding")
+				return nil, errors.New("error invoking binding")
 			}
 			return &bindings.InvokeResponse{Data: []byte("ok"), Metadata: req.Metadata}, nil
 		},
