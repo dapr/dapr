@@ -1952,6 +1952,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 }
 
 func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	// context.TODO() is used here as later on a context will have to be passed in for each publish separately
 	ps, ok := a.pubSubs[req.PubsubName]
 	if !ok {
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
@@ -1960,11 +1961,14 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
+	policyDef := a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
 	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
-		return bulkPublisher.BulkPublish(context.TODO(), req)
+		return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, bulkPublisher)
 	}
-	log.Debugf("pubsub %s does not implement the bulkPublish API, defaulting to normal publish", req.PubsubName)
-	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
+	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
+	defaultBulkPublisher := runtimePubsub.NewDefaultBulkPublisher(ps.component)
+
+	return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, defaultBulkPublisher)
 }
 
 func metadataContainsNamespace(items []componentsV1alpha1.MetadataItem) bool {
