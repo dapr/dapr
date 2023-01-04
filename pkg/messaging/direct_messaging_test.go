@@ -33,12 +33,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const maxGRPCServerUptime = 100 * time.Millisecond
-
-func newDirectMessaging() *directMessaging {
-	return &directMessaging{}
-}
-
 func TestDestinationHeaders(t *testing.T) {
 	t.Run("destination header present", func(t *testing.T) {
 		appID := "test1"
@@ -46,7 +40,7 @@ func TestDestinationHeaders(t *testing.T) {
 			WithMetadata(map[string][]string{})
 		defer req.Close()
 
-		dm := newDirectMessaging()
+		dm := &directMessaging{}
 		dm.addDestinationAppIDHeaderToMetadata(appID, req)
 		md := req.Metadata()[invokev1.DestinationIDHeader]
 		assert.Equal(t, appID, md.Values[0])
@@ -61,7 +55,7 @@ func TestCallerAndCalleeHeaders(t *testing.T) {
 			WithMetadata(map[string][]string{})
 		defer req.Close()
 
-		dm := newDirectMessaging()
+		dm := &directMessaging{}
 		dm.addCallerAndCalleeAppIDHeaderToMetadata(callerAppID, calleeAppID, req)
 		actualCallerAppID := req.Metadata()[invokev1.CallerIDHeader]
 		actualCalleeAppID := req.Metadata()[invokev1.CalleeIDHeader]
@@ -76,7 +70,7 @@ func TestForwardedHeaders(t *testing.T) {
 			WithMetadata(map[string][]string{})
 		defer req.Close()
 
-		dm := newDirectMessaging()
+		dm := &directMessaging{}
 		dm.hostAddress = "1"
 		dm.hostName = "2"
 
@@ -101,7 +95,7 @@ func TestForwardedHeaders(t *testing.T) {
 			})
 		defer req.Close()
 
-		dm := newDirectMessaging()
+		dm := &directMessaging{}
 		dm.hostAddress = "1"
 		dm.hostName = "2"
 
@@ -125,7 +119,7 @@ func TestKubernetesNamespace(t *testing.T) {
 	t.Run("no namespace", func(t *testing.T) {
 		appID := "app1"
 
-		dm := newDirectMessaging()
+		dm := &directMessaging{}
 		id, ns, err := dm.requestAppIDAndNamespace(appID)
 
 		assert.NoError(t, err)
@@ -136,7 +130,7 @@ func TestKubernetesNamespace(t *testing.T) {
 	t.Run("with namespace", func(t *testing.T) {
 		appID := "app1.ns1"
 
-		dm := newDirectMessaging()
+		dm := &directMessaging{}
 		id, ns, err := dm.requestAppIDAndNamespace(appID)
 
 		assert.NoError(t, err)
@@ -147,7 +141,7 @@ func TestKubernetesNamespace(t *testing.T) {
 	t.Run("invalid namespace", func(t *testing.T) {
 		appID := "app1.ns1.ns2"
 
-		dm := newDirectMessaging()
+		dm := &directMessaging{}
 		_, _, err := dm.requestAppIDAndNamespace(appID)
 
 		assert.Error(t, err)
@@ -158,13 +152,11 @@ func TestInvokeRemote(t *testing.T) {
 	log.SetOutputLevel(logger.FatalLevel)
 	defer log.SetOutputLevel(logger.InfoLevel)
 
-	prepareEnvironment := func(t *testing.T, enableStreaming bool) *internalv1pb.InternalInvokeResponse {
+	prepareEnvironment := func(t *testing.T, enableStreaming bool, multiChunks bool) (*directMessaging, func()) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		server := startInternalServer(port, enableStreaming)
-		defer server.Stop()
+		server := startInternalServer(port, enableStreaming, multiChunks)
 		clientConn := createTestClient(port)
-		defer clientConn.Close()
 
 		messaging := NewDirectMessaging(NewDirectMessagingOpts{
 			MaxRequestBodySize: 10 << 20,
@@ -173,7 +165,20 @@ func TestInvokeRemote(t *testing.T) {
 			},
 		}).(*directMessaging)
 
-		request := invokev1.NewInvokeMethodRequest("method").
+		teardown := func() {
+			server.Stop()
+			clientConn.Close()
+		}
+
+		return messaging, teardown
+	}
+
+	t.Run("streaming with single chunk", func(t *testing.T) {
+		messaging, teardown := prepareEnvironment(t, true, false)
+		defer teardown()
+
+		request := invokev1.
+			NewInvokeMethodRequest("method").
 			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
 		defer request.Close()
 
@@ -183,26 +188,54 @@ func TestInvokeRemote(t *testing.T) {
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
 
-		return pd
-	}
-
-	t.Run("target supports streaming", func(t *testing.T) {
-		pd := prepareEnvironment(t, true)
-
 		assert.Equal(t, "🐱", string(pd.Message.Data.Value))
 	})
 
+	t.Run("streaming with multiple chunks", func(t *testing.T) {
+		messaging, teardown := prepareEnvironment(t, true, true)
+		defer teardown()
+
+		request := invokev1.
+			NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
+		defer request.Close()
+
+		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		require.NoError(t, err)
+
+		pd, err := res.ProtoWithData()
+		require.NoError(t, err)
+
+		assert.Equal(t, "🐱 Sempre caro mi fu quest'ermo colle… E il naufragar m'è dolce in questo mare.", string(pd.Message.Data.Value))
+	})
+
 	t.Run("target does not support streaming", func(t *testing.T) {
-		pd := prepareEnvironment(t, false)
+		messaging, teardown := prepareEnvironment(t, false, false)
+		defer teardown()
+
+		request := invokev1.
+			NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
+		defer request.Close()
+
+		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		require.NoError(t, err)
+
+		pd, err := res.ProtoWithData()
+		require.NoError(t, err)
 
 		assert.Equal(t, "🐶", string(pd.Message.Data.Value))
 	})
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(
+		ctx,
 		fmt.Sprintf("localhost:%d", port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
 	)
 	if err != nil {
 		panic(err)
@@ -210,13 +243,15 @@ func createTestClient(port int) *grpc.ClientConn {
 	return conn
 }
 
-func startInternalServer(port int, enableStreaming bool) *grpc.Server {
+func startInternalServer(port int, enableStreaming bool, multiChunks bool) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	server := grpc.NewServer()
 
 	if enableStreaming {
-		stream := &mockGRPCServerStream{}
+		stream := &mockGRPCServerStream{
+			multiChunks: multiChunks,
+		}
 		server.RegisterService(&grpc.ServiceDesc{
 			ServiceName: "dapr.proto.internals.v1.ServiceInvocation",
 			HandlerType: (*mockGRPCServerStreamI)(nil),
@@ -237,9 +272,6 @@ func startInternalServer(port int, enableStreaming bool) *grpc.Server {
 			panic(err)
 		}
 	}()
-
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
 
 	return server
 }
@@ -290,9 +322,11 @@ type mockGRPCServerStreamI interface {
 
 type mockGRPCServerStream struct {
 	mockGRPCServerUnary
+	multiChunks bool
 }
 
 func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
+	// Send the first chunk
 	resp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 		WithRawDataString("🐱").
 		WithContentType("text/plain").
@@ -310,9 +344,26 @@ func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvoca
 		Response: resp.Proto(),
 		Payload: &commonv1pb.StreamPayload{
 			Data:     data,
-			Complete: true,
+			Complete: !m.multiChunks,
 		},
 	})
+
+	// Send the next chunk if needed
+	if m.multiChunks {
+		stream.Send(&internalv1pb.InternalInvokeResponseStream{
+			Payload: &commonv1pb.StreamPayload{
+				Data:     []byte(" Sempre caro mi fu quest'ermo colle…"),
+				Complete: false,
+			},
+		})
+		stream.Send(&internalv1pb.InternalInvokeResponseStream{
+			Payload: &commonv1pb.StreamPayload{
+				Data:     []byte(" E il naufragar m'è dolce in questo mare."),
+				Complete: true,
+			},
+		})
+	}
+
 	return nil
 }
 

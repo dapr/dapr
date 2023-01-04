@@ -74,7 +74,7 @@ const (
 	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
 )
 
-// Pool of *[]byte used by direct messaging (for sending on both the server and client). Their size is fixed at StreamBufferSize.
+// BufPool is a pool of *[]byte used by direct messaging (for sending on both the server and client). Their size is fixed at StreamBufferSize.
 var BufPool = sync.Pool{
 	New: func() any {
 		// Return a pointer here

@@ -68,8 +68,6 @@ const (
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
-//
-//nolint:interfacebloat
 type API interface {
 	// DaprInternal Service methods
 	internalv1pb.ServiceInvocationServer

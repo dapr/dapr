@@ -265,7 +265,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
 
-	// TODO: DO THIS IF THE FEATURE FLAG IS OFF
+	// TODO @ItalyPaleAle: DO THIS IF THE FEATURE FLAG IS OFF
 	var imr *invokev1.InvokeMethodResponse
 	if false {
 		imr, err = d.invokeRemoteUnary(ctx, clientV1, req, opts)
