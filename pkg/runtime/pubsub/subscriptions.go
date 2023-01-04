@@ -208,7 +208,8 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 				s, ok := status.FromError(rErr)
 				if ok && s != nil {
 					if s.Code() == codes.Unimplemented {
-						return rResp, backoff.Permanent(rErr)
+						log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
+						return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
 					}
 				}
 			}
@@ -223,7 +224,8 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			if rErr != nil {
 				s, ok := status.FromError(rErr)
 				if ok && s != nil && s.Code() == codes.Unimplemented {
-					return rResp, backoff.Permanent(rErr)
+					log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
+					return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
 				}
 			}
 			return rResp, rErr
