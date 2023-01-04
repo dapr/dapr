@@ -69,6 +69,7 @@ type directMessaging struct {
 	readBufferSize       int
 	resiliency           resiliency.Provider
 	isResiliencyEnabled  bool
+	isStreamingEnabled   bool
 }
 
 type remoteApp struct {
@@ -91,6 +92,7 @@ type NewDirectMessagingOpts struct {
 	ReadBufferSize      int
 	Resiliency          resiliency.Provider
 	IsResiliencyEnabled bool
+	IsStreamingEnabled  bool
 }
 
 // NewDirectMessaging returns a new direct messaging api.
@@ -111,6 +113,7 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 		readBufferSize:       opts.ReadBufferSize,
 		resiliency:           opts.Resiliency,
 		isResiliencyEnabled:  opts.IsResiliencyEnabled,
+		isStreamingEnabled:   opts.IsStreamingEnabled,
 		hostAddress:          hAddr,
 		hostName:             hName,
 	}
@@ -265,9 +268,8 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
 
-	// TODO @ItalyPaleAle: DO THIS IF THE FEATURE FLAG IS OFF
 	var imr *invokev1.InvokeMethodResponse
-	if false {
+	if !d.isStreamingEnabled {
 		imr, err = d.invokeRemoteUnary(ctx, clientV1, req, opts)
 	} else {
 		imr, err = d.invokeRemoteStream(ctx, clientV1, req, appID, opts)

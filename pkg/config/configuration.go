@@ -37,6 +37,8 @@ type Feature string
 const (
 	// Enable support for resiliency
 	Resiliency Feature = "Resiliency"
+	// Enable support for streaming in HTTP service invocation
+	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
 	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
 )
@@ -377,6 +379,10 @@ func containsKey(s []string, key string) bool {
 func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
 	// TODO @ItalyPaleAle: Temporary change to validate Resiliency
 	if target == Resiliency {
+		return true
+	}
+	// TODO @ItalyPaleAle: Temporary change to validate streaming
+	if target == ServiceInvocationStreaming {
 		return true
 	}
 	for _, feature := range features {

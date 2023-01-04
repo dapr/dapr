@@ -163,6 +163,7 @@ func TestInvokeRemote(t *testing.T) {
 			ClientConnFn: func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
 				return clientConn, func(_ bool) {}, nil
 			},
+			IsStreamingEnabled: true,
 		}).(*directMessaging)
 
 		teardown := func() {
