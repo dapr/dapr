@@ -396,8 +396,9 @@ func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *i
 
 	responseBytes, _ := json.Marshal(subs)
 
-	response := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	response.WithRawData(responseBytes, "content/json")
+	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataBytes(responseBytes).
+		WithContentType("application/json")
 	return response, nil
 }
 
@@ -431,8 +432,9 @@ func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.
 
 	responseBytes, _ := json.Marshal(subs)
 
-	response := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	response.WithRawData(responseBytes, "content/json")
+	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataBytes(responseBytes).
+		WithContentType("application/json")
 	return response, nil
 }
 
@@ -630,9 +632,11 @@ func TestGRPCSubscriptions(t *testing.T) {
 			unimplemented:    true,
 		}
 
-		_, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
-		require.Error(t, err)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		// not implemented error is not retried and is returned as "zero" subscriptions
+		require.NoError(t, err)
 		assert.Equal(t, 1, m.callCount)
+		assert.Len(t, subs, 0)
 	})
 
 	t.Run("error from app, success after retries with resiliency", func(t *testing.T) {
@@ -661,9 +665,11 @@ func TestGRPCSubscriptions(t *testing.T) {
 			unimplemented:    true,
 		}
 
-		_, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
-		require.Error(t, err)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		// not implemented error is not retried and is returned as "zero" subscriptions
+		require.NoError(t, err)
 		assert.Equal(t, 1, m.callCount)
+		assert.Len(t, subs, 0)
 	})
 }
 
