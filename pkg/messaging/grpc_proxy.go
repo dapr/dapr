@@ -15,22 +15,22 @@ package messaging
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
-	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
-	"github.com/dapr/dapr/pkg/resiliency"
-
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
+	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 // Proxy is the interface for a gRPC transparent proxy.
@@ -84,14 +84,14 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 
 	v := md[diagnostics.GRPCProxyAppIDKey]
 	if len(v) == 0 {
-		return ctx, nil, nil, nopTeardown, errors.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
+		return ctx, nil, nil, nopTeardown, fmt.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
 	}
 
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 	appID := v[0]
 
 	if p.remoteAppFn == nil {
-		return ctx, nil, nil, nopTeardown, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
+		return ctx, nil, nil, nopTeardown, errors.New("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
 	}
 
 	target, isLocal, err := p.isLocalInternal(appID)
@@ -142,7 +142,7 @@ func (p *proxy) IsLocal(appID string) (bool, error) {
 
 func (p *proxy) isLocalInternal(appID string) (remoteApp, bool, error) {
 	if p.remoteAppFn == nil {
-		return remoteApp{}, false, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
+		return remoteApp{}, false, errors.New("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
 	}
 
 	target, err := p.remoteAppFn(appID)

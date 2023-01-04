@@ -15,6 +15,7 @@ limitations under the License.
 package runtime
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -23,10 +24,6 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pkg/errors"
-
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -40,8 +37,11 @@ import (
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
@@ -124,8 +124,10 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	if *appID == "" {
-		return nil, errors.New("app-id parameter cannot be empty")
+	if *mode == string(modes.StandaloneMode) {
+		if err := validation.ValidateSelfHostedAppID(*appID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply options to all loggers
@@ -144,29 +146,29 @@ func FromFlags() (*DaprRuntime, error) {
 
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {
-		return nil, errors.Wrap(err, "error parsing dapr-http-port flag")
+		return nil, fmt.Errorf("error parsing dapr-http-port flag: %w", err)
 	}
 
 	daprAPIGRPC, err := strconv.Atoi(*daprAPIGRPCPort)
 	if err != nil {
-		return nil, errors.Wrap(err, "error parsing dapr-grpc-port flag")
+		return nil, fmt.Errorf("error parsing dapr-grpc-port flag: %w", err)
 	}
 
 	profPort, err := strconv.Atoi(*profilePort)
 	if err != nil {
-		return nil, errors.Wrap(err, "error parsing profile-port flag")
+		return nil, fmt.Errorf("error parsing profile-port flag: %w", err)
 	}
 
 	var daprInternalGRPC int
 	if *daprInternalGRPCPort != "" && *daprInternalGRPCPort != "0" {
 		daprInternalGRPC, err = strconv.Atoi(*daprInternalGRPCPort)
 		if err != nil {
-			return nil, errors.Wrap(err, "error parsing dapr-internal-grpc-port")
+			return nil, fmt.Errorf("error parsing dapr-internal-grpc-port: %w", err)
 		}
 	} else {
 		daprInternalGRPC, err = freeport.GetFreePort()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get free port for internal grpc server")
+			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
 		}
 	}
 
@@ -174,7 +176,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if *daprPublicPort != "" {
 		port, cerr := strconv.Atoi(*daprPublicPort)
 		if cerr != nil {
-			return nil, errors.Wrap(cerr, "error parsing dapr-public-port")
+			return nil, fmt.Errorf("error parsing dapr-public-port: %w", cerr)
 		}
 		publicPort = &port
 	}
@@ -183,7 +185,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
 		if err != nil {
-			return nil, errors.Wrap(err, "error parsing app-port")
+			return nil, fmt.Errorf("error parsing app-port: %w", err)
 		}
 	}
 
@@ -327,9 +329,9 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	// Config and resiliency need the operator client, only initiate once and only if we will actually use it.
+	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
-	if *mode == string(modes.KubernetesMode) && *config != "" {
+	if *mode == string(modes.KubernetesMode) {
 		log.Infof("Initializing the operator client (config: %s)", *config)
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {

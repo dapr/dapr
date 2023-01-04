@@ -15,30 +15,30 @@ package messaging
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
-
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
@@ -136,19 +136,22 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
 func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, string, error) {
+	if targetAppID == "" {
+		return "", "", errors.New("app id is empty")
+	}
 	items := strings.Split(targetAppID, ".")
-	if len(items) == 1 {
+	switch len(items) {
+	case 1:
 		return targetAppID, d.namespace, nil
-	} else if len(items) == 2 {
+	case 2:
 		return items[0], items[1], nil
-	} else {
-		return "", "", errors.Errorf("invalid app id %s", targetAppID)
+	default:
+		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
 	}
 }
 
-// invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
-// TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target
-// Server shuts down.
+// invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures.
+// TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target server shuts down.
 func (d *directMessaging) invokeWithRetry(
 	ctx context.Context,
 	numRetries int,
@@ -160,45 +163,45 @@ func (d *directMessaging) invokeWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			retriesExhaustedPath := false // Used to track final error state.
-			nullifyResponsePath := false  // Used to track final response state.
-			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
-			var resp *invokev1.InvokeMethodResponse
-			err := policy(func(ctx context.Context) (rErr error) {
-				var teardown func(destroy bool)
-				retriesExhaustedPath = false
-				resp, teardown, rErr = fn(ctx, app.id, app.namespace, app.address, req)
+			// This policy has built-in retries so enable replay in the request
+			req.WithReplay(true)
+
+			policyRunner := resiliency.NewRunnerWithOptions(ctx,
+				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
+				resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+					Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+				},
+			)
+			attempts := atomic.Int32{}
+			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+				attempt := attempts.Add(1)
+				rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 				if rErr == nil {
 					teardown(false)
-					return nil
+					return rResp, nil
 				}
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
 					// Destroy the connection and force a re-connection on the next attempt
 					teardown(true)
-					retriesExhaustedPath = true
-					return rErr
+					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 				}
 				teardown(false)
-				return backoff.Permanent(rErr)
+				return rResp, backoff.Permanent(rErr)
 			})
-			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
-			if retriesExhaustedPath {
-				return nil, errors.Errorf("failed to invoke target %s after %v retries. Error: %s", app.id, numRetries, err.Error())
-			}
-
-			if nullifyResponsePath {
-				resp = nil
-			}
-
-			return resp, err
 		}
 
 		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
 		teardown(false)
 		return resp, err
 	}
+
+	// The following path is used when resiliency is disabled
+
+	// We need to enable replaying because the request may be attempted again in this path
+	req.WithReplay(true)
+
 	for i := 0; i < numRetries; i++ {
 		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
@@ -218,7 +221,8 @@ func (d *directMessaging) invokeWithRetry(
 		teardown(false)
 		return resp, err
 	}
-	return nil, errors.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
+
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
@@ -250,13 +254,12 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
-	var opts []grpc.CallOption
-	opts = append(
-		opts,
-		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB<<20),
-		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB<<20),
-	)
+	opts := []grpc.CallOption{
+		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB << 20),
+		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB << 20),
+	}
 
+	// Set up timers
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
 
@@ -267,7 +270,11 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 		}
 	}()
 
-	resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
+	pd, err := req.ProtoWithData()
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to read data from request object: %w", err)
+	}
+	resp, err = clientV1.CallLocal(ctx, pd, opts...)
 	if err != nil {
 		return nil, teardown, err
 	}
@@ -331,6 +338,10 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 	id, namespace, err := d.requestAppIDAndNamespace(appID)
 	if err != nil {
 		return remoteApp{}, err
+	}
+
+	if d.resolver == nil {
+		return remoteApp{}, errors.New("name resolver not initialized")
 	}
 
 	request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}

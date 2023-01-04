@@ -108,7 +108,8 @@ func (m *mockAppChannel) GetBaseAddress() string {
 func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
-		if err := json.Unmarshal(req.Message().Data.Value, &request); err == nil {
+		err := json.NewDecoder(req.RawData()).Decode(&request)
+		if err == nil {
 			m.requestC <- request
 		}
 	}
@@ -128,7 +129,7 @@ func (r *reentrantAppChannel) GetBaseAddress() string {
 }
 
 func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	r.callLog = append(r.callLog, fmt.Sprintf("Entering %s", req.Message().Method))
+	r.callLog = append(r.callLog, "Entering "+req.Message().Method)
 	if len(r.nextCall) > 0 {
 		nextReq := r.nextCall[0]
 		r.nextCall = r.nextCall[1:]
@@ -138,12 +139,13 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 			header.Add("Dapr-Reentrancy-Id", val.Values[0])
 			nextReq.AddHeaders(&header)
 		}
-		_, err := r.a.callLocalActor(context.Background(), nextReq)
+		resp, err := r.a.callLocalActor(context.Background(), nextReq)
 		if err != nil {
 			return nil, err
 		}
+		defer resp.Close()
 	}
-	r.callLog = append(r.callLog, fmt.Sprintf("Exiting %s", req.Message().Method))
+	r.callLog = append(r.callLog, "Exiting "+req.Message().Method)
 
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
 }
@@ -179,7 +181,7 @@ func (f *fakeStateStore) Features() []state.Feature {
 	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
 }
 
-func (f *fakeStateStore) Delete(req *state.DeleteRequest) error {
+func (f *fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	delete(f.items, req.Key)
@@ -187,11 +189,11 @@ func (f *fakeStateStore) Delete(req *state.DeleteRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
+func (f *fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+func (f *fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	item := f.items[req.Key]
@@ -203,10 +205,10 @@ func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) 
 	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
 }
 
-func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	res := []state.BulkGetResponse{}
 	for _, oneRequest := range req {
-		oneResponse, err := f.Get(&state.GetRequest{
+		oneResponse, err := f.Get(ctx, &state.GetRequest{
 			Key:      oneRequest.Key,
 			Metadata: oneRequest.Metadata,
 			Options:  oneRequest.Options,
@@ -225,7 +227,7 @@ func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetR
 	return true, res, nil
 }
 
-func (f *fakeStateStore) Set(req *state.SetRequest) error {
+func (f *fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	b, _ := json.Marshal(&req.Value)
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -238,11 +240,11 @@ func (f *fakeStateStore) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
 
-func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
+func (f *fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
+func (f *fakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	// First we check all eTags
@@ -1736,12 +1738,14 @@ func TestCallLocalActor(t *testing.T) {
 	)
 
 	req := invokev1.NewInvokeMethodRequest(testMethod).WithActor(testActorType, testActorID)
+	defer req.Close()
 
 	t.Run("invoke actor successfully", func(t *testing.T) {
 		testActorRuntime := newTestActorsRuntime()
 		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
+		defer resp.Close()
 	})
 
 	t.Run("actor is already disposed", func(t *testing.T) {
@@ -2187,7 +2191,9 @@ func TestParseTime(t *testing.T) {
 
 func TestBasicReentrantActorLocking(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
+	defer req2.Close()
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
@@ -2210,6 +2216,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
 		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first",
@@ -2218,8 +2225,11 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 
 func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("other", "1")
+	defer req2.Close()
 	req3 := invokev1.NewInvokeMethodRequest("third").WithActor("reentrant", "1")
+	defer req3.Close()
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
@@ -2242,6 +2252,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
 		"Entering actors/reentrant/1/method/third", "Exiting actors/reentrant/1/method/third",
@@ -2251,6 +2262,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 
 func TestReentrancyStackLimit(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+	defer req.Close()
 
 	stackDepth := 0
 	appConfig := DefaultAppConfig
@@ -2278,7 +2290,9 @@ func TestReentrancyStackLimit(t *testing.T) {
 
 func TestReentrancyPerActor(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
+	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrantActor", "1")
+	defer req2.Close()
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: false}
@@ -2309,6 +2323,7 @@ func TestReentrancyPerActor(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrantActor/1/method/first", "Entering actors/reentrantActor/1/method/second",
 		"Exiting actors/reentrantActor/1/method/second", "Exiting actors/reentrantActor/1/method/first",
@@ -2317,6 +2332,7 @@ func TestReentrancyPerActor(t *testing.T) {
 
 func TestReentrancyStackLimitPerActor(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
+	defer req.Close()
 
 	stackDepth := 0
 	appConfig := DefaultAppConfig
@@ -2390,8 +2406,10 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	runtime := builder.buildActorRuntime()
 
 	t.Run("callLocalActor times out with resiliency", func(t *testing.T) {
-		req := invokev1.NewInvokeMethodRequest("actorMethod")
-		req.WithActor("failingActorType", "timeoutId")
+		req := invokev1.NewInvokeMethodRequest("actorMethod").
+			WithActor("failingActorType", "timeoutId").
+			WithReplay(true)
+		defer req.Close()
 
 		start := time.Now()
 		resp, err := runtime.callLocalActor(context.Background(), req)

@@ -18,10 +18,10 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -119,12 +119,15 @@ type Service struct {
 
 // NewPlacementService returns a new placement service.
 func NewPlacementService(raftNode *raft.Server) *Service {
+	fhdd := &atomic.Int64{}
+	fhdd.Store(int64(faultyHostDetectInitialDuration))
+
 	return &Service{
 		disseminateLock:          &sync.Mutex{},
 		streamConnPool:           []placementGRPCStream{},
 		streamConnPoolLock:       &sync.RWMutex{},
 		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
-		faultyHostDetectDuration: atomic.NewInt64(int64(faultyHostDetectInitialDuration)),
+		faultyHostDetectDuration: fhdd,
 		raftNode:                 raftNode,
 		shutdownCh:               make(chan struct{}),
 		grpcServerLock:           &sync.Mutex{},

@@ -118,19 +118,46 @@ message TopicEventResponse {
   TopicEventResponseStatus status = 1;
 }
 
+// TopicEventCERequest message is compatible with CloudEvent spec v1.0
+message TopicEventCERequest {
+  // The unique identifier of this cloud event.
+  string id = 1;
+
+  // source identifies the context in which an event happened.
+  string source = 2;
+
+  // The type of event related to the originating occurrence. 
+  string type = 3;
+
+  // The version of the CloudEvents specification. 
+  string spec_version = 4;
+
+  // The content type of data value.
+  string data_content_type = 5;
+
+  // The content of the event.
+  bytes data = 6;
+
+  // Custom attributes which includes cloud event extensions.
+  google.protobuf.Struct extensions = 7;
+}
+
 // TopicEventBulkRequestEntry represents a single message inside a bulk request
 message TopicEventBulkRequestEntry {
   // Unique identifier for the message.
   string entry_id = 1;
 
   // The content of the event.
-  bytes event = 2;
-  
+  oneof event {
+    bytes bytes = 2;
+    TopicEventCERequest cloud_event = 3;
+  }
+
   // content type of the event contained.
-  string content_type = 3;
+  string content_type = 4;
   
   // The metadata associated with the event.
-  map<string,string> metadata = 4;
+  map<string,string> metadata = 5;
 }
 
 // TopicEventBulkRequest represents request for bulk message

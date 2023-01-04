@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	kauthapi "k8s.io/api/authentication/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8s "k8s.io/client-go/kubernetes"
@@ -40,10 +39,10 @@ type validator struct {
 
 func (v *validator) Validate(id, token, namespace string) error {
 	if id == "" {
-		return errors.Errorf("%s: id field in request must not be empty", errPrefix)
+		return fmt.Errorf("%s: id field in request must not be empty", errPrefix)
 	}
 	if token == "" {
-		return errors.Errorf("%s: token field in request must not be empty", errPrefix)
+		return fmt.Errorf("%s: token field in request must not be empty", errPrefix)
 	}
 
 	// TODO: Remove once the NoDefaultTokenAudience feature is finalized
