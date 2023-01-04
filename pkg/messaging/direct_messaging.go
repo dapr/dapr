@@ -43,9 +43,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// Maximum size, in bytes, for the buffer used by CallLocalStream: 2KB.
-const StreamBufferSize = 2 << 10
-
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 // messageClientConnection is the function type to connect to the other
@@ -268,27 +265,158 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
 
-	var resp *internalv1pb.InternalInvokeResponse
-	defer func() {
-		if resp != nil {
-			diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, resp.Status.Code, start)
-		}
-	}()
+	// TODO: DO THIS IF THE FEATURE FLAG IS OFF
+	var imr *invokev1.InvokeMethodResponse
+	if false {
+		imr, err = d.invokeRemoteUnary(ctx, clientV1, req, opts)
+	} else {
+		imr, err = d.invokeRemoteStream(ctx, clientV1, req, appID, opts)
+	}
 
+	// Diagnostics
+	if imr != nil {
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+	}
+
+	return imr, teardown, err
+}
+
+func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {
 	pd, err := req.ProtoWithData()
 	if err != nil {
-		return nil, teardown, fmt.Errorf("failed to read data from request object: %w", err)
-	}
-	resp, err = clientV1.CallLocal(ctx, pd, opts...)
-	if err != nil {
-		return nil, teardown, err
+		return nil, fmt.Errorf("failed to read data from request object: %w", err)
 	}
 
-	imr, err := invokev1.InternalInvokeResponse(resp)
+	resp, err := clientV1.CallLocal(ctx, pd, opts...)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return imr, teardown, err
+	return invokev1.InternalInvokeResponse(resp)
+}
+
+func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, appID string, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {
+	stream, err := clientV1.CallLocalStream(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	buf := invokev1.BufPool.Get().(*[]byte)
+	defer func() {
+		invokev1.BufPool.Put(buf)
+	}()
+	r := req.RawData()
+	reqProto := req.Proto()
+	proto := &internalv1pb.InternalInvokeRequestStream{}
+	var n int
+	for {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		// Reset the object so we can re-use it
+		proto.Reset()
+
+		// First message only - add the request
+		if reqProto != nil {
+			proto.Request = reqProto
+			reqProto = nil
+		}
+
+		if proto.Payload == nil {
+			proto.Payload = &commonv1pb.StreamPayload{}
+		}
+
+		if r != nil {
+			n, err = r.Read(*buf)
+			if err == io.EOF {
+				proto.Payload.Complete = true
+			} else if err != nil {
+				return nil, err
+			}
+			if n > 0 {
+				proto.Payload.Data = (*buf)[:n]
+			}
+		} else {
+			proto.Payload.Complete = true
+		}
+
+		// Send the chunk if there's anything to send
+		if proto.Request != nil || proto.Payload.Complete || len(proto.Payload.Data) > 0 {
+			err = stream.SendMsg(proto)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Stop with the last chunk
+		if proto.Payload.Complete {
+			break
+		}
+	}
+
+	// Read the first chunk of the response
+	chunk := &internalv1pb.InternalInvokeResponseStream{}
+	err = stream.RecvMsg(chunk)
+	if err != nil {
+		// If we're connecting to a sidecar that doesn't support CallLocalStream, fallback to the unary RPC
+		// This should happen if we're connecting to an app that uses an older version of Dapr
+		// Although we handle this case gracefully, the extra request/response will have a small performance impact
+		if status.Code(err) == codes.Unimplemented {
+			log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
+			return d.invokeRemoteUnary(ctx, clientV1, req, opts)
+		}
+		return nil, err
+	}
+	if chunk.Response == nil || chunk.Response.Status == nil || chunk.Response.Headers == nil {
+		return nil, errors.New("response does not contain the required fields in the leading chunk")
+	}
+	pr, pw := io.Pipe()
+	res, err := invokev1.InternalInvokeResponse(chunk.Response)
+	if err != nil {
+		return nil, err
+	}
+	res.WithRawData(pr)
+	if chunk.Response.Message != nil {
+		res.WithContentType(chunk.Response.Message.ContentType)
+	}
+
+	// Read the response into the stream in the background
+	go func() {
+		var (
+			done    bool
+			readErr error
+		)
+		for {
+			if ctx.Err() != nil {
+				pw.CloseWithError(ctx.Err())
+				return
+			}
+
+			done, readErr = ReadChunk(chunk, pw)
+			if readErr != nil {
+				pw.CloseWithError(readErr)
+				return
+			}
+
+			if done {
+				break
+			}
+
+			readErr = stream.RecvMsg(chunk)
+			if readErr != nil {
+				pw.CloseWithError(readErr)
+				return
+			}
+
+			if chunk.Response != nil && (chunk.Response.Status != nil || chunk.Response.Headers != nil || chunk.Response.Message != nil) {
+				pw.CloseWithError(errors.New("response metadata found in non-leading chunk"))
+				return
+			}
+		}
+
+		pw.Close()
+	}()
+
+	return res, nil
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {

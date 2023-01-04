@@ -162,9 +162,12 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	defer res.Close()
 
 	// Respond to the caller
+	buf := invokev1.BufPool.Get().(*[]byte)
+	defer func() {
+		invokev1.BufPool.Put(buf)
+	}()
 	r := res.RawData()
 	resProto := res.Proto()
-	buf := make([]byte, messaging.StreamBufferSize)
 	proto := &internalv1pb.InternalInvokeResponseStream{}
 	var n int
 	for {
@@ -175,7 +178,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		// Reset the object so we can re-use it
 		proto.Reset()
 
-		// First message only - add the message
+		// First message only - add the response
 		if resProto != nil {
 			proto.Response = resProto
 			resProto = nil
@@ -186,22 +189,25 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		}
 
 		if r != nil {
-			n, err = r.Read(buf)
+			n, err = r.Read(*buf)
 			if err == io.EOF {
 				proto.Payload.Complete = true
 			} else if err != nil {
 				return err
 			}
 			if n > 0 {
-				proto.Payload.Data = buf[:n]
+				proto.Payload.Data = (*buf)[:n]
 			}
 		} else {
 			proto.Payload.Complete = true
 		}
 
-		err = stream.SendMsg(proto)
-		if err != nil {
-			return err
+		// Send the chunk if there's anything to send
+		if proto.Response != nil || proto.Payload.Complete || len(proto.Payload.Data) > 0 {
+			err = stream.SendMsg(proto)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Stop with the last chunk
