@@ -460,6 +460,110 @@ func TestCallLocal(t *testing.T) {
 	})
 }
 
+func TestCallLocalStream(t *testing.T) {
+	t.Run("appchannel is not ready", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: nil,
+		}
+		server := startInternalServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
+		st, err := client.CallLocalStream(context.Background())
+		assert.NoError(t, err)
+
+		request := invokev1.NewInvokeMethodRequest("method")
+		defer request.Close()
+		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
+			Request: request.Proto(),
+			Payload: &commonv1pb.StreamPayload{Complete: true},
+		})
+		assert.NoError(t, err)
+
+		_, err = st.Recv()
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: mockAppChannel,
+		}
+		server := startInternalServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
+		st, err := client.CallLocalStream(context.Background())
+		assert.NoError(t, err)
+
+		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
+			Request: &internalv1pb.InternalInvokeRequest{
+				Message: nil,
+			},
+			Payload: &commonv1pb.StreamPayload{Complete: true},
+		})
+		assert.NoError(t, err)
+
+		_, err = st.Recv()
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("invokemethod returns error", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.
+			On(
+				"InvokeMethod",
+				mock.MatchedBy(matchContextInterface),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
+			).
+			Return(nil, status.Error(codes.Unknown, "unknown error"))
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: mockAppChannel,
+		}
+		server := startInternalServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
+		st, err := client.CallLocalStream(context.Background())
+		require.NoError(t, err)
+
+		request := invokev1.NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"foo"}})
+		defer request.Close()
+
+		pd, err := request.ProtoWithData()
+		require.NoError(t, err)
+		require.NotNil(t, pd.Message.Data)
+
+		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
+			Request: request.Proto(),
+			Payload: &commonv1pb.StreamPayload{
+				Data:     pd.Message.Data.Value,
+				Complete: true,
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = st.Recv()
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+}
+
 func mustMarshalAny(msg proto.Message) *anypb.Any {
 	any, err := anypb.New(msg)
 	if err != nil {
