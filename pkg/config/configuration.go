@@ -16,13 +16,13 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -302,7 +302,7 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 		return nil, err
 	}
 	if resp.GetConfiguration() == nil {
-		return nil, errors.Errorf("configuration %s not found", config)
+		return nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
 	err = json.Unmarshal(resp.GetConfiguration(), conf)
@@ -325,12 +325,12 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 	for _, scope := range scopes {
 		// validate scope
 		if set.Has(scope.StoreName) {
-			return errors.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
+			return fmt.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
 		}
 		if scope.DefaultAccess != "" &&
 			!strings.EqualFold(scope.DefaultAccess, AllowAccess) &&
 			!strings.EqualFold(scope.DefaultAccess, DenyAccess) {
-			return errors.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
+			return fmt.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
 		}
 		set.Insert(scope.StoreName)
 

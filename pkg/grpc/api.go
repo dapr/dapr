@@ -443,23 +443,36 @@ type invokeServiceResp struct {
 }
 
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
-	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
-	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
-		req.WithMetadata(incomingMD)
-	}
-
 	if a.directMessaging == nil {
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx,
-		a.resiliency.EndpointPolicy(in.Id, in.Id+":"+req.Message().Method),
-	)
+	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
+
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage()).
+		WithReplay(policyDef.HasRetries())
+	defer req.Close()
+
+	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		req.WithMetadata(incomingMD)
+	}
+
+	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*invokeServiceResp, error) {
 		rResp := &invokeServiceResp{}
 		imr, rErr := a.directMessaging.Invoke(ctx, in.Id, req)
 		if imr != nil {
-			rResp.message = imr.Message()
+			// Read the entire message in memory then close imr
+			pd, pdErr := imr.ProtoWithData()
+			imr.Close()
+			if pd != nil {
+				rResp.message = pd.Message
+			}
+
+			// If we have an error, set it only if rErr is not already set
+			if pdErr != nil && rErr == nil {
+				rErr = pdErr
+			}
 		}
 		if rErr != nil {
 			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
@@ -468,10 +481,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
-			errorMessage := ""
-			if imr != nil {
-				_, b := imr.RawData()
-				errorMessage = string(b)
+			var errorMessage string
+			if rResp.message != nil && rResp.message.Data != nil {
+				errorMessage = string(rResp.message.Data.Value)
 			}
 			code := int(imr.Status().Code)
 			// If the status is OK, will be nil
@@ -628,8 +640,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 	bulkRes.FailedEntries = make([]*runtimev1pb.BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
 	for _, r := range res.FailedEntries {
-		resEntry := runtimev1pb.BulkPublishResponseFailedEntry{}
-		resEntry.EntryId = r.EntryId
+		resEntry := runtimev1pb.BulkPublishResponseFailedEntry{EntryId: r.EntryId}
 		if r.Error != nil {
 			resEntry.Error = r.Error.Error()
 		}
@@ -1571,14 +1582,18 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	req := invokev1.NewInvokeMethodRequest(in.Method)
-	req.WithActor(in.ActorType, in.ActorId)
-	req.WithRawData(in.Data, "")
-	reqMetadata := map[string][]string{}
+	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+
+	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
 		reqMetadata[k] = []string{v}
 	}
-	req.WithMetadata(reqMetadata)
+	req := invokev1.NewInvokeMethodRequest(in.Method).
+		WithActor(in.ActorType, in.ActorId).
+		WithRawDataBytes(in.Data).
+		WithMetadata(reqMetadata).
+		WithReplay(policyDef.HasRetries())
+	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1587,8 +1602,10 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
-		a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId),
+	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.actor.Call(ctx, req)
@@ -1602,7 +1619,12 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	if resp == nil {
 		resp = invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
 	}
-	_, response.Data = resp.RawData()
+	defer resp.Close()
+
+	response.Data, err = resp.RawDataFull()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response data: %w", err)
+	}
 	return response, nil
 }
 

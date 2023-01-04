@@ -17,7 +17,6 @@ package dapr.proto.runtime.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
-import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
@@ -343,7 +342,7 @@ message BulkPublishResponseFailedEntry {
   string entry_id = 1;
 
   // The error message if any on failure
-  string error = 3;
+  string error = 2;
 }
 
 
@@ -683,7 +682,7 @@ message WorkflowReference {
 message GetWorkflowRequest {
   string instance_id  = 1;
   string workflow_type = 2;
-  string workflow_component = 3; 
+  string workflow_component = 3;
 }
 
 message GetWorkflowResponse {
@@ -697,7 +696,7 @@ message StartWorkflowRequest {
   string workflow_component = 2;
   string workflow_name = 3;
   map<string, string> options = 4;
-  google.protobuf.Any input = 5;   
+  google.protobuf.Any input = 5;
 }
 
 message TerminateWorkflowRequest {
