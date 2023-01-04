@@ -123,14 +123,15 @@ func IsYaml(fileName string) bool {
 	return false
 }
 
-// GetIntOrDefault returns the value of the key in the map or the default value if the key is not present.
-func GetIntOrDefault(m map[string]string, key string, def int) int {
-	if val, ok := m[key]; ok {
-		if i, err := strconv.Atoi(val); err == nil {
-			return i
+// GetIntValFromStringVal returns an int value from corresponding string value OR default value if its
+// value not convertible to int.
+func GetIntValFromStringVal(val string, defaultValue int) int {
+	if val != "" {
+		if intVal, err := strconv.Atoi(val); err == nil {
+			return intVal
 		}
 	}
-	return def
+	return defaultValue
 }
 
 // IsSocket returns if the given file is a unix socket.

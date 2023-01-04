@@ -294,9 +294,9 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 					Default: pubsubRawBulkSubTopic,
 				},
 				BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{
-					Enabled:                   "true",
-					MaxBulkSubCount:           "60",
-					MaxBulkSubAwaitDurationMs: "1000",
+					Enabled:            "true",
+					MaxMessagesCount:   "60",
+					MaxAwaitDurationMs: "1000",
 				},
 				Metadata: map[string]string{
 					"rawPayload": "true",
@@ -309,9 +309,9 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 					Default: pubsubCEBulkSubTopic,
 				},
 				BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{
-					Enabled:                   "true",
-					MaxBulkSubCount:           "60",
-					MaxBulkSubAwaitDurationMs: "1000",
+					Enabled:            "true",
+					MaxMessagesCount:   "60",
+					MaxAwaitDurationMs: "1000",
 				},
 			},
 		},

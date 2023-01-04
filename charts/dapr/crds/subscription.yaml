@@ -56,9 +56,9 @@ spec:
                 properties:
                   enabled: 
                     type: string
-                  maxBulkSubCount:
+                  maxMessagesCount:
                     type: string
-                  maxBulkSubAwaitDurationMs:
+                  maxAwaitDurationMs:
                     type: string
                 required:
                   - enabled
@@ -146,9 +146,9 @@ spec:
                 properties:
                   enabled: 
                     type: string
-                  maxBulkSubCount:
+                  maxMessagesCount:
                     type: string
-                  maxBulkSubAwaitDurationMs:
+                  maxAwaitDurationMs:
                     type: string
                 required:
                   - enabled

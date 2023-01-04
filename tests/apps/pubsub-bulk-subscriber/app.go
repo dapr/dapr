@@ -74,9 +74,9 @@ type subscription struct {
 }
 
 type BulkSubscribe struct {
-	Enabled                   string `json:"enabled"`
-	MaxBulkSubCount           string `json:"maxBulkSubCount,omitempty"`
-	MaxBulkSubAwaitDurationMs string `json:"maxBulkSubAwaitDurationMs,omitempty"`
+	Enabled            string `json:"enabled"`
+	MaxMessagesCount   string `json:"maxMessagesCount,omitempty"`
+	MaxAwaitDurationMs string `json:"maxAwaitDurationMs,omitempty"`
 }
 
 type BulkRawMessage struct {
@@ -180,9 +180,9 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Topic:      pubsubRawBulkSubTopic,
 			Route:      pubsubRawBulkSubTopic,
 			BulkSubscribe: BulkSubscribe{
-				Enabled:                   "true",
-				MaxBulkSubCount:           "60",
-				MaxBulkSubAwaitDurationMs: "1000",
+				Enabled:            "true",
+				MaxMessagesCount:   "60",
+				MaxAwaitDurationMs: "1000",
 			},
 			Metadata: map[string]string{
 				"rawPayload": "true",
@@ -193,9 +193,9 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Topic:      pubsubCEBulkSubTopic,
 			Route:      pubsubCEBulkSubTopic,
 			BulkSubscribe: BulkSubscribe{
-				Enabled:                   "true",
-				MaxBulkSubCount:           "60",
-				MaxBulkSubAwaitDurationMs: "1000",
+				Enabled:            "true",
+				MaxMessagesCount:   "60",
+				MaxAwaitDurationMs: "1000",
 			},
 		},
 	}

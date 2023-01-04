@@ -58,9 +58,9 @@ type (
 	}
 
 	BulkSubscribeJSON struct {
-		Enabled                   string `json:"enabled"`
-		MaxBulkSubCount           string `json:"maxBulkSubCount,omitempty"`
-		MaxBulkSubAwaitDurationMs string `json:"maxBulkSubAwaitDurationMs,omitempty"`
+		Enabled            string `json:"enabled"`
+		MaxMessagesCount   string `json:"maxMessagesCount,omitempty"`
+		MaxAwaitDurationMs string `json:"maxAwaitDurationMs,omitempty"`
 	}
 
 	RuleJSON struct {
@@ -154,9 +154,9 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 				n++
 			}
 			bulkSubscribe := &BulkSubscribe{
-				Enabled:                   si.BulkSubscribe.Enabled,
-				MaxBulkSubCount:           si.BulkSubscribe.MaxBulkSubCount,
-				MaxBulkSubAwaitDurationMs: si.BulkSubscribe.MaxBulkSubAwaitDurationMs,
+				Enabled:            si.BulkSubscribe.Enabled,
+				MaxMessagesCount:   si.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: si.BulkSubscribe.MaxAwaitDurationMs,
 			}
 			subscriptions[i] = Subscription{
 				PubsubName:      si.PubsubName,
@@ -265,9 +265,9 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			var bulkSubscribe *BulkSubscribe
 			if s.BulkSubscribe != nil {
 				bulkSubscribe = &BulkSubscribe{
-					Enabled:                   s.BulkSubscribe.Enabled,
-					MaxBulkSubCount:           s.BulkSubscribe.MaxBulkSubCount,
-					MaxBulkSubAwaitDurationMs: s.BulkSubscribe.MaxBulkSubAwaitDurationMs,
+					Enabled:            s.BulkSubscribe.Enabled,
+					MaxMessagesCount:   s.BulkSubscribe.MaxMessagesCount,
+					MaxAwaitDurationMs: s.BulkSubscribe.MaxAwaitDurationMs,
 				}
 			}
 			subscriptions[i] = Subscription{
@@ -362,9 +362,9 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Scopes:          sub.Scopes,
 			DeadLetterTopic: sub.Spec.DeadLetterTopic,
 			BulkSubscribe: &BulkSubscribe{
-				Enabled:                   sub.Spec.BulkSubscribe.Enabled,
-				MaxBulkSubCount:           sub.Spec.BulkSubscribe.MaxBulkSubCount,
-				MaxBulkSubAwaitDurationMs: sub.Spec.BulkSubscribe.MaxBulkSubAwaitDurationMs,
+				Enabled:            sub.Spec.BulkSubscribe.Enabled,
+				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
 			},
 		}, nil
 
@@ -388,9 +388,9 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Scopes:          sub.Scopes,
 			DeadLetterTopic: sub.Spec.DeadLetterTopic,
 			BulkSubscribe: &BulkSubscribe{
-				Enabled:                   sub.Spec.BulkSubscribe.Enabled,
-				MaxBulkSubCount:           sub.Spec.BulkSubscribe.MaxBulkSubCount,
-				MaxBulkSubAwaitDurationMs: sub.Spec.BulkSubscribe.MaxBulkSubAwaitDurationMs,
+				Enabled:            sub.Spec.BulkSubscribe.Enabled,
+				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
 			},
 		}, nil
 	}

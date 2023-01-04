@@ -48,9 +48,9 @@ func (s *Subscription) ConvertTo(dstRaw conversion.Hub) error {
 
 func convertBulkSubscriptionV2alpha1ToV1alpha1(in *BulkSubscribe) *v1alpha1.BulkSubscribe {
 	out := v1alpha1.BulkSubscribe{
-		Enabled:                   in.Enabled,
-		MaxBulkSubCount:           in.MaxBulkSubCount,
-		MaxBulkSubAwaitDurationMs: in.MaxBulkSubAwaitDurationMs,
+		Enabled:            in.Enabled,
+		MaxMessagesCount:   in.MaxMessagesCount,
+		MaxAwaitDurationMs: in.MaxAwaitDurationMs,
 	}
 	return &out
 }
@@ -86,9 +86,9 @@ func (s *Subscription) ConvertFrom(srcRaw conversion.Hub) error {
 
 func convertBulkSubscriptionV1alpha1ToV2alpha1(in *v1alpha1.BulkSubscribe) *BulkSubscribe {
 	out := BulkSubscribe{
-		Enabled:                   in.Enabled,
-		MaxBulkSubCount:           in.MaxBulkSubCount,
-		MaxBulkSubAwaitDurationMs: in.MaxBulkSubAwaitDurationMs,
+		Enabled:            in.Enabled,
+		MaxMessagesCount:   in.MaxMessagesCount,
+		MaxAwaitDurationMs: in.MaxAwaitDurationMs,
 	}
 	return &out
 }

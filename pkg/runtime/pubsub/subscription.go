@@ -11,9 +11,9 @@ type Subscription struct {
 }
 
 type BulkSubscribe struct {
-	Enabled                   string `json:"enabled"`
-	MaxBulkSubCount           string `json:"maxBulkSubCount,omitempty"`
-	MaxBulkSubAwaitDurationMs string `json:"maxBulkSubAwaitDurationMs,omitempty"`
+	Enabled            string `json:"enabled"`
+	MaxMessagesCount   string `json:"maxMessagesCount,omitempty"`
+	MaxAwaitDurationMs string `json:"maxAwaitDurationMs,omitempty"`
 }
 
 type Rule struct {

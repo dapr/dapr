@@ -296,10 +296,10 @@ message BulkSubscribeRequest {
   string enabled = 1;
 
   // Optional. Max number of messages to be sent in a single bulk request
-  string maxBulkSubCount = 2;
+  string maxMessagesCount = 2;
 
   // Optional. Max duration to wait for messages to be sent in a single bulk request
-  string maxBulkSubAwaitDurationMs  = 3;
+  string maxAwaitDurationMs  = 3;
 }
 
 // ListInputBindingsResponse is the message including the list of input bindings.

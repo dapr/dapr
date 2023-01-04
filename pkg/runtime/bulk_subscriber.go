@@ -83,6 +83,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 	req := pubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
 		Metadata: route.metadata,
+		BulkSubscribeRequest: pubsub.BulkSubscribeRequest{
+			MaxMessagesCount:   route.bulkSubscribe.MaxMessagesCount,
+			MaxAwaitDurationMs: route.bulkSubscribe.MaxAwaitDurationMs,
+		},
 	}
 
 	bulkHandler := func(ctx context.Context, msg *pubsub.BulkMessage) ([]pubsub.BulkSubscribeResponseEntry, error) {

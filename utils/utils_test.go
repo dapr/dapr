@@ -114,33 +114,28 @@ func TestIsYaml(t *testing.T) {
 	}
 }
 
-func TestGetIntOrDefault(t *testing.T) {
-	testMap := map[string]string{"key1": "1", "key2": "2", "key3": "3"}
+func TestGetIntValFromStringVal(t *testing.T) {
 	tcs := []struct {
 		name     string
-		m        map[string]string
-		key      string
+		val      string
 		def      int
 		expected int
 	}{
 		{
-			name:     "key exists in the map",
-			m:        testMap,
-			key:      "key2",
-			def:      0,
-			expected: 2,
+			name:     "value is blank",
+			val:      "",
+			def:      5,
+			expected: 5,
 		},
 		{
-			name:     "key does not exist in the map, default value is used",
-			m:        testMap,
-			key:      "key4",
-			def:      4,
-			expected: 4,
+			name:     "val represents a valid integer, ",
+			val:      "91",
+			def:      5,
+			expected: 91,
 		},
 		{
-			name:     "empty map, default value is used",
-			m:        map[string]string{},
-			key:      "key1",
+			name:     "val represents an invalid integer, default value is used",
+			val:      "abc",
 			def:      100,
 			expected: 100,
 		},
@@ -148,7 +143,7 @@ func TestGetIntOrDefault(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			actual := GetIntOrDefault(tc.m, tc.key, tc.def)
+			actual := GetIntValFromStringVal(tc.val, tc.def)
 			if actual != tc.expected {
 				t.Errorf("expected %d, actual %d", tc.expected, actual)
 			}

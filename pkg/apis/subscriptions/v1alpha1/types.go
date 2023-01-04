@@ -46,8 +46,8 @@ type SubscriptionSpec struct {
 type BulkSubscribe struct {
 	Enabled string `json:"enabled"`
 	// +optional
-	MaxBulkSubCount           string `json:"maxBulkSubCount,omitempty"`
-	MaxBulkSubAwaitDurationMs string `json:"maxBulkSubAwaitDurationMs,omitempty"`
+	MaxMessagesCount   string `json:"maxMessagesCount,omitempty"`
+	MaxAwaitDurationMs string `json:"maxAwaitDurationMs,omitempty"`
 }
 
 // +kubebuilder:object:root=true
