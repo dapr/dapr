@@ -3,9 +3,6 @@ package runtime
 import (
 	"context"
 	"errors"
-	"sync/atomic"
-
-	"github.com/cenkalti/backoff/v4"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -20,20 +17,21 @@ func (a *DaprRuntime) ApplyBulkSubscribeResiliency(bulkSubCallData *bulkSubscrib
 ) (*[]pubsub.BulkSubscribeResponseEntry, error) {
 	bscData := *bulkSubCallData
 	ctx := bscData.ctx
-	var subscribedEntries atomic.Pointer[[]pubSubMessage]
-	subscribedEntries.Store(&psm.pubSubMessages)
 	policyRunner := resiliency.NewRunnerWithOptions(
 		ctx, policyDef, resiliency.RunnerOpts[*[]pubsub.BulkSubscribeResponseEntry]{
 			Accumulator: func(bsre *[]pubsub.BulkSubscribeResponseEntry) {
 				for _, v := range *bsre {
 					// add to main bulkResponses
-					index := (*bscData.entryIdIndexMap)[v.EntryId]
-					(*bscData.bulkResponses)[index].EntryId = v.EntryId
-					(*bscData.bulkResponses)[index].Error = v.Error
+					if index, ok := (*bscData.entryIdIndexMap)[v.EntryId]; ok {
+						(*bscData.bulkResponses)[index].EntryId = v.EntryId
+						(*bscData.bulkResponses)[index].Error = v.Error
+					}
 				}
-				filteredPubSubMsgs := utils.Filter(*subscribedEntries.Load(), func(ps pubSubMessage) bool {
-					index := (*bscData.entryIdIndexMap)[ps.entry.EntryId]
-					return (*bscData.bulkResponses)[index].Error != nil
+				filteredPubSubMsgs := utils.Filter(psm.pubSubMessages, func(ps pubSubMessage) bool {
+					if index, ok := (*bscData.entryIdIndexMap)[ps.entry.EntryId]; ok {
+						return (*bscData.bulkResponses)[index].Error != nil
+					}
+					return false
 				})
 				psm.pubSubMessages = filteredPubSubMsgs
 				psm.length = len(filteredPubSubMsgs)
@@ -48,7 +46,7 @@ func (a *DaprRuntime) ApplyBulkSubscribeResiliency(bulkSubCallData *bulkSubscrib
 		case GRPCProtocol:
 			pErr = a.publishBulkMessageGRPC(&bscData, &psm, &bsre, rawPayload)
 		default:
-			pErr = backoff.Permanent(errors.New("invalid application protocol"))
+			panic(errors.New("invalid application protocol"))
 		}
 		return &bsre, pErr
 	})

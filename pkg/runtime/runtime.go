@@ -850,9 +850,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			path:       routePath,
 			pubsub:     name,
 		}
-		policyRunner := resiliency.NewRunner[any](ctx,
-			a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub),
-		)
+		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			var pErr error
 			switch a.runtimeConfig.ApplicationProtocol {
