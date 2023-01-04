@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -23,10 +23,17 @@ var (
 
 	gitcommit, gitversion string
 	features              string
-	featuresSlice         []string
 )
 
+// Set by the init function
+var featuresSlice []string
+
 func init() {
+	if featuresSlice != nil {
+		// Return if another init method (e.g. for a build tag) already initialized
+		return
+	}
+
 	// At initialization, parse the value of "features" into a slice
 	if features == "" {
 		featuresSlice = []string{}
