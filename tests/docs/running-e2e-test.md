@@ -25,6 +25,9 @@ E2E tests are designed for verifying the functional correctness by replicating e
     export DAPR_NAMESPACE=dapr-tests
     export DAPR_MTLS_ENABLED=true
 
+    # If you want to enable debug logs for the daprd container set this
+    # export DEBUG_LOGGING=true
+
     # If you want to run tests against Windows or arm kubernetes clusters, uncomment and set these
     # export TARGET_OS=linux
     # export TARGET_ARCH=amd64
@@ -72,12 +75,12 @@ E2E tests are designed for verifying the functional correctness by replicating e
 
 If you are starting from scratch and just want to build dapr, deploy it, and run the e2e tests to your kubernetes cluster, do the following:
 
-1. Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb services, if they exist
+1. Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb, dapr-temporal services, if they exist
 
    *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 
    ```sh
-   helm uninstall dapr dapr-kafka dapr-redis dapr-mongodb -n $DAPR_NAMESPACE
+   helm uninstall dapr dapr-kafka dapr-redis dapr-mongodb dapr-temporal -n $DAPR_NAMESPACE
    ```
 
 2. Remove the test namespace, if it exists
@@ -86,7 +89,7 @@ If you are starting from scratch and just want to build dapr, deploy it, and run
    make delete-test-namespace
    ```
 
-    > Note: please make sure that you have executed helm uninstall command before you deleted dapr test namespace. Otherwise if you directly deleted the dapr test namespace without helm unisntall command and re-installed dapr control plane, the dapr sidecar injector won't work and fail for "bad certificate". And you have already run into this problem, you can recover by helm uninstall command. See https://github.com/dapr/dapr/issues/4612
+    > Note: please make sure that you have executed helm uninstall command before you deleted dapr test namespace. Otherwise if you directly deleted the dapr test namespace without helm uninstall command and re-installed dapr control plane, the dapr sidecar injector won't work and fail for "bad certificate". And you have already run into this problem, you can recover by helm uninstall command. See https://github.com/dapr/dapr/issues/4612
 
 3. Build, deploy, run tests from start to finish
 
@@ -180,8 +183,13 @@ To completely remove Dapr, test dependencies, and any lingering e2e test apps:
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 
 ```bash
-# Uninstall dapr, dapr-kafka, dapr-redis services
-helm uninstall dapr dapr-kafka dapr-redis dapr-mongodb -n $DAPR_NAMESPACE
+# Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb, dapr-temporal services, then remove dapr-zipkin
+helm uninstall dapr -n $DAPR_NAMESPACE || true
+helm uninstall dapr-kafka  -n $DAPR_NAMESPACE || true
+helm uninstall dapr-redis  -n $DAPR_NAMESPACE || true
+helm uninstall dapr-mongodb  -n $DAPR_NAMESPACE || true
+helm uninstall dapr-temporal -n $DAPR_NAMESPACE || true
+kubectl delete deployment dapr-zipkin -n $DAPR_NAMESPACE || true
 
 # Remove the test namespace
 make delete-test-namespace

@@ -16,29 +16,29 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/pkg/errors"
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/metadata"
-
-	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messaging"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -131,9 +131,10 @@ func (s *server) StartNonBlocking() error {
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
+			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
+			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.Port, err)
+				s.logger.Warnf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				listeners = append(listeners, l)
 			}
@@ -141,7 +142,7 @@ func (s *server) StartNonBlocking() error {
 	}
 
 	if len(listeners) == 0 {
-		return errors.Errorf("could not listen on any endpoint")
+		return errors.New("could not listen on any endpoint")
 	}
 
 	for _, listener := range listeners {
@@ -174,6 +175,12 @@ func (s *server) Close() error {
 		server.GracefulStop()
 	}
 
+	if s.api != nil {
+		if closer, ok := s.api.(io.Closer); ok {
+			closer.Close()
+		}
+	}
+
 	return nil
 }
 
@@ -181,13 +188,13 @@ func (s *server) generateWorkloadCert() error {
 	s.logger.Info("sending workload csr request to sentry")
 	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
 	if err != nil {
-		return errors.Wrap(err, "error from authenticator CreateSignedWorkloadCert")
+		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %w", err)
 	}
 	s.logger.Info("certificate signed successfully")
 
 	tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 	if err != nil {
-		return errors.Wrap(err, "error creating x509 Key Pair")
+		return fmt.Errorf("error creating x509 Key Pair: %w", err)
 	}
 
 	s.signedCert = signedCert
@@ -197,9 +204,10 @@ func (s *server) generateWorkloadCert() error {
 }
 
 func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
-	opts := []grpcGo.ServerOption{}
-	intr := []grpcGo.UnaryServerInterceptor{}
-	intrStream := []grpcGo.StreamServerInterceptor{}
+	intr := make([]grpcGo.UnaryServerInterceptor, 0, 6)
+	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 3)
+
+	intr = append(intr, metadata.SetMetadataInContextUnary)
 
 	if len(s.apiSpec.Allowed) > 0 {
 		s.logger.Info("enabled API access list on gRPC server")
@@ -228,26 +236,15 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		}
 	}
 
-	enableAPILogging := s.config.EnableAPILogging
-	if enableAPILogging {
+	if s.config.EnableAPILogging && s.infoLogger != nil {
 		intr = append(intr, s.getGRPCAPILoggingInfo())
 	}
 
-	chain := grpcMiddleware.ChainUnaryServer(
-		intr...,
-	)
-	opts = append(
-		opts,
-		grpcGo.UnaryInterceptor(chain),
-	)
-
-	chainStream := grpcMiddleware.ChainStreamServer(
-		intrStream...,
-	)
-
-	opts = append(opts, grpcGo.StreamInterceptor(chainStream))
-
-	return opts
+	return []grpcGo.ServerOption{
+		grpcGo.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(intr...)),
+		grpcGo.StreamInterceptor(grpcMiddleware.ChainStreamServer(intrStream...)),
+		grpcGo.InTapHandle(metadata.SetMetadataInTapHandle),
+	}
 }
 
 func (s *server) getGRPCServer() (*grpcGo.Server, error) {
@@ -313,7 +310,7 @@ func (s *server) startWorkloadCertRotation() {
 }
 
 func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool {
-	expiresIn := certExpiryDate.Sub(time.Now().UTC())
+	expiresIn := certExpiryDate.Sub(time.Now())
 	expiresInSeconds := expiresIn.Seconds()
 	certDurationSeconds := certDuration.Seconds()
 

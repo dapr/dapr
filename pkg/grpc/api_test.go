@@ -32,12 +32,13 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -57,6 +58,8 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -84,13 +87,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  10,
+					MaxRetries:  ptr.Of(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -145,15 +148,19 @@ var testResiliency = &v1alpha1.Resiliency{
 type mockGRPCAPI struct{}
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
-	return resp.Proto(), nil
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(ctx)).
+		WithContentType("text/plain")
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
-	return resp.Proto(), nil
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(ctx)).
+		WithContentType("text/plain")
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -246,7 +253,9 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	server := grpc.NewServer()
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(metadata.SetMetadataInContextUnary),
+	)
 	go func() {
 		runtimev1pb.RegisterDaprServer(server, srv)
 		if err := server.Serve(lis); err != nil {
@@ -280,11 +289,17 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	opts := []grpc.ServerOption{}
+	interceptors := []grpc.UnaryServerInterceptor{
+		metadata.SetMetadataInContextUnary,
+	}
 	if token != "" {
-		opts = append(opts,
-			grpc.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token")),
+		interceptors = append(interceptors,
+			setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token"),
 		)
+	}
+	opts := []grpc.ServerOption{
+		grpc.ChainUnaryInterceptor(interceptors...),
+		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
 	}
 
 	server := grpc.NewServer(opts...)
@@ -302,7 +317,10 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(
+		fmt.Sprintf("localhost:%d", port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -320,8 +338,9 @@ func TestCallActorWithTracing(t *testing.T) {
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)
 
-	request := invokev1.NewInvokeMethodRequest("method")
-	request.WithActor("test-actor", "actor-1")
+	request := invokev1.NewInvokeMethodRequest("method").
+		WithActor("test-actor", "actor-1")
+	defer request.Close()
 
 	resp, err := client.CallActor(context.Background(), request.Proto())
 	assert.NoError(t, err)
@@ -338,9 +357,10 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	defer clientConn.Close()
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)
-	request := invokev1.NewInvokeMethodRequest("method").Proto()
+	request := invokev1.NewInvokeMethodRequest("method")
+	defer request.Close()
 
-	resp, err := client.CallLocal(context.Background(), request)
+	resp, err := client.CallLocal(context.Background(), request.Proto())
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with app call")
 }
@@ -359,9 +379,10 @@ func TestCallLocal(t *testing.T) {
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
+		request := invokev1.NewInvokeMethodRequest("method")
+		defer request.Close()
 
-		_, err := client.CallLocal(context.Background(), request)
+		_, err := client.CallLocal(context.Background(), request.Proto())
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 
@@ -391,7 +412,10 @@ func TestCallLocal(t *testing.T) {
 		port, _ := freeport.GetFreePort()
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(nil, status.Error(codes.Unknown, "unknown error"))
+		mockAppChannel.On("InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
+		).Return(nil, status.Error(codes.Unknown, "unknown error"))
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
@@ -402,9 +426,10 @@ func TestCallLocal(t *testing.T) {
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
+		request := invokev1.NewInvokeMethodRequest("method")
+		defer request.Close()
 
-		_, err := client.CallLocal(context.Background(), request)
+		_, err := client.CallLocal(context.Background(), request.Proto())
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
@@ -430,13 +455,15 @@ func TestAPIToken(t *testing.T) {
 	t.Run("valid token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.AnythingOfType("*context.valueCtx"),
+			mock.MatchedBy(matchContextInterface),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -458,8 +485,8 @@ func TestAPIToken(t *testing.T) {
 				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
-		md := metadata.Pairs("dapr-api-token", token)
-		ctx := metadata.NewOutgoingContext(context.Background(), md)
+		md := grpcMetadata.Pairs("dapr-api-token", token)
+		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
 		_, err := client.InvokeService(ctx, req)
 
 		// assert
@@ -478,13 +505,15 @@ func TestAPIToken(t *testing.T) {
 	t.Run("invalid token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.AnythingOfType("*context.valueCtx"),
+			mock.MatchedBy(matchContextInterface),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -506,8 +535,8 @@ func TestAPIToken(t *testing.T) {
 				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
-		md := metadata.Pairs("dapr-api-token", "4567")
-		ctx := metadata.NewOutgoingContext(context.Background(), md)
+		md := grpcMetadata.Pairs("dapr-api-token", "4567")
+		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
 		_, err := client.InvokeService(ctx, req)
 
 		// assert
@@ -520,13 +549,15 @@ func TestAPIToken(t *testing.T) {
 	t.Run("missing token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.AnythingOfType("*context.valueCtx"),
+			mock.MatchedBy(matchContextInterface),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -612,13 +643,15 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 
 	for _, tt := range httpResponseTests {
 		t.Run(fmt.Sprintf("handle http %d response code", tt.status), func(t *testing.T) {
-			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil)
-			fakeResp.WithRawData([]byte(tt.errHTTPMessage), "application/json")
+			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil).
+				WithRawDataString(tt.errHTTPMessage).
+				WithContentType("application/json")
+			defer fakeResp.Close()
 
 			// Set up direct messaging mock
 			mockDirectMessaging.Calls = nil // reset call count
 			mockDirectMessaging.On("Invoke",
-				mock.AnythingOfType("*context.valueCtx"),
+				mock.MatchedBy(matchContextInterface),
 				"fakeAppID",
 				mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -640,7 +673,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 					Data:   &anypb.Any{Value: []byte("testData")},
 				},
 			}
-			var header metadata.MD
+			var header grpcMetadata.MD
 			_, err := client.InvokeService(context.Background(), req, grpc.Header(&header))
 
 			// assert
@@ -682,13 +715,15 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 					Owner:        "Dapr",
 				}),
 			},
-		)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.AnythingOfType("*context.valueCtx"),
+			mock.MatchedBy(matchContextInterface),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
@@ -958,13 +993,13 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
+	fakeStore.On("BulkSet", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
 		return reqs[0].Key == goodStoreKey
 	})).Return(nil)
-	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
+	fakeStore.On("BulkSet", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
@@ -1048,14 +1083,14 @@ func TestSaveState(t *testing.T) {
 func TestGetState(t *testing.T) {
 	// Setup mock store
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == goodStoreKey
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: ptr.Of("test-etag"),
 		}, nil)
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
 	})).Return(
 		nil,
@@ -1135,7 +1170,7 @@ func TestGetState(t *testing.T) {
 func TestGetConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	fakeConfigurationStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.GetRequest) bool {
 			return req.Keys[0] == goodKey
 		})).Return(
@@ -1147,7 +1182,7 @@ func TestGetConfiguration(t *testing.T) {
 			},
 		}, nil)
 	fakeConfigurationStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.GetRequest) bool {
 			return req.Keys[0] == "good-key1" && req.Keys[1] == goodKey2 && req.Keys[2] == "good-key3"
 		})).Return(
@@ -1165,7 +1200,7 @@ func TestGetConfiguration(t *testing.T) {
 			},
 		}, nil)
 	fakeConfigurationStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.GetRequest) bool {
 			return req.Keys[0] == "error-key"
 		})).Return(
@@ -1268,7 +1303,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	var tempReq *configuration.SubscribeRequest
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
 			return len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey
@@ -1286,7 +1321,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			return true
 		})).Return("id", nil)
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
 			return len(req.Keys) == 2 && req.Keys[0] == goodKey && req.Keys[1] == goodKey2
@@ -1307,7 +1342,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			return true
 		})).Return("id", nil)
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			return req.Keys[0] == "error-key"
 		}),
@@ -1421,12 +1456,12 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	defer close(stop)
 	var tempReq *configuration.SubscribeRequest
 	fakeConfigurationStore.On("Unsubscribe",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return true
 		})).Return(nil)
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
 			return len(req.Keys) == 1 && req.Keys[0] == goodKey
@@ -1458,7 +1493,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return true
 		})).Return(mockSubscribeID, nil)
 	fakeConfigurationStore.On("Subscribe",
-		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
 			return len(req.Keys) == 2 && req.Keys[0] == goodKey && req.Keys[1] == goodKey2
@@ -1596,7 +1631,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	fakeConfigurationStore.On("Unsubscribe",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return req.ID == mockSubscribeID
 		})).Return(nil)
@@ -1655,16 +1690,20 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 
 func TestGetBulkState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == goodStoreKey
-	})).Return(
+	fakeStore.On("Get",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.GetRequest) bool {
+			return req.Key == goodStoreKey
+		})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: ptr.Of("test-etag"),
 		}, nil)
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == errorStoreKey
-	})).Return(
+	fakeStore.On("Get",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.GetRequest) bool {
+			return req.Key == errorStoreKey
+		})).Return(
 		nil,
 		errors.New("failed to get state with error-key"))
 
@@ -1773,12 +1812,16 @@ func TestGetBulkState(t *testing.T) {
 
 func TestDeleteState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == goodStoreKey
-	})).Return(nil)
-	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == errorStoreKey
-	})).Return(errors.New("failed to delete state with key2"))
+	fakeStore.On("Delete",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.DeleteRequest) bool {
+			return req.Key == goodStoreKey
+		})).Return(nil)
+	fakeStore.On("Delete",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.DeleteRequest) bool {
+			return req.Key == errorStoreKey
+		})).Return(errors.New("failed to delete state with key2"))
 
 	fakeAPI := &api{
 		id:          "fakeAPI",
@@ -1955,6 +1998,88 @@ func TestPublishTopic(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+func TestBulkPublish(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	fakeAPI := &api{
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
+			},
+			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+				entries := []pubsub.BulkPublishResponseFailedEntry{}
+				// Construct sample response from the broker.
+				if req.Topic == "error-topic" {
+					for _, e := range req.Entries {
+						entry := pubsub.BulkPublishResponseFailedEntry{
+							EntryId: e.EntryId,
+						}
+						entry.Error = errors.New("error on publish")
+						entries = append(entries, entry)
+					}
+				} else if req.Topic == "even-error-topic" {
+					for i, e := range req.Entries {
+						if i%2 == 0 {
+							entry := pubsub.BulkPublishResponseFailedEntry{
+								EntryId: e.EntryId,
+							}
+							entry.Error = errors.New("error on publish")
+							entries = append(entries, entry)
+						}
+					}
+				}
+				// Mock simulates only partial failures or total success, so error is always nil.
+				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
+			},
+		},
+	}
+
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	sampleEntries := []*runtimev1pb.BulkPublishRequestEntry{
+		{EntryId: "1", Event: []byte("data1")},
+		{EntryId: "2", Event: []byte("data2")},
+		{EntryId: "3", Event: []byte("data3")},
+		{EntryId: "4", Event: []byte("data4")},
+	}
+
+	res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "topic",
+		Entries:    sampleEntries,
+	})
+	assert.Nil(t, err)
+	assert.Empty(t, res.FailedEntries)
+
+	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "error-topic",
+		Entries:    sampleEntries,
+	})
+	t.Log(res)
+	// Partial failure, so expecting no error
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, 4, len(res.FailedEntries))
+	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "even-error-topic",
+		Entries:    sampleEntries,
+	})
+	// Partial failure, so expecting no error
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, 2, len(res.FailedEntries))
+}
+
 func TestShutdownEndpoints(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
@@ -1993,7 +2118,7 @@ func TestInvokeBinding(t *testing.T) {
 	srv := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "error-binding" {
-				return nil, errors.New("error when invoke binding")
+				return nil, errors.New("error invoking binding")
 			}
 			return &bindings.InvokeResponse{Data: []byte("ok"), Metadata: req.Metadata}, nil
 		},
@@ -2010,7 +2135,7 @@ func TestInvokeBinding(t *testing.T) {
 	_, err = client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	ctx := metadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
+	ctx := grpcMetadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
 	assert.Nil(t, err)
 	assert.NotNil(t, resp)
@@ -2054,7 +2179,7 @@ func TestTransactionStateStoreNotImplemented(t *testing.T) {
 
 func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore := &daprt.TransactionalStoreMock{}
-	matchKeyFn := func(req *state.TransactionalStateRequest, key string) bool {
+	matchKeyFn := func(ctx context.Context, req *state.TransactionalStateRequest, key string) bool {
 		if len(req.Operations) == 1 {
 			if rr, ok := req.Operations[0].Request.(state.SetRequest); ok {
 				if rr.Key == "fakeAPI||"+key {
@@ -2066,12 +2191,16 @@ func TestExecuteStateTransaction(t *testing.T) {
 		}
 		return false
 	}
-	fakeStore.On("Multi", mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
-		return matchKeyFn(req, goodKey)
-	})).Return(nil)
-	fakeStore.On("Multi", mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
-		return matchKeyFn(req, "error-key")
-	})).Return(errors.New("error to execute with key2"))
+	fakeStore.On("Multi",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
+			return matchKeyFn(context.Background(), req, goodKey)
+		})).Return(nil)
+	fakeStore.On("Multi",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
+			return matchKeyFn(context.Background(), req, "error-key")
+		})).Return(errors.New("error to execute with key2"))
 
 	var fakeTransactionalStore state.TransactionalStore = fakeStore
 	fakeAPI := &api{
@@ -2186,6 +2315,22 @@ func TestGetMetadata(t *testing.T) {
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
+		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+			return []runtimePubsub.Subscription{
+				{
+					PubsubName:      "test",
+					Topic:           "topic",
+					DeadLetterTopic: "dead",
+					Metadata:        map[string]string{},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Match: &expr.Expr{},
+							Path:  "path",
+						},
+					},
+				},
+			}, nil
+		},
 	}
 	fakeAPI.extendedMetadata.Store("testKey", "testValue")
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -2206,6 +2351,14 @@ func TestGetMetadata(t *testing.T) {
 	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
 	assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
 	assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
+	assert.Len(t, response.Subscriptions, 1)
+	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
+	assert.Equal(t, response.Subscriptions[0].Topic, "topic")
+	assert.Equal(t, response.Subscriptions[0].DeadLetterTopic, "dead")
+	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
+	assert.Len(t, response.Subscriptions[0].Rules.Rules, 1)
+	assert.Equal(t, fmt.Sprintf("%s", response.Subscriptions[0].Rules.Rules[0].Match), "")
+	assert.Equal(t, response.Subscriptions[0].Rules.Rules[0].Path, "path")
 }
 
 func TestSetMetadata(t *testing.T) {
@@ -2374,9 +2527,11 @@ func TestQueryState(t *testing.T) {
 
 	fakeStore := &mockStateStoreQuerier{}
 	// simulate full result
-	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
-		return len(req.Query.Sort) != 0 && req.Query.Page.Limit != 0
-	})).Return(
+	fakeStore.MockQuerier.On("Query",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.QueryRequest) bool {
+			return len(req.Query.Sort) != 0 && req.Query.Page.Limit != 0
+		})).Return(
 		&state.QueryResponse{
 			Results: []state.QueryItem{
 				{
@@ -2386,16 +2541,20 @@ func TestQueryState(t *testing.T) {
 			},
 		}, nil)
 	// simulate empty data
-	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
-		return len(req.Query.Sort) == 0 && req.Query.Page.Limit != 0
-	})).Return(
+	fakeStore.MockQuerier.On("Query",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.QueryRequest) bool {
+			return len(req.Query.Sort) == 0 && req.Query.Page.Limit != 0
+		})).Return(
 		&state.QueryResponse{
 			Results: []state.QueryItem{},
 		}, nil)
 	// simulate error
-	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
-		return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
-	})).Return(nil, errors.New("Query error"))
+	fakeStore.MockQuerier.On("Query",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *state.QueryRequest) bool {
+			return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
+		})).Return(nil, errors.New("Query error"))
 
 	server := startTestServerAPI(port, &api{
 		id:          "fakeAPI",
@@ -2509,7 +2668,7 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		r, err := client.GetConfigurationAlpha1(context.TODO(), &runtimev1pb.GetConfigurationRequest{
+		r, err := client.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
 			StoreName: "store1",
 			Keys: []string{
 				"key1",
@@ -2543,7 +2702,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		ctx := context.TODO()
+		ctx := context.Background()
 		client := runtimev1pb.NewDaprClient(clientConn)
 		s, err := client.SubscribeConfigurationAlpha1(ctx, &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "store1",
@@ -2592,7 +2751,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		ctx := context.TODO()
+		ctx := context.Background()
 		client := runtimev1pb.NewDaprClient(clientConn)
 		s, err := client.SubscribeConfigurationAlpha1(ctx, &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "store1",
@@ -2636,14 +2795,15 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				"failingQueryKey":      1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":        time.Second * 10,
-				"timeoutSetKey":        time.Second * 10,
-				"timeoutDeleteKey":     time.Second * 10,
-				"timeoutBulkGetKey":    time.Second * 10,
-				"timeoutBulkSetKey":    time.Second * 10,
-				"timeoutBulkDeleteKey": time.Second * 10,
-				"timeoutMultiKey":      time.Second * 10,
-				"timeoutQueryKey":      time.Second * 10,
+				"timeoutGetKey":         time.Second * 10,
+				"timeoutSetKey":         time.Second * 10,
+				"timeoutDeleteKey":      time.Second * 10,
+				"timeoutBulkGetKey":     time.Second * 10,
+				"timeoutBulkGetKeyBulk": time.Second * 10,
+				"timeoutBulkSetKey":     time.Second * 10,
+				"timeoutBulkDeleteKey":  time.Second * 10,
+				"timeoutMultiKey":       time.Second * 10,
+				"timeoutQueryKey":       time.Second * 10,
 			},
 			map[string]int{},
 		),
@@ -2743,6 +2903,12 @@ func TestStateAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
+		// Adding this will make the bulk operation fail with a timeout, and Dapr should be able to recover nicely
+		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
+		t.Cleanup(func() {
+			failingStore.BulkFailKey = ""
+		})
+
 		_, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: "failStore",
 			Keys:      []string{"failingBulkGetKey", "goodBulkGetKey"},
@@ -2757,22 +2923,29 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		start := time.Now()
 		resp, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: "failStore",
-			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey"},
+			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey", "nilGetKey"},
 		})
 		end := time.Now()
 
 		assert.NoError(t, err)
-		assert.Len(t, resp.Items, 2)
+		assert.Len(t, resp.Items, 3)
 		for _, item := range resp.Items {
-			if item.Key == "timeoutBulkGetKey" {
+			switch item.Key {
+			case "timeoutBulkGetKey":
 				assert.NotEmpty(t, item.Error)
 				assert.Contains(t, item.Error, "context deadline exceeded")
-			} else {
+			case "goodTimeoutBulkGetKey":
 				assert.Empty(t, item.Error)
+			case "nilGetKey":
+				assert.Empty(t, item.Error)
+				assert.Empty(t, item.Data)
+			default:
+				t.Fatalf("unexpected key: %s", item.Key)
 			}
 		}
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
 		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("nilGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2940,8 +3113,8 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 		_, err = resp.Recv()
 		assert.NoError(t, err)
-		// Subscribe now calls Get first so we have an extra call.
-		assert.Equal(t, 3, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
+
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
 	})
 
 	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
@@ -3096,16 +3269,20 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	t.Run("Test invoke direct message retries with resiliency", func(t *testing.T) {
-		_, err := client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
+		val := []byte("failingKey")
+		res, err := client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
 			Id: "failingApp",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "test",
-				Data:   &anypb.Any{Value: []byte("failingKey")},
+				Data:   &anypb.Any{Value: val},
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
+		require.NotNil(t, res)
+		require.NotNil(t, res.Data)
+		assert.Equal(t, val, res.Data.Value)
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
@@ -3354,7 +3531,7 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().TryLock(gomock.Any()).DoAndReturn(func(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+		mockLockStore.EXPECT().TryLock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			assert.Equal(t, int32(1), req.ExpiryInSeconds)
@@ -3450,7 +3627,7 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().Unlock(gomock.Any()).DoAndReturn(func(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+		mockLockStore.EXPECT().Unlock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			return &lock.UnlockResponse{
@@ -3470,4 +3647,9 @@ func TestUnlock(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
 	})
+}
+
+func matchContextInterface(v any) bool {
+	_, ok := v.(context.Context)
+	return ok
 }

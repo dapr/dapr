@@ -23,20 +23,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dapr/dapr/utils"
-
 	"github.com/ghodss/yaml"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
-
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-
-	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/config"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
@@ -66,6 +62,8 @@ const (
 	Pubsub                        ComponentType         = "Pubsub"
 	Secretstore                   ComponentType         = "Secretstore"
 	Statestore                    ComponentType         = "Statestore"
+	Inbound                       ComponentDirection    = "Inbound"
+	Outbound                      ComponentDirection    = "Outbound"
 )
 
 // ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
@@ -83,21 +81,21 @@ const (
 )
 
 type (
-	// Provider is the interface for returning a `Runner` for the various
+	// Provider is the interface for returning a `*PolicyDefinition` for the various
 	// resiliency scenarios in the runtime.
 	Provider interface {
 		// EndpointPolicy returns the policy for a service endpoint.
-		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
+		EndpointPolicy(service string, endpoint string) *PolicyDefinition
 		// ActorPolicy returns the policy for an actor instance to be used before the lock is acquired.
-		ActorPreLockPolicy(ctx context.Context, actorType string, id string) Runner
+		ActorPreLockPolicy(actorType string, id string) *PolicyDefinition
 		// ActorPolicy returns the policy for an actor instance to be used after the lock is acquired.
-		ActorPostLockPolicy(ctx context.Context, actorType string, id string) Runner
+		ActorPostLockPolicy(actorType string, id string) *PolicyDefinition
 		// ComponentOutboundPolicy returns the outbound policy for a component.
-		ComponentOutboundPolicy(ctx context.Context, name string, componentType ComponentType) Runner
+		ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition
 		// ComponentInboundPolicy returns the inbound policy for a component.
-		ComponentInboundPolicy(ctx context.Context, name string, componentType ComponentType) Runner
+		ComponentInboundPolicy(name string, componentType ComponentType) *PolicyDefinition
 		// BuiltInPolicy are used to replace existing retries in Dapr which may not bind specifically to one of the above categories.
-		BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner
+		BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition
 		// GetPolicy returns the policy that applies to the target, or nil if there is none.
 		GetPolicy(target string, policyType PolicyType) *PolicyDescription
 	}
@@ -179,12 +177,13 @@ type (
 		getPolicyLevels() []string
 		getPolicyTypeName() PolicyTypeName
 	}
-	EndpointPolicy  struct{}
-	ActorPolicy     struct{}
-	ComponentType   string
-	ComponentPolicy struct {
+	EndpointPolicy     struct{}
+	ActorPolicy        struct{}
+	ComponentType      string
+	ComponentDirection string
+	ComponentPolicy    struct {
 		componentType      ComponentType
-		componentDirection string
+		componentDirection ComponentDirection
 	}
 )
 
@@ -532,23 +531,20 @@ func (r *Resiliency) isProtectedPolicy(name string) bool {
 }
 
 // EndpointPolicy returns the policy for a service endpoint.
-func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint string) Runner {
-	var t time.Duration
-	var rc *retry.Config
-	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("endpoint[%s, %s]", app, endpoint)
-	if r == nil {
-		return Policy(ctx, r.log, operationName, t, rc, cb)
+func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefinition {
+	policyDef := &PolicyDefinition{
+		log:  r.log,
+		name: "endpoint[" + app + ", " + endpoint + "]",
 	}
 	policyNames, ok := r.apps[app]
 	if ok {
 		r.log.Debugf("Found Endpoint Policy for %s: %+v", app, policyNames)
 		if policyNames.Timeout != "" {
-			t = r.timeouts[policyNames.Timeout]
+			policyDef.t = r.timeouts[policyNames.Timeout]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 		if policyNames.Retry != "" {
-			rc = r.retries[policyNames.Retry]
+			policyDef.r = r.retries[policyNames.Retry]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
 		}
 		if policyNames.CircuitBreaker != "" {
@@ -558,17 +554,17 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 				if ok {
 					cbi, ok := cache.Get(endpoint)
 					if ok {
-						cb, _ = cbi.(*breaker.CircuitBreaker)
+						policyDef.cb, _ = cbi.(*breaker.CircuitBreaker)
 					} else {
-						cb = &breaker.CircuitBreaker{
+						policyDef.cb = &breaker.CircuitBreaker{
 							Name:        endpoint,
 							MaxRequests: template.MaxRequests,
 							Interval:    template.Interval,
 							Timeout:     template.Timeout,
 							Trip:        template.Trip,
 						}
-						cb.Initialize(r.log)
-						cache.Add(endpoint, cb)
+						policyDef.cb.Initialize(r.log)
+						cache.Add(endpoint, policyDef.cb)
 					}
 				}
 			}
@@ -578,10 +574,10 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 		if defaultNames, ok := r.getDefaultPolicy(&EndpointPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Endpoint %s: %+v", app, defaultNames)
 			if defaultNames.Retry != "" {
-				rc = r.retries[defaultNames.Retry]
+				policyDef.r = r.retries[defaultNames.Retry]
 			}
 			if defaultNames.Timeout != "" {
-				t = r.timeouts[defaultNames.Timeout]
+				policyDef.t = r.timeouts[defaultNames.Timeout]
 			}
 
 			if defaultNames.CircuitBreaker != "" {
@@ -591,17 +587,17 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 					if ok {
 						cbi, ok := cache.Get(endpoint)
 						if ok {
-							cb, _ = cbi.(*breaker.CircuitBreaker)
+							policyDef.cb, _ = cbi.(*breaker.CircuitBreaker)
 						} else {
-							cb = &breaker.CircuitBreaker{
+							policyDef.cb = &breaker.CircuitBreaker{
 								Name:        endpoint,
 								MaxRequests: template.MaxRequests,
 								Interval:    template.Interval,
 								Timeout:     template.Timeout,
 								Trip:        template.Trip,
 							}
-							cb.Initialize(r.log)
-							cache.Add(endpoint, cb)
+							policyDef.cb.Initialize(r.log)
+							cache.Add(endpoint, policyDef.cb)
 						}
 					}
 					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
@@ -610,23 +606,20 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 		}
 	}
 
-	return Policy(ctx, r.log, operationName, t, rc, cb)
+	return policyDef
 }
 
 // ActorPreLockPolicy returns the policy for an actor instance to be used before an actor lock is acquired.
-func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, id string) Runner {
-	var t time.Duration
-	var rc *retry.Config
-	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("actor[%s, %s]", actorType, id)
-	if r == nil {
-		return Policy(ctx, r.log, operationName, t, rc, cb)
+func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefinition {
+	policyDef := &PolicyDefinition{
+		log:  r.log,
+		name: "actor[" + actorType + ", " + id + "]",
 	}
 	actorPolicies, ok := r.actors[actorType]
 	if policyNames := actorPolicies.PreLockPolicies; ok {
 		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Retry != "" {
-			rc = r.retries[policyNames.Retry]
+			policyDef.r = r.retries[policyNames.Retry]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
 		}
 		if policyNames.CircuitBreaker != "" {
@@ -643,17 +636,17 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 
 					cbi, ok := cache.Get(key)
 					if ok {
-						cb, _ = cbi.(*breaker.CircuitBreaker)
+						policyDef.cb, _ = cbi.(*breaker.CircuitBreaker)
 					} else {
-						cb = &breaker.CircuitBreaker{
+						policyDef.cb = &breaker.CircuitBreaker{
 							Name:        key,
 							MaxRequests: template.MaxRequests,
 							Interval:    template.Interval,
 							Timeout:     template.Timeout,
 							Trip:        template.Trip,
 						}
-						cb.Initialize(r.log)
-						cache.Add(key, cb)
+						policyDef.cb.Initialize(r.log)
+						cache.Add(key, policyDef.cb)
 					}
 				}
 			}
@@ -663,7 +656,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 		if defaultNames, ok := r.getDefaultPolicy(&ActorPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultNames)
 			if defaultNames.Retry != "" {
-				rc = r.retries[defaultNames.Retry]
+				policyDef.r = r.retries[defaultNames.Retry]
 			}
 
 			if defaultNames.CircuitBreaker != "" {
@@ -680,17 +673,17 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 
 						cbi, ok := cache.Get(key)
 						if ok {
-							cb, _ = cbi.(*breaker.CircuitBreaker)
+							policyDef.cb, _ = cbi.(*breaker.CircuitBreaker)
 						} else {
-							cb = &breaker.CircuitBreaker{
+							policyDef.cb = &breaker.CircuitBreaker{
 								Name:        key,
 								MaxRequests: template.MaxRequests,
 								Interval:    template.Interval,
 								Timeout:     template.Timeout,
 								Trip:        template.Trip,
 							}
-							cb.Initialize(r.log)
-							cache.Add(key, cb)
+							policyDef.cb.Initialize(r.log)
+							cache.Add(key, policyDef.cb)
 						}
 					}
 					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
@@ -699,131 +692,124 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 		}
 	}
 
-	return Policy(ctx, r.log, operationName, t, rc, cb)
+	return policyDef
 }
 
 // ActorPostLockPolicy returns the policy for an actor instance to be used after an actor lock is acquired.
-func (r *Resiliency) ActorPostLockPolicy(ctx context.Context, actorType string, id string) Runner {
-	var t time.Duration
-	var rc *retry.Config
-	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("actor[%s, %s]", actorType, id)
-	if r == nil {
-		return Policy(ctx, r.log, operationName, t, rc, cb)
+func (r *Resiliency) ActorPostLockPolicy(actorType string, id string) *PolicyDefinition {
+	policyDef := &PolicyDefinition{
+		log:  r.log,
+		name: "actor[" + actorType + ", " + id + "]",
 	}
 	actorPolicies, ok := r.actors[actorType]
 	if policyNames := actorPolicies.PostLockPolicies; ok {
 		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Timeout != "" {
-			t = r.timeouts[policyNames.Timeout]
+			policyDef.t = r.timeouts[policyNames.Timeout]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(&ActorPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
-				t = r.timeouts[defaultPolicies.Timeout]
+				policyDef.t = r.timeouts[defaultPolicies.Timeout]
 			}
 		}
 	}
 
-	return Policy(ctx, r.log, operationName, t, rc, cb)
+	return policyDef
 }
 
 // ComponentOutboundPolicy returns the outbound policy for a component.
-func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string, componentType ComponentType) Runner {
-	var t time.Duration
-	var rc *retry.Config
-	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("component[%s] output", name)
-	if r == nil {
-		return Policy(ctx, r.log, operationName, t, rc, cb)
+func (r *Resiliency) ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition {
+	policyDef := &PolicyDefinition{
+		log:  r.log,
+		name: "component[" + name + "] output",
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
-		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies)
+		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies.Outbound)
 		if componentPolicies.Outbound.Timeout != "" {
-			t = r.timeouts[componentPolicies.Outbound.Timeout]
+			policyDef.t = r.timeouts[componentPolicies.Outbound.Timeout]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 		if componentPolicies.Outbound.Retry != "" {
-			rc = r.retries[componentPolicies.Outbound.Retry]
+			policyDef.r = r.retries[componentPolicies.Outbound.Retry]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
 		}
 		if componentPolicies.Outbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
-			cb = r.componentCBs.Get(r.log, name, template)
+			policyDef.cb = r.componentCBs.Get(r.log, name, template)
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: "Outbound"}); ok {
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
-				t = r.timeouts[defaultPolicies.Timeout]
+				policyDef.t = r.timeouts[defaultPolicies.Timeout]
 			}
 			if defaultPolicies.Retry != "" {
-				rc = r.retries[defaultPolicies.Retry]
+				policyDef.r = r.retries[defaultPolicies.Retry]
 			}
 			if defaultPolicies.CircuitBreaker != "" {
 				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
-				cb = r.componentCBs.Get(r.log, name, template)
+				policyDef.cb = r.componentCBs.Get(r.log, name, template)
 			}
 		}
 	}
 
-	return Policy(ctx, r.log, operationName, t, rc, cb)
+	return policyDef
 }
 
 // ComponentInboundPolicy returns the inbound policy for a component.
-func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string, componentType ComponentType) Runner {
-	var t time.Duration
-	var rc *retry.Config
-	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("component[%s] input", name)
-	if r == nil {
-		return Policy(ctx, r.log, operationName, t, rc, cb)
+func (r *Resiliency) ComponentInboundPolicy(name string, componentType ComponentType) *PolicyDefinition {
+	policyDef := &PolicyDefinition{
+		log:  r.log,
+		name: "component[" + name + "] input",
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
-		r.log.Debugf("Found Component Inbound Policy for component %s: %+v", name, componentPolicies)
+		r.log.Debugf("Found Component Inbound Policy for component %s: %+v", name, componentPolicies.Inbound)
 		if componentPolicies.Inbound.Timeout != "" {
-			t = r.timeouts[componentPolicies.Inbound.Timeout]
+			policyDef.t = r.timeouts[componentPolicies.Inbound.Timeout]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 		if componentPolicies.Inbound.Retry != "" {
-			rc = r.retries[componentPolicies.Inbound.Retry]
+			policyDef.r = r.retries[componentPolicies.Inbound.Retry]
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
 		}
 		if componentPolicies.Inbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
-			cb = r.componentCBs.Get(r.log, name, template)
+			policyDef.cb = r.componentCBs.Get(r.log, name, template)
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
-		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: "Inbound"}); ok {
+		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: Inbound}); ok {
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
-				t = r.timeouts[defaultPolicies.Timeout]
+				policyDef.t = r.timeouts[defaultPolicies.Timeout]
 			}
 			if defaultPolicies.Retry != "" {
-				rc = r.retries[defaultPolicies.Retry]
+				policyDef.r = r.retries[defaultPolicies.Retry]
 			}
 			if defaultPolicies.CircuitBreaker != "" {
 				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
-				cb = r.componentCBs.Get(r.log, name, template)
+				policyDef.cb = r.componentCBs.Get(r.log, name, template)
 			}
 		}
 	}
 
-	return Policy(ctx, r.log, operationName, t, rc, cb)
+	return policyDef
 }
 
 // BuiltInPolicy returns a policy that represents a specific built-in retry scenario.
-func (r *Resiliency) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner {
-	var t time.Duration
-	var cb *breaker.CircuitBreaker
-	stringName := string(name)
-	return Policy(ctx, r.log, stringName, t, r.retries[stringName], cb)
+func (r *Resiliency) BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition {
+	nameStr := string(name)
+	return &PolicyDefinition{
+		log:  r.log,
+		name: nameStr,
+		r:    r.retries[nameStr],
+	}
 }
 
 // GetPolicy returns the policy that applies to the target, or nil if there is none.
@@ -840,18 +826,21 @@ func (r *Resiliency) GetPolicy(target string, policyType PolicyType) *PolicyDesc
 		componentPolicy, exists = r.components[target]
 		if exists {
 			policy, _ := policyType.(*ComponentPolicy)
-			if policy.componentDirection == "Inbound" {
+			switch policy.componentDirection {
+			case Inbound:
 				policyName = PolicyNames{
 					Retry:          componentPolicy.Inbound.Retry,
 					CircuitBreaker: componentPolicy.Inbound.CircuitBreaker,
 					Timeout:        componentPolicy.Inbound.Timeout,
 				}
-			} else {
+			case Outbound:
 				policyName = PolicyNames{
 					Retry:          componentPolicy.Outbound.Retry,
 					CircuitBreaker: componentPolicy.Outbound.CircuitBreaker,
 					Timeout:        componentPolicy.Outbound.Timeout,
 				}
+			default:
+				panic(fmt.Errorf("invalid component policy direction: '%s'", policy.componentDirection))
 			}
 		}
 	case Actor:
@@ -980,11 +969,6 @@ func (e *circuitBreakerInstances) Remove(name string) {
 	e.Unlock()
 }
 
-// HasRetries returns true if the policy is configured to have more than 1 retry.
-func (p PolicyDescription) HasRetries() bool {
-	return p.RetryPolicy != nil && p.RetryPolicy.MaxRetries != 0
-}
-
 func toMap(val interface{}) (interface{}, error) {
 	jsonBytes, err := json.Marshal(val)
 	if err != nil {
@@ -1065,9 +1049,9 @@ func (*ComponentPolicy) getPolicyTypeName() PolicyTypeName {
 }
 
 var ComponentInboundPolicy = ComponentPolicy{
-	componentDirection: "Inbound",
+	componentDirection: Inbound,
 }
 
 var ComponentOutboundPolicy = ComponentPolicy{
-	componentDirection: "Outbound",
+	componentDirection: Outbound,
 }

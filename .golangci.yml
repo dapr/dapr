@@ -126,6 +126,8 @@ linters-settings:
     packages-with-error-message:
       - "github.com/Sirupsen/logrus": "must use github.com/dapr/kit/logger"
       - "github.com/agrea/ptr": "must use github.com/dapr/kit/ptr"
+      - "go.uber.org/atomic": "must use sync/atomic"
+      - "github.com/pkg/errors": "must use standard library (errors package and/or fmt.Errorf)"
       - "github.com/cenkalti/backoff": "must use github.com/cenkalti/backoff/v4"
       - "github.com/cenkalti/backoff/v2": "must use github.com/cenkalti/backoff/v4"
       - "github.com/cenkalti/backoff/v3": "must use github.com/cenkalti/backoff/v4"
@@ -229,6 +231,7 @@ linters:
   enable-all: true
   disable:
     # TODO Enforce the below linters later
+    - nosnakecase
     - dupl
     - errcheck
     - funlen
@@ -281,3 +284,5 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - structcheck
+    - varcheck
+    - deadcode

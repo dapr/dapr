@@ -21,13 +21,11 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -39,7 +37,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/acl"
+	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -50,6 +48,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -70,7 +69,7 @@ const (
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 //
-//nolint:nosnakecase
+//nolint:interfacebloat
 type API interface {
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -110,6 +109,9 @@ type API interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
+	GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error)
+	StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error)
+	TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -120,6 +122,7 @@ type api struct {
 	appChannel                 channel.AppChannel
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
+	workflowComponents         map[string]workflows.Workflow
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
@@ -137,6 +140,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
+	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	daprRunTimeVersion         string
 }
 
@@ -174,7 +178,7 @@ func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 	// 4. delegate to the component
-	compResp, err := store.TryLock(compReq)
+	compResp, err := store.TryLock(ctx, compReq)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
@@ -214,7 +218,7 @@ func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) 
 		return newInternalErrorUnlockResponse(), err
 	}
 	// 4. delegate to the component
-	compResp, err := store.Unlock(compReq)
+	compResp, err := store.Unlock(ctx, compReq)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
@@ -278,6 +282,7 @@ type APIOpts struct {
 	SecretStores                map[string]secretstores.SecretStore
 	SecretsConfiguration        map[string]config.SecretsScope
 	ConfigurationStores         map[string]configuration.Store
+	WorkflowComponents          map[string]workflows.Workflow
 	LockStores                  map[string]lock.Store
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
@@ -289,6 +294,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
+	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
 }
 
 // NewAPI returns a new gRPC API.
@@ -309,6 +315,7 @@ func NewAPI(opts APIOpts) API {
 		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               opts.SecretStores,
+		workflowComponents:         opts.WorkflowComponents,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
@@ -320,66 +327,9 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsFn:            opts.GetComponentsFn,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		daprRunTimeVersion:         version.Version(),
 	}
-}
-
-// CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
-func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	if a.appChannel == nil {
-		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
-	}
-
-	req, err := invokev1.InternalInvokeRequest(in)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
-	}
-
-	if a.accessControlList != nil {
-		// An access control policy has been specified for the app. Apply the policies.
-		operation := req.Message().Method
-		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
-		// Get the http verb in case the application protocol is http
-		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
-			httpExt := req.Message().GetHttpExtension()
-			if httpExt != nil {
-				httpVerb = httpExt.GetVerb()
-			}
-		}
-		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol, a.accessControlList)
-
-		if !callAllowed {
-			return nil, status.Errorf(codes.PermissionDenied, errMsg)
-		}
-	}
-
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
-		return nil, err
-	}
-	return resp.Proto(), err
-}
-
-// CallActor invokes a virtual actor.
-func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	req, err := invokev1.InternalInvokeRequest(in)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
-	}
-
-	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	resp, err := a.actor.Call(ctx, req)
-	if err != nil {
-		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
-		if errors.Is(err, actors.ErrDaprResponseHeader) {
-			return resp.Proto(), nil
-		}
-
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
-		return nil, err
-	}
-	return resp.Proto(), nil
 }
 
 // validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
@@ -486,58 +436,91 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	return &emptypb.Empty{}, nil
 }
 
+type invokeServiceResp struct {
+	message  *commonv1pb.InvokeResponse
+	headers  metadata.MD
+	trailers metadata.MD
+}
+
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
-	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
+	if a.directMessaging == nil {
+		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
+	}
+
+	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
+
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage()).
+		WithReplay(policyDef.HasRetries())
+	defer req.Close()
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
 	}
 
-	if a.directMessaging == nil {
-		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
-	}
-
-	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
-	var resp *invokev1.InvokeMethodResponse
-	respError := policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = a.directMessaging.Invoke(ctx, in.Id, req)
-		if rErr != nil {
-			rErr = status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
-			return rErr
-		}
-
-		headerMD := invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
-
-		// If the status is OK, respError will be nil.
-		var respError error
-		if resp.IsHTTPResponse() {
-			errorMessage := []byte{}
-			if resp != nil {
-				_, errorMessage = resp.RawData()
+	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx, policyDef)
+	resp, err := policyRunner(func(ctx context.Context) (*invokeServiceResp, error) {
+		rResp := &invokeServiceResp{}
+		imr, rErr := a.directMessaging.Invoke(ctx, in.Id, req)
+		if imr != nil {
+			// Read the entire message in memory then close imr
+			pd, pdErr := imr.ProtoWithData()
+			imr.Close()
+			if pd != nil {
+				rResp.message = pd.Message
 			}
-			respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
-			// Populate http status code to header
-			headerMD.Set(daprHTTPStatusHeader, strconv.Itoa(int(resp.Status().Code)))
-		} else {
-			respError = invokev1.ErrorFromInternalStatus(resp.Status())
-			// ignore trailer if appchannel uses HTTP
-			grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Trailers(), false))
+
+			// If we have an error, set it only if rErr is not already set
+			if pdErr != nil && rErr == nil {
+				rErr = pdErr
+			}
+		}
+		if rErr != nil {
+			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
 		}
 
-		grpc.SetHeader(ctx, headerMD)
+		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
-		return respError
+		if imr.IsHTTPResponse() {
+			var errorMessage string
+			if rResp.message != nil && rResp.message.Data != nil {
+				errorMessage = string(rResp.message.Data.Value)
+			}
+			code := int(imr.Status().Code)
+			// If the status is OK, will be nil
+			rErr = invokev1.ErrorFromHTTPResponseCode(code, errorMessage)
+			// Populate http status code to header
+			rResp.headers.Set(daprHTTPStatusHeader, strconv.Itoa(code))
+		} else {
+			// If the status is OK, will be nil
+			rErr = invokev1.ErrorFromInternalStatus(imr.Status())
+			// Only include trailers if appchannel uses gRPC
+			rResp.trailers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Trailers(), false)
+		}
+
+		return rResp, rErr
 	})
 
+	var message *commonv1pb.InvokeResponse
+	if resp != nil {
+		if resp.headers != nil {
+			grpc.SetHeader(ctx, resp.headers)
+		}
+		if resp.trailers != nil {
+			grpc.SetTrailer(ctx, resp.trailers)
+		}
+		message = resp.message
+	}
+
 	// In this case, there was an error with the actual request or a resiliency policy stopped the request.
-	if respError != nil {
+	if err != nil {
 		// Check if it's returned by status.Errorf
-		_, ok := respError.(interface{ GRPCStatus() *status.Status })
-		if ok || (errors.Is(respError, context.DeadlineExceeded) || breaker.IsErrorPermanent(respError)) {
-			return nil, respError
+		_, ok := err.(interface{ GRPCStatus() *status.Status })
+		if ok || errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
+			return nil, err
 		}
 	}
-	return resp.Message(), respError
+
+	return message, err
 }
 
 func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
@@ -623,33 +606,25 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	start := time.Now()
+	// err is only nil if all entries are successfully published.
+	// For partial success, err is not nil and res contains the failed entries.
 	res, err := a.pubsubAdapter.BulkPublish(&req)
+
 	elapsed := diag.ElapsedSince(start)
-	var eventsPublished int64 = 0
+	eventsPublished := int64(len(req.Entries))
 
-	bulkRes := runtimev1pb.BulkPublishResponse{}
-
-	if len(res.Statuses) != 0 {
-		bulkRes.Statuses = make([]*runtimev1pb.BulkPublishResponseEntry, 0, len(res.Statuses))
-		for _, r := range res.Statuses {
-			resEntry := runtimev1pb.BulkPublishResponseEntry{}
-			resEntry.EntryId = r.EntryId
-			if r.Error != nil {
-				resEntry.Error = r.Error.Error()
-			}
-			if r.Status == pubsub.PublishSucceeded {
-				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_SUCCESS //nolint:nosnakecase
-				eventsPublished++
-			} else {
-				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
-			}
-			bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
-		}
+	if len(res.FailedEntries) != 0 {
+		eventsPublished -= int64(len(res.FailedEntries))
 	}
-
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
 
+	// BulkPublishResponse contains all failed entries from the request.
+	// If there are no failed entries, then the failedEntries array will be empty.
+	bulkRes := runtimev1pb.BulkPublishResponse{}
+
 	if err != nil {
+		// Only respond with error if it is  permission denied or not found.
+		// On error, the response will be empty.
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			nerr = status.Errorf(codes.PermissionDenied, err.Error())
@@ -663,7 +638,17 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		return &bulkRes, nerr
 	}
 
+	bulkRes.FailedEntries = make([]*runtimev1pb.BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
+	for _, r := range res.FailedEntries {
+		resEntry := runtimev1pb.BulkPublishResponseFailedEntry{}
+		resEntry.EntryId = r.EntryId
+		if r.Error != nil {
+			resEntry.Error = r.Error.Error()
+		}
+		bulkRes.FailedEntries = append(bulkRes.FailedEntries, &resEntry)
+	}
 	closeChildSpans(ctx, nil)
+	// even on partial failures, err is nil. As when error is set, the response is expected to not be processed.
 	return &bulkRes, nil
 }
 
@@ -705,14 +690,19 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	return r, nil
 }
 
+type bulkGetRes struct {
+	bulkGet   bool
+	responses []state.BulkGetResponse
+}
+
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
+	bulkResp := &runtimev1pb.GetBulkStateResponse{}
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetBulkStateResponse{}, err
+		return bulkResp, err
 	}
 
-	bulkResp := &runtimev1pb.GetBulkStateResponse{}
 	if len(in.Keys) == 0 {
 		return bulkResp, nil
 	}
@@ -732,29 +722,35 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	start := time.Now()
-	var bulkGet bool
-	var responses []state.BulkGetResponse
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
-	err = policy(func(ctx context.Context) (rErr error) {
-		bulkGet, responses, rErr = store.BulkGet(reqs)
-		return rErr
+	policyDef := a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
+	bgrPolicyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
+	bgr, err := bgrPolicyRunner(func(ctx context.Context) (*bulkGetRes, error) {
+		rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, reqs)
+		return &bulkGetRes{
+			bulkGet:   rBulkGet,
+			responses: rBulkResponse,
+		}, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
+	if bgr == nil {
+		bgr = &bulkGetRes{}
+	}
+
 	// if store supports bulk get
-	if bulkGet {
+	if bgr.bulkGet {
 		if err != nil {
 			return bulkResp, err
 		}
-		for i := 0; i < len(responses); i++ {
+		for i := 0; i < len(bgr.responses); i++ {
 			item := &runtimev1pb.BulkStateItem{
-				Key:      stateLoader.GetOriginalStateKey(responses[i].Key),
-				Data:     responses[i].Data,
-				Etag:     stringValueOrEmpty(responses[i].ETag),
-				Metadata: responses[i].Metadata,
-				Error:    responses[i].Error,
+				Key:      stateLoader.GetOriginalStateKey(bgr.responses[i].Key),
+				Data:     bgr.responses[i].Data,
+				Etag:     stringValueOrEmpty(bgr.responses[i].ETag),
+				Metadata: bgr.responses[i].Metadata,
+				Error:    bgr.responses[i].Error,
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
 		}
@@ -768,28 +764,21 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	for i := 0; i < n; i++ {
 		fn := func(param interface{}) {
 			req := param.(*state.GetRequest)
-			var r *state.GetResponse
-			ok := atomic.Bool{}
-			policyErr := policy(func(ctx context.Context) error {
-				res, rErr := store.Get(req)
-				if rErr != nil {
-					return rErr
-				}
-				if ok.CompareAndSwap(false, true) {
-					r = res
-				}
-				return nil
+			policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
+			res, policyErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
+				return store.Get(ctx, req)
 			})
 
 			item := &runtimev1pb.BulkStateItem{
 				Key: stateLoader.GetOriginalStateKey(req.Key),
 			}
+
 			if policyErr != nil {
 				item.Error = policyErr.Error()
-			} else if r != nil {
-				item.Data = r.Data
-				item.Etag = stringValueOrEmpty(r.ETag)
-				item.Metadata = r.Metadata
+			} else if res != nil {
+				item.Data = res.Data
+				item.Etag = stringValueOrEmpty(res.ETag)
+				item.Metadata = res.Metadata
 			}
 			resultCh <- item
 		}
@@ -797,8 +786,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 	limiter.Wait()
 	// collect result
-	resultLen := len(resultCh)
-	for i := 0; i < resultLen; i++ {
+	for i := 0; i < n; i++ {
 		item := <-resultCh
 
 		if encryption.EncryptedStateStore(in.StoreName) {
@@ -839,7 +827,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	if err != nil {
 		return &runtimev1pb.GetStateResponse{}, err
 	}
-	req := state.GetRequest{
+	req := &state.GetRequest{
 		Key:      key,
 		Metadata: in.Metadata,
 		Options: state.GetStateOption{
@@ -848,11 +836,11 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
-	var getResponse *state.GetResponse
-	err = policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = store.Get(&req)
-		return rErr
+	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	)
+	getResponse, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
+		return store.Get(ctx, req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -864,6 +852,9 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 
+	if getResponse == nil {
+		getResponse = &state.GetResponse{}
+	}
 	if encryption.EncryptedStateStore(in.StoreName) {
 		val, err := encryption.TryDecryptValue(in.StoreName, getResponse.Data)
 		if err != nil {
@@ -885,17 +876,19 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 }
 
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error) {
+	empty := &emptypb.Empty{}
+
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return empty, err
 	}
 
 	reqs := []state.SetRequest{}
 	for _, s := range in.States {
 		key, err1 := stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
 		if err1 != nil {
-			return &emptypb.Empty{}, err1
+			return empty, err1
 		}
 		req := state.SetRequest{
 			Key:      key,
@@ -904,7 +897,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 		if contentType, ok := req.Metadata[contribMetadata.ContentType]; ok && contentType == contenttype.JSONContentType {
 			if err1 = json.Unmarshal(s.Value, &req.Value); err1 != nil {
-				return &emptypb.Empty{}, err1
+				return empty, err1
 			}
 		} else {
 			req.Value = s.Value
@@ -923,7 +916,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			val, encErr := encryption.TryEncryptValue(in.StoreName, s.Value)
 			if encErr != nil {
 				apiServerLogger.Debug(encErr)
-				return &emptypb.Empty{}, encErr
+				return empty, encErr
 			}
 
 			req.Value = val
@@ -933,9 +926,11 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
-	err = policy(func(ctx context.Context) error {
-		return store.BulkSet(reqs)
+	policyRunner := resiliency.NewRunner[any](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	)
+	_, err = policyRunner(func(ctx context.Context) (any, error) {
+		return nil, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -944,9 +939,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return empty, err
 	}
-	return &emptypb.Empty{}, nil
+	return empty, nil
 }
 
 func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
@@ -980,11 +975,11 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	req.Metadata = in.GetMetadata()
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
-	var resp *state.QueryResponse
-	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = querier.Query(&req)
-		return rErr
+	policyRunner := resiliency.NewRunner[*state.QueryResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	)
+	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
+		return querier.Query(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -995,6 +990,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		apiServerLogger.Debug(err)
 		return ret, err
 	}
+
 	if resp == nil || len(resp.Results) == 0 {
 		return ret, nil
 	}
@@ -1030,15 +1026,17 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 }
 
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
+	empty := &emptypb.Empty{}
+
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return empty, err
 	}
 
 	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
 	if err != nil {
-		return &emptypb.Empty{}, err
+		return empty, err
 	}
 	req := state.DeleteRequest{
 		Key:      key,
@@ -1055,9 +1053,11 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
-	err = policy(func(ctx context.Context) error {
-		return store.Delete(&req)
+	policyRunner := resiliency.NewRunner[any](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	)
+	_, err = policyRunner(func(ctx context.Context) (any, error) {
+		return nil, store.Delete(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1066,23 +1066,25 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return empty, err
 	}
-	return &emptypb.Empty{}, nil
+	return empty, nil
 }
 
 func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error) {
+	empty := &emptypb.Empty{}
+
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return empty, err
 	}
 
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
 		key, err1 := stateLoader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
 		if err1 != nil {
-			return &emptypb.Empty{}, err1
+			return empty, err1
 		}
 		req := state.DeleteRequest{
 			Key:      key,
@@ -1101,9 +1103,11 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
-	err = policy(func(ctx context.Context) error {
-		return store.BulkDelete(reqs)
+	policyRunner := resiliency.NewRunner[any](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	)
+	_, err = policyRunner(func(ctx context.Context) (any, error) {
+		return nil, store.BulkDelete(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1111,16 +1115,18 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return empty, err
 	}
-	return &emptypb.Empty{}, nil
+	return empty, nil
 }
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
+	response := &runtimev1pb.GetSecretResponse{}
+
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetSecretResponse{}, err
+		return response, err
 	}
 
 	secretStoreName := in.StoreName
@@ -1128,13 +1134,13 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	if a.secretStores[secretStoreName] == nil {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetSecretResponse{}, err
+		return response, err
 	}
 
 	if !a.isSecretAllowed(in.StoreName, in.Key) {
 		err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, in.Key, in.StoreName)
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetSecretResponse{}, err
+		return response, err
 	}
 
 	req := secretstores.GetSecretRequest{
@@ -1143,11 +1149,12 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
-	var getResponse secretstores.GetSecretResponse
-	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(ctx, req)
-		return rErr
+	policyRunner := resiliency.NewRunner[*secretstores.GetSecretResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
+	)
+	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.GetSecretResponse, error) {
+		rResp, rErr := a.secretStores[secretStoreName].GetSecret(ctx, req)
+		return &rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1156,19 +1163,22 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetSecretResponse{}, err
+		return response, err
 	}
 
-	return &runtimev1pb.GetSecretResponse{
-		Data: getResponse.Data,
-	}, nil
+	if getResponse != nil {
+		response.Data = getResponse.Data
+	}
+	return response, nil
 }
 
 func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error) {
+	response := &runtimev1pb.GetBulkSecretResponse{}
+
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetBulkSecretResponse{}, err
+		return response, err
 	}
 
 	secretStoreName := in.StoreName
@@ -1176,7 +1186,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	if a.secretStores[secretStoreName] == nil {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetBulkSecretResponse{}, err
+		return response, err
 	}
 
 	req := secretstores.BulkGetSecretRequest{
@@ -1184,11 +1194,12 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
-	var getResponse secretstores.BulkGetSecretResponse
-	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
-		return rErr
+	policyRunner := resiliency.NewRunner[*secretstores.BulkGetSecretResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
+	)
+	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.BulkGetSecretResponse, error) {
+		rResp, rErr := a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
+		return &rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1197,9 +1208,12 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetBulkSecretResponse{}, err
+		return response, err
 	}
 
+	if getResponse == nil {
+		return response, nil
+	}
 	filteredSecrets := map[string]map[string]string{}
 	for key, v := range getResponse.Data {
 		if a.isSecretAllowed(secretStoreName, key) {
@@ -1209,7 +1223,6 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		}
 	}
 
-	response := &runtimev1pb.GetBulkSecretResponse{}
 	if getResponse.Data != nil {
 		response.Data = map[string]*runtimev1pb.SecretResponse{}
 		for key, v := range filteredSecrets {
@@ -1233,24 +1246,21 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &emptypb.Empty{}, err
 	}
 
-	storeName := in.StoreName
-
-	if a.stateStores[storeName] == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, storeName)
+	if a.stateStores[in.StoreName] == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, in.StoreName)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
 
-	transactionalStore, ok := a.transactionalStateStores[storeName]
+	transactionalStore, ok := a.transactionalStateStores[in.StoreName]
 	if !ok {
-		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, storeName)
+		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, in.StoreName)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
 
-	operations := []state.TransactionalStateOperation{}
-	for _, inputReq := range in.Operations {
-		var operation state.TransactionalStateOperation
+	operations := make([]state.TransactionalStateOperation, len(in.Operations))
+	for i, inputReq := range in.Operations {
 		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
@@ -1279,7 +1289,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operation = state.TransactionalStateOperation{
+			operations[i] = state.TransactionalStateOperation{
 				Operation: state.Upsert,
 				Request:   setReq,
 			}
@@ -1300,7 +1310,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operation = state.TransactionalStateOperation{
+			operations[i] = state.TransactionalStateOperation{
 				Operation: state.Delete,
 				Request:   delReq,
 			}
@@ -1310,16 +1320,14 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
-
-		operations = append(operations, operation)
 	}
 
-	if encryption.EncryptedStateStore(storeName) {
+	if encryption.EncryptedStateStore(in.StoreName) {
 		for i, op := range operations {
 			if op.Operation == state.Upsert {
 				req := op.Request.(*state.SetRequest)
 				data := []byte(fmt.Sprintf("%v", req.Value))
-				val, err := encryption.TryEncryptValue(storeName, data)
+				val, err := encryption.TryEncryptValue(in.StoreName, data)
 				if err != nil {
 					err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
 					apiServerLogger.Debug(err)
@@ -1333,12 +1341,15 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
-	err := policy(func(ctx context.Context) error {
-		return transactionalStore.Multi(&state.TransactionalStateRequest{
-			Operations: operations,
-			Metadata:   in.Metadata,
-		})
+	policyRunner := resiliency.NewRunner[any](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	)
+	storeReq := &state.TransactionalStateRequest{
+		Operations: operations,
+		Metadata:   in.Metadata,
+	}
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
+		return nil, transactionalStore.Multi(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1564,20 +1575,26 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 }
 
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
+	response := &runtimev1pb.InvokeActorResponse{}
+
 	if a.actor == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.InvokeActorResponse{}, err
+		return response, err
 	}
 
-	req := invokev1.NewInvokeMethodRequest(in.Method)
-	req.WithActor(in.ActorType, in.ActorId)
-	req.WithRawData(in.Data, "")
-	reqMetadata := map[string][]string{}
+	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+
+	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
 		reqMetadata[k] = []string{v}
 	}
-	req.WithMetadata(reqMetadata)
+	req := invokev1.NewInvokeMethodRequest(in.Method).
+		WithActor(in.ActorType, in.ActorId).
+		WithRawDataBytes(in.Data).
+		WithMetadata(reqMetadata).
+		WithReplay(policyDef.HasRetries())
+	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1586,22 +1603,30 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	resp := invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
-	policy := a.resiliency.ActorPreLockPolicy(ctx, in.ActorType, in.ActorId)
-	err := policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = a.actor.Call(ctx, req)
-		return rErr
+	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
+	)
+	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+		return a.actor.Call(ctx, req)
 	})
 	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.InvokeActorResponse{}, err
+		return response, err
 	}
 
-	_, body := resp.RawData()
-	return &runtimev1pb.InvokeActorResponse{
-		Data: body,
-	}, nil
+	if resp == nil {
+		resp = invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
+	}
+	defer resp.Close()
+
+	response.Data, err = resp.RawDataFull()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response data: %w", err)
+	}
+	return response, nil
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
@@ -1656,11 +1681,29 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
+	subscriptions, err := a.getSubscriptionsFn()
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetMetadataResponse{}, err
+	}
+	ps := []*runtimev1pb.PubsubSubscription{}
+	for _, s := range subscriptions {
+		ps = append(ps, &runtimev1pb.PubsubSubscription{
+			PubsubName:      s.PubsubName,
+			Topic:           s.Topic,
+			Metadata:        s.Metadata,
+			DeadLetterTopic: s.DeadLetterTopic,
+			Rules:           convertPubsubSubscriptionRules(s.Rules),
+		})
+	}
+
 	response := &runtimev1pb.GetMetadataResponse{
 		Id:                   a.id,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
+		Subscriptions:        ps,
 	}
 
 	return response, nil
@@ -1673,10 +1716,150 @@ func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 	return make([]string, 0)
 }
 
+func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
+	out := &runtimev1pb.PubsubSubscriptionRules{
+		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
+	}
+	for _, r := range rules {
+		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
+			Match: fmt.Sprintf("%s", r.Match),
+			Path:  r.Path,
+		})
+	}
+	return out
+}
+
 // SetMetadata Sets value in extended metadata of the sidecar.
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
 	return &emptypb.Empty{}, nil
+}
+
+func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
+	if in.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+	if in.WorkflowComponent == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+	req := workflows.WorkflowReference{
+		InstanceID: in.InstanceId,
+	}
+	response, err := workflowRun.Get(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+
+	id := &runtimev1pb.WorkflowReference{
+		InstanceId: response.WFInfo.InstanceID,
+	}
+
+	t, err := time.Parse(time.RFC3339, response.StartTime)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTimerParse, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+
+	res := &runtimev1pb.GetWorkflowResponse{
+		InstanceId: id.InstanceId,
+		StartTime:  t.Unix(),
+		Metadata:   response.Metadata,
+	}
+	return res, nil
+}
+
+func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error) {
+	if in.WorkflowName == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrWorkflowNameMissing)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	if in.WorkflowComponent == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	if in.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	wf := workflows.WorkflowReference{
+		InstanceID: in.InstanceId,
+	}
+	req := workflows.StartRequest{
+		WorkflowReference: wf,
+		Options:           in.Options,
+		WorkflowName:      in.WorkflowName,
+		Input:             in.Input,
+	}
+
+	resp, err := workflowRun.Start(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrStartWorkflow, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+	ret := &runtimev1pb.WorkflowReference{
+		InstanceId: resp.InstanceID,
+	}
+	return ret, nil
+}
+
+func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
+	if in.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
+	}
+
+	if in.WorkflowComponent == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
+	}
+
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
+	}
+
+	req := workflows.WorkflowReference{
+		InstanceID: in.InstanceId,
+	}
+
+	err := workflowRun.Terminate(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TerminateWorkflowResponse{}, nil
+	}
+	return &runtimev1pb.TerminateWorkflowResponse{}, nil
 }
 
 // Shutdown the sidecar.
@@ -1708,10 +1891,12 @@ func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 }
 
 func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+	response := &runtimev1pb.GetConfigurationResponse{}
+
 	store, err := a.getConfigurationStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetConfigurationResponse{}, err
+		return response, err
 	}
 
 	req := configuration.GetRequest{
@@ -1720,11 +1905,11 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Configuration)
-	var getResponse *configuration.GetResponse
-	err = policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = store.Get(ctx, &req)
-		return rErr
+	policyRunner := resiliency.NewRunner[*configuration.GetResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Configuration),
+	)
+	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
+		return store.Get(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1733,20 +1918,19 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, req.Keys, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetConfigurationResponse{}, err
+		return response, err
 	}
 
-	cachedItems := make(map[string]*commonv1pb.ConfigurationItem, len(getResponse.Items))
-	for k, v := range getResponse.Items {
-		cachedItems[k] = &commonv1pb.ConfigurationItem{
-			Metadata: v.Metadata,
-			Value:    v.Value,
-			Version:  v.Version,
+	if getResponse != nil {
+		cachedItems := make(map[string]*commonv1pb.ConfigurationItem, len(getResponse.Items))
+		for k, v := range getResponse.Items {
+			cachedItems[k] = &commonv1pb.ConfigurationItem{
+				Metadata: v.Metadata,
+				Value:    v.Value,
+				Version:  v.Version,
+			}
 		}
-	}
-
-	response := &runtimev1pb.GetConfigurationResponse{
-		Items: cachedItems,
+		response.Items = cachedItems
 	}
 
 	return response, nil
@@ -1791,30 +1975,8 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	subscribeKeys := make([]string, 0)
 
 	// TODO(@halspang) provide a switch to use just resiliency or this.
-	newCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
-	// empty list means subscribing to all configuration keys
-	if len(request.Keys) == 0 {
-		getConfigurationReq := &runtimev1pb.GetConfigurationRequest{
-			StoreName: request.StoreName,
-			Keys:      []string{},
-			Metadata:  request.GetMetadata(),
-		}
-		resp, err2 := a.GetConfigurationAlpha1(newCtx, getConfigurationReq)
-		if err2 != nil {
-			err2 = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationGet, request.Keys, request.StoreName, err2))
-			apiServerLogger.Debug(err2)
-			return err2
-		}
-
-		items := resp.GetItems()
-		for key := range items {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, key)]; !ok {
-				subscribeKeys = append(subscribeKeys, key)
-			}
-		}
-	} else {
+	if len(request.Keys) > 0 {
 		subscribeKeys = append(subscribeKeys, request.Keys...)
 	}
 
@@ -1831,11 +1993,11 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(newCtx, request.StoreName, resiliency.Configuration)
-	var id string
-	err = policy(func(ctx context.Context) (rErr error) {
-		id, rErr = store.Subscribe(ctx, req, handler.updateEventHandler)
-		return rErr
+	policyRunner := resiliency.NewRunner[string](configurationServer.Context(),
+		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+	)
+	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
+		return store.Subscribe(ctx, req, handler.updateEventHandler)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1847,16 +2009,18 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		return err
 	}
 	if err := handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
-		Id: id,
+		Id: subscribeID,
 	}); err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}
+
 	stop := make(chan struct{})
 	a.configurationSubscribeLock.Lock()
-	a.configurationSubscribe[id] = stop
+	a.configurationSubscribe[subscribeID] = stop
 	a.configurationSubscribeLock.Unlock()
 	<-stop
+
 	return nil
 }
 
@@ -1884,13 +2048,16 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	delete(a.configurationSubscribe, subscribeID)
 	close(stop)
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName, resiliency.Configuration)
+	policyRunner := resiliency.NewRunner[any](ctx,
+		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+	)
 
 	start := time.Now()
-	err = policy(func(ctx context.Context) error {
-		return store.Unsubscribe(ctx, &configuration.UnsubscribeRequest{
-			ID: subscribeID,
-		})
+	storeReq := &configuration.UnsubscribeRequest{
+		ID: subscribeID,
+	}
+	_, err = policyRunner(func(ctx context.Context) (any, error) {
+		return nil, store.Unsubscribe(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1905,4 +2072,16 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
+}
+
+func (a *api) Close() error {
+	a.configurationSubscribeLock.Lock()
+	defer a.configurationSubscribeLock.Unlock()
+
+	for k, stop := range a.configurationSubscribe {
+		close(stop)
+		delete(a.configurationSubscribe, k)
+	}
+
+	return nil
 }

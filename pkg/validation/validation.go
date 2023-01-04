@@ -14,11 +14,10 @@ limitations under the License.
 package validation
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // The consts and vars beginning with dns* were taken from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go
@@ -30,7 +29,7 @@ const (
 
 var dns1123LabelRegexp = regexp.MustCompile("^" + dns1123LabelFmt + "$")
 
-// ValidateKubernetesAppID returns a bool that indicates whether a dapr app id is valid for the Kubernetes platform.
+// ValidateKubernetesAppID returns an error if the Dapr app id is not valid for the Kubernetes platform.
 func ValidateKubernetesAppID(appID string) error {
 	if appID == "" {
 		return errors.New("value for the dapr.io/app-id annotation is empty")
@@ -39,8 +38,18 @@ func ValidateKubernetesAppID(appID string) error {
 	if len(r) == 0 {
 		return nil
 	}
-	s := fmt.Sprintf("invalid app id(input: %s, service: %s): %s", appID, serviceName(appID), strings.Join(r, ","))
-	return errors.New(s)
+	return fmt.Errorf("invalid app id (input: %s, service: %s): %s", appID, serviceName(appID), strings.Join(r, ", "))
+}
+
+// ValidateSelfHostedAppID returns an error if the Dapr app id is not valid for self-hosted.
+func ValidateSelfHostedAppID(appID string) error {
+	if appID == "" {
+		return errors.New("parameter app-id cannot be empty")
+	}
+	if strings.Contains(appID, ".") {
+		return errors.New("parameter app-id cannot contain a period (.)")
+	}
+	return nil
 }
 
 func serviceName(appID string) string {

@@ -1,11 +1,11 @@
 package metrics
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
-	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
 
 	"github.com/dapr/kit/logger"
@@ -67,7 +67,7 @@ func (m *promMetricsExporter) Init() error {
 		Namespace: m.namespace,
 		Registry:  prom.DefaultRegisterer.(*prom.Registry),
 	}); err != nil {
-		return errors.Errorf("failed to create Prometheus exporter: %v", err)
+		return fmt.Errorf("failed to create Prometheus exporter: %w", err)
 	}
 
 	// start metrics server
@@ -92,6 +92,7 @@ func (m *promMetricsExporter) startMetricServer() error {
 		mux := http.NewServeMux()
 		mux.Handle(defaultMetricsPath, m.ocExporter)
 
+		//nolint:gosec
 		if err := http.ListenAndServe(addr, mux); err != nil {
 			m.exporter.logger.Fatalf("failed to start metrics server: %v", err)
 		}

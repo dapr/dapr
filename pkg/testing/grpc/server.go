@@ -26,7 +26,7 @@ import (
 
 const bufSize = 1024 * 1024
 
-// TestServerFor returns a grpcServer factory that bootstraps a grpcserver backed by a buf connection (in memory), and returns the the given clientFactory instance to communicate with it.
+// TestServerFor returns a grpcServer factory that bootstraps a grpcserver backed by a buf connection (in memory), and returns the given clientFactory instance to communicate with it.
 // it also provides cleanup function for close the grpcserver and client connection.
 //
 //	usage,

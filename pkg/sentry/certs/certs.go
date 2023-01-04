@@ -8,8 +8,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-
-	"github.com/pkg/errors"
+	"errors"
+	"fmt"
 )
 
 const (
@@ -40,7 +40,7 @@ func DecodePEMKey(key []byte) (interface{}, error) {
 	case BlockTypePKCS8PrivateKey:
 		return x509.ParsePKCS8PrivateKey(block.Bytes)
 	default:
-		return nil, errors.Errorf("unsupported block type %s", block.Type)
+		return nil, fmt.Errorf("unsupported block type %s", block.Type)
 	}
 }
 
@@ -160,7 +160,7 @@ func ParsePemCSR(csrPem []byte) (*x509.CertificateRequest, error) {
 	}
 	csr, err := x509.ParseCertificateRequest(block.Bytes)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse X.509 certificate signing request")
+		return nil, fmt.Errorf("failed to parse X.509 certificate signing request: %w", err)
 	}
 	return csr, nil
 }
