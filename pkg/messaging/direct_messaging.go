@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -34,12 +35,16 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
+
+// Maximum size, in bytes, for the buffer used by CallLocalStream: 2KB.
+const StreamBufferSize = 2 << 10
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
@@ -355,4 +360,31 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 		id:        id,
 		address:   address,
 	}, nil
+}
+
+// Interface for *internalv1pb.InternalInvokeResponseStream and *internalv1pb.InternalInvokeRequestStream
+type chunkWithPayload interface {
+	GetPayload() *commonv1pb.StreamPayload
+}
+
+// ReadChunk reads a chunk of data from an InternalInvokeResponseStream or InternalInvokeRequestStream object
+// The returned value "done" is true if the sender of the chunk claims this is the last chunk.
+func ReadChunk(chunk chunkWithPayload, out io.Writer) (done bool, err error) {
+	payload := chunk.GetPayload()
+	if payload == nil {
+		return false, nil
+	}
+
+	if len(payload.Data) > 0 {
+		var n int
+		n, err = out.Write(payload.Data)
+		if err != nil {
+			return false, err
+		}
+		if n != len(payload.Data) {
+			return false, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.Data))
+		}
+	}
+
+	return payload.Complete, nil
 }

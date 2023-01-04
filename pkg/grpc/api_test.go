@@ -155,6 +155,32 @@ func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalIn
 	return resp.ProtoWithData()
 }
 
+func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(stream.Context())).
+		WithContentType("text/plain")
+	defer resp.Close()
+
+	var data []byte
+	pd, err := resp.ProtoWithData()
+	if err != nil {
+		return err
+	}
+	if pd.Message != nil && pd.Message.Data != nil {
+		data = pd.Message.Data.Value
+	}
+
+	stream.Send(&internalv1pb.InternalInvokeResponseStream{
+		Response: resp.Proto(),
+		Payload: &commonv1pb.StreamPayload{
+			Data:     data,
+			Complete: true,
+		},
+	})
+
+	return nil
+}
+
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
 		WithRawDataBytes(ExtractSpanContext(ctx)).
