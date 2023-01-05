@@ -127,6 +127,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 		}
 	}`)
 	workflowURL := fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/WorkflowID/start")
+	log.Printf("Start - call: %s", workflowURL)
 	res, err := httpClient.Post(workflowURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
@@ -141,6 +142,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 
 	// TERMINATE TEST //
 	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/"+resultData.InstanceID+"/terminate")
+	log.Printf("Terminate - call: %s", workflowURL)
 	res, err = httpClient.Post(workflowURL, "", nil)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
@@ -150,6 +152,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 	time.Sleep(2 * time.Second) // Sleep after the terminate call to ensure that temporal has time to terminate the activity
 	// Use the data that was retrieved back from the start workflow call (InstanceID) to get info on the workflow
 	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/"+resultData.InstanceID)
+	log.Printf("Get - call: %s", workflowURL)
 	res, err = httpClient.Get(workflowURL)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
