@@ -44,10 +44,10 @@ type SubscriptionSpec struct {
 
 // BulkSubscribe encapsulates the bulk subscription configuration for a topic.
 type BulkSubscribe struct {
-	Enabled string `json:"enabled"`
+	Enabled bool `json:"enabled"`
 	// +optional
-	MaxMessagesCount   string `json:"maxMessagesCount,omitempty"`
-	MaxAwaitDurationMs string `json:"maxAwaitDurationMs,omitempty"`
+	MaxMessagesCount   int32 `json:"maxMessagesCount,omitempty"`
+	MaxAwaitDurationMs int32 `json:"maxAwaitDurationMs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -55,11 +55,11 @@ spec:
                 description: Represents bulk subscribe properies
                 properties:
                   enabled: 
-                    type: string
+                    type: boolean
                   maxMessagesCount:
-                    type: string
+                    type: integer
                   maxAwaitDurationMs:
-                    type: string
+                    type: integer
                 required:
                   - enabled
                 type: object
@@ -145,11 +145,11 @@ spec:
                 description: Represents bulk subscribe properies
                 properties:
                   enabled: 
-                    type: string
+                    type: boolean
                   maxMessagesCount:
-                    type: string
+                    type: integer
                   maxAwaitDurationMs:
-                    type: string
+                    type: integer
                 required:
                   - enabled
                 type: object

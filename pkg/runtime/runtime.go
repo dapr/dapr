@@ -732,7 +732,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 	namespaced := a.pubSubs[name].namespaceScoped
 
-	if route.bulkSubscribe != nil && utils.IsTruthy(route.bulkSubscribe.Enabled) {
+	if route.bulkSubscribe != nil && route.bulkSubscribe.Enabled {
 		err := a.bulkSubscribeTopic(ctx, policyRunner, name, topic, route, namespaced)
 		if err != nil {
 			cancel()

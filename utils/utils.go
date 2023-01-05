@@ -17,7 +17,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -124,13 +123,10 @@ func IsYaml(fileName string) bool {
 	return false
 }
 
-// GetIntValFromStringVal returns an int value from corresponding string value OR default value if its
-// value not convertible to int.
-func GetIntValFromStringVal(val string, defaultValue int) int {
-	if val != "" {
-		if intVal, err := strconv.Atoi(val); err == nil {
-			return intVal
-		}
+// GetIntValOrDefault returns an int value if greater than 0 OR default value.
+func GetIntValOrDefault(val int, defaultValue int) int {
+	if val > 0 {
+		return val
 	}
 	return defaultValue
 }

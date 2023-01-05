@@ -293,13 +293,13 @@ message TopicRule {
 // BulkSubscribeRequest is the message to pass settings for bulk subscribe
 message BulkSubscribeRequest {
   // Required. Flag to enable/disable bulk subscribe
-  string enabled = 1;
+  bool enabled = 1;
 
   // Optional. Max number of messages to be sent in a single bulk request
-  string maxMessagesCount = 2;
+  int32 max_messages_count = 2;
 
   // Optional. Max duration to wait for messages to be sent in a single bulk request
-  string maxAwaitDurationMs  = 3;
+  int32 max_await_duration_ms  = 3;
 }
 
 // ListInputBindingsResponse is the message including the list of input bindings.

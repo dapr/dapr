@@ -84,8 +84,8 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 		Topic:    subscribeTopic,
 		Metadata: route.metadata,
 		BulkSubscribeRequest: pubsub.BulkSubscribeRequest{
-			MaxMessagesCount:   route.bulkSubscribe.MaxMessagesCount,
-			MaxAwaitDurationMs: route.bulkSubscribe.MaxAwaitDurationMs,
+			MaxMessagesCount:   int(route.bulkSubscribe.MaxMessagesCount),
+			MaxAwaitDurationMs: int(route.bulkSubscribe.MaxAwaitDurationMs),
 		},
 	}
 

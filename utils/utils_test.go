@@ -117,33 +117,27 @@ func TestIsYaml(t *testing.T) {
 func TestGetIntValFromStringVal(t *testing.T) {
 	tcs := []struct {
 		name     string
-		val      string
+		val      int
 		def      int
 		expected int
 	}{
 		{
-			name:     "value is blank",
-			val:      "",
+			name:     "value is not provided by user, default value is used",
+			val:      0,
 			def:      5,
 			expected: 5,
 		},
 		{
-			name:     "val represents a valid integer, ",
-			val:      "91",
+			name:     "val is provided by user",
+			val:      91,
 			def:      5,
 			expected: 91,
-		},
-		{
-			name:     "val represents an invalid integer, default value is used",
-			val:      "abc",
-			def:      100,
-			expected: 100,
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			actual := GetIntValFromStringVal(tc.val, tc.def)
+			actual := GetIntValOrDefault(tc.val, tc.def)
 			if actual != tc.expected {
 				t.Errorf("expected %d, actual %d", tc.expected, actual)
 			}
