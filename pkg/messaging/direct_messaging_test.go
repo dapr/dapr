@@ -152,10 +152,10 @@ func TestInvokeRemote(t *testing.T) {
 	log.SetOutputLevel(logger.FatalLevel)
 	defer log.SetOutputLevel(logger.InfoLevel)
 
-	prepareEnvironment := func(t *testing.T, enableStreaming bool, multiChunks bool) (*directMessaging, func()) {
+	prepareEnvironment := func(t *testing.T, enableStreaming bool, chunks []string) (*directMessaging, func()) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		server := startInternalServer(port, enableStreaming, multiChunks)
+		server := startInternalServer(port, enableStreaming, chunks)
 		clientConn := createTestClient(port)
 
 		messaging := NewDirectMessaging(NewDirectMessagingOpts{
@@ -174,8 +174,26 @@ func TestInvokeRemote(t *testing.T) {
 		return messaging, teardown
 	}
 
+	t.Run("streaming with no data", func(t *testing.T) {
+		messaging, teardown := prepareEnvironment(t, true, nil)
+		defer teardown()
+
+		request := invokev1.
+			NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
+		defer request.Close()
+
+		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		require.NoError(t, err)
+
+		pd, err := res.ProtoWithData()
+		require.NoError(t, err)
+
+		assert.Empty(t, pd.Message.Data.Value)
+	})
+
 	t.Run("streaming with single chunk", func(t *testing.T) {
-		messaging, teardown := prepareEnvironment(t, true, false)
+		messaging, teardown := prepareEnvironment(t, true, []string{"🐱"})
 		defer teardown()
 
 		request := invokev1.
@@ -193,7 +211,14 @@ func TestInvokeRemote(t *testing.T) {
 	})
 
 	t.Run("streaming with multiple chunks", func(t *testing.T) {
-		messaging, teardown := prepareEnvironment(t, true, true)
+		chunks := []string{
+			"Sempre caro mi fu quest'ermo colle ",
+			"e questa siepe, che da tanta parte ",
+			"dell'ultimo orizzonte il guardo esclude. ",
+			"… ",
+			"E il naufragar m'è dolce in questo mare.",
+		}
+		messaging, teardown := prepareEnvironment(t, true, chunks)
 		defer teardown()
 
 		request := invokev1.
@@ -207,11 +232,11 @@ func TestInvokeRemote(t *testing.T) {
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
 
-		assert.Equal(t, "🐱 Sempre caro mi fu quest'ermo colle… E il naufragar m'è dolce in questo mare.", string(pd.Message.Data.Value))
+		assert.Equal(t, "Sempre caro mi fu quest'ermo colle e questa siepe, che da tanta parte dell'ultimo orizzonte il guardo esclude. … E il naufragar m'è dolce in questo mare.", string(pd.Message.Data.Value))
 	})
 
 	t.Run("target does not support streaming", func(t *testing.T) {
-		messaging, teardown := prepareEnvironment(t, false, false)
+		messaging, teardown := prepareEnvironment(t, false, nil)
 		defer teardown()
 
 		request := invokev1.
@@ -244,14 +269,14 @@ func createTestClient(port int) *grpc.ClientConn {
 	return conn
 }
 
-func startInternalServer(port int, enableStreaming bool, multiChunks bool) *grpc.Server {
+func startInternalServer(port int, enableStreaming bool, chunks []string) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	server := grpc.NewServer()
 
 	if enableStreaming {
 		stream := &mockGRPCServerStream{
-			multiChunks: multiChunks,
+			chunks: chunks,
 		}
 		server.RegisterService(&grpc.ServiceDesc{
 			ServiceName: "dapr.proto.internals.v1.ServiceInvocation",
@@ -323,44 +348,35 @@ type mockGRPCServerStreamI interface {
 
 type mockGRPCServerStream struct {
 	mockGRPCServerUnary
-	multiChunks bool
+	chunks []string
 }
 
 func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
 	// Send the first chunk
 	resp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-		WithRawDataString("🐱").
 		WithContentType("text/plain").
 		WithHTTPHeaders(map[string][]string{"foo": {"bar"}})
 	defer resp.Close()
-	pd, err := resp.ProtoWithData()
-	if err != nil {
-		return err
-	}
-	var data []byte
-	if pd.Message != nil && pd.Message.Data != nil {
-		data = pd.Message.Data.Value
+
+	var payload *commonv1pb.StreamPayload
+	if len(m.chunks) > 0 {
+		payload = &commonv1pb.StreamPayload{
+			Data: []byte(m.chunks[0]),
+			Seq:  0,
+		}
 	}
 	stream.Send(&internalv1pb.InternalInvokeResponseStream{
 		Response: resp.Proto(),
-		Payload: &commonv1pb.StreamPayload{
-			Data: data,
-			Seq:  0,
-		},
+		Payload:  payload,
 	})
 
-	// Send the next chunk if needed
-	if m.multiChunks {
+	// Send the next chunks if needed
+	// Note this starts from index 1 on purpose
+	for i := 1; i < len(m.chunks); i++ {
 		stream.Send(&internalv1pb.InternalInvokeResponseStream{
 			Payload: &commonv1pb.StreamPayload{
-				Data: []byte(" Sempre caro mi fu quest'ermo colle…"),
-				Seq:  1,
-			},
-		})
-		stream.Send(&internalv1pb.InternalInvokeResponseStream{
-			Payload: &commonv1pb.StreamPayload{
-				Data: []byte(" E il naufragar m'è dolce in questo mare."),
-				Seq:  2,
+				Data: []byte(m.chunks[i]),
+				Seq:  uint32(i),
 			},
 		})
 	}

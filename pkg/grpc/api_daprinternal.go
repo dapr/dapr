@@ -135,22 +135,21 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 			// Get the payload from the chunk that was previously read
 			payload = chunk.GetPayload()
-			if payload == nil {
-				continue
-			}
-			readSeq, readErr = messaging.ReadChunk(payload, pw)
-			if readErr != nil {
-				pw.CloseWithError(readErr)
-				return
-			}
+			if payload != nil {
+				readSeq, readErr = messaging.ReadChunk(payload, pw)
+				if readErr != nil {
+					pw.CloseWithError(readErr)
+					return
+				}
 
-			// Check if the sequence number is greater than the previous (or 0 for the first chunk)
-			if (firstChunk && readSeq != 0) || (!firstChunk && readSeq != lastSeq+1) {
-				pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d", readSeq))
-				return
+				// Check if the sequence number is greater than the previous (or 0 for the first chunk)
+				if (firstChunk && readSeq != 0) || (!firstChunk && readSeq != lastSeq+1) {
+					pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d", readSeq))
+					return
+				}
+				lastSeq = readSeq
+				firstChunk = false
 			}
-			lastSeq = readSeq
-			firstChunk = false
 
 			// Read the next chunk
 			readErr = stream.RecvMsg(chunk)
@@ -196,13 +195,13 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 			return ctx.Err()
 		}
 
-		// Reset the object so we can re-use it
-		proto.Reset()
-
 		// First message only - add the response
 		if resProto != nil {
 			proto.Response = resProto
 			resProto = nil
+		} else {
+			// Reset the object so we can re-use it
+			proto.Reset()
 		}
 
 		if r != nil {
