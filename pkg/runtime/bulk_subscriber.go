@@ -309,6 +309,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(bulkSubCallData *bulkSubscribeCallD
 	envelope[runtimePubsub.Entries] = rawMsgEntries
 	da, marshalErr := json.Marshal(&envelope)
 	a.bulkSubLock.Unlock()
+
 	if marshalErr != nil {
 		log.Errorf("Error serializing bulk cloud event in pubsub %s and topic %s: %s", psm.pubsub, psm.topic, marshalErr)
 		if deadLetterTopic != "" {
@@ -624,23 +625,31 @@ func (a *DaprRuntime) publishBulkMessageGRPC(bulkSubCallData *bulkSubscribeCallD
 			case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 				// success from protobuf definition
+				a.bulkSubLock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += 1
+				a.bulkSubLock.Unlock()
 				entryRespReceived[response.EntryId] = true
 				addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 			case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
+				a.bulkSubLock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
+				a.bulkSubLock.Unlock()
 				entryRespReceived[response.EntryId] = true
 				addBulkResponseEntry(bulkResponses, response.EntryId,
 					fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", response.EntryId))
 				hasAnyError = true
 			case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", response.EntryId)
+				a.bulkSubLock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += 1
+				a.bulkSubLock.Unlock()
 				entryRespReceived[response.EntryId] = true
 				addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 			default:
 				// Consider unknown status field as error and retry
+				a.bulkSubLock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
+				a.bulkSubLock.Unlock()
 				entryRespReceived[response.EntryId] = true
 				addBulkResponseEntry(bulkResponses, response.EntryId,
 					fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", response.EntryId, response.GetStatus()))
