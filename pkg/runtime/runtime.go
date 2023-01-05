@@ -978,7 +978,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		Proxy:               a.proxy,
 		ReadBufferSize:      a.runtimeConfig.ReadBufferSize,
 		Resiliency:          a.resiliency,
-		IsResiliencyEnabled: config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
+		IsResiliencyEnabled: a.globalConfig.IsFeatureEnabled(config.Resiliency),
 	})
 }
 
@@ -1799,7 +1799,7 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	}
 
 	// handle app subscriptions
-	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
+	resiliencyEnabled := a.globalConfig.IsFeatureEnabled(config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
@@ -2363,15 +2363,15 @@ func (a *DaprRuntime) initActors() error {
 		AppConfig:          a.appConfig,
 	})
 	act := actors.NewActors(actors.ActorsOpts{
-		StateStore:       a.stateStores[a.actorStateStoreName],
-		AppChannel:       a.appChannel,
-		GRPCConnectionFn: a.grpc.GetGRPCConnection,
-		Config:           actorConfig,
-		CertChain:        a.runtimeConfig.CertChain,
-		TracingSpec:      a.globalConfig.Spec.TracingSpec,
-		Features:         a.globalConfig.Spec.Features,
-		Resiliency:       a.resiliency,
-		StateStoreName:   a.actorStateStoreName,
+		StateStore:          a.stateStores[a.actorStateStoreName],
+		AppChannel:          a.appChannel,
+		GRPCConnectionFn:    a.grpc.GetGRPCConnection,
+		Config:              actorConfig,
+		CertChain:           a.runtimeConfig.CertChain,
+		TracingSpec:         a.globalConfig.Spec.TracingSpec,
+		Resiliency:          a.resiliency,
+		IsResiliencyEnabled: a.globalConfig.IsFeatureEnabled(config.Resiliency),
+		StateStoreName:      a.actorStateStoreName,
 	})
 	err = act.Init()
 	if err == nil {
