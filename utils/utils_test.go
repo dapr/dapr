@@ -245,6 +245,8 @@ func TestFilter(t *testing.T) {
 		out := Filter(in, func(s string) bool {
 			return s != ""
 		})
+		assert.Equal(t, 6, cap(in))
+		assert.Equal(t, 3, cap(out))
 		assert.Equal(t, []string{"a", "b", "c"}, out)
 	})
 	t.Run("should filter out empty values and return empty collection if all values are filtered out", func(t *testing.T) {
@@ -252,6 +254,8 @@ func TestFilter(t *testing.T) {
 		out := Filter(in, func(s string) bool {
 			return s != ""
 		})
+		assert.Equal(t, 3, cap(in))
+		assert.Equal(t, 0, cap(out))
 		assert.Equal(t, []string{}, out)
 	})
 }
