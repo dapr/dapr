@@ -149,7 +149,7 @@ func startTest(commandRequest testCommandRequest) (int, appResponse) {
 
 	time.Sleep(2 * time.Second) // Sleep after the terminate call to ensure that temporal has time to terminate the activity
 	// Use the data that was retrieved back from the start workflow call (InstanceID) to get info on the workflow
-	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/"+resultData.InstanceID+"")
+	workflowURL = fmt.Sprintf(workflowURLTemplate, daprHTTPPort, "temporal/HelloTemporalWF/"+resultData.InstanceID)
 	res, err = httpClient.Get(workflowURL)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: err.Error()}
