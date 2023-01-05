@@ -137,6 +137,7 @@ type K6 struct {
 	name              string
 	configName        string
 	script            string
+	appID             string
 	parallelism       int
 	runnerEnv         []corev1.EnvVar
 	addDapr           bool
@@ -241,7 +242,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	runnerAnnotations := make(map[string]string)
 	if k6.addDapr {
 		runnerAnnotations[annotations.KeyEnabled] = "true"
-		runnerAnnotations[annotations.KeyAppID] = "tester-app"
+		runnerAnnotations[annotations.KeyAppID] = k6.appID
 		runnerAnnotations[annotations.KeyMemoryLimit] = k6.daprMemoryLimit
 		runnerAnnotations[annotations.KeyMemoryRequest] = k6.daprMemoryRequest
 	}
@@ -456,6 +457,13 @@ func WithName(name string) K6Opt {
 	}
 }
 
+// WithAppID sets the appID when dapr is enabled.
+func WithAppID(appID string) K6Opt {
+	return func(k *K6) {
+		k.appID = appID
+	}
+}
+
 // WithScript set the test script.
 func WithScript(script string) K6Opt {
 	return func(k *K6) {
@@ -523,6 +531,7 @@ func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 	ctx, cancel := context.WithCancel(context.Background())
 	k6Tester := &K6{
 		name:              "k6-test",
+		appID:             "tester-app",
 		script:            scriptPath,
 		parallelism:       1,
 		addDapr:           true,
