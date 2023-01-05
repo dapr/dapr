@@ -438,6 +438,7 @@ type TopicEventBulkRequestEntry struct {
 	// The content of the event.
 	//
 	// Types that are assignable to Event:
+	//
 	//	*TopicEventBulkRequestEntry_Bytes
 	//	*TopicEventBulkRequestEntry_CloudEvent
 	Event isTopicEventBulkRequestEntry_Event `protobuf_oneof:"event"`
