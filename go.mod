@@ -422,7 +422,7 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230105045239-91911d6a2aaa
+replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230105152736-426e059f461a
 
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
