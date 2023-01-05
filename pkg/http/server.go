@@ -157,7 +157,7 @@ func (s *server) StartNonBlocking() error {
 
 	if s.config.EnableProfiling {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
+			addr := apiListenAddress + ":" + strconv.Itoa(s.config.ProfilePort)
 			log.Infof("starting profiling server on %s", addr)
 			pl, err := net.Listen("tcp", addr)
 			if err != nil {
