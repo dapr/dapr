@@ -119,6 +119,10 @@ service Dapr {
   // Terminate Workflow
   rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
 
+  // Request a new port to initiate a connection to the AppCallback.
+  // Makes the Dapr sidecar start a listener on an ephemeral port.
+  rpc ConnectAppCallback (ConnectAppCallbackRequest) returns (ConnectAppCallbackResponse) {}
+
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
@@ -705,4 +709,12 @@ message TerminateWorkflowRequest {
 }
 
 message TerminateWorkflowResponse {
+}
+
+message ConnectAppCallbackRequest {
+  // Empty
+}
+
+message ConnectAppCallbackResponse {
+  int32 port = 1;
 }

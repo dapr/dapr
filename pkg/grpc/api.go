@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strconv"
 	"sync"
@@ -26,6 +27,7 @@ import (
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -68,52 +70,17 @@ const (
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
-//
-//nolint:interfacebloat
 type API interface {
 	// DaprInternal Service methods
-	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
-	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+	internalv1pb.ServiceInvocationServer
 
 	// Dapr Service methods
-	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
-	BulkPublishEventAlpha1(ctx context.Context, req *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error)
-	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
-	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
-	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
-	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
-	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
-	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
-	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
-	SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error
-	UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error)
-	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
-	QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error)
-	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
-	DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error)
-	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error)
+	runtimev1pb.DaprServer
+
+	// Methods internal to the object
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
-	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error)
-	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error)
-	RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error)
-	UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error)
-	RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error)
-	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
-	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
-	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
-	TryLockAlpha1(ctx context.Context, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error)
-	UnlockAlpha1(ctx context.Context, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error)
-	// Gets metadata of the sidecar
-	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
-	// Sets value in extended metadata of the sidecar
-	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
-	GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error)
-	StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error)
-	TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error)
-	// Shutdown the sidecar
-	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
 
 type api struct {
@@ -2074,6 +2041,97 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
+}
+
+func (a *api) ConnectAppCallback(context.Context, *runtimev1pb.ConnectAppCallbackRequest) (*runtimev1pb.ConnectAppCallbackResponse, error) {
+	const connectionTimeout = 10 * time.Second
+
+	// Create a new TCP listener that will accept connections from the client
+	// This is listening on port "0" which means that the kernel will assign a random available port
+	// TODO @ItalyPaleAle: use APIListenAddresses from the config
+	addr, err := net.ResolveTCPAddr("tcp", ":0")
+	if err != nil {
+		err = status.Errorf(codes.Internal, "failed to create address: %v", err)
+		apiServerLogger.Debug(err)
+		return nil, err
+	}
+	lis, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		err = status.Errorf(codes.Internal, "failed to create listener: %v", err)
+		apiServerLogger.Debug(err)
+		return nil, err
+	}
+	port := lis.Addr().(*net.TCPAddr).Port
+
+	apiServerLogger.Debugf("Created ephemeral listener on port %d", port)
+
+	// In a background goroutine, wait for the first client to establish a connection to the listener we just created
+	// The first connectiopn to be established wins
+	// There's also a timeout after which we will close the listener if no one connected to it
+	connCh := make(chan any)
+	go func() {
+		conn, connErr := lis.Accept()
+		if connErr != nil {
+			connCh <- connErr
+		} else {
+			connCh <- conn
+		}
+		close(connCh)
+	}()
+	go func() {
+		select {
+		case <-time.After(connectionTimeout):
+			// Timed out
+			// Log, then exit the select block
+			apiServerLogger.Warnf("Client did not connect to the ephemeral listener within %v", connectionTimeout)
+		case msg := <-connCh:
+			if msg == nil {
+				// Exit the select block
+				break
+			}
+			switch v := msg.(type) {
+			case error:
+				// Log, then exit the select block
+				apiServerLogger.Errorf("Error while trying to accept connection to the ephemeral listener: %v", v)
+			case net.Conn:
+				apiServerLogger.Infof("Established client connection on the ephemeral listener from %v", v.RemoteAddr())
+				clientConn(v)
+			}
+		}
+
+		// Close the listener - whether we have a connection or not, we don't need it anymore
+		innerErr := lis.Close()
+		if innerErr != nil {
+			apiServerLogger.Errorf("Failed to close epehemeral listener: %v", innerErr)
+		}
+	}()
+
+	// In the meanwhile, return the response with the port
+	return &runtimev1pb.ConnectAppCallbackResponse{
+		Port: int32(port),
+	}, nil
+}
+
+func clientConn(conn net.Conn) {
+	clientConn, err := grpc.Dial(
+		// Target is 0.0.0.0:0 because we are using a custom dial function
+		"0.0.0.0:0",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
+			return conn, nil
+		}),
+	)
+
+	if err != nil {
+		apiServerLogger.Errorf("Failed to close create gRPC client connection on existing connection with client: %v", err)
+		return
+	}
+
+	fmt.Println("CONNECTION ESTABLISHED", clientConn.GetState())
+	for {
+		fmt.Println(clientConn.Invoke(context.Background(), "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &emptypb.Empty{}, &emptypb.Empty{}))
+		time.Sleep(2 * time.Second)
+	}
 }
 
 func (a *api) Close() error {
