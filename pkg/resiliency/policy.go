@@ -16,6 +16,7 @@ package resiliency
 import (
 	"context"
 	"errors"
+	"io"
 	"reflect"
 	"sync/atomic"
 	"time"
@@ -47,6 +48,11 @@ type PolicyDefinition struct {
 	t    time.Duration
 	r    *retry.Config
 	cb   *breaker.CircuitBreaker
+}
+
+// HasRetries returns true if the policy is configured to have more than 1 retry.
+func (p PolicyDefinition) HasRetries() bool {
+	return p.r != nil && p.r.MaxRetries != 0
 }
 
 type RunnerOpts[T any] struct {
@@ -169,6 +175,11 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 			},
 		)
 	}
+}
+
+// DisposerCloser is a Disposer function for RunnerOpts that invokes Close() on the object.
+func DisposerCloser[T io.Closer](obj T) {
+	_ = obj.Close()
 }
 
 func isZero(val any) bool {
