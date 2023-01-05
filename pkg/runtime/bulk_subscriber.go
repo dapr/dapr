@@ -304,8 +304,11 @@ func (a *DaprRuntime) publishBulkMessageHTTP(bulkSubCallData *bulkSubscribeCallD
 	for i, pubSubMsg := range psm.pubSubMessages {
 		rawMsgEntries[i] = pubSubMsg.rawData
 	}
+
+	a.bulkSubLock.Lock()
 	envelope[runtimePubsub.Entries] = rawMsgEntries
 	da, marshalErr := json.Marshal(&envelope)
+	a.bulkSubLock.Unlock()
 	if marshalErr != nil {
 		log.Errorf("Error serializing bulk cloud event in pubsub %s and topic %s: %s", psm.pubsub, psm.topic, marshalErr)
 		if deadLetterTopic != "" {
@@ -397,23 +400,31 @@ func (a *DaprRuntime) publishBulkMessageHTTP(bulkSubCallData *bulkSubscribeCallD
 					// When statusCode 2xx, Consider empty status field OR not receiving status for an item as retry
 					fallthrough
 				case pubsub.Retry:
+					a.bulkSubLock.Lock()
 					bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
+					a.bulkSubLock.Unlock()
 					entryRespReceived[response.EntryId] = true
 					addBulkResponseEntry(bulkResponses, response.EntryId,
 						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 					hasAnyError = true
 				case pubsub.Success:
+					a.bulkSubLock.Lock()
 					bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Success)]++
+					a.bulkSubLock.Unlock()
 					entryRespReceived[response.EntryId] = true
 					addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 				case pubsub.Drop:
+					a.bulkSubLock.Lock()
 					bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
+					a.bulkSubLock.Unlock()
 					entryRespReceived[response.EntryId] = true
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
 					addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 				default:
 					// Consider unknown status field as error and retry
+					a.bulkSubLock.Lock()
 					bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
+					a.bulkSubLock.Unlock()
 					entryRespReceived[response.EntryId] = true
 					addBulkResponseEntry(bulkResponses, response.EntryId,
 						fmt.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))

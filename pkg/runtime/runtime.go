@@ -210,6 +210,7 @@ type DaprRuntime struct {
 	appHealth                 *apphealth.AppHealth
 	appHealthReady            func() // Invoked the first time the app health becomes ready
 	appHealthLock             *sync.Mutex
+	bulkSubLock               *sync.Mutex
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -295,6 +296,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		resiliency:                 resiliencyProvider,
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
+		bulkSubLock:                &sync.Mutex{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
