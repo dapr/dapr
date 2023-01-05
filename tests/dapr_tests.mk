@@ -72,6 +72,7 @@ service_invocation_grpc \
 state_get_grpc \
 state_get_http \
 pubsub_publish_grpc \
+pubsub_publish_http \
 pubsub_bulk_publish_grpc \
 actor_double_activation \
 actor_id_scale \
