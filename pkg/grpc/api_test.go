@@ -173,8 +173,8 @@ func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_Call
 	stream.Send(&internalv1pb.InternalInvokeResponseStream{
 		Response: resp.Proto(),
 		Payload: &commonv1pb.StreamPayload{
-			Data:     data,
-			Complete: true,
+			Data: data,
+			Seq:  0,
 		},
 	})
 
@@ -475,15 +475,16 @@ func TestCallLocalStream(t *testing.T) {
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
 		st, err := client.CallLocalStream(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		request := invokev1.NewInvokeMethodRequest("method")
 		defer request.Close()
 		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
 			Request: request.Proto(),
-			Payload: &commonv1pb.StreamPayload{Complete: true},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
+		err = st.CloseSend()
+		require.NoError(t, err)
 
 		_, err = st.Recv()
 		assert.Equal(t, codes.Internal, status.Code(err))
@@ -504,15 +505,16 @@ func TestCallLocalStream(t *testing.T) {
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
 		st, err := client.CallLocalStream(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
 			Request: &internalv1pb.InternalInvokeRequest{
 				Message: nil,
 			},
-			Payload: &commonv1pb.StreamPayload{Complete: true},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
+		err = st.CloseSend()
+		require.NoError(t, err)
 
 		_, err = st.Recv()
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -553,10 +555,13 @@ func TestCallLocalStream(t *testing.T) {
 		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
 			Request: request.Proto(),
 			Payload: &commonv1pb.StreamPayload{
-				Data:     pd.Message.Data.Value,
-				Complete: true,
+				Data: pd.Message.Data.Value,
+				Seq:  0,
 			},
 		})
+		require.NoError(t, err)
+		require.NoError(t, err)
+		err = st.CloseSend()
 		require.NoError(t, err)
 
 		_, err = st.Recv()

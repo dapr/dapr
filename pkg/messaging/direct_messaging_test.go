@@ -344,8 +344,8 @@ func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvoca
 	stream.Send(&internalv1pb.InternalInvokeResponseStream{
 		Response: resp.Proto(),
 		Payload: &commonv1pb.StreamPayload{
-			Data:     data,
-			Complete: !m.multiChunks,
+			Data: data,
+			Seq:  0,
 		},
 	})
 
@@ -353,14 +353,14 @@ func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvoca
 	if m.multiChunks {
 		stream.Send(&internalv1pb.InternalInvokeResponseStream{
 			Payload: &commonv1pb.StreamPayload{
-				Data:     []byte(" Sempre caro mi fu quest'ermo colle…"),
-				Complete: false,
+				Data: []byte(" Sempre caro mi fu quest'ermo colle…"),
+				Seq:  1,
 			},
 		})
 		stream.Send(&internalv1pb.InternalInvokeResponseStream{
 			Payload: &commonv1pb.StreamPayload{
-				Data:     []byte(" E il naufragar m'è dolce in questo mare."),
-				Complete: true,
+				Data: []byte(" E il naufragar m'è dolce in questo mare."),
+				Seq:  2,
 			},
 		})
 	}

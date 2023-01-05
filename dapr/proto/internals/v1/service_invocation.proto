@@ -44,8 +44,9 @@ service ServiceInvocation {
   // - The first message in the stream MUST contain a `request` (caller) or `response` (callee) message with all required properties present.
   // - The first message in the stream MAY contain a `payload`, which is not required and may be empty.
   // - Subsequent messages (any message except the first one in the stream) MUST contain a `payload` and MUST NOT contain any other property (like `request` or `response`).
-  // - The last message in the stream MUST contain a `payload` with `complete=true`. That message is assumed to be the last one from the sender and no more messages are to be sent in the stream in the same direction after that.
-  // The caller and callee must send at least one message in the stream. If only 1 message is sent in each direction, that message must contain both a `request`/`response` and a `payload` with `complete=true` (the `payload` may be empty).
+  // - Each message with a `payload` MUST contain a sequence number in `seq`, which is a counter that starts from 0 and MUST be incremented by 1 in each chunk. The `seq` counter MUST NOT be included if the message does not have a `payload`.
+  // - When the sender has completed sending the data, it MUST call `CloseSend` on the stream.
+  // The caller and callee must send at least one message in the stream. If only 1 message is sent in each direction, that message must contain both a `request`/`response` (the `payload` may be empty).
   rpc CallLocalStream (stream InternalInvokeRequestStream) returns (stream InternalInvokeResponseStream) {}
 }
 

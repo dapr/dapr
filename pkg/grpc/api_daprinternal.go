@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"google.golang.org/grpc/codes"
@@ -120,8 +121,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// Read the rest of the data in background as we submit the request
 	go func() {
 		var (
-			done    bool
-			readErr error
+			firstChunk bool = true
+			lastSeq    uint32
+			readSeq    uint32
+			payload    *commonv1pb.StreamPayload
+			readErr    error
 		)
 		for {
 			if ctx.Err() != nil {
@@ -129,19 +133,32 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 				return
 			}
 
-			done, readErr = messaging.ReadChunk(chunk, pw)
+			// Get the payload from the chunk that was previously read
+			payload = chunk.GetPayload()
+			if payload == nil {
+				continue
+			}
+			readSeq, readErr = messaging.ReadChunk(payload, pw)
 			if readErr != nil {
 				pw.CloseWithError(readErr)
 				return
 			}
 
-			if done {
-				break
+			// Check if the sequence number is greater than the previous (or 0 for the first chunk)
+			if (firstChunk && readSeq != 0) || (!firstChunk && readSeq != lastSeq+1) {
+				pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d", readSeq))
+				return
 			}
+			lastSeq = readSeq
+			firstChunk = false
 
+			// Read the next chunk
 			readErr = stream.RecvMsg(chunk)
-			if err != nil {
-				pw.CloseWithError(readErr)
+			if readErr == io.EOF {
+				// Receiving an io.EOF signifies that the client has stopped sending data over the pipe, so we can stop reading
+				break
+			} else if readErr != nil {
+				pw.CloseWithError(fmt.Errorf("error receiving message: %w", readErr))
 				return
 			}
 
@@ -169,7 +186,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	r := res.RawData()
 	resProto := res.Proto()
 	proto := &internalv1pb.InternalInvokeResponseStream{}
-	var n int
+	var (
+		n    int
+		seq  uint32
+		done bool
+	)
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -184,34 +205,35 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 			resProto = nil
 		}
 
-		if proto.Payload == nil {
-			proto.Payload = &commonv1pb.StreamPayload{}
-		}
-
 		if r != nil {
 			n, err = r.Read(*buf)
 			if err == io.EOF {
-				proto.Payload.Complete = true
+				done = true
 			} else if err != nil {
 				return err
 			}
 			if n > 0 {
-				proto.Payload.Data = (*buf)[:n]
+				proto.Payload = &commonv1pb.StreamPayload{
+					Data: (*buf)[:n],
+					Seq:  seq,
+				}
+				seq++
 			}
 		} else {
-			proto.Payload.Complete = true
+			done = true
 		}
 
 		// Send the chunk if there's anything to send
-		if proto.Response != nil || proto.Payload.Complete || len(proto.Payload.Data) > 0 {
+		if proto.Response != nil || proto.Payload != nil {
 			err = stream.SendMsg(proto)
 			if err != nil {
-				return err
+				return fmt.Errorf("error sending message: %w", err)
 			}
 		}
 
 		// Stop with the last chunk
-		if proto.Payload.Complete {
+		// This will make the method return and close the stream
+		if done {
 			break
 		}
 	}

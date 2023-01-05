@@ -98,9 +98,8 @@ message StreamPayload {
   // Receivers must not make assumptions about the number of bytes they'll receive in each chunk.
   bytes data = 1;
 
-  // Set to true if this is the last chunk.
-  // After a message with `complete=true` is received, the sender must not send any more chunk.
-  bool complete = 2;
+  // Sequence number. This is a counter that starts from 0 and increments by 1 on each chunk sent.
+  uint32 seq = 2;
 }
 
 // StateItem represents state key, value, and additional options to save state.

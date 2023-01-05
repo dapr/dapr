@@ -308,7 +308,11 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	r := req.RawData()
 	reqProto := req.Proto()
 	proto := &internalv1pb.InternalInvokeRequestStream{}
-	var n int
+	var (
+		n    int
+		seq  uint32
+		done bool
+	)
 	for {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -323,34 +327,38 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 			reqProto = nil
 		}
 
-		if proto.Payload == nil {
-			proto.Payload = &commonv1pb.StreamPayload{}
-		}
-
 		if r != nil {
 			n, err = r.Read(*buf)
 			if err == io.EOF {
-				proto.Payload.Complete = true
+				done = true
 			} else if err != nil {
 				return nil, err
 			}
 			if n > 0 {
-				proto.Payload.Data = (*buf)[:n]
+				proto.Payload = &commonv1pb.StreamPayload{
+					Data: (*buf)[:n],
+					Seq:  seq,
+				}
+				seq++
 			}
 		} else {
-			proto.Payload.Complete = true
+			done = true
 		}
 
 		// Send the chunk if there's anything to send
-		if proto.Request != nil || proto.Payload.Complete || len(proto.Payload.Data) > 0 {
+		if proto.Request != nil || proto.Payload != nil {
 			err = stream.SendMsg(proto)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("error sending message: %w", err)
 			}
 		}
 
 		// Stop with the last chunk
-		if proto.Payload.Complete {
+		if done {
+			err = stream.CloseSend()
+			if err != nil {
+				return nil, fmt.Errorf("failed to close the send direction of the stream: %w", err)
+			}
 			break
 		}
 	}
@@ -363,6 +371,8 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		// This should happen if we're connecting to an app that uses an older version of Dapr
 		// Although we handle this case gracefully, the extra request/response will have a small performance impact
 		if status.Code(err) == codes.Unimplemented {
+			// TODO: @ItalyPaleAle at this point we may have consumed the request stream already. Can we check the error earlier?
+			// See: https://github.com/grpc/grpc-go/issues/5910
 			log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
 			return d.invokeRemoteUnary(ctx, clientV1, req, opts)
 		}
@@ -384,8 +394,11 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	// Read the response into the stream in the background
 	go func() {
 		var (
-			done    bool
-			readErr error
+			firstChunk bool = true
+			lastSeq    uint32
+			readSeq    uint32
+			payload    *commonv1pb.StreamPayload
+			readErr    error
 		)
 		for {
 			if ctx.Err() != nil {
@@ -393,19 +406,33 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 				return
 			}
 
-			done, readErr = ReadChunk(chunk, pw)
+			// Get the payload from the chunk that was previously read
+			payload = chunk.GetPayload()
+			if payload == nil {
+				continue
+			}
+			readSeq, readErr = ReadChunk(payload, pw)
 			if readErr != nil {
 				pw.CloseWithError(readErr)
 				return
 			}
 
-			if done {
-				break
+			// Check if the sequence number is greater than the previous (or 0 for the first chunk)
+			fmt.Println(firstChunk, readSeq, lastSeq)
+			if (firstChunk && readSeq != 0) || (!firstChunk && readSeq != lastSeq+1) {
+				pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d", readSeq))
+				return
 			}
+			lastSeq = readSeq
+			firstChunk = false
 
+			// Read the next chunk
 			readErr = stream.RecvMsg(chunk)
-			if readErr != nil {
-				pw.CloseWithError(readErr)
+			if readErr == io.EOF {
+				// Receiving an io.EOF signifies that the client has stopped sending data over the pipe, so we can stop reading
+				break
+			} else if readErr != nil {
+				pw.CloseWithError(fmt.Errorf("error receiving message: %w", readErr))
 				return
 			}
 
@@ -492,29 +519,19 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 	}, nil
 }
 
-// Interface for *internalv1pb.InternalInvokeResponseStream and *internalv1pb.InternalInvokeRequestStream
-type chunkWithPayload interface {
-	GetPayload() *commonv1pb.StreamPayload
-}
-
-// ReadChunk reads a chunk of data from an InternalInvokeResponseStream or InternalInvokeRequestStream object
-// The returned value "done" is true if the sender of the chunk claims this is the last chunk.
-func ReadChunk(chunk chunkWithPayload, out io.Writer) (done bool, err error) {
-	payload := chunk.GetPayload()
-	if payload == nil {
-		return false, nil
-	}
-
+// ReadChunk reads a chunk of data from a StreamPayload object.
+// The returned value "seq" indicates the sequence number
+func ReadChunk(payload *commonv1pb.StreamPayload, out io.Writer) (seq uint32, err error) {
 	if len(payload.Data) > 0 {
 		var n int
 		n, err = out.Write(payload.Data)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
 		if n != len(payload.Data) {
-			return false, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.Data))
+			return 0, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.Data))
 		}
 	}
 
-	return payload.Complete, nil
+	return payload.Seq, nil
 }
