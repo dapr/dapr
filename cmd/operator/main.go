@@ -22,12 +22,12 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
-	"github.com/dapr/dapr/pkg/version"
 )
 
 var (
@@ -55,7 +55,7 @@ const (
 )
 
 func main() {
-	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Operator -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
 	operatorOpts := operator.Options{
 		Config:                    config,
