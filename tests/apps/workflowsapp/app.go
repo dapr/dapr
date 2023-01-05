@@ -209,10 +209,21 @@ func main() {
 	w.RegisterWorkflow(HelloTemporalWF)
 	w.RegisterActivity(HelloTemporalAct)
 
+	for i := 0; i < 5; i++ {
+		err = w.Start()
+
+		if err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	if err != nil {
+		log.Fatalln("unable to start Temporal worker", err)
+	}
+
 	// Start listening to the Task Queue
 	log.Println("e2e worker created")
-	w.Start()
-
 	utils.StartServer(appPort, appRouter, true, false)
 }
 
