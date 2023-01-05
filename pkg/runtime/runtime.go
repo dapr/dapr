@@ -494,6 +494,20 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = a.getGRPCAPI()
 
+	// If we're using the callback channel, set the handler for that
+	var callbackChannelConnected chan struct{}
+	if a.runtimeConfig.EnableCallbackChannel {
+		callbackChannelConnected = make(chan struct{})
+		firstCallbackConnection := sync.Once{}
+		a.daprGRPCAPI.SetOnAppCallbackConnection(func(conn net.Conn) {
+			a.grpc.SetLocalConnCreateFn(a.grpc.LocalConnCreatorFromNetConn(conn))
+			firstCallbackConnection.Do(func() {
+				close(callbackChannelConnected)
+				callbackChannelConnected = nil
+			})
+		})
+	}
+
 	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
@@ -526,12 +540,29 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
 
-	a.blockUntilAppIsReady()
+	if !a.runtimeConfig.EnableCallbackChannel {
+		a.blockUntilAppIsReady()
 
-	err = a.createAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+		err = a.createAppChannel()
+		if err != nil {
+			log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+		}
+	} else {
+		// If we're using the callback channel, we need to wait until the app establishes a connection
+		log.Info("Waiting for the application to establish the callback channel")
+		<-callbackChannelConnected
+		log.Info("Callback channel connected for the application")
+
+		a.appChannel, err = a.grpc.GetAppChannel()
+		if err != nil {
+			log.Errorf("Failed to establish callback channel with app: %s", err)
+		}
 	}
+
+	if a.runtimeConfig.MaxConcurrency > 0 {
+		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+	}
+
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 
@@ -2850,10 +2881,6 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
 	default:
 		return fmt.Errorf("cannot create app channel for protocol %s", a.runtimeConfig.ApplicationProtocol)
-	}
-
-	if a.runtimeConfig.MaxConcurrency > 0 {
-		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
 	}
 
 	a.appChannel = ch

@@ -55,6 +55,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
+	enableCallbackChannel := flag.Bool("enable-callback-channel", false, "Use the callback channel for communicating with the app")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
 	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
@@ -228,9 +229,25 @@ func FromFlags() (*DaprRuntime, error) {
 		concurrency = *appMaxConcurrency
 	}
 
-	appPrtcl := string(HTTPProtocol)
-	if *appProtocol != string(HTTPProtocol) {
-		appPrtcl = *appProtocol
+	var appPrtcl string
+	{
+		p := strings.ToLower(*appProtocol)
+		switch p {
+		case string(HTTPProtocol),
+			string(GRPCProtocol):
+			appPrtcl = p
+		case "":
+			appPrtcl = string(HTTPProtocol)
+		default:
+			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocol)
+		}
+	}
+
+	if *enableCallbackChannel {
+		if applicationPort > 0 {
+			return nil, errors.New("flag 'app-port' must not be defined when 'enable-callback-channel' is set")
+		}
+		appPrtcl = string(GRPCProtocol)
 	}
 
 	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
@@ -279,6 +296,7 @@ func FromFlags() (*DaprRuntime, error) {
 		APIListenAddresses:           daprAPIListenAddressList,
 		PublicPort:                   publicPort,
 		AppPort:                      applicationPort,
+		EnableCallbackChannel:        *enableCallbackChannel,
 		ProfilePort:                  profPort,
 		EnableProfiling:              *enableProfiling,
 		MaxConcurrency:               concurrency,

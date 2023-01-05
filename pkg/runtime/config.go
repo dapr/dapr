@@ -62,6 +62,7 @@ type Config struct {
 	APIGRPCPort                  int
 	InternalGRPCPort             int
 	ApplicationPort              int
+	EnableCallbackChannel        bool
 	APIListenAddresses           []string
 	ApplicationProtocol          Protocol
 	Mode                         modes.DaprMode
@@ -101,6 +102,7 @@ type NewRuntimeConfigOpts struct {
 	APIListenAddresses           []string
 	PublicPort                   *int
 	AppPort                      int
+	EnableCallbackChannel        bool
 	ProfilePort                  int
 	EnableProfiling              bool
 	MaxConcurrency               int
@@ -133,19 +135,20 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 	}
 
 	return &Config{
-		ID:                  opts.ID,
-		HTTPPort:            opts.HTTPPort,
-		PublicPort:          opts.PublicPort,
-		InternalGRPCPort:    opts.InternalGRPCPort,
-		APIGRPCPort:         opts.APIGRPCPort,
-		ApplicationPort:     opts.AppPort,
-		ProfilePort:         opts.ProfilePort,
-		APIListenAddresses:  opts.APIListenAddresses,
-		ApplicationProtocol: Protocol(opts.AppProtocol),
-		Mode:                modes.DaprMode(opts.Mode),
-		PlacementAddresses:  opts.PlacementAddresses,
-		GlobalConfig:        opts.GlobalConfig,
-		AllowedOrigins:      opts.AllowedOrigins,
+		ID:                    opts.ID,
+		HTTPPort:              opts.HTTPPort,
+		PublicPort:            opts.PublicPort,
+		InternalGRPCPort:      opts.InternalGRPCPort,
+		APIGRPCPort:           opts.APIGRPCPort,
+		ApplicationPort:       opts.AppPort,
+		EnableCallbackChannel: opts.EnableCallbackChannel,
+		ProfilePort:           opts.ProfilePort,
+		APIListenAddresses:    opts.APIListenAddresses,
+		ApplicationProtocol:   Protocol(opts.AppProtocol),
+		Mode:                  modes.DaprMode(opts.Mode),
+		PlacementAddresses:    opts.PlacementAddresses,
+		GlobalConfig:          opts.GlobalConfig,
+		AllowedOrigins:        opts.AllowedOrigins,
 		Standalone: config.StandaloneConfig{
 			ComponentsPath: opts.ComponentsPath,
 		},

@@ -27,7 +27,6 @@ import (
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -81,6 +80,7 @@ type API interface {
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
+	SetOnAppCallbackConnection(func(conn net.Conn))
 }
 
 type api struct {
@@ -109,6 +109,7 @@ type api struct {
 	getComponentsCapabilitesFn func() map[string][]string
 	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	daprRunTimeVersion         string
+	onAppCallbackConnection    func(conn net.Conn)
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
@@ -2041,97 +2042,6 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
-}
-
-func (a *api) ConnectAppCallback(context.Context, *runtimev1pb.ConnectAppCallbackRequest) (*runtimev1pb.ConnectAppCallbackResponse, error) {
-	const connectionTimeout = 10 * time.Second
-
-	// Create a new TCP listener that will accept connections from the client
-	// This is listening on port "0" which means that the kernel will assign a random available port
-	// TODO @ItalyPaleAle: use APIListenAddresses from the config
-	addr, err := net.ResolveTCPAddr("tcp", ":0")
-	if err != nil {
-		err = status.Errorf(codes.Internal, "failed to create address: %v", err)
-		apiServerLogger.Debug(err)
-		return nil, err
-	}
-	lis, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		err = status.Errorf(codes.Internal, "failed to create listener: %v", err)
-		apiServerLogger.Debug(err)
-		return nil, err
-	}
-	port := lis.Addr().(*net.TCPAddr).Port
-
-	apiServerLogger.Debugf("Created ephemeral listener on port %d", port)
-
-	// In a background goroutine, wait for the first client to establish a connection to the listener we just created
-	// The first connectiopn to be established wins
-	// There's also a timeout after which we will close the listener if no one connected to it
-	connCh := make(chan any)
-	go func() {
-		conn, connErr := lis.Accept()
-		if connErr != nil {
-			connCh <- connErr
-		} else {
-			connCh <- conn
-		}
-		close(connCh)
-	}()
-	go func() {
-		select {
-		case <-time.After(connectionTimeout):
-			// Timed out
-			// Log, then exit the select block
-			apiServerLogger.Warnf("Client did not connect to the ephemeral listener within %v", connectionTimeout)
-		case msg := <-connCh:
-			if msg == nil {
-				// Exit the select block
-				break
-			}
-			switch v := msg.(type) {
-			case error:
-				// Log, then exit the select block
-				apiServerLogger.Errorf("Error while trying to accept connection to the ephemeral listener: %v", v)
-			case net.Conn:
-				apiServerLogger.Infof("Established client connection on the ephemeral listener from %v", v.RemoteAddr())
-				clientConn(v)
-			}
-		}
-
-		// Close the listener - whether we have a connection or not, we don't need it anymore
-		innerErr := lis.Close()
-		if innerErr != nil {
-			apiServerLogger.Errorf("Failed to close epehemeral listener: %v", innerErr)
-		}
-	}()
-
-	// In the meanwhile, return the response with the port
-	return &runtimev1pb.ConnectAppCallbackResponse{
-		Port: int32(port),
-	}, nil
-}
-
-func clientConn(conn net.Conn) {
-	clientConn, err := grpc.Dial(
-		// Target is 0.0.0.0:0 because we are using a custom dial function
-		"0.0.0.0:0",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
-			return conn, nil
-		}),
-	)
-
-	if err != nil {
-		apiServerLogger.Errorf("Failed to close create gRPC client connection on existing connection with client: %v", err)
-		return
-	}
-
-	fmt.Println("CONNECTION ESTABLISHED", clientConn.GetState())
-	for {
-		fmt.Println(clientConn.Invoke(context.Background(), "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &emptypb.Empty{}, &emptypb.Empty{}))
-		time.Sleep(2 * time.Second)
-	}
 }
 
 func (a *api) Close() error {

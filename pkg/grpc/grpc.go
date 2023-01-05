@@ -40,6 +40,9 @@ const (
 	maxConnIdle       = 3 * time.Minute
 )
 
+// ConnCreatorFn is a function that returns a gRPC connection
+type ConnCreatorFn = func() (grpc.ClientConnInterface, error)
+
 // AppChannelConfig contains the configuration for the app channel.
 type AppChannelConfig struct {
 	Port                 int
@@ -57,7 +60,7 @@ type Manager struct {
 	mode              modes.DaprMode
 	channelConfig     *AppChannelConfig
 	localConn         *ConnectionPool
-	localConnCreateFn func() (grpc.ClientConnInterface, error)
+	localConnCreateFn ConnCreatorFn
 }
 
 // NewGRPCManager returns a new grpc manager.
@@ -108,11 +111,53 @@ func (g *Manager) CloseAppClient() {
 	g.localConn.DestroyAll()
 }
 
-// SetLocalConnCreateFn sets the function used to create connections.
+// SetLocalConnCreateFn sets the function used to create local connections.
 // It does not destroy connections that have been established already; use CloseAppClient() after invoking this method if needed.
 // Set fn to nil to reset to the built-in function.
-func (g *Manager) SetLocalConnCreateFn(fn func() (grpc.ClientConnInterface, error)) {
+func (g *Manager) SetLocalConnCreateFn(fn ConnCreatorFn) {
 	g.localConnCreateFn = fn
+}
+
+// LocalConnCreatorFromNetConn returns a ConnCreatorFn (which can be passed to SetLocalConnCreateFn) which creates a new local connection from an existing net.Conn.
+func (g *Manager) LocalConnCreatorFromNetConn(conn net.Conn) ConnCreatorFn {
+	return func() (grpc.ClientConnInterface, error) {
+		opts := make([]grpc.DialOption, 0, 4)
+
+		if diag.DefaultGRPCMonitoring.IsEnabled() {
+			opts = append(opts,
+				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+			)
+		}
+
+		if g.channelConfig.SSLEnabled {
+			//nolint:gosec
+			opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+				InsecureSkipVerify: true,
+			})))
+		} else {
+			opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		}
+
+		opts = append(opts,
+			grpc.WithBlock(),
+			grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
+				return conn, nil
+			}),
+		)
+
+		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+		defer cancel()
+		grpcConn, err := grpc.DialContext(
+			ctx,
+			"0.0.0.0:0", // Target is 0.0.0.0:0 because we are using a custom dial function
+			opts...,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create gRPC client connection on existing connection with client: %w", err)
+		}
+
+		return grpcConn, nil
+	}
 }
 
 func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
