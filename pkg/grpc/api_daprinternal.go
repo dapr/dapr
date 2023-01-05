@@ -121,7 +121,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// Read the rest of the data in background as we submit the request
 	go func() {
 		var (
-			firstChunk bool = true
+			firstChunk = true
 			lastSeq    uint32
 			readSeq    uint32
 			payload    *commonv1pb.StreamPayload

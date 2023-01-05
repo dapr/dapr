@@ -26,6 +26,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -235,12 +236,52 @@ func TestInvokeRemote(t *testing.T) {
 		assert.Equal(t, "Sempre caro mi fu quest'ermo colle e questa siepe, che da tanta parte dell'ultimo orizzonte il guardo esclude. … E il naufragar m'è dolce in questo mare.", string(pd.Message.Data.Value))
 	})
 
-	t.Run("target does not support streaming", func(t *testing.T) {
+	t.Run("target does not support streaming - request is not replayable", func(t *testing.T) {
 		messaging, teardown := prepareEnvironment(t, false, nil)
 		defer teardown()
 
 		request := invokev1.
 			NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
+		defer request.Close()
+
+		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		require.Error(t, err)
+		assert.Equal(t, fmt.Sprintf(streamingUnsupportedErr, "app1"), err.Error())
+		assert.Nil(t, res)
+	})
+
+	t.Run("target does not support streaming - request is replayable", func(t *testing.T) {
+		messaging, teardown := prepareEnvironment(t, false, nil)
+		defer teardown()
+
+		request := invokev1.
+			NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}}).
+			WithReplay(true)
+		defer request.Close()
+
+		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		require.NoError(t, err)
+
+		pd, err := res.ProtoWithData()
+		require.NoError(t, err)
+
+		assert.Equal(t, "🐶", string(pd.Message.Data.Value))
+	})
+
+	t.Run("target does not support streaming - request has data in-memory", func(t *testing.T) {
+		messaging, teardown := prepareEnvironment(t, false, nil)
+		defer teardown()
+
+		request := invokev1.
+			FromInvokeRequestMessage(&commonv1pb.InvokeRequest{
+				Method: "method",
+				Data: &anypb.Any{
+					Value: []byte("nel blu dipinto di blu"),
+				},
+				ContentType: "text/plain",
+			}).
 			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
 		defer request.Close()
 
