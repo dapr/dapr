@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slices"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -160,4 +161,17 @@ func PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) m
 	}
 
 	return resMeta
+}
+
+func Filter[T any](items []T, test func(item T) bool, isFilterNotApplicable bool) []T {
+	if isFilterNotApplicable {
+		return items
+	}
+	filteredItems := make([]T, 0, len(items))
+	for _, value := range items {
+		if test(value) {
+			filteredItems = append(filteredItems, value)
+		}
+	}
+	return slices.Clip(filteredItems) // return and trunc capacity of slice
 }
