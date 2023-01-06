@@ -169,7 +169,20 @@ type OtelSpec struct {
 
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
-	Enabled bool `json:"enabled" yaml:"enabled"`
+	Enabled bool          `json:"enabled" yaml:"enabled"`
+	Rules   []MetricsRule `json:"rules" yaml:"rules"`
+}
+
+// MetricsRule defines configuration options for a metric.
+type MetricsRule struct {
+	Name   string        `json:"name" yaml:"name"`
+	Labels []MetricLabel `json:"labels" yaml:"labels"`
+}
+
+// MetricsLabel defines an object that allows to set regex expressions for a label.
+type MetricLabel struct {
+	Name  string            `json:"name" yaml:"name"`
+	Regex map[string]string `json:"regex" yaml:"regex"`
 }
 
 // AppPolicySpec defines the policy data structure for each app.
