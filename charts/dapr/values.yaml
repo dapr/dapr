@@ -28,3 +28,10 @@ global:
     app.kubernetes.io/part-of: "dapr"
     app.kubernetes.io/managed-by: "helm"
     app.kubernetes.io/component: "{{ .Values.component }}" # Should be set in each subchart
+
+  issuerFilenames: {}
+  ## the issuerFilenames dictionary, if setup, have to contain 3 keys: ca,cert,key
+  # issuerFilenames:
+  #   ca: "ca.crt"
+  #   cert: "tls.crt"
+  #   key: "tls.key"

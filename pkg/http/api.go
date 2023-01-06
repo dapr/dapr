@@ -43,6 +43,7 @@ import (
 	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
@@ -58,7 +59,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -211,7 +211,7 @@ func NewAPI(opts APIOpts) API {
 		maxRequestBodySize:         opts.MaxRequestBodySize,
 		transactionalStateStores:   transactionalStateStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		daprRunTimeVersion:         version.Version(),
+		daprRunTimeVersion:         buildinfo.Version(),
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -2472,8 +2472,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	if err != nil {
 		bulkRes.FailedEntries = make([]BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
 		for _, r := range res.FailedEntries {
-			resEntry := BulkPublishResponseFailedEntry{}
-			resEntry.EntryId = r.EntryId
+			resEntry := BulkPublishResponseFailedEntry{EntryId: r.EntryId}
 			if r.Error != nil {
 				resEntry.Error = r.Error.Error()
 			}
