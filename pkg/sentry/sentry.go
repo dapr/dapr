@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/config"
@@ -178,7 +178,7 @@ func (s *sentry) createValidator() (identity.Validator, error) {
 		// we're in Kubernetes, create client and init a new serviceaccount token validator
 		kubeClient, err := k8s.GetClient()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create kubernetes client")
+			return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 		}
 
 		// TODO: Remove once the NoDefaultTokenAudience feature is finalized

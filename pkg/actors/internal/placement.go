@@ -16,12 +16,10 @@ package internal
 import (
 	"context"
 	"net"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"go.uber.org/atomic"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -31,7 +29,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/dapr/pkg/runtime/security"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.internal.placement")
@@ -57,25 +54,13 @@ type ActorPlacement struct {
 	// runtimeHostname is the address and port of the runtime
 	runtimeHostName string
 
+	// client is the placement client.
+	client *placementClient
+
 	// serverAddr is the list of placement addresses.
 	serverAddr []string
 	// serverIndex is the current index of placement servers in serverAddr.
 	serverIndex atomic.Int32
-
-	// clientCert is the workload certificate to connect placement.
-	clientCert *daprCredentials.CertChain
-
-	// clientLock is the lock for client conn and stream.
-	clientLock *sync.RWMutex
-	// clientConn is the gRPC client connection.
-	clientConn *grpc.ClientConn
-	// clientStream is the client side stream.
-	clientStream v1pb.Placement_ReportDaprStatusClient
-	// streamConnAlive is the status of stream connection alive.
-	streamConnAlive bool
-	// streamConnectedCond is the condition variable for goroutines waiting for or announcing
-	// that the stream between runtime and placement is connected.
-	streamConnectedCond *sync.Cond
 
 	// placementTables is the consistent hashing table map to
 	// look up Dapr runtime host address to locate actor.
@@ -102,19 +87,6 @@ type ActorPlacement struct {
 	shutdownConnLoop sync.WaitGroup
 }
 
-func addDNSResolverPrefix(addr []string) []string {
-	resolvers := make([]string, 0, len(addr))
-	for _, a := range addr {
-		prefix := ""
-		host, _, err := net.SplitHostPort(a)
-		if err == nil && net.ParseIP(host) == nil {
-			prefix = "dns:///"
-		}
-		resolvers = append(resolvers, prefix+a)
-	}
-	return resolvers
-}
-
 // NewActorPlacement initializes ActorPlacement for the actor service.
 func NewActorPlacement(
 	serverAddr []string, clientCert *daprCredentials.CertChain,
@@ -122,23 +94,20 @@ func NewActorPlacement(
 	appHealthFn func() bool,
 	afterTableUpdateFn func(),
 ) *ActorPlacement {
+	servers := addDNSResolverPrefix(serverAddr)
 	return &ActorPlacement{
 		actorTypes:      actorTypes,
 		appID:           appID,
 		runtimeHostName: runtimeHostName,
-		serverAddr:      addDNSResolverPrefix(serverAddr),
+		serverAddr:      servers,
 
-		clientCert: clientCert,
-
-		clientLock:          &sync.RWMutex{},
-		streamConnAlive:     false,
-		streamConnectedCond: sync.NewCond(&sync.Mutex{}),
+		client: newPlacementClient(getGrpcOptsGetter(servers, clientCert)),
 
 		placementTableLock: &sync.RWMutex{},
 		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
 		operationUpdateLock: &sync.Mutex{},
-		tableIsBlocked:      atomic.NewBool(false),
+		tableIsBlocked:      &atomic.Bool{},
 		appHealthFn:         appHealthFn,
 		afterTableUpdateFn:  afterTableUpdateFn,
 	}
@@ -150,27 +119,25 @@ func (p *ActorPlacement) Start() {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 
-	established := false
-	func() {
-		p.clientLock.Lock()
-		defer p.clientLock.Unlock()
-
-		p.clientStream, p.clientConn = p.establishStreamConn()
-		if p.clientStream == nil {
-			return
-		}
-		established = true
-	}()
-	if !established {
+	if established := p.establishStreamConn(); !established {
 		return
 	}
 
-	func() {
-		p.streamConnectedCond.L.Lock()
-		defer p.streamConnectedCond.L.Unlock()
+	// establish connection loop, whenever a disconnect occurs it starts to run trying to connect to a new server.
+	p.shutdownConnLoop.Add(1)
+	go func() {
+		defer p.shutdownConnLoop.Done()
+		for !p.shutdown.Load() {
+			// wait until disconnection occurs or shutdown is triggered
+			p.client.waitUntil(func(streamConnAlive bool) bool {
+				return !streamConnAlive || p.shutdown.Load()
+			})
 
-		p.streamConnAlive = true
-		p.streamConnectedCond.Broadcast()
+			if p.shutdown.Load() {
+				break
+			}
+			p.establishStreamConn()
+		}
 	}()
 
 	// Establish receive channel to retrieve placement table update
@@ -178,46 +145,24 @@ func (p *ActorPlacement) Start() {
 	go func() {
 		defer p.shutdownConnLoop.Done()
 		for !p.shutdown.Load() {
-			p.clientLock.RLock()
-			clientStream := p.clientStream
-			p.clientLock.RUnlock()
-			resp, err := clientStream.Recv()
+			// Wait until stream is connected or shutdown is triggered.
+			p.client.waitUntil(func(streamAlive bool) bool {
+				return streamAlive || p.shutdown.Load()
+			})
+
+			resp, err := p.client.recv()
 			if p.shutdown.Load() {
 				break
 			}
 
 			// TODO: we may need to handle specific errors later.
 			if err != nil {
-				p.closeStream()
-
-				s, ok := status.FromError(err)
-				// If the current server is not leader, then it will try to the next server.
-				if ok && s.Code() == codes.FailedPrecondition {
-					p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-				} else {
-					log.Debugf("disconnected from placement: %v", err)
-				}
-
-				newStream, newConn := p.establishStreamConn()
-				if newStream != nil {
-					p.clientLock.Lock()
-					p.clientConn = newConn
-					p.clientStream = newStream
-					p.clientLock.Unlock()
-
-					func() {
-						p.streamConnectedCond.L.Lock()
-						defer p.streamConnectedCond.L.Unlock()
-
-						p.streamConnAlive = true
-						p.streamConnectedCond.Broadcast()
-					}()
-				}
-
-				continue
+				p.client.disconnectFn(func() {
+					p.onPlacementError(err) // depending on the returned error a new server could be used
+				})
+			} else {
+				p.onPlacementOrder(resp)
 			}
-
-			p.onPlacementOrder(resp)
 		}
 	}()
 
@@ -227,15 +172,10 @@ func (p *ActorPlacement) Start() {
 	go func() {
 		defer p.shutdownConnLoop.Done()
 		for !p.shutdown.Load() {
-			// Wait until stream is connected.
-			func() {
-				p.streamConnectedCond.L.Lock()
-				defer p.streamConnectedCond.L.Unlock()
-
-				for !p.streamConnAlive && !p.shutdown.Load() {
-					p.streamConnectedCond.Wait()
-				}
-			}()
+			// Wait until stream is connected or shutdown is triggered.
+			p.client.waitUntil(func(streamAlive bool) bool {
+				return streamAlive || p.shutdown.Load()
+			})
 
 			if p.shutdown.Load() {
 				break
@@ -248,7 +188,7 @@ func (p *ActorPlacement) Start() {
 				// Then Placement will remove this host from the member list.
 				log.Debug("disconnecting from placement service by the unhealthy app.")
 
-				p.closeStream()
+				p.client.disconnect()
 				continue
 			}
 
@@ -260,29 +200,14 @@ func (p *ActorPlacement) Start() {
 				// Port is redundant because Name should include port number
 			}
 
-			var err error
-			// Do lock to avoid being called with CloseSend concurrently
-			func() {
-				p.clientLock.RLock()
-				defer p.clientLock.RUnlock()
-
-				// p.clientStream is nil when the app is unhealthy and
-				// daprd is disconnected from the placement service.
-				if p.clientStream != nil {
-					err = p.clientStream.Send(&host)
-				}
-			}()
-
+			err := p.client.send(&host)
 			if err != nil {
 				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
 				log.Debugf("failed to report status to placement service : %v", err)
 			}
 
 			// No delay if stream connection is not alive.
-			p.streamConnectedCond.L.Lock()
-			streamConnAlive := p.streamConnAlive
-			p.streamConnectedCond.L.Unlock()
-			if streamConnAlive {
+			if p.client.isConnected() {
 				diag.DefaultMonitoring.ActorStatusReported("send")
 				time.Sleep(statusReportHeartbeatInterval)
 			}
@@ -294,91 +219,86 @@ func (p *ActorPlacement) Start() {
 func (p *ActorPlacement) Stop() {
 	// CAS to avoid stop more than once.
 	if p.shutdown.CompareAndSwap(false, true) {
-		p.closeStream()
+		p.client.disconnect()
 	}
 	p.shutdownConnLoop.Wait()
 }
 
-func (p *ActorPlacement) closeStream() {
-	func() {
-		p.clientLock.Lock()
-		defer p.clientLock.Unlock()
+// WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.
+func (p *ActorPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error {
+	if !p.tableIsBlocked.Load() {
+		return nil
+	}
+	select {
+	case <-p.unblockSignal:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
-		if p.clientStream != nil {
-			p.clientStream.CloseSend()
-			p.clientStream = nil
-		}
+// LookupActor resolves to actor service instance address using consistent hashing table.
+func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string) {
+	p.placementTableLock.RLock()
+	defer p.placementTableLock.RUnlock()
 
-		if p.clientConn != nil {
-			p.clientConn.Close()
-			p.clientConn = nil
-		}
-	}()
+	if p.placementTables == nil {
+		return "", ""
+	}
 
-	func() {
-		p.streamConnectedCond.L.Lock()
-		defer p.streamConnectedCond.L.Unlock()
-
-		p.streamConnAlive = false
-		// Let waiters wake up from block
-		p.streamConnectedCond.Broadcast()
-	}()
+	t := p.placementTables.Entries[actorType]
+	if t == nil {
+		return "", ""
+	}
+	host, err := t.GetHost(actorID)
+	if err != nil || host == nil {
+		return "", ""
+	}
+	return host.Name, host.AppID
 }
 
 //nolint:nosnakecase
-func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusClient, *grpc.ClientConn) {
+func (p *ActorPlacement) establishStreamConn() (established bool) {
 	for !p.shutdown.Load() {
-		serverAddr := p.serverAddr[p.serverIndex.Load()]
-
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthFn() {
 			time.Sleep(placementReconnectInterval)
 			continue
 		}
 
+		serverAddr := p.serverAddr[p.serverIndex.Load()]
+
 		log.Debugf("try to connect to placement service: %s", serverAddr)
 
-		opts, err := daprCredentials.GetClientOptions(p.clientCert, security.TLSServerName)
-		if err != nil {
-			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
-			return nil, nil
+		err := p.client.connectToServer(serverAddr)
+		if err == errEstablishingTLSConn {
+			return false
 		}
 
-		if diag.DefaultGRPCMonitoring.IsEnabled() {
-			opts = append(
-				opts,
-				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
-		}
-
-		if len(p.serverAddr) == 1 && strings.HasPrefix(p.serverAddr[0], "dns:///") {
-			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
-			// With round robin load balancer, Dapr can find the leader automatically.
-			opts = append(opts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
-		}
-
-		conn, err := grpc.Dial(serverAddr, opts...)
-	NEXT_SERVER:
 		if err != nil {
 			log.Debugf("error connecting to placement service: %v", err)
-			if conn != nil {
-				conn.Close()
-			}
 			p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 			time.Sleep(placementReconnectInterval)
 			continue
 		}
 
-		client := v1pb.NewPlacementClient(conn)
-		stream, err := client.ReportDaprStatus(context.Background())
-		if err != nil {
-			goto NEXT_SERVER
-		}
-
-		log.Debugf("established connection to placement service at %s", conn.Target())
-		return stream, conn
+		log.Debugf("established connection to placement service at %s", p.client.clientConn.Target())
+		return true
 	}
 
-	return nil, nil
+	return false
+}
+
+// onPlacementError closes the current placement stream and reestablish the connection again,
+// uses a different placement server depending on the error code
+func (p *ActorPlacement) onPlacementError(err error) {
+	s, ok := status.FromError(err)
+	// If the current server is not leader, then it will try to the next server.
+	if ok && s.Code() == codes.FailedPrecondition {
+		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
+	} else {
+		log.Debugf("disconnected from placement: %v", err)
+	}
 }
 
 func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
@@ -456,29 +376,16 @@ func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	log.Infof("placement tables updated, version: %s", in.GetVersion())
 }
 
-// WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.
-func (p *ActorPlacement) WaitUntilPlacementTableIsReady() {
-	if p.tableIsBlocked.Load() {
-		<-p.unblockSignal
+// addDNSResolverPrefix add the `dns://` prefix to the given addresses
+func addDNSResolverPrefix(addr []string) []string {
+	resolvers := make([]string, 0, len(addr))
+	for _, a := range addr {
+		prefix := ""
+		host, _, err := net.SplitHostPort(a)
+		if err == nil && net.ParseIP(host) == nil {
+			prefix = "dns:///"
+		}
+		resolvers = append(resolvers, prefix+a)
 	}
-}
-
-// LookupActor resolves to actor service instance address using consistent hashing table.
-func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string) {
-	p.placementTableLock.RLock()
-	defer p.placementTableLock.RUnlock()
-
-	if p.placementTables == nil {
-		return "", ""
-	}
-
-	t := p.placementTables.Entries[actorType]
-	if t == nil {
-		return "", ""
-	}
-	host, err := t.GetHost(actorID)
-	if err != nil || host == nil {
-		return "", ""
-	}
-	return host.Name, host.AppID
+	return resolvers
 }

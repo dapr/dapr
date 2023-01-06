@@ -40,8 +40,8 @@ type LoadTester interface {
 //
 //nolint:interfacebloat
 type PlatformInterface interface {
-	setup() error
-	tearDown() error
+	Setup() error
+	TearDown() error
 
 	AddComponents(comps []kube.ComponentDescription) error
 	AddApps(apps []kube.AppDescription) error
@@ -103,10 +103,10 @@ func (tr *TestRunner) Start(m runnable) int {
 
 	// Setup testing platform
 	log.Println("Running setup...")
-	err := tr.Platform.setup()
+	err := tr.Platform.Setup()
 	defer func() {
 		log.Println("Running teardown...")
-		tr.tearDown()
+		tr.TearDown()
 	}()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.setup(), %s", err.Error())
@@ -147,9 +147,9 @@ func (tr *TestRunner) Start(m runnable) int {
 	return m.Run()
 }
 
-func (tr *TestRunner) tearDown() {
+func (tr *TestRunner) TearDown() {
 	// Tearing down platform
-	tr.Platform.tearDown()
+	tr.Platform.TearDown()
 
 	// TODO: Add the resources which will be tearing down
 }

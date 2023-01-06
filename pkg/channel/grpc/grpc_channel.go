@@ -103,7 +103,13 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		g.ch <- struct{}{}
 	}
 
-	md := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
+	// Read the request, including the data
+	pd, err := req.ProtoWithData()
+	if err != nil {
+		return nil, err
+	}
+
+	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.Metadata, true)
 
 	if g.appMetadataToken != "" {
 		md.Set(authConsts.APITokenHeader, g.appMetadataToken)
@@ -114,16 +120,14 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	var header, trailer grpcMetadata.MD
 
-	var opts []grpc.CallOption
-	opts = append(
-		opts,
+	opts := []grpc.CallOption{
 		grpc.Header(&header),
 		grpc.Trailer(&trailer),
-		grpc.MaxCallSendMsgSize(g.maxRequestBodySizeMB<<20),
-		grpc.MaxCallRecvMsgSize(g.maxRequestBodySizeMB<<20),
-	)
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySizeMB << 20),
+		grpc.MaxCallRecvMsgSize(g.maxRequestBodySizeMB << 20),
+	}
 
-	resp, err := g.appCallbackClient.OnInvoke(ctx, req.Message(), opts...)
+	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.Message, opts...)
 
 	if g.ch != nil {
 		<-g.ch
@@ -139,9 +143,11 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
 	}
 
-	rsp.WithHeaders(header).WithTrailers(trailer)
+	rsp.WithHeaders(header).
+		WithTrailers(trailer).
+		WithMessage(resp)
 
-	return rsp.WithMessage(resp), nil
+	return rsp, nil
 }
 
 // HealthProbe performs a health probe.
