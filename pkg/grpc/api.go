@@ -448,7 +448,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-  apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
+        apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
 	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage()).
