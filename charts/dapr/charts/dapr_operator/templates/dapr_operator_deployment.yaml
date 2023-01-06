@@ -176,6 +176,14 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
+{{- with .Values.global.issuerFilenames }}
+        - "--issuer-ca-filename"
+        - "{{ .ca }}"
+        - "--issuer-certificate-filename"
+        - "{{ .cert }}"
+        - "--issuer-key-filename"
+        - "{{ .key }}"
+{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: credentials

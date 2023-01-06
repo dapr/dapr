@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,14 +11,37 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package version
+package buildinfo
+
+import (
+	"strings"
+)
 
 // Values for these are injected by the build.
 var (
 	version = "edge"
 
 	gitcommit, gitversion string
+	features              string
 )
+
+// Set by the init function
+var featuresSlice []string
+
+func init() {
+	if featuresSlice != nil {
+		// Return if another init method (e.g. for a build tag) already initialized
+		return
+	}
+
+	// At initialization, parse the value of "features" into a slice
+	if features == "" {
+		featuresSlice = []string{}
+	} else {
+		featuresSlice = strings.Split(features, ",")
+	}
+	features = ""
+}
 
 // Version returns the Dapr version. This is either a semantic version
 // number or else, in the case of unreleased code, the string "edge".
@@ -34,4 +57,9 @@ func Commit() string {
 // GitVersion returns the git version for the code that Dapr was built from.
 func GitVersion() string {
 	return gitversion
+}
+
+// Features returns the list of features enabled for this build.
+func Features() []string {
+	return featuresSlice
 }

@@ -35,7 +35,7 @@ type defaultBulkPublisher struct {
 }
 
 // NewDefaultBulkPublisher returns a new defaultBulkPublisher from a PubSub.
-func NewDefaultBulkPublisher(p contribPubsub.PubSub) *defaultBulkPublisher {
+func NewDefaultBulkPublisher(p contribPubsub.PubSub) contribPubsub.BulkPublisher {
 	return &defaultBulkPublisher{
 		p: p,
 	}
