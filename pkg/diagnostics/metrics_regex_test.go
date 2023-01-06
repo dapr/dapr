@@ -3,9 +3,10 @@ package diagnostics
 import (
 	"testing"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestRegexRulesSingle(t *testing.T) {
