@@ -149,13 +149,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
-				var contenttype string
-				if message.ContentType != "" {
-					contenttype = message.ContentType
-				} else {
-					contenttype = "application/octet-stream"
+				if message.ContentType == "" {
+					message.ContentType = "application/octet-stream"
 				}
-				populateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, contenttype, namespacedConsumer, a.namespace)
+				populateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, message.ContentType, namespacedConsumer, a.namespace)
 			} else {
 				var cloudEvent map[string]interface{}
 				err = json.Unmarshal(message.Event, &cloudEvent)
@@ -189,6 +186,9 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
 				if rPath == "" && a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 					continue
+				}
+				if message.ContentType == "" {
+					message.ContentType = contenttype.CloudEventContentType
 				}
 				populateBulkSubcribedMessage(&(msg.Entries[i]), cloudEvent, &routePathBulkMessageMap, rPath, i, msg, true, psName, message.ContentType, namespacedConsumer, a.namespace)
 			}
@@ -347,7 +347,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	req := invokev1.NewInvokeMethodRequest(psm.path).
 		WithHTTPExtension(nethttp.MethodPost, "").
 		WithRawDataBytes(da).
-		WithContentType(contenttype.CloudEventContentType).
+		WithContentType(contenttype.JSONContentType).
 		WithCustomHTTPMetadata(psm.metadata)
 	defer req.Close()
 
