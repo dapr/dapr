@@ -75,6 +75,9 @@ type API interface {
 	// Dapr Service methods
 	runtimev1pb.DaprServer
 
+	// DaprAppCallback Service methods
+	runtimev1pb.DaprAppCallbackServer
+
 	// Methods internal to the object
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)

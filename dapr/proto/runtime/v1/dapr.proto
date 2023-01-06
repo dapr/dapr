@@ -119,12 +119,16 @@ service Dapr {
   // Terminate Workflow
   rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
 
+  // Shutdown the sidecar
+  rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}
+
+// DaprAppCallback service is an extension of the Dapr service to support the ConnectAppCallback method.
+// This is implemented as a separate service because it is registered only if the callback channel is enabled, and because ACL rules should not apply to this.
+service DaprAppCallback {
   // Request a new port to initiate a connection to the AppCallback.
   // Makes the Dapr sidecar start a listener on an ephemeral port.
   rpc ConnectAppCallback (ConnectAppCallbackRequest) returns (ConnectAppCallbackResponse) {}
-
-  // Shutdown the sidecar
-  rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.

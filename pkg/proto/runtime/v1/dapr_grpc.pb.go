@@ -86,9 +86,6 @@ type DaprClient interface {
 	GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
 	// Terminate Workflow
 	TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*TerminateWorkflowResponse, error)
-	// Request a new port to initiate a connection to the AppCallback.
-	// Makes the Dapr sidecar start a listener on an ephemeral port.
-	ConnectAppCallback(ctx context.Context, in *ConnectAppCallbackRequest, opts ...grpc.CallOption) (*ConnectAppCallbackResponse, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -403,15 +400,6 @@ func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateW
 	return out, nil
 }
 
-func (c *daprClient) ConnectAppCallback(ctx context.Context, in *ConnectAppCallbackRequest, opts ...grpc.CallOption) (*ConnectAppCallbackResponse, error) {
-	out := new(ConnectAppCallbackResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ConnectAppCallback", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *daprClient) Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/Shutdown", in, out, opts...)
@@ -487,9 +475,6 @@ type DaprServer interface {
 	GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
 	// Terminate Workflow
 	TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error)
-	// Request a new port to initiate a connection to the AppCallback.
-	// Makes the Dapr sidecar start a listener on an ephemeral port.
-	ConnectAppCallback(context.Context, *ConnectAppCallbackRequest) (*ConnectAppCallbackResponse, error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -590,9 +575,6 @@ func (UnimplementedDaprServer) GetWorkflowAlpha1(context.Context, *GetWorkflowRe
 }
 func (UnimplementedDaprServer) TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TerminateWorkflowAlpha1 not implemented")
-}
-func (UnimplementedDaprServer) ConnectAppCallback(context.Context, *ConnectAppCallbackRequest) (*ConnectAppCallbackResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ConnectAppCallback not implemented")
 }
 func (UnimplementedDaprServer) Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
@@ -1170,24 +1152,6 @@ func _Dapr_TerminateWorkflowAlpha1_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_ConnectAppCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConnectAppCallbackRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaprServer).ConnectAppCallback(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.Dapr/ConnectAppCallback",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).ConnectAppCallback(ctx, req.(*ConnectAppCallbackRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
@@ -1334,10 +1298,6 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_TerminateWorkflowAlpha1_Handler,
 		},
 		{
-			MethodName: "ConnectAppCallback",
-			Handler:    _Dapr_ConnectAppCallback_Handler,
-		},
-		{
 			MethodName: "Shutdown",
 			Handler:    _Dapr_Shutdown_Handler,
 		},
@@ -1349,5 +1309,93 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+	Metadata: "dapr/proto/runtime/v1/dapr.proto",
+}
+
+// DaprAppCallbackClient is the client API for DaprAppCallback service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type DaprAppCallbackClient interface {
+	// Request a new port to initiate a connection to the AppCallback.
+	// Makes the Dapr sidecar start a listener on an ephemeral port.
+	ConnectAppCallback(ctx context.Context, in *ConnectAppCallbackRequest, opts ...grpc.CallOption) (*ConnectAppCallbackResponse, error)
+}
+
+type daprAppCallbackClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewDaprAppCallbackClient(cc grpc.ClientConnInterface) DaprAppCallbackClient {
+	return &daprAppCallbackClient{cc}
+}
+
+func (c *daprAppCallbackClient) ConnectAppCallback(ctx context.Context, in *ConnectAppCallbackRequest, opts ...grpc.CallOption) (*ConnectAppCallbackResponse, error) {
+	out := new(ConnectAppCallbackResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.DaprAppCallback/ConnectAppCallback", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DaprAppCallbackServer is the server API for DaprAppCallback service.
+// All implementations should embed UnimplementedDaprAppCallbackServer
+// for forward compatibility
+type DaprAppCallbackServer interface {
+	// Request a new port to initiate a connection to the AppCallback.
+	// Makes the Dapr sidecar start a listener on an ephemeral port.
+	ConnectAppCallback(context.Context, *ConnectAppCallbackRequest) (*ConnectAppCallbackResponse, error)
+}
+
+// UnimplementedDaprAppCallbackServer should be embedded to have forward compatible implementations.
+type UnimplementedDaprAppCallbackServer struct {
+}
+
+func (UnimplementedDaprAppCallbackServer) ConnectAppCallback(context.Context, *ConnectAppCallbackRequest) (*ConnectAppCallbackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConnectAppCallback not implemented")
+}
+
+// UnsafeDaprAppCallbackServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to DaprAppCallbackServer will
+// result in compilation errors.
+type UnsafeDaprAppCallbackServer interface {
+	mustEmbedUnimplementedDaprAppCallbackServer()
+}
+
+func RegisterDaprAppCallbackServer(s grpc.ServiceRegistrar, srv DaprAppCallbackServer) {
+	s.RegisterService(&DaprAppCallback_ServiceDesc, srv)
+}
+
+func _DaprAppCallback_ConnectAppCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConnectAppCallbackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprAppCallbackServer).ConnectAppCallback(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.DaprAppCallback/ConnectAppCallback",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprAppCallbackServer).ConnectAppCallback(ctx, req.(*ConnectAppCallbackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// DaprAppCallback_ServiceDesc is the grpc.ServiceDesc for DaprAppCallback service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var DaprAppCallback_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "dapr.proto.runtime.v1.DaprAppCallback",
+	HandlerType: (*DaprAppCallbackServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ConnectAppCallback",
+			Handler:    _DaprAppCallback_ConnectAppCallback_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "dapr/proto/runtime/v1/dapr.proto",
 }
