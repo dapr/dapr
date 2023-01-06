@@ -18,6 +18,9 @@ import (
 
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // appIDKey is a tag key for App ID.
@@ -37,10 +40,12 @@ var (
 	DefaultComponentMonitoring = newComponentMetrics()
 	// DefaultResiliencyMonitoring holds resiliency specific metrics.
 	DefaultResiliencyMonitoring = newResiliencyMetrics()
+	// Rules holds regex expressions for metrics labels
+	Rules map[string]string
 )
 
 // InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string) error {
+func InitMetrics(appID, namespace string, rules []config.MetricsRule) error {
 	if err := DefaultMonitoring.Init(appID); err != nil {
 		return err
 	}
@@ -63,6 +68,5 @@ func InitMetrics(appID, namespace string) error {
 
 	// Set reporting period of views
 	view.SetReportingPeriod(DefaultReportingPeriod)
-
-	return nil
+	return utils.CreateRulesMap(rules)
 }

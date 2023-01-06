@@ -1933,69 +1933,139 @@ func TestPublishTopic(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
-	_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
+	t.Run("err: empty publish event request", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
+	t.Run("err: publish event request with empty topic", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+		})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Nil(t, err)
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
+	t.Run("no err: publish event request with topic and pubsub alone", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+		})
+		assert.Nil(t, err)
 	})
-	assert.Equal(t, codes.Internal, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-found",
+	t.Run("err: publish event request with error-topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+		})
+		assert.Equal(t, codes.Internal, status.Code(err))
 	})
-	assert.Equal(t, codes.NotFound, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-allowed",
+	t.Run("err: publish event request with err-not-found topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-found",
+		})
+		assert.Equal(t, codes.NotFound, status.Code(err))
 	})
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
+	t.Run("err: publish event request with err-not-allowed topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-allowed",
+		})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
+	t.Run("err: empty bulk publish event request", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Nil(t, err)
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
+	t.Run("err: bulk publish event request with duplicate entry Ids", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries: []*runtimev1pb.BulkPublishRequestEntry{
+				{
+					Event:       []byte("data"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+				{
+					Event:       []byte("data 2"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+			},
+		})
+		assert.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		assert.Contains(t, err.Error(), "entryId is duplicated")
 	})
-	assert.Equal(t, codes.Internal, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-found",
+	t.Run("err: bulk publish event request with missing entry Ids", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries: []*runtimev1pb.BulkPublishRequestEntry{
+				{
+					Event:       []byte("data"),
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+				{
+					Event:       []byte("data 2"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+			},
+		})
+		assert.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		assert.Contains(t, err.Error(), "not present for entry")
 	})
-	assert.Equal(t, codes.NotFound, status.Code(err))
+	t.Run("err: bulk publish event request with pubsub and empty topic", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+		})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-allowed",
+	t.Run("no err: bulk publish event request with pubsub, topic and empty entries", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+		})
+		assert.Nil(t, err)
 	})
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	t.Run("err: bulk publish event request with error-topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+		})
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("err: bulk publish event request with err-not-found topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-found",
+		})
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("err: bulk publish event request with err-not-allowed topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-allowed",
+		})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	})
 }
 
 func TestBulkPublish(t *testing.T) {
@@ -2051,33 +2121,39 @@ func TestBulkPublish(t *testing.T) {
 		{EntryId: "4", Event: []byte("data4")},
 	}
 
-	res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
-		Entries:    sampleEntries,
+	t.Run("no failures", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries:    sampleEntries,
+		})
+		assert.Nil(t, err)
+		assert.Empty(t, res.FailedEntries)
 	})
-	assert.Nil(t, err)
-	assert.Empty(t, res.FailedEntries)
+	t.Run("all failures from component", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+			Entries:    sampleEntries,
+		})
+		t.Log(res)
+		// Full failure from component, so expecting no error
+		assert.Nil(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 4, len(res.FailedEntries))
+	})
 
-	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
-		Entries:    sampleEntries,
+	t.Run("partial failures from component", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "even-error-topic",
+			Entries:    sampleEntries,
+		})
+		// Partial failure, so expecting no error
+		assert.Nil(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 2, len(res.FailedEntries))
 	})
-	t.Log(res)
-	// Partial failure, so expecting no error
-	assert.Nil(t, err)
-	assert.NotNil(t, res)
-	assert.Equal(t, 4, len(res.FailedEntries))
-	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "even-error-topic",
-		Entries:    sampleEntries,
-	})
-	// Partial failure, so expecting no error
-	assert.Nil(t, err)
-	assert.NotNil(t, res)
-	assert.Equal(t, 2, len(res.FailedEntries))
 }
 
 func TestShutdownEndpoints(t *testing.T) {
