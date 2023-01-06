@@ -63,6 +63,7 @@ type Config struct {
 	InternalGRPCPort             int
 	ApplicationPort              int
 	EnableCallbackChannel        bool
+	CallbackChannelPort          int
 	APIListenAddresses           []string
 	ApplicationProtocol          Protocol
 	Mode                         modes.DaprMode
@@ -103,6 +104,7 @@ type NewRuntimeConfigOpts struct {
 	PublicPort                   *int
 	AppPort                      int
 	EnableCallbackChannel        bool
+	CallbackChannelPort          int
 	ProfilePort                  int
 	EnableProfiling              bool
 	MaxConcurrency               int
@@ -142,6 +144,7 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		APIGRPCPort:           opts.APIGRPCPort,
 		ApplicationPort:       opts.AppPort,
 		EnableCallbackChannel: opts.EnableCallbackChannel,
+		CallbackChannelPort:   opts.CallbackChannelPort,
 		ProfilePort:           opts.ProfilePort,
 		APIListenAddresses:    opts.APIListenAddresses,
 		ApplicationProtocol:   Protocol(opts.AppProtocol),

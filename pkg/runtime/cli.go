@@ -54,8 +54,9 @@ func FromFlags() (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
-	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
+	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	enableCallbackChannel := flag.Bool("enable-callback-channel", false, "Use the callback channel for communicating with the app")
+	callbackChannelPortPtr := flag.String("callback-channel-port", "0", "The port for the callback channel; if 0 (default), use a random one")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
 	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
@@ -229,25 +230,37 @@ func FromFlags() (*DaprRuntime, error) {
 		concurrency = *appMaxConcurrency
 	}
 
-	var appPrtcl string
+	var appProtocol string
 	{
-		p := strings.ToLower(*appProtocol)
+		p := strings.ToLower(*appProtocolPtr)
 		switch p {
 		case string(HTTPProtocol),
 			string(GRPCProtocol):
-			appPrtcl = p
+			appProtocol = p
 		case "":
-			appPrtcl = string(HTTPProtocol)
+			appProtocol = string(HTTPProtocol)
 		default:
-			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocol)
+			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocolPtr)
 		}
 	}
 
+	var callbackChannelPort int
 	if *enableCallbackChannel {
 		if applicationPort > 0 {
 			return nil, errors.New("flag 'app-port' must not be defined when 'enable-callback-channel' is set")
 		}
-		appPrtcl = string(GRPCProtocol)
+
+		// When the callback channel is enabled, override the app protocol to force the use of gRPC
+		// No need to warn the user since Dapr won't attempt making connections to the app anyways
+		appProtocol = string(GRPCProtocol)
+
+		// Parse the port used for the callback channel
+		if callbackChannelPortPtr != nil && *callbackChannelPortPtr != "" {
+			callbackChannelPort, _ = strconv.Atoi(*callbackChannelPortPtr)
+		}
+		if callbackChannelPort < 1 {
+			callbackChannelPort = 0
+		}
 	}
 
 	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
@@ -288,7 +301,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AllowedOrigins:               *allowedOrigins,
 		GlobalConfig:                 *config,
 		ComponentsPath:               *componentsPath,
-		AppProtocol:                  appPrtcl,
+		AppProtocol:                  appProtocol,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,
 		InternalGRPCPort:             daprInternalGRPC,
@@ -297,6 +310,7 @@ func FromFlags() (*DaprRuntime, error) {
 		PublicPort:                   publicPort,
 		AppPort:                      applicationPort,
 		EnableCallbackChannel:        *enableCallbackChannel,
+		CallbackChannelPort:          callbackChannelPort,
 		ProfilePort:                  profPort,
 		EnableProfiling:              *enableProfiling,
 		MaxConcurrency:               concurrency,

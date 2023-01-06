@@ -210,7 +210,7 @@ type DaprRuntime struct {
 	appHealth                 *apphealth.AppHealth
 	appHealthReady            func() // Invoked the first time the app health becomes ready
 	appHealthLock             *sync.Mutex
-	onAppCallbackConnection   func(conn net.Conn)
+	appCallbackListener       *appCallbackListener
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -502,16 +502,18 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		// This also enables the "ConnectAppCallback" method
 		a.daprGRPCAPI.SetCreateAppCallbackListener(a.createAppCallbackListener)
 
-		// Set the callback for when new connections are established
+		// Create the appCallbackListener and set the callback for when new connections are established
 		// On the first connection only we also need to send a signal to using "callbackChannelConnected" - a few lines below, this method will block waiting for the signal to indicate that a connection was established
 		callbackChannelConnected = make(chan struct{})
 		firstCallbackConnection := sync.Once{}
-		a.onAppCallbackConnection = func(conn net.Conn) {
-			a.grpc.SetLocalConnCreateFn(a.grpc.LocalConnCreatorFromNetConn(conn))
-			firstCallbackConnection.Do(func() {
-				close(callbackChannelConnected)
-				callbackChannelConnected = nil
-			})
+		a.appCallbackListener = &appCallbackListener{
+			OnAppCallbackConnection: func(conn net.Conn) {
+				a.grpc.SetLocalConnCreateFn(a.grpc.LocalConnCreatorFromNetConn(conn))
+				firstCallbackConnection.Do(func() {
+					close(callbackChannelConnected)
+					callbackChannelConnected = nil
+				})
+			},
 		}
 	}
 
