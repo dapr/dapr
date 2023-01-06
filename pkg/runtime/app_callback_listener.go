@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -120,11 +120,14 @@ func (acl *appCallbackListener) Start(port int) (int, error) {
 				log.Errorf("Error while trying to accept connection to the app callback listener: %v", v)
 			case net.Conn:
 				log.Infof("Established client connection on the app callback listener from %v", v.RemoteAddr())
-				acl.OnAppCallbackConnection(v)
+				if acl.OnAppCallbackConnection != nil {
+					acl.OnAppCallbackConnection(v)
+				}
 			}
 		}
 
 		// Close the listener - whether we have a connection or not, we don't need it anymore
+		log.Debugf("Closing app callback listener on port %d", port)
 		innerErr = lis.Close()
 		if innerErr != nil {
 			log.Errorf("Failed to close app callback listener: %v", innerErr)
