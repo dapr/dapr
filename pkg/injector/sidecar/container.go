@@ -62,13 +62,31 @@ var (
 
 // GetSidecarContainer returns the Container object for the sidecar.
 func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
-	appPort, err := cfg.Annotations.GetInt32(annotations.KeyAppPort)
-	if err != nil {
-		return nil, err
-	}
-	appPortStr := ""
-	if appPort > 0 {
-		appPortStr = strconv.Itoa(int(appPort))
+	var (
+		appPortStr             string
+		callbackChannelPortStr string
+		err                    error
+	)
+
+	enableCallbackChannel := cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableCallbackChannel, false)
+	if !enableCallbackChannel {
+		var appPort int32
+		appPort, err = cfg.Annotations.GetInt32(annotations.KeyAppPort)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse value '%s' for '%s': %w", cfg.Annotations[annotations.KeyAppPort], annotations.KeyAppPort, err)
+		}
+		if appPort > 0 {
+			appPortStr = strconv.Itoa(int(appPort))
+		}
+	} else {
+		var callbackChannelPort int32
+		callbackChannelPort, err = cfg.Annotations.GetInt32(annotations.KeyCallbackChannelPort)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse value '%s' for '%s': %w", cfg.Annotations[annotations.KeyCallbackChannelPort], annotations.KeyCallbackChannelPort, err)
+		}
+		if callbackChannelPort > 0 {
+			callbackChannelPortStr = strconv.Itoa(int(callbackChannelPort))
+		}
 	}
 
 	metricsEnabled := cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableMetrics, annotations.DefaultEnableMetric)
@@ -128,7 +146,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-internal-grpc-port", strconv.Itoa(SidecarInternalGRPCPort),
 		"--dapr-listen-addresses", sidecarListenAddresses,
 		"--dapr-public-port", strconv.Itoa(SidecarPublicPort),
-		"--app-port", appPortStr,
 		"--app-id", cfg.AppID,
 		"--control-plane-address", cfg.ControlPlaneAddress,
 		"--app-protocol", cfg.Annotations.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol),
@@ -143,6 +160,16 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
 		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(disableBuiltinK8sSecretStore),
+	}
+
+	if appPortStr != "" {
+		args = append(args, "--app-port", appPortStr)
+	}
+	if enableCallbackChannel {
+		args = append(args, "--enable-callback-channel")
+		if callbackChannelPortStr != "" {
+			args = append(args, "--callback-channel-port", callbackChannelPortStr)
+		}
 	}
 
 	// --enable-api-logging is set only if there's an explicit annotation (true or false) for that

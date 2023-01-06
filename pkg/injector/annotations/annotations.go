@@ -33,6 +33,8 @@ const (
 	KeyEnableDebug                                      = "dapr.io/enable-debug"
 	KeyDebugPort                                        = "dapr.io/debug-port"
 	KeyEnv                                              = "dapr.io/env"
+	KeyEnableCallbackChannel                            = "dapr.io/enable-callback-channel"
+	KeyCallbackChannelPort                              = "dapr.io/callback-channel-port"
 	KeyCPULimit                                         = "dapr.io/sidecar-cpu-limit"
 	KeyMemoryLimit                                      = "dapr.io/sidecar-memory-limit"
 	KeyCPURequest                                       = "dapr.io/sidecar-cpu-request"
