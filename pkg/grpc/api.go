@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"sort"
 	"strconv"
 	"sync"
@@ -80,7 +79,7 @@ type API interface {
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
-	SetOnAppCallbackConnection(func(conn net.Conn))
+	SetCreateAppCallbackListener(func() (int, error))
 }
 
 type api struct {
@@ -109,7 +108,7 @@ type api struct {
 	getComponentsCapabilitesFn func() map[string][]string
 	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
 	daprRunTimeVersion         string
-	onAppCallbackConnection    func(conn net.Conn)
+	createAppCallbackListener  func() (int, error)
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {

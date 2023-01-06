@@ -4002,6 +4002,7 @@ type ConnectAppCallbackResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Port clients should connect to
 	Port int32 `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
 }
 

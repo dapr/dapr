@@ -716,5 +716,6 @@ message ConnectAppCallbackRequest {
 }
 
 message ConnectAppCallbackResponse {
+  // Port clients should connect to
   int32 port = 1;
 }
