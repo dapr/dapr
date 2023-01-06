@@ -14,16 +14,15 @@ limitations under the License.
 package bindings_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	b "github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/bindings"
+	"github.com/dapr/kit/logger"
 )
 
 type (
@@ -90,7 +89,7 @@ func TestRegistry(t *testing.T) {
 		assert.False(t, testRegistry.HasInputBinding(componentName, "v1"))
 		assert.False(t, testRegistry.HasInputBinding(componentName, "v2"))
 		p, actualError := testRegistry.CreateInputBinding(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find input binding %s/v1", componentName)
+		expectedError := fmt.Errorf("couldn't find input binding %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)
@@ -144,7 +143,7 @@ func TestRegistry(t *testing.T) {
 		assert.False(t, testRegistry.HasOutputBinding(componentName, "v1"))
 		assert.False(t, testRegistry.HasOutputBinding(componentName, "v2"))
 		p, actualError := testRegistry.CreateOutputBinding(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find output binding %s/v1", componentName)
+		expectedError := fmt.Errorf("couldn't find output binding %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)

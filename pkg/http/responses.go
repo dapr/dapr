@@ -34,6 +34,18 @@ type BulkGetResponse struct {
 	Error    string            `json:"error,omitempty"`
 }
 
+// BulkPublishResponseEntry is an object representing a single entry in bulk publish response
+type BulkPublishResponseFailedEntry struct {
+	EntryId string `json:"entryId"` //nolint:stylecheck
+	Error   string `json:"error,omitempty"`
+}
+
+// BulkPublishResponse is the response for bulk publishing events
+type BulkPublishResponse struct {
+	FailedEntries []BulkPublishResponseFailedEntry `json:"failedEntries"`
+	ErrorCode     string                           `json:"errorCode,omitempty"`
+}
+
 // QueryResponse is the response object for querying state.
 type QueryResponse struct {
 	Results  []QueryItem       `json:"results"`

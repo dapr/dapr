@@ -14,6 +14,7 @@ limitations under the License.
 package state
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
@@ -79,16 +80,22 @@ func (ss *grpcStateStore) Features() []state.Feature {
 	return ss.features
 }
 
+// Returns the component metadata options
+func (ss *grpcStateStore) GetComponentMetadata() map[string]string {
+	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
+	return map[string]string{}
+}
+
 // Delete performs a delete operation.
-func (ss *grpcStateStore) Delete(req *state.DeleteRequest) error {
-	_, err := ss.Client.Delete(ss.Context, toDeleteRequest(req))
+func (ss *grpcStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
+	_, err := ss.Client.Delete(ctx, toDeleteRequest(req))
 
 	return err
 }
 
 // Get performs a get on the state store.
-func (ss *grpcStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
-	response, err := ss.Client.Get(ss.Context, toGetRequest(req))
+func (ss *grpcStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
+	response, err := ss.Client.Get(ctx, toGetRequest(req))
 	if err != nil {
 		return nil, err
 	}
@@ -101,17 +108,17 @@ func (ss *grpcStateStore) Get(req *state.GetRequest) (*state.GetResponse, error)
 }
 
 // Set performs a set operation on the state store.
-func (ss *grpcStateStore) Set(req *state.SetRequest) error {
+func (ss *grpcStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	protoRequest, err := toSetRequest(req)
 	if err != nil {
 		return err
 	}
-	_, err = ss.Client.Set(ss.Context, protoRequest)
+	_, err = ss.Client.Set(ctx, protoRequest)
 	return err
 }
 
 // BulkDelete performs a delete operation for many keys at once.
-func (ss *grpcStateStore) BulkDelete(reqs []state.DeleteRequest) error {
+func (ss *grpcStateStore) BulkDelete(ctx context.Context, reqs []state.DeleteRequest) error {
 	protoRequests := make([]*proto.DeleteRequest, len(reqs))
 
 	for idx := range reqs {
@@ -122,12 +129,12 @@ func (ss *grpcStateStore) BulkDelete(reqs []state.DeleteRequest) error {
 		Items: protoRequests,
 	}
 
-	_, err := ss.Client.BulkDelete(ss.Context, bulkDeleteRequest)
+	_, err := ss.Client.BulkDelete(ctx, bulkDeleteRequest)
 	return err
 }
 
 // BulkGet performs a get operation for many keys at once.
-func (ss *grpcStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	protoRequests := make([]*proto.GetRequest, len(req))
 	for idx := range req {
 		protoRequests[idx] = toGetRequest(&req[idx])
@@ -137,7 +144,7 @@ func (ss *grpcStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGet
 		Items: protoRequests,
 	}
 
-	bulkGetResponse, err := ss.Client.BulkGet(ss.Context, bulkGetRequest)
+	bulkGetResponse, err := ss.Client.BulkGet(ctx, bulkGetRequest)
 	if err != nil {
 		return false, nil, err
 	}
@@ -157,7 +164,7 @@ func (ss *grpcStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGet
 }
 
 // BulkSet performs a set operation for many keys at once.
-func (ss *grpcStateStore) BulkSet(req []state.SetRequest) error {
+func (ss *grpcStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
 	requests := []*proto.SetRequest{}
 	for idx := range req {
 		protoRequest, err := toSetRequest(&req[idx])
@@ -166,20 +173,20 @@ func (ss *grpcStateStore) BulkSet(req []state.SetRequest) error {
 		}
 		requests = append(requests, protoRequest)
 	}
-	_, err := ss.Client.BulkSet(ss.Context, &proto.BulkSetRequest{
+	_, err := ss.Client.BulkSet(ctx, &proto.BulkSetRequest{
 		Items: requests,
 	})
 	return err
 }
 
 // Query performsn a query in the state store
-func (ss *grpcStateStore) Query(req *state.QueryRequest) (*state.QueryResponse, error) {
+func (ss *grpcStateStore) Query(ctx context.Context, req *state.QueryRequest) (*state.QueryResponse, error) {
 	q, err := toQuery(req.Query)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := ss.Client.Query(ss.Context, &proto.QueryRequest{
+	resp, err := ss.Client.Query(ctx, &proto.QueryRequest{
 		Query:    q,
 		Metadata: req.Metadata,
 	})
@@ -190,7 +197,7 @@ func (ss *grpcStateStore) Query(req *state.QueryRequest) (*state.QueryResponse, 
 }
 
 // Multi executes operation in a transactional environment
-func (ss *grpcStateStore) Multi(request *state.TransactionalStateRequest) error {
+func (ss *grpcStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
 	operations := make([]*proto.TransactionalStateOperation, len(request.Operations))
 	for idx, op := range request.Operations {
 		transactOp, err := toTransactOperation(op)
@@ -199,7 +206,7 @@ func (ss *grpcStateStore) Multi(request *state.TransactionalStateRequest) error 
 		}
 		operations[idx] = transactOp
 	}
-	_, err := ss.Client.Transact(ss.Context, &proto.TransactionalStateRequest{
+	_, err := ss.Client.Transact(ctx, &proto.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   request.Metadata,
 	})

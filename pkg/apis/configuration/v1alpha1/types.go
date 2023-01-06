@@ -57,6 +57,8 @@ type ConfigurationSpec struct {
 	APISpec APISpec `json:"api,omitempty"`
 	// +optional
 	ComponentsSpec ComponentsSpec `json:"components,omitempty"`
+	// +optional
+	LoggingSpec LoggingSpec `json:"logging,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -153,6 +155,20 @@ type ZipkinSpec struct {
 // MetricSpec defines metrics configuration.
 type MetricSpec struct {
 	Enabled bool `json:"enabled"`
+	// +optional
+	Rules []MetricsRule `json:"rules"`
+}
+
+// MetricsRule defines configuration options for a metric.
+type MetricsRule struct {
+	Name   string        `json:"name"`
+	Labels []MetricLabel `json:"labels"`
+}
+
+// MetricsLabel defines an object that allows to set regex expressions for a label.
+type MetricLabel struct {
+	Name  string            `json:"name"`
+	Regex map[string]string `json:"regex"`
 }
 
 // AppPolicySpec defines the policy data structure for each app.
@@ -207,6 +223,25 @@ type ConfigurationList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Configuration `json:"items"`
+}
+
+// LoggingSpec defines the configuration for logging.
+type LoggingSpec struct {
+	// Configure API logging.
+	// +optional
+	APILogging APILoggingSpec `json:"apiLogging" yaml:"apiLogging"`
+}
+
+// APILoggingSpec defines the configuration for API logging.
+type APILoggingSpec struct {
+	// Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly.
+	// The default value is false.
+	// +optional
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// If true, health checks are not reported in API logs. Default: false.
+	// This option has no effect if API logging is disabled.
+	// +optional
+	OmitHealthChecks bool `json:"omitHealthChecks" yaml:"omitHealthChecks"`
 }
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value.

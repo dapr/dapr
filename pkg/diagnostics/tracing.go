@@ -170,7 +170,8 @@ func TraceStateFromW3CString(h string) *trace.TraceState {
 
 	ts, err := trace.ParseTraceState(h)
 	if err != nil {
-		return nil
+		ts = trace.TraceState{}
+		return &ts
 	}
 
 	return &ts

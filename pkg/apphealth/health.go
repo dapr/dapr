@@ -16,9 +16,8 @@ package apphealth
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"time"
-
-	"go.uber.org/atomic"
 
 	"github.com/dapr/kit/logger"
 )
@@ -55,12 +54,16 @@ type ChangeCallback func(status uint8)
 
 // NewAppHealth creates a new AppHealth object.
 func NewAppHealth(config *Config, probeFn ProbeFunction) *AppHealth {
+	// Initial state is unhealthy until we validate it
+	failureCount := &atomic.Int32{}
+	failureCount.Store(config.Threshold)
+
 	return &AppHealth{
 		config:            config,
 		probeFn:           probeFn,
 		report:            make(chan uint8, 1),
-		failureCount:      atomic.NewInt32(config.Threshold), // Initial state is unhealthy until we validate it
-		lastReport:        atomic.NewInt64(0),
+		failureCount:      failureCount,
+		lastReport:        &atomic.Int64{},
 		reportMinInterval: 1e6,
 		queue:             make(chan struct{}, 1),
 	}
@@ -185,7 +188,7 @@ func (h *AppHealth) ratelimitReports() bool {
 			return false
 		}
 
-		swapped = h.lastReport.CAS(prev, now)
+		swapped = h.lastReport.CompareAndSwap(prev, now)
 	}
 
 	// If we couldn't do the swap after 2 attempts, just return false
@@ -209,7 +212,7 @@ func (h *AppHealth) setResult(successful bool) {
 	}
 
 	// Count the failure
-	failures := h.failureCount.Inc()
+	failures := h.failureCount.Add(1)
 
 	// First, check if we've overflown
 	if failures < 0 {

@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/config"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 var endpoints = map[string][]string{
@@ -40,6 +40,9 @@ var endpoints = map[string][]string{
 	},
 	"publish.v1": {
 		"/dapr.proto.runtime.v1.Dapr/PublishEvent",
+	},
+	"publish.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1",
 	},
 	"bindings.v1": {
 		"/dapr.proto.runtime.v1.Dapr/InvokeBinding",
@@ -73,6 +76,11 @@ var endpoints = map[string][]string{
 	"unlock.v1alpha1": {
 		"/dapr.proto.runtime.v1.Dapr/UnlockAlpha1",
 	},
+	"workflows.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/StartWorkflowAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/GetWorkflowAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/TerminateWorkflowAlpha1",
+	},
 	"shutdown.v1": {
 		"/dapr.proto.runtime.v1.Dapr/Shutdown",
 	},
@@ -105,7 +113,7 @@ func setAPIEndpointsMiddlewareUnary(rules []config.APIAccessRule) grpc.UnaryServ
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		_, ok := allowed[info.FullMethod]
 		if !ok {
-			return nil, v1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+			return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
 		}
 
 		return handler(ctx, req)

@@ -65,6 +65,9 @@ const (
 	errorInfoDomain            = "dapr.io"
 	errorInfoHTTPCodeMetadata  = "http.code"
 	errorInfoHTTPErrorMetadata = "http.error_message"
+
+	CallerIDHeader = DaprHeaderPrefix + "caller-app-id"
+	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
 )
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
@@ -78,18 +81,22 @@ func IsJSONContentType(contentType string) bool {
 
 // MetadataToInternalMetadata converts metadata to dapr internal metadata map.
 func MetadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
-	internalMD := DaprInternalMetadata{}
+	internalMD := make(DaprInternalMetadata, len(md))
 	for k, values := range md {
-		listValue := internalv1pb.ListStringValue{}
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
+			vals := make([]string, len(values))
 			// binary key requires base64 encoded.
-			for _, val := range values {
-				listValue.Values = append(listValue.Values, base64.StdEncoding.EncodeToString([]byte(val)))
+			for i, val := range values {
+				vals[i] = base64.StdEncoding.EncodeToString([]byte(val))
+			}
+			internalMD[k] = &internalv1pb.ListStringValue{
+				Values: vals,
 			}
 		} else {
-			listValue.Values = append(listValue.Values, values...)
+			internalMD[k] = &internalv1pb.ListStringValue{
+				Values: values,
+			}
 		}
-		internalMD[k] = &listValue
 	}
 
 	return internalMD
@@ -161,7 +168,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 		}
 
 		if httpHeaderConversion && isPermanentHTTPHeader(k) {
-			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
+			keyName = DaprHeaderPrefix + keyName
 		}
 
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
@@ -430,15 +437,6 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 			md.Set(tracebinMetadata, string(decoded))
 		}
 	}
-}
-
-func cloneBytes(data []byte) []byte {
-	if data == nil {
-		return nil
-	}
-	cloneData := make([]byte, len(data))
-	copy(cloneData, data)
-	return cloneData
 }
 
 // ProtobufToJSON serializes Protobuf message to json format.

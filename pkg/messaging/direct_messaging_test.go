@@ -14,11 +14,14 @@ limitations under the License.
 package messaging
 
 import (
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 
+	nr "github.com/dapr/components-contrib/nameresolution"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -29,8 +32,9 @@ func newDirectMessaging() *directMessaging {
 func TestDestinationHeaders(t *testing.T) {
 	t.Run("destination header present", func(t *testing.T) {
 		appID := "test1"
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.addDestinationAppIDHeaderToMetadata(appID, req)
@@ -39,10 +43,28 @@ func TestDestinationHeaders(t *testing.T) {
 	})
 }
 
+func TestCallerAndCalleeHeaders(t *testing.T) {
+	t.Run("caller and callee header present", func(t *testing.T) {
+		callerAppID := "caller-app"
+		calleeAppID := "callee-app"
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
+
+		dm := newDirectMessaging()
+		dm.addCallerAndCalleeAppIDHeaderToMetadata(callerAppID, calleeAppID, req)
+		actualCallerAppID := req.Metadata()[invokev1.CallerIDHeader]
+		actualCalleeAppID := req.Metadata()[invokev1.CalleeIDHeader]
+		assert.Equal(t, callerAppID, actualCallerAppID.Values[0])
+		assert.Equal(t, calleeAppID, actualCalleeAppID.Values[0])
+	})
+}
+
 func TestForwardedHeaders(t *testing.T) {
 	t.Run("forwarded headers present", func(t *testing.T) {
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.hostAddress = "1"
@@ -61,12 +83,13 @@ func TestForwardedHeaders(t *testing.T) {
 	})
 
 	t.Run("forwarded headers get appended", func(t *testing.T) {
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{
-			fasthttp.HeaderXForwardedFor:  {"originalXForwardedFor"},
-			fasthttp.HeaderXForwardedHost: {"originalXForwardedHost"},
-			fasthttp.HeaderForwarded:      {"originalForwarded"},
-		})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{
+				fasthttp.HeaderXForwardedFor:  {"originalXForwardedFor"},
+				fasthttp.HeaderXForwardedHost: {"originalXForwardedHost"},
+				fasthttp.HeaderForwarded:      {"originalForwarded"},
+			})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.hostAddress = "1"
@@ -118,5 +141,93 @@ func TestKubernetesNamespace(t *testing.T) {
 		_, _, err := dm.requestAppIDAndNamespace(appID)
 
 		assert.Error(t, err)
+	})
+}
+
+type testResolver struct{}
+
+func (r testResolver) Init(metadata nr.Metadata) error {
+	// nop
+	return nil
+}
+
+func (r testResolver) ResolveID(req nr.ResolveRequest) (string, error) {
+	switch req.ID {
+	case "okapp":
+		return "12.34.56.78", nil
+	case "emptyapp":
+		return "", nil
+	case "failapp":
+		return "", errors.New("failed")
+	default:
+		panic("not a valid case")
+	}
+}
+
+func Test_directMessaging_getRemoteApp(t *testing.T) {
+	const defaultNamespace = "mynamespace"
+	type args struct {
+		appID string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    remoteApp
+		wantErr bool
+	}{
+		{
+			name: "app with no namespace",
+			args: args{appID: "okapp"},
+			want: remoteApp{id: "okapp", namespace: defaultNamespace, address: "12.34.56.78"},
+		},
+		{
+			name: "app with namespace",
+			args: args{appID: "okapp.ns2"},
+			want: remoteApp{id: "okapp", namespace: "ns2", address: "12.34.56.78"},
+		},
+		{
+			name:    "empty appID",
+			args:    args{appID: ""},
+			wantErr: true,
+		},
+		{
+			name:    "invalid appID",
+			args:    args{appID: "not.valid.appID"},
+			wantErr: true,
+		},
+		{
+			name: "app doesn't exist",
+			args: args{appID: "emptyapp"},
+			want: remoteApp{id: "emptyapp", namespace: defaultNamespace, address: ""},
+		},
+		{
+			name:    "resolver errors",
+			args:    args{appID: "failapp"},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &directMessaging{
+				grpcPort:  3500,
+				namespace: defaultNamespace,
+				resolver:  &testResolver{},
+			}
+			got, err := d.getRemoteApp(tt.args.appID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("directMessaging.getRemoteApp() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("directMessaging.getRemoteApp() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("resolver is nil", func(t *testing.T) {
+		d := &directMessaging{}
+		_, err := d.getRemoteApp("foo")
+		_ = assert.Error(t, err) &&
+			assert.ErrorContains(t, err, "name resolver not initialized")
 	})
 }

@@ -15,18 +15,16 @@ package pluggable
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
-
-	"github.com/pkg/errors"
-
 	"github.com/jhump/protoreflect/grpcreflect"
-
 	"google.golang.org/grpc"
 	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 var (
@@ -69,6 +67,11 @@ type service struct {
 
 type reflectServiceClient interface {
 	ListServices() ([]string, error)
+	Reset()
+}
+type grpcConnectionCloser interface {
+	grpc.ClientConnInterface
+	Close() error
 }
 
 // serviceDiscovery returns all available discovered pluggable components services.
@@ -89,7 +92,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 
 	files, err := os.ReadDir(componentsSocketPath)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not list pluggable components unix sockets")
+		return nil, fmt.Errorf("could not list pluggable components unix sockets: %w", err)
 	}
 
 	for _, dirEntry := range files {
@@ -116,9 +119,9 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 
 		serviceList, err := refctClient.ListServices()
 		if err != nil {
-			return nil, errors.Wrap(err, "unable to list services")
+			return nil, fmt.Errorf("unable to list services: %w", err)
 		}
-		dialer := socketDialer(socket)
+		dialer := socketDialer(socket, grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
 
 		componentName := removeExt(f.Name())
 		for _, svc := range serviceList {
@@ -145,6 +148,14 @@ func callback(services []service) {
 	}
 }
 
+// reflectServiceConnectionCloser is used for cleanup the stream created to be used for the reflection service.
+func reflectServiceConnectionCloser(conn grpcConnectionCloser, client reflectServiceClient) func() {
+	return func() {
+		client.Reset()
+		conn.Close()
+	}
+}
+
 // Discover discover the pluggable components and callback the service discovery with the given component name and grpc dialer.
 func Discover(ctx context.Context) error {
 	services, err := serviceDiscovery(func(socket string) (reflectServiceClient, func(), error) {
@@ -156,9 +167,8 @@ func Discover(ctx context.Context) error {
 		if err != nil {
 			return nil, nil, err
 		}
-		return grpcreflect.NewClient(ctx, reflectpb.NewServerReflectionClient(conn)), func() {
-			conn.Close()
-		}, nil
+		client := grpcreflect.NewClient(ctx, reflectpb.NewServerReflectionClient(conn))
+		return client, reflectServiceConnectionCloser(conn, client), nil
 	})
 	if err != nil {
 		return err

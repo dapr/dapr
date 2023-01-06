@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -72,7 +73,7 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  1,
+					MaxRetries:  ptr.Of(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -107,7 +108,8 @@ func (m *mockAppChannel) GetBaseAddress() string {
 func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
-		if err := json.Unmarshal(req.Message().Data.Value, &request); err == nil {
+		err := json.NewDecoder(req.RawData()).Decode(&request)
+		if err == nil {
 			m.requestC <- request
 		}
 	}
@@ -127,7 +129,7 @@ func (r *reentrantAppChannel) GetBaseAddress() string {
 }
 
 func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	r.callLog = append(r.callLog, fmt.Sprintf("Entering %s", req.Message().Method))
+	r.callLog = append(r.callLog, "Entering "+req.Message().Method)
 	if len(r.nextCall) > 0 {
 		nextReq := r.nextCall[0]
 		r.nextCall = r.nextCall[1:]
@@ -137,12 +139,13 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 			header.Add("Dapr-Reentrancy-Id", val.Values[0])
 			nextReq.AddHeaders(&header)
 		}
-		_, err := r.a.callLocalActor(context.Background(), nextReq)
+		resp, err := r.a.callLocalActor(context.Background(), nextReq)
 		if err != nil {
 			return nil, err
 		}
+		defer resp.Close()
 	}
-	r.callLog = append(r.callLog, fmt.Sprintf("Exiting %s", req.Message().Method))
+	r.callLog = append(r.callLog, "Exiting "+req.Message().Method)
 
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
 }
@@ -178,7 +181,7 @@ func (f *fakeStateStore) Features() []state.Feature {
 	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
 }
 
-func (f *fakeStateStore) Delete(req *state.DeleteRequest) error {
+func (f *fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	delete(f.items, req.Key)
@@ -186,11 +189,11 @@ func (f *fakeStateStore) Delete(req *state.DeleteRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
+func (f *fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+func (f *fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	item := f.items[req.Key]
@@ -202,10 +205,10 @@ func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) 
 	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
 }
 
-func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	res := []state.BulkGetResponse{}
 	for _, oneRequest := range req {
-		oneResponse, err := f.Get(&state.GetRequest{
+		oneResponse, err := f.Get(ctx, &state.GetRequest{
 			Key:      oneRequest.Key,
 			Metadata: oneRequest.Metadata,
 			Options:  oneRequest.Options,
@@ -224,7 +227,7 @@ func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetR
 	return true, res, nil
 }
 
-func (f *fakeStateStore) Set(req *state.SetRequest) error {
+func (f *fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	b, _ := json.Marshal(&req.Value)
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -233,11 +236,15 @@ func (f *fakeStateStore) Set(req *state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
+func (f *fakeStateStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
+func (f *fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
+func (f *fakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	// First we check all eTags
@@ -280,7 +287,6 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 type runtimeBuilder struct {
 	appChannel     channel.AppChannel
 	config         *Config
-	featureSpec    []config.FeatureSpec
 	actorStore     state.Store
 	actorStoreName string
 }
@@ -302,10 +308,6 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		b.config = &config
 	}
 
-	if b.featureSpec == nil {
-		b.featureSpec = []config.FeatureSpec{}
-	}
-
 	tracingSpec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	storeName := "actorStore"
@@ -319,7 +321,6 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		AppChannel:     b.appChannel,
 		Config:         *b.config,
 		TracingSpec:    tracingSpec,
-		Features:       b.featureSpec,
 		Resiliency:     resiliency.FromConfigurations(log, testResiliency),
 		StateStoreName: storeName,
 	})
@@ -409,7 +410,6 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 		AppChannel:     appChannel,
 		Config:         c,
 		TracingSpec:    spec,
-		Features:       []config.FeatureSpec{},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
 	})
@@ -1008,7 +1008,9 @@ func reminderRepeats(ctx context.Context, t *testing.T, dueTime, period, ttl str
 		return
 	}
 	assert.NoError(t, err)
+	testActorsRuntime.remindersLock.RLock()
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+	testActorsRuntime.remindersLock.RUnlock()
 
 	cnt := 0
 	var (
@@ -1729,12 +1731,14 @@ func TestCallLocalActor(t *testing.T) {
 	)
 
 	req := invokev1.NewInvokeMethodRequest(testMethod).WithActor(testActorType, testActorID)
+	defer req.Close()
 
 	t.Run("invoke actor successfully", func(t *testing.T) {
 		testActorRuntime := newTestActorsRuntime()
 		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
+		defer resp.Close()
 	})
 
 	t.Run("actor is already disposed", func(t *testing.T) {
@@ -2180,7 +2184,9 @@ func TestParseTime(t *testing.T) {
 
 func TestBasicReentrantActorLocking(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
+	defer req2.Close()
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
@@ -2193,9 +2199,8 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2203,6 +2208,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
 		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first",
@@ -2211,8 +2217,11 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 
 func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("other", "1")
+	defer req2.Close()
 	req3 := invokev1.NewInvokeMethodRequest("third").WithActor("reentrant", "1")
+	defer req3.Close()
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
@@ -2225,9 +2234,8 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2235,6 +2243,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
 		"Entering actors/reentrant/1/method/third", "Exiting actors/reentrant/1/method/third",
@@ -2244,6 +2253,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 
 func TestReentrancyStackLimit(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+	defer req.Close()
 
 	stackDepth := 0
 	appConfig := DefaultAppConfig
@@ -2257,9 +2267,8 @@ func TestReentrancyStackLimit(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2271,7 +2280,9 @@ func TestReentrancyStackLimit(t *testing.T) {
 
 func TestReentrancyPerActor(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
+	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrantActor", "1")
+	defer req2.Close()
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: false}
@@ -2292,9 +2303,8 @@ func TestReentrancyPerActor(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2302,6 +2312,7 @@ func TestReentrancyPerActor(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	defer resp.Close()
 	assert.Equal(t, []string{
 		"Entering actors/reentrantActor/1/method/first", "Entering actors/reentrantActor/1/method/second",
 		"Exiting actors/reentrantActor/1/method/second", "Exiting actors/reentrantActor/1/method/first",
@@ -2310,6 +2321,7 @@ func TestReentrancyPerActor(t *testing.T) {
 
 func TestReentrancyStackLimitPerActor(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
+	defer req.Close()
 
 	stackDepth := 0
 	appConfig := DefaultAppConfig
@@ -2332,9 +2344,8 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
-		appChannel:  reentrantAppChannel,
-		config:      &reentrantConfig,
-		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+		appChannel: reentrantAppChannel,
+		config:     &reentrantConfig,
 	}
 	testActorRuntime := builder.buildActorRuntime()
 	reentrantAppChannel.a = testActorRuntime
@@ -2348,28 +2359,29 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	actorType := "failingActor"
 	actorID := "failingId"
 	failingState := &daprt.FailingStatestore{
-		Failure: daprt.Failure{
+		Failure: daprt.NewFailure(
 			// Transform the keys into actor format.
-			Fails: map[string]int{
+			map[string]int{
 				constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey"): 1,
 				constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey"):    1,
 				constructCompositeKey("actors", actorType):                                 1, // Default reminder key.
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey"): time.Second * 10,
 				constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey"):    time.Second * 10,
 				constructCompositeKey("actors", actorType):                                 time.Second * 10, // Default reminder key.
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 	failingAppChannel := &daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Timeouts: map[string]time.Duration{
+		Failure: daprt.NewFailure(
+			nil,
+			map[string]time.Duration{
 				"timeoutId": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			return req.Actor().ActorId
 		},
@@ -2382,8 +2394,10 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	runtime := builder.buildActorRuntime()
 
 	t.Run("callLocalActor times out with resiliency", func(t *testing.T) {
-		req := invokev1.NewInvokeMethodRequest("actorMethod")
-		req.WithActor("failingActorType", "timeoutId")
+		req := invokev1.NewInvokeMethodRequest("actorMethod").
+			WithActor("failingActorType", "timeoutId").
+			WithReplay(true)
+		defer req.Close()
 
 		start := time.Now()
 		resp, err := runtime.callLocalActor(context.Background(), req)
@@ -2391,7 +2405,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
-		assert.Equal(t, 1, failingAppChannel.Failure.CallCount["timeoutId"])
+		assert.Equal(t, 1, failingAppChannel.Failure.CallCount("timeoutId"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2405,7 +2419,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey")
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 	})
 
 	t.Run("test get state times out with resiliency", func(t *testing.T) {
@@ -2420,7 +2434,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey")
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2442,7 +2456,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey")
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 	})
 
 	t.Run("test state transaction times out with resiliency", func(t *testing.T) {
@@ -2465,7 +2479,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey")
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2477,7 +2491,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey("actors", actorType)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 
 		// Key will no longer fail, so now we can check the timeout.
 		start := time.Now()
@@ -2488,7 +2502,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 4, failingState.Failure.CallCount[callKey]) // Should be called 2 more times.
+		assert.Equal(t, 4, failingState.Failure.CallCount(callKey)) // Should be called 2 more times.
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }

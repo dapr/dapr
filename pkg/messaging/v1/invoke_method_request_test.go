@@ -15,10 +15,14 @@ limitations under the License.
 package v1
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -28,21 +32,68 @@ import (
 
 func TestInvokeRequest(t *testing.T) {
 	req := NewInvokeMethodRequest("test_method")
+	defer req.Close()
 
 	assert.Equal(t, internalv1pb.APIVersion_V1, req.r.GetVer())
 	assert.Equal(t, "test_method", req.r.Message.GetMethod())
 }
 
 func TestFromInvokeRequestMessage(t *testing.T) {
-	pb := &commonv1pb.InvokeRequest{Method: "frominvokerequestmessage"}
-	req := FromInvokeRequestMessage(pb)
+	t.Run("no data", func(t *testing.T) {
+		pb := &commonv1pb.InvokeRequest{Method: "frominvokerequestmessage"}
+		req := FromInvokeRequestMessage(pb)
+		defer req.Close()
 
-	assert.Equal(t, internalv1pb.APIVersion_V1, req.r.GetVer())
-	assert.Equal(t, "frominvokerequestmessage", req.r.Message.GetMethod())
+		assert.Equal(t, internalv1pb.APIVersion_V1, req.r.GetVer())
+		assert.Equal(t, "frominvokerequestmessage", req.r.Message.GetMethod())
+
+		bData, err := io.ReadAll(req.RawData())
+		assert.NoError(t, err)
+		assert.Len(t, bData, 0)
+	})
+
+	t.Run("with data", func(t *testing.T) {
+		pb := &commonv1pb.InvokeRequest{
+			Method: "frominvokerequestmessage",
+			Data:   &anypb.Any{Value: []byte("test")},
+		}
+		req := FromInvokeRequestMessage(pb)
+		defer req.Close()
+
+		assert.Equal(t, internalv1pb.APIVersion_V1, req.r.GetVer())
+		assert.Equal(t, "frominvokerequestmessage", req.r.Message.GetMethod())
+
+		bData, err := io.ReadAll(req.RawData())
+		assert.NoError(t, err)
+		assert.Equal(t, "test", string(bData))
+	})
 }
 
 func TestInternalInvokeRequest(t *testing.T) {
-	t.Run("valid internal invoke request", func(t *testing.T) {
+	t.Run("valid internal invoke request with no data", func(t *testing.T) {
+		m := &commonv1pb.InvokeRequest{
+			Method:      "invoketest",
+			ContentType: "application/json",
+			Data:        nil,
+		}
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: m,
+		}
+
+		ir, err := InternalInvokeRequest(&pb)
+		assert.NoError(t, err)
+		defer ir.Close()
+		assert.NotNil(t, ir.r.Message)
+		assert.Equal(t, "invoketest", ir.r.Message.Method)
+		assert.Nil(t, ir.r.Message.Data)
+
+		bData, err := io.ReadAll(ir.RawData())
+		assert.NoError(t, err)
+		assert.Len(t, bData, 0)
+	})
+
+	t.Run("valid internal invoke request with data", func(t *testing.T) {
 		m := &commonv1pb.InvokeRequest{
 			Method:      "invoketest",
 			ContentType: "application/json",
@@ -55,9 +106,16 @@ func TestInternalInvokeRequest(t *testing.T) {
 
 		ir, err := InternalInvokeRequest(&pb)
 		assert.NoError(t, err)
+		defer ir.Close()
 		assert.NotNil(t, ir.r.Message)
-		assert.Equal(t, "invoketest", ir.r.Message.GetMethod())
-		assert.NotNil(t, ir.r.Message.GetData())
+		assert.Equal(t, "invoketest", ir.r.Message.Method)
+		require.NotNil(t, ir.r.Message.Data)
+		require.NotNil(t, ir.r.Message.Data.Value)
+		assert.Equal(t, []byte("test"), ir.r.Message.Data.Value)
+
+		bData, err := io.ReadAll(ir.RawData())
+		assert.NoError(t, err)
+		assert.Equal(t, "test", string(bData))
 	})
 
 	t.Run("nil message field", func(t *testing.T) {
@@ -73,12 +131,13 @@ func TestInternalInvokeRequest(t *testing.T) {
 
 func TestMetadata(t *testing.T) {
 	t.Run("gRPC headers", func(t *testing.T) {
-		req := NewInvokeMethodRequest("test_method")
 		md := map[string][]string{
 			"test1": {"val1", "val2"},
 			"test2": {"val3", "val4"},
 		}
-		req.WithMetadata(md)
+		req := NewInvokeMethodRequest("test_method").
+			WithMetadata(md)
+		defer req.Close()
 		mdata := req.Metadata()
 
 		assert.Equal(t, "val1", mdata["test1"].GetValues()[0])
@@ -93,8 +152,9 @@ func TestMetadata(t *testing.T) {
 		req.Header.Set("Header2", "Value2")
 		req.Header.Set("Header3", "Value3")
 
-		re := NewInvokeMethodRequest("test_method")
-		re.WithFastHTTPHeaders(&req.Header)
+		re := NewInvokeMethodRequest("test_method").
+			WithFastHTTPHeaders(&req.Header)
+		defer re.Close()
 		mheader := re.Metadata()
 
 		assert.Equal(t, "Value1", mheader["Header1"].GetValues()[0])
@@ -105,74 +165,243 @@ func TestMetadata(t *testing.T) {
 
 func TestData(t *testing.T) {
 	t.Run("contenttype is set", func(t *testing.T) {
-		req := NewInvokeMethodRequest("test_method")
-		req.WithRawData([]byte("test"), "application/json")
-		contentType, bData := req.RawData()
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("test").
+			WithContentType("application/json")
+		defer req.Close()
+		contentType := req.ContentType()
+		bData, err := io.ReadAll(req.RawData())
+		assert.NoError(t, err)
 		assert.Equal(t, "application/json", contentType)
-		assert.Equal(t, []byte("test"), bData)
+		assert.Equal(t, "test", string(bData))
 	})
 
 	t.Run("contenttype is unset,", func(t *testing.T) {
-		req := NewInvokeMethodRequest("test_method")
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("test")
+		defer req.Close()
 
-		req.WithRawData([]byte("test"), "")
-		contentType, bData := req.RawData()
+		contentType := req.ContentType()
+		bData, err := io.ReadAll(req.RawData())
+		assert.NoError(t, err)
 		assert.Equal(t, "", req.r.Message.ContentType)
 		assert.Equal(t, "", contentType)
-		assert.Equal(t, []byte("test"), bData)
-
-		// Force the ContentType to be empty to test setting it in RawData
-		req.r.Message.ContentType = ""
-		contentType, bData = req.RawData()
-		assert.Equal(t, "", req.r.Message.ContentType)
-		assert.Equal(t, "", contentType)
-		assert.Equal(t, []byte("test"), bData)
+		assert.Equal(t, "test", string(bData))
 	})
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
+		defer req.Close()
 		req.r.Message.Data = &anypb.Any{TypeUrl: "fake", Value: []byte("fake")}
-		contentType, bData := req.RawData()
+		contentType := req.ContentType()
+		bData, err := io.ReadAll(req.RawData())
+		assert.NoError(t, err)
 		assert.Equal(t, "", contentType)
-		assert.Equal(t, []byte("fake"), bData)
+		assert.Equal(t, "fake", string(bData))
+	})
+}
+
+func TestRawData(t *testing.T) {
+	t.Run("message is nil", func(t *testing.T) {
+		req := &InvokeMethodRequest{
+			r: &internalv1pb.InternalInvokeRequest{},
+		}
+		r := req.RawData()
+		assert.Nil(t, r)
+	})
+
+	t.Run("return data from stream", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		r := req.RawData()
+		bData, err := io.ReadAll(r)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "nel blu dipinto di blu", string(bData))
+
+		_ = assert.Nil(t, req.Message().Data) ||
+			assert.Len(t, req.Message().Data.Value, 0)
+	})
+
+	t.Run("data inside message has priority", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		// Override
+		const msg = "felice di stare lassu'"
+		req.Message().Data = &anypb.Any{Value: []byte(msg)}
+
+		r := req.RawData()
+		bData, err := io.ReadAll(r)
+
+		assert.NoError(t, err)
+		assert.Equal(t, msg, string(bData))
+
+		_ = assert.NotNil(t, req.Message().Data) &&
+			assert.Equal(t, msg, string(req.Message().Data.Value))
+	})
+}
+
+func TestRawDataFull(t *testing.T) {
+	t.Run("message is nil", func(t *testing.T) {
+		req := &InvokeMethodRequest{
+			r: &internalv1pb.InternalInvokeRequest{},
+		}
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Nil(t, data)
+	})
+
+	t.Run("return data from stream", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Equal(t, "nel blu dipinto di blu", string(data))
+
+		_ = assert.Nil(t, req.Message().Data) ||
+			assert.Len(t, req.Message().Data.Value, 0)
+	})
+
+	t.Run("data inside message has priority", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawDataString("nel blu dipinto di blu")
+		defer req.Close()
+
+		// Override
+		const msg = "felice di stare lassu'"
+		req.Message().Data = &anypb.Any{Value: []byte(msg)}
+
+		data, err := req.RawDataFull()
+		assert.NoError(t, err)
+		assert.Equal(t, msg, string(data))
+
+		_ = assert.NotNil(t, req.Message().Data) &&
+			assert.Equal(t, msg, string(req.Message().Data.Value))
 	})
 }
 
 func TestHTTPExtension(t *testing.T) {
-	req := NewInvokeMethodRequest("test_method")
-	req.WithHTTPExtension("POST", "query1=value1&query2=value2")
-	assert.Equal(t, commonv1pb.HTTPExtension_POST, req.Message().GetHttpExtension().GetVerb())
+	req := NewInvokeMethodRequest("test_method").
+		WithHTTPExtension("POST", "query1=value1&query2=value2")
+	defer req.Close()
+	assert.Equal(t, commonv1pb.HTTPExtension_POST, req.Message().HttpExtension.Verb)
 	assert.Equal(t, "query1=value1&query2=value2", req.EncodeHTTPQueryString())
 }
 
 func TestActor(t *testing.T) {
-	req := NewInvokeMethodRequest("test_method")
-	req.WithActor("testActor", "1")
-	assert.Equal(t, "testActor", req.Actor().GetActorType())
+	req := NewInvokeMethodRequest("test_method").
+		WithActor("testActor", "1")
+	defer req.Close()
+	assert.Equal(t, "testActor", req.Actor().ActorType)
 	assert.Equal(t, "1", req.Actor().GetActorId())
 }
 
-func TestProto(t *testing.T) {
-	m := &commonv1pb.InvokeRequest{
-		Method:      "invoketest",
-		ContentType: "application/json",
-		Data:        &anypb.Any{Value: []byte("test")},
-	}
-	pb := internalv1pb.InternalInvokeRequest{
-		Ver:     internalv1pb.APIVersion_V1,
-		Message: m,
-	}
+func TestRequestProto(t *testing.T) {
+	t.Run("byte slice", func(t *testing.T) {
+		m := &commonv1pb.InvokeRequest{
+			Method:      "invoketest",
+			ContentType: "application/json",
+			Data:        &anypb.Any{Value: []byte("test")},
+		}
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: m,
+		}
 
-	ir, err := InternalInvokeRequest(&pb)
-	assert.NoError(t, err)
-	req2 := ir.Proto()
+		ir, err := InternalInvokeRequest(&pb)
+		assert.NoError(t, err)
+		defer ir.Close()
+		req2 := ir.Proto()
+		msg := req2.GetMessage()
 
-	assert.Equal(t, "application/json", req2.GetMessage().ContentType)
-	assert.Equal(t, []byte("test"), req2.GetMessage().Data.Value)
+		assert.Equal(t, "application/json", msg.ContentType)
+		require.NotNil(t, msg.Data)
+		require.NotNil(t, msg.Data.Value)
+		assert.Equal(t, []byte("test"), msg.Data.Value)
+
+		bData, err := io.ReadAll(ir.RawData())
+		assert.NoError(t, err)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	t.Run("stream", func(t *testing.T) {
+		m := &commonv1pb.InvokeRequest{
+			Method:      "invoketest",
+			ContentType: "application/json",
+		}
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: m,
+		}
+
+		ir, err := InternalInvokeRequest(&pb)
+		assert.NoError(t, err)
+		defer ir.Close()
+		ir.data = io.NopCloser(strings.NewReader("test"))
+		req2 := ir.Proto()
+
+		assert.Equal(t, "application/json", req2.GetMessage().ContentType)
+		assert.Nil(t, req2.GetMessage().Data)
+
+		bData, err := io.ReadAll(ir.RawData())
+		assert.NoError(t, err)
+		assert.Equal(t, []byte("test"), bData)
+	})
+}
+
+func TestRequestProtoWithData(t *testing.T) {
+	t.Run("byte slice", func(t *testing.T) {
+		m := &commonv1pb.InvokeRequest{
+			Method:      "invoketest",
+			ContentType: "application/json",
+			Data:        &anypb.Any{Value: []byte("test")},
+		}
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: m,
+		}
+
+		ir, err := InternalInvokeRequest(&pb)
+		assert.NoError(t, err)
+		defer ir.Close()
+		req2, err := ir.ProtoWithData()
+		assert.NoError(t, err)
+
+		assert.Equal(t, "application/json", req2.GetMessage().ContentType)
+		assert.Equal(t, []byte("test"), req2.GetMessage().Data.Value)
+	})
+
+	t.Run("stream", func(t *testing.T) {
+		m := &commonv1pb.InvokeRequest{
+			Method:      "invoketest",
+			ContentType: "application/json",
+		}
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: m,
+		}
+
+		ir, err := InternalInvokeRequest(&pb)
+		assert.NoError(t, err)
+		defer ir.Close()
+		ir.data = io.NopCloser(strings.NewReader("test"))
+		req2, err := ir.ProtoWithData()
+		assert.NoError(t, err)
+
+		assert.Equal(t, "application/json", req2.GetMessage().ContentType)
+		assert.Equal(t, []byte("test"), req2.GetMessage().Data.Value)
+	})
 }
 
 func TestAddHeaders(t *testing.T) {
 	req := NewInvokeMethodRequest("test_method")
+	defer req.Close()
 	header := fasthttp.RequestHeader{}
 	header.Add("Dapr-Reentrant-Id", "test")
 	req.AddHeaders(&header)
@@ -186,6 +415,7 @@ func TestAddHeadersDoesNotOverwrite(t *testing.T) {
 	header := fasthttp.RequestHeader{}
 	header.Add("Dapr-Reentrant-Id", "test")
 	req := NewInvokeMethodRequest("test_method").WithFastHTTPHeaders(&header)
+	defer req.Close()
 
 	header.Set("Dapr-Reentrant-Id", "test2")
 	req.AddHeaders(&header)
@@ -209,8 +439,9 @@ func TestWithCustomHTTPMetadata(t *testing.T) {
 		md[customMetadataKey(i)] = customMetadataValue(i)
 	}
 
-	req := NewInvokeMethodRequest("test_method")
-	req.WithCustomHTTPMetadata(md)
+	req := NewInvokeMethodRequest("test_method").
+		WithCustomHTTPMetadata(md)
+	defer req.Close()
 
 	imrMd := req.Metadata()
 	for i := 0; i < numMetadata; i++ {
@@ -219,4 +450,214 @@ func TestWithCustomHTTPMetadata(t *testing.T) {
 		// We assume only 1 value per key as the input map can only support string -> string mapping.
 		assert.Equal(t, customMetadataValue(i), val.Values[0])
 	}
+}
+
+func TestRequestReplayable(t *testing.T) {
+	const message = "Nel mezzo del cammin di nostra vita mi ritrovai per una selva oscura, che' la diritta via era smarrita."
+	newReplayable := func() *InvokeMethodRequest {
+		return NewInvokeMethodRequest("test_method").
+			WithRawDataString(message).
+			WithReplay(true)
+	}
+
+	t.Run("read once", func(t *testing.T) {
+		req := newReplayable()
+		defer req.Close()
+
+		t.Run("first read in full", func(t *testing.T) {
+			read, err := io.ReadAll(req.RawData())
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("req.data is EOF", func(t *testing.T) {
+			buf := make([]byte, 9)
+			n, err := io.ReadFull(req.data, buf)
+			assert.Equal(t, 0, n)
+			assert.ErrorIs(t, err, io.EOF)
+		})
+
+		t.Run("replay buffer is full", func(t *testing.T) {
+			assert.Equal(t, len(message), req.replay.Len())
+			read, err := io.ReadAll(bytes.NewReader(req.replay.Bytes()))
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("close request", func(t *testing.T) {
+			err := req.Close()
+			assert.NoError(t, err)
+			assert.Nil(t, req.data)
+			assert.Nil(t, req.replay)
+		})
+	})
+
+	t.Run("read in full three times", func(t *testing.T) {
+		req := newReplayable()
+		defer req.Close()
+
+		t.Run("first read in full", func(t *testing.T) {
+			read, err := io.ReadAll(req.RawData())
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("req.data is EOF", func(t *testing.T) {
+			buf := make([]byte, 9)
+			n, err := io.ReadFull(req.data, buf)
+			assert.Equal(t, 0, n)
+			assert.ErrorIs(t, err, io.EOF)
+		})
+
+		t.Run("replay buffer is full", func(t *testing.T) {
+			assert.Equal(t, len(message), req.replay.Len())
+			read, err := io.ReadAll(bytes.NewReader(req.replay.Bytes()))
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("second read in full", func(t *testing.T) {
+			read, err := io.ReadAll(req.RawData())
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("third read in full", func(t *testing.T) {
+			read, err := io.ReadAll(req.RawData())
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("close request", func(t *testing.T) {
+			err := req.Close()
+			assert.NoError(t, err)
+			assert.Nil(t, req.data)
+			assert.Nil(t, req.replay)
+		})
+	})
+
+	t.Run("read in full, then partial read", func(t *testing.T) {
+		req := newReplayable()
+		defer req.Close()
+
+		t.Run("first read in full", func(t *testing.T) {
+			read, err := io.ReadAll(req.RawData())
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		r := req.RawData()
+		t.Run("second, partial read", func(t *testing.T) {
+			buf := make([]byte, 9)
+			n, err := io.ReadFull(r, buf)
+			assert.NoError(t, err)
+			assert.Equal(t, 9, n)
+			assert.Equal(t, message[:9], string(buf))
+		})
+
+		t.Run("read rest", func(t *testing.T) {
+			read, err := io.ReadAll(r)
+			assert.NoError(t, err)
+			assert.Len(t, read, len(message)-9)
+			// Continue from byte 9
+			assert.Equal(t, message[9:], string(read))
+		})
+
+		t.Run("second read in full", func(t *testing.T) {
+			read, err := req.RawDataFull()
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("close request", func(t *testing.T) {
+			err := req.Close()
+			assert.NoError(t, err)
+			assert.Nil(t, req.data)
+			assert.Nil(t, req.replay)
+		})
+	})
+
+	t.Run("partial read, then read in full", func(t *testing.T) {
+		req := newReplayable()
+		defer req.Close()
+
+		t.Run("first, partial read", func(t *testing.T) {
+			buf := make([]byte, 9)
+			n, err := io.ReadFull(req.RawData(), buf)
+
+			assert.NoError(t, err)
+			assert.Equal(t, 9, n)
+			assert.Equal(t, message[:9], string(buf))
+		})
+
+		t.Run("replay buffer has partial data", func(t *testing.T) {
+			assert.Equal(t, 9, req.replay.Len())
+			read, err := io.ReadAll(bytes.NewReader(req.replay.Bytes()))
+			assert.NoError(t, err)
+			assert.Equal(t, message[:9], string(read))
+		})
+
+		t.Run("second read in full", func(t *testing.T) {
+			read, err := io.ReadAll(req.RawData())
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("req.data is EOF", func(t *testing.T) {
+			buf := make([]byte, 9)
+			n, err := io.ReadFull(req.data, buf)
+			assert.Equal(t, 0, n)
+			assert.ErrorIs(t, err, io.EOF)
+		})
+
+		t.Run("replay buffer is full", func(t *testing.T) {
+			assert.Equal(t, len(message), req.replay.Len())
+			read, err := io.ReadAll(bytes.NewReader(req.replay.Bytes()))
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("third read in full", func(t *testing.T) {
+			read, err := io.ReadAll(req.RawData())
+			assert.NoError(t, err)
+			assert.Equal(t, message, string(read))
+		})
+
+		t.Run("close request", func(t *testing.T) {
+			err := req.Close()
+			assert.NoError(t, err)
+			assert.Nil(t, req.data)
+			assert.Nil(t, req.replay)
+		})
+	})
+
+	t.Run("get ProtoWithData twice", func(t *testing.T) {
+		req := newReplayable()
+		defer req.Close()
+
+		t.Run("first ProtoWithData request", func(t *testing.T) {
+			pb, err := req.ProtoWithData()
+			assert.NoError(t, err)
+			assert.NotNil(t, pb)
+			assert.NotNil(t, pb.Message)
+			assert.NotNil(t, pb.Message.Data)
+			assert.Equal(t, message, string(pb.Message.Data.Value))
+		})
+
+		t.Run("second ProtoWithData request", func(t *testing.T) {
+			pb, err := req.ProtoWithData()
+			assert.NoError(t, err)
+			assert.NotNil(t, pb)
+			assert.NotNil(t, pb.Message)
+			assert.NotNil(t, pb.Message.Data)
+			assert.Equal(t, message, string(pb.Message.Data.Value))
+		})
+
+		t.Run("close request", func(t *testing.T) {
+			err := req.Close()
+			assert.NoError(t, err)
+			assert.Nil(t, req.data)
+			assert.Nil(t, req.replay)
+		})
+	})
 }

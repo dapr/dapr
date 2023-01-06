@@ -101,7 +101,7 @@ spec:
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
-        image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
+        image: "{{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
@@ -175,6 +175,14 @@ spec:
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
         - "--enable-metrics=false"
+{{- end }}
+{{- with .Values.global.issuerFilenames }}
+        - "--issuer-ca-filename"
+        - "{{ .ca }}"
+        - "--issuer-certificate-filename"
+        - "{{ .cert }}"
+        - "--issuer-key-filename"
+        - "{{ .key }}"
 {{- end }}
       serviceAccountName: dapr-operator
       volumes:
