@@ -17,15 +17,14 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/config"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
-var (
-	metricsRules map[string][]regexPair
-)
+var metricsRules map[string][]regexPair
 
 type regexPair struct {
 	regex   *regexp.Regexp

@@ -16,9 +16,10 @@ package utils
 import (
 	"testing"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/tag"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestWithTags(t *testing.T) {

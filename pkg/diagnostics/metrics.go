@@ -16,10 +16,11 @@ package diagnostics
 import (
 	"time"
 
-	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // appIDKey is a tag key for App ID.
