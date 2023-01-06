@@ -267,7 +267,7 @@ message TopicSubscription {
   string dead_letter_topic = 6;
 
   // The optional bulk subscribe settings for this topic.
-  BulkSubscribeRequest bulk_subscribe = 7;
+  BulkSubscribeConfig bulk_subscribe = 7;
 }
 
 message TopicRoutes {
@@ -290,8 +290,8 @@ message TopicRule {
   string path = 2;
 }
 
-// BulkSubscribeRequest is the message to pass settings for bulk subscribe
-message BulkSubscribeRequest {
+// BulkSubscribeConfig is the message to pass settings for bulk subscribe
+message BulkSubscribeConfig {
   // Required. Flag to enable/disable bulk subscribe
   bool enabled = 1;
 

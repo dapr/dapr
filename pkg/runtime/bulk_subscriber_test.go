@@ -714,7 +714,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{Enabled: true},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 					Metadata:      map[string]string{"rawPayload": "true"},
 				},
 			},
@@ -806,7 +806,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 							},
 						},
 					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{Enabled: true},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
@@ -918,7 +918,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{Enabled: true},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
@@ -996,7 +996,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{Enabled: true},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
@@ -1086,7 +1086,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{Enabled: true},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
@@ -1170,7 +1170,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{Enabled: true},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}

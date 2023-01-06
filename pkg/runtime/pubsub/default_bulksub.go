@@ -53,9 +53,9 @@ func NewDefaultBulkSubscriber(p contribPubsub.PubSub) *defaultBulkSubscriber {
 // Dapr buffers messages in memory and calls the handler with a list of messages
 // when the buffer is full or max await duration is reached.
 func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPubsub.SubscribeRequest, handler contribPubsub.BulkHandler) error {
-	cfg := contribPubsub.BulkSubscribeRequest{
-		MaxMessagesCount:   utils.GetIntValOrDefault(req.BulkSubscribeRequest.MaxMessagesCount, defaultMaxMessagesCount),
-		MaxAwaitDurationMs: utils.GetIntValOrDefault(req.BulkSubscribeRequest.MaxAwaitDurationMs, defaultMaxAwaitDurationMs),
+	cfg := contribPubsub.BulkSubscribeConfig{
+		MaxMessagesCount:   utils.GetIntValOrDefault(req.BulkSubscribeConfig.MaxMessagesCount, defaultMaxMessagesCount),
+		MaxAwaitDurationMs: utils.GetIntValOrDefault(req.BulkSubscribeConfig.MaxAwaitDurationMs, defaultMaxAwaitDurationMs),
 	}
 
 	msgCbChan := make(chan msgWithCallback, cfg.MaxMessagesCount)
@@ -95,7 +95,7 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 
 // processBulkMessages reads messages from msgChan and publishes them to a BulkHandler.
 // It buffers messages in memory and publishes them in bulk.
-func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeRequest, handler contribPubsub.BulkHandler) {
+func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeConfig, handler contribPubsub.BulkHandler) {
 	messages := make([]contribPubsub.BulkMessageEntry, cfg.MaxMessagesCount)
 	msgCbMap := make(map[string]func(error), cfg.MaxMessagesCount)
 

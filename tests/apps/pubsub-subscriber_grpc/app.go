@@ -293,7 +293,7 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 				Routes: &runtimev1pb.TopicRoutes{
 					Default: pubsubRawBulkSubTopic,
 				},
-				BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{
+				BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{
 					Enabled:            true,
 					MaxMessagesCount:   60,
 					MaxAwaitDurationMs: 1000,
@@ -308,7 +308,7 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 				Routes: &runtimev1pb.TopicRoutes{
 					Default: pubsubCEBulkSubTopic,
 				},
-				BulkSubscribe: &runtimev1pb.BulkSubscribeRequest{
+				BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{
 					Enabled:            true,
 					MaxMessagesCount:   60,
 					MaxAwaitDurationMs: 1000,
