@@ -23,11 +23,14 @@ import (
 	"net"
 	nethttp "net/http"
 	"os"
+	"os/signal"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -205,6 +208,7 @@ type DaprRuntime struct {
 	subscriptions             []runtimePubsub.Subscription
 	inputBindingRoutes        map[string]string
 	shutdownC                 chan error
+	running                   atomic.Bool
 	apiClosers                []io.Closer
 	componentAuthorizers      []ComponentAuthorizer
 	appHealth                 *apphealth.AppHealth
@@ -321,6 +325,8 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	if err := a.initRuntime(&o); err != nil {
 		return err
 	}
+
+	a.running.Store(true)
 
 	d := time.Since(start).Milliseconds()
 	log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
@@ -559,7 +565,16 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	} else {
 		// If we're using the callback channel, we need to wait until the app establishes a connection
 		log.Info("Waiting for the application to establish the callback channel")
-		<-callbackChannelConnected
+		// Select also on shutdown signal so we don't block if users try to stop daprd
+		stopCh := ShutdownSignal()
+		select {
+		case <-stopCh:
+			a.ShutdownWithWait()
+			return nil
+		case <-callbackChannelConnected:
+			// Nop, just continue
+		}
+		signal.Stop(stopCh)
 		log.Info("Callback channel connected for the application")
 
 		a.appChannel, err = a.grpc.GetAppChannel()
@@ -2706,6 +2721,11 @@ func (a *DaprRuntime) cleanSocket() {
 }
 
 func (a *DaprRuntime) Shutdown(duration time.Duration) {
+	// If the shutdown has already been invoked, do nothing
+	if !a.running.CompareAndSwap(true, false) {
+		return
+	}
+
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 	log.Info("Dapr shutting down")
@@ -3169,4 +3189,11 @@ func (a *DaprRuntime) stopTrace() {
 	} else {
 		a.tracerProvider = nil
 	}
+}
+
+// ShutdownSignal returns a signal that receives a message when the app needs to shut down
+func ShutdownSignal() chan os.Signal {
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
+	return stop
 }
