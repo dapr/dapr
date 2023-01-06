@@ -222,6 +222,34 @@ spec:
                 properties:
                   enabled:
                     type: boolean
+                  rules:
+                    items:
+                      description: MetricsRule defines configuration options for a
+                        metric.
+                      properties:
+                        labels:
+                          items:
+                            description: MetricsLabel defines an object that allows
+                              to set regex expressions for a label.
+                            properties:
+                              name:
+                                type: string
+                              regex:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            required:
+                            - name
+                            - regex
+                            type: object
+                          type: array
+                        name:
+                          type: string
+                      required:
+                      - labels
+                      - name
+                      type: object
+                    type: array
                 required:
                 - enabled
                 type: object
