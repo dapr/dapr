@@ -2708,6 +2708,13 @@ func closeComponent(component any, logmsg string, merr *error) {
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
+	// Another shutdown signal causes an instant shutdown and interrupts the graceful shutdown
+	go func() {
+		<-ShutdownSignal()
+		log.Info("Received another shutdown signal - shutting down right away")
+		os.Exit(0)
+	}()
+
 	a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 	os.Exit(0)
 }
