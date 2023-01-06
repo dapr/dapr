@@ -25,12 +25,17 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
+// pubSubMessage contains all the essential information related to a particular entry.
+// This need to be maintained as a separate struct, as we need to filter out messages and
+// their related info doing retries of resiliency support.
 type pubSubMessage struct {
 	cloudEvent map[string]interface{}
 	rawData    *runtimePubsub.BulkSubscribeMessageItem
 	entry      *pubsub.BulkMessageEntry
 }
 
+// pubsubBulkSubscribedMessage contains all the essential information related to
+// a bulk subscribe message.
 type pubsubBulkSubscribedMessage struct {
 	pubSubMessages []pubSubMessage
 	topic          string
@@ -40,14 +45,15 @@ type pubsubBulkSubscribedMessage struct {
 	length         int
 }
 
+// bulkSubIngressDiagnostics holds diagnostics information for bulk subscribe ingress.
 type bulkSubIngressDiagnostics struct {
 	statusWiseDiag map[string]int64
 	elapsed        float64
 	retryReported  bool
 }
 
+// bulkSubscribeCallData holds data for a bulk subscribe call.
 type bulkSubscribeCallData struct {
-	ctx             context.Context
 	bulkResponses   *[]pubsub.BulkSubscribeResponseEntry
 	bulkSubDiag     *bulkSubIngressDiagnostics
 	entryIdIndexMap *map[string]int //nolint:stylecheck
@@ -63,19 +69,19 @@ type bulkSubscribeCallData struct {
 //  2. Iterate through each message and validate entryId is NOT blank
 //     2.A. If it is a raw payload:
 //     2.A.i. Get route path, if processable
-//     2.A.ii. If route path is non-blank, generate base64 encoding of event data
+//     2.A.ii. Check route path is non-blank if protocol used is HTTP; generate base64 encoding of event data
 //     and set contentType, if provided, else set to "application/octet-stream"
 //     2.A.iii. Finally, form a child message to be sent to app and add it to the list of messages,
 //     to be sent to app (this list of messages is registered against correct path in an internal map)
 //     2.B. If it is NOT a raw payload (it is considered a cloud event):
 //     2.B.i. Unmarshal it into a map[string]interface{}
-//     2.B.ii. If any error while unmarshalling, send to DLQ if configured, else register error for this message
+//     2.B.ii. If any error while unmarshalling, register error for this message
 //     2.B.iii. Check if message expired
 //     2.B.iv. Get route path, if processable
-//     2.B.v. If route path is non-blank, form a child message to be sent to app and add it to the list of messages,
+//     2.B.v. Check route path is non-blank if protocol used is HTTP, form a child message to be sent to app and add it to the list of messages,
 //  3. Iterate through map prepared for path vs list of messages to be sent on this path
 //     3.A. Prepare envelope for the list of messages to be sent to app on this path
-//     3.B. Send the envelope to app by invoking http endpoint
+//     3.B. Send the envelope to app by invoking http/grpc endpoint
 //  4. Check if any error has occurred so far in processing for any of the message and invoke DLQ, if configured.
 //  5. Send back responses array to broker interface.
 func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.PolicyDefinition,
@@ -107,7 +113,6 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 		routePathBulkMessageMap := make(map[string]pubsubBulkSubscribedMessage)
 		entryIdIndexMap := make(map[string]int, len(msg.Entries)) //nolint:stylecheck
 		bulkSubCallData := bulkSubscribeCallData{
-			ctx:             ctx,
 			bulkResponses:   &bulkResponses,
 			bulkSubDiag:     &bulkSubDiag,
 			entryIdIndexMap: &entryIdIndexMap,
@@ -117,7 +122,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if dlqErr := a.sendBulkToDLQIfConfigured(&bulkSubCallData, msg, true, route); dlqErr != nil {
+			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route); dlqErr != nil {
 				populateAllBulkResponsesWithError(msg, &bulkResponses, err)
 				reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
@@ -134,7 +139,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 			}
 			entryIdIndexMap[message.EntryId] = i
 			if rawPayload {
-				rPath, routeErr := a.getRouteIfProcessable(&bulkSubCallData, route, &(msg.Entries[i]), i, string(message.Event))
+				rPath, routeErr := a.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, string(message.Event))
 				if routeErr != nil {
 					hasAnyError = true
 					continue
@@ -176,7 +181,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					bulkResponses[i].Error = nil
 					continue
 				}
-				rPath, routeErr := a.getRouteIfProcessable(&bulkSubCallData, route, &(msg.Entries[i]), i, cloudEvent)
+				rPath, routeErr := a.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, cloudEvent)
 				if routeErr != nil {
 					hasAnyError = true
 					continue
@@ -190,7 +195,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 		}
 		var overallInvokeErr error
 		for path, psm := range routePathBulkMessageMap {
-			invokeErr := a.createEnvelopeAndInvokeSubscriber(&bulkSubCallData, psm, msg, route, path, policyDef, rawPayload)
+			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, &bulkSubCallData, psm, msg, route, path, policyDef, rawPayload)
 			if invokeErr != nil {
 				hasAnyError = true
 				err = invokeErr
@@ -205,7 +210,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			bulkSubDiag.retryReported = true
-			if dlqErr := a.sendBulkToDLQIfConfigured(&bulkSubCallData, msg, false, route); dlqErr != nil {
+			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route); dlqErr != nil {
 				reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
 			}
@@ -224,7 +229,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 }
 
 // sendBulkToDLQIfConfigured sends the message to the dead letter queue if configured.
-func (a *DaprRuntime) sendBulkToDLQIfConfigured(bulkSubCallData *bulkSubscribeCallData, msg *pubsub.BulkMessage,
+func (a *DaprRuntime) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, msg *pubsub.BulkMessage,
 	sendAllEntries bool, route TopicRouteElem,
 ) error {
 	bscData := *bulkSubCallData
@@ -241,7 +246,7 @@ func (a *DaprRuntime) sendBulkToDLQIfConfigured(bulkSubCallData *bulkSubscribeCa
 }
 
 // getRouteIfProcessable returns the route path if the message is processable.
-func (a *DaprRuntime) getRouteIfProcessable(bulkSubCallData *bulkSubscribeCallData, route TopicRouteElem, message *pubsub.BulkMessageEntry,
+func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, route TopicRouteElem, message *pubsub.BulkMessageEntry,
 	i int, matchElem interface{},
 ) (string, error) {
 	bscData := *bulkSubCallData
@@ -270,7 +275,7 @@ func (a *DaprRuntime) getRouteIfProcessable(bulkSubCallData *bulkSubscribeCallDa
 }
 
 // createEnvelopeAndInvokeSubscriber creates the envelope and invokes the subscriber.
-func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(bulkSubCallData *bulkSubscribeCallData, psm pubsubBulkSubscribedMessage,
+func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm pubsubBulkSubscribedMessage,
 	msg *pubsub.BulkMessage, route TopicRouteElem, path string, policyDef *resiliency.PolicyDefinition,
 	rawPayload bool,
 ) error {
@@ -288,17 +293,16 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(bulkSubCallData *bulkSub
 		Pubsub:   bscData.psName,
 		Metadata: msg.Metadata,
 	})
-	_, e := a.ApplyBulkSubscribeResiliency(bulkSubCallData, psm, route.deadLetterTopic,
+	_, e := a.ApplyBulkSubscribeResiliency(ctx, bulkSubCallData, psm, route.deadLetterTopic,
 		path, policyDef, rawPayload, envelope)
 	return e
 }
 
 // publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding responses.
-func (a *DaprRuntime) publishBulkMessageHTTP(bulkSubCallData *bulkSubscribeCallData, psm *pubsubBulkSubscribedMessage,
+func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *pubsubBulkSubscribedMessage,
 	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, envelope map[string]any, deadLetterTopic string,
 ) error {
 	bscData := *bulkSubCallData
-	ctx := bscData.ctx
 	rawMsgEntries := make([]*runtimePubsub.BulkSubscribeMessageItem, len(psm.pubSubMessages))
 	entryRespReceived := make(map[string]bool, len(psm.pubSubMessages))
 	for i, pubSubMsg := range psm.pubSubMessages {
@@ -466,11 +470,13 @@ func (a *DaprRuntime) publishBulkMessageHTTP(bulkSubCallData *bulkSubscribeCallD
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("Retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", psm.topic, statusCode)
+	retriableErrorStr := fmt.Sprintf("Retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", psm.topic, statusCode)
+	retriableError := errors.New(retriableErrorStr)
+	log.Warn(retriableErrorStr)
 	bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 	bscData.bulkSubDiag.elapsed = elapsed
-	populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, fmt.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", psm.topic, statusCode))
-	return fmt.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", psm.topic, statusCode)
+	populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, retriableError)
+	return retriableError
 }
 
 func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
@@ -529,11 +535,10 @@ func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[
 }
 
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
-func (a *DaprRuntime) publishBulkMessageGRPC(bulkSubCallData *bulkSubscribeCallData, psm *pubsubBulkSubscribedMessage,
+func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *pubsubBulkSubscribedMessage,
 	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, rawPayload bool,
 ) error {
 	bscData := *bulkSubCallData
-	ctx := bscData.ctx
 	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(psm.pubSubMessages))
 	entryRespReceived := make(map[string]bool, len(psm.pubSubMessages))
 	for i, pubSubMsg := range psm.pubSubMessages {

@@ -11,12 +11,11 @@ import (
 
 // ApplyBulkSubscribeResiliency applies resiliency support to bulk subscribe. It tries to filter
 // out the messages that have been successfully processed and only retries the ones that have failed
-func (a *DaprRuntime) ApplyBulkSubscribeResiliency(bulkSubCallData *bulkSubscribeCallData,
+func (a *DaprRuntime) ApplyBulkSubscribeResiliency(ctx context.Context, bulkSubCallData *bulkSubscribeCallData,
 	psm pubsubBulkSubscribedMessage, deadLetterTopic string, path string, policyDef *resiliency.PolicyDefinition,
 	rawPayload bool, envelope map[string]interface{},
 ) (*[]pubsub.BulkSubscribeResponseEntry, error) {
 	bscData := *bulkSubCallData
-	ctx := bscData.ctx
 	policyRunner := resiliency.NewRunnerWithOptions(
 		ctx, policyDef, resiliency.RunnerOpts[*[]pubsub.BulkSubscribeResponseEntry]{
 			Accumulator: func(bsre *[]pubsub.BulkSubscribeResponseEntry) {
@@ -42,9 +41,9 @@ func (a *DaprRuntime) ApplyBulkSubscribeResiliency(bulkSubCallData *bulkSubscrib
 		bsre := []pubsub.BulkSubscribeResponseEntry{}
 		switch a.runtimeConfig.ApplicationProtocol {
 		case HTTPProtocol:
-			pErr = a.publishBulkMessageHTTP(&bscData, &psm, &bsre, envelope, deadLetterTopic)
+			pErr = a.publishBulkMessageHTTP(ctx, &bscData, &psm, &bsre, envelope, deadLetterTopic)
 		case GRPCProtocol:
-			pErr = a.publishBulkMessageGRPC(&bscData, &psm, &bsre, rawPayload)
+			pErr = a.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsre, rawPayload)
 		default:
 			panic(errors.New("invalid application protocol"))
 		}
