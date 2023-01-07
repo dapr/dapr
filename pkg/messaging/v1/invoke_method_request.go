@@ -186,7 +186,7 @@ func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
 // ProtoWithData returns a copy of the internal InternalInvokeRequest Proto object with the entire data stream read into the Data property.
 func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeRequest, error) {
 	if imr.r == nil || imr.r.Message == nil {
-		return nil, errors.New("message is nil")
+		return nil, nil
 	}
 
 	// If the data is already in-memory in the object, return the object directly.
