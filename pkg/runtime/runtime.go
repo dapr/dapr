@@ -59,6 +59,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
+	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
@@ -514,11 +515,35 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		firstCallbackConnection := sync.Once{}
 		a.appCallbackListener = &appCallbackListener{
 			OnAppCallbackConnection: func(conn net.Conn) {
+				// Set the localConnCreateFn to use the connection we just received
 				a.grpc.SetLocalConnCreateFn(a.grpc.LocalConnCreatorFromNetConn(conn))
+
+				// Create the app channel
+				ch, innerErr := a.grpc.GetAppChannel()
+				if innerErr != nil {
+					log.Errorf("Failed to establish callback channel with app: %v", innerErr)
+					return
+				}
+
+				// Establish the ping channel and wait for the first response
+				innerErr = ch.(*grpcChannel.Channel).StartPingStream(a.ctx, 30*time.Second)
+				if innerErr != nil {
+					log.Errorf("Failed to receive ping from app on callback channel: %v", err)
+					return
+				}
+
+				// On the first successful connection only, send a signal that the app can continue setting up
 				firstCallbackConnection.Do(func() {
 					close(callbackChannelConnected)
 					callbackChannelConnected = nil
 				})
+
+				// Store the app channel
+				a.appChannel = ch
+
+				a.daprHTTPAPI.SetAppChannel(a.appChannel)
+				a.daprGRPCAPI.SetAppChannel(a.appChannel)
+				a.directMessaging.SetAppChannel(a.appChannel)
 			},
 		}
 	}
@@ -532,6 +557,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	} else {
 		log.Infof("API gRPC server is running on port %v", a.runtimeConfig.APIGRPCPort)
 	}
+
+	a.initDirectMessaging(a.nameResolver)
 
 	// Start HTTP Server
 	err = a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.PublicPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
@@ -562,6 +589,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		if err != nil {
 			log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 		}
+
+		a.daprHTTPAPI.SetAppChannel(a.appChannel)
+		a.daprGRPCAPI.SetAppChannel(a.appChannel)
+		a.directMessaging.SetAppChannel(a.appChannel)
 	} else {
 		// If we're using the callback channel, we need to wait until the app establishes a connection
 		log.Info("Waiting for the application to establish the callback channel")
@@ -576,21 +607,11 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		}
 		signal.Stop(stopCh)
 		log.Info("Callback channel connected for the application")
-
-		a.appChannel, err = a.grpc.GetAppChannel()
-		if err != nil {
-			log.Errorf("Failed to establish callback channel with app: %s", err)
-		}
 	}
 
 	if a.runtimeConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
 	}
-
-	a.daprHTTPAPI.SetAppChannel(a.appChannel)
-	a.daprGRPCAPI.SetAppChannel(a.appChannel)
-
-	a.initDirectMessaging(a.nameResolver)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
@@ -599,7 +620,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.appHealthReadyInit(opts)
 	}
 	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
-		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
+		// We can't just pass "a.appChannel.HealthProbe" because appChannel may be re-created
+		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
+			return a.appChannel.HealthProbe(ctx)
+		})
 		a.appHealth.OnHealthChange(a.appHealthChanged)
 		a.appHealth.StartProbes(a.ctx)
 
@@ -1027,7 +1051,6 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		Namespace:           a.namespace,
 		Port:                a.runtimeConfig.InternalGRPCPort,
 		Mode:                a.runtimeConfig.Mode,
-		AppChannel:          a.appChannel,
 		ClientConnFn:        a.grpc.GetGRPCConnection,
 		Resolver:            resolver,
 		MaxRequestBodySize:  a.runtimeConfig.MaxRequestBodySize,

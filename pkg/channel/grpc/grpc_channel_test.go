@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -94,7 +93,7 @@ func TestInvokeMethod(t *testing.T) {
 	c := Channel{
 		baseAddress:          "localhost:9998",
 		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		appHealthClient:      runtimev1pb.NewAppCallbackHealthCheckClient(conn),
+		conn:                 conn,
 		appMetadataToken:     "token1",
 		maxRequestBodySizeMB: 4,
 	}
@@ -140,7 +139,7 @@ func TestHealthProbe(t *testing.T) {
 	c := Channel{
 		baseAddress:          "localhost:9998",
 		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		appHealthClient:      runtimev1pb.NewAppCallbackHealthCheckClient(conn),
+		conn:                 conn,
 		appMetadataToken:     "token1",
 		maxRequestBodySizeMB: 4,
 	}

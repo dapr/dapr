@@ -50,6 +50,7 @@ type messageClientConnection func(ctx context.Context, address string, id string
 // DirectMessaging is the API interface for invoking a remote app.
 type DirectMessaging interface {
 	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
+	SetAppChannel(appChannel channel.AppChannel)
 }
 
 type directMessaging struct {
@@ -119,6 +120,10 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	}
 
 	return dm
+}
+
+func (d *directMessaging) SetAppChannel(appChannel channel.AppChannel) {
+	d.appChannel = appChannel
 }
 
 // Invoke takes a message requests and invokes an app, either local or remote.

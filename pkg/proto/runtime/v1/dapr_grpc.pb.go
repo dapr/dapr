@@ -1312,88 +1312,88 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "dapr/proto/runtime/v1/dapr.proto",
 }
 
-// DaprAppCallbackClient is the client API for DaprAppCallback service.
+// DaprAppChannelClient is the client API for DaprAppChannel service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type DaprAppCallbackClient interface {
+type DaprAppChannelClient interface {
 	// Request a new port to initiate a connection to the AppCallback.
 	// Makes the Dapr sidecar start a listener on an ephemeral port.
 	ConnectAppCallback(ctx context.Context, in *ConnectAppCallbackRequest, opts ...grpc.CallOption) (*ConnectAppCallbackResponse, error)
 }
 
-type daprAppCallbackClient struct {
+type daprAppChannelClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewDaprAppCallbackClient(cc grpc.ClientConnInterface) DaprAppCallbackClient {
-	return &daprAppCallbackClient{cc}
+func NewDaprAppChannelClient(cc grpc.ClientConnInterface) DaprAppChannelClient {
+	return &daprAppChannelClient{cc}
 }
 
-func (c *daprAppCallbackClient) ConnectAppCallback(ctx context.Context, in *ConnectAppCallbackRequest, opts ...grpc.CallOption) (*ConnectAppCallbackResponse, error) {
+func (c *daprAppChannelClient) ConnectAppCallback(ctx context.Context, in *ConnectAppCallbackRequest, opts ...grpc.CallOption) (*ConnectAppCallbackResponse, error) {
 	out := new(ConnectAppCallbackResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.DaprAppCallback/ConnectAppCallback", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.DaprAppChannel/ConnectAppCallback", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// DaprAppCallbackServer is the server API for DaprAppCallback service.
-// All implementations should embed UnimplementedDaprAppCallbackServer
+// DaprAppChannelServer is the server API for DaprAppChannel service.
+// All implementations should embed UnimplementedDaprAppChannelServer
 // for forward compatibility
-type DaprAppCallbackServer interface {
+type DaprAppChannelServer interface {
 	// Request a new port to initiate a connection to the AppCallback.
 	// Makes the Dapr sidecar start a listener on an ephemeral port.
 	ConnectAppCallback(context.Context, *ConnectAppCallbackRequest) (*ConnectAppCallbackResponse, error)
 }
 
-// UnimplementedDaprAppCallbackServer should be embedded to have forward compatible implementations.
-type UnimplementedDaprAppCallbackServer struct {
+// UnimplementedDaprAppChannelServer should be embedded to have forward compatible implementations.
+type UnimplementedDaprAppChannelServer struct {
 }
 
-func (UnimplementedDaprAppCallbackServer) ConnectAppCallback(context.Context, *ConnectAppCallbackRequest) (*ConnectAppCallbackResponse, error) {
+func (UnimplementedDaprAppChannelServer) ConnectAppCallback(context.Context, *ConnectAppCallbackRequest) (*ConnectAppCallbackResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConnectAppCallback not implemented")
 }
 
-// UnsafeDaprAppCallbackServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to DaprAppCallbackServer will
+// UnsafeDaprAppChannelServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to DaprAppChannelServer will
 // result in compilation errors.
-type UnsafeDaprAppCallbackServer interface {
-	mustEmbedUnimplementedDaprAppCallbackServer()
+type UnsafeDaprAppChannelServer interface {
+	mustEmbedUnimplementedDaprAppChannelServer()
 }
 
-func RegisterDaprAppCallbackServer(s grpc.ServiceRegistrar, srv DaprAppCallbackServer) {
-	s.RegisterService(&DaprAppCallback_ServiceDesc, srv)
+func RegisterDaprAppChannelServer(s grpc.ServiceRegistrar, srv DaprAppChannelServer) {
+	s.RegisterService(&DaprAppChannel_ServiceDesc, srv)
 }
 
-func _DaprAppCallback_ConnectAppCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DaprAppChannel_ConnectAppCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ConnectAppCallbackRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprAppCallbackServer).ConnectAppCallback(ctx, in)
+		return srv.(DaprAppChannelServer).ConnectAppCallback(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.DaprAppCallback/ConnectAppCallback",
+		FullMethod: "/dapr.proto.runtime.v1.DaprAppChannel/ConnectAppCallback",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprAppCallbackServer).ConnectAppCallback(ctx, req.(*ConnectAppCallbackRequest))
+		return srv.(DaprAppChannelServer).ConnectAppCallback(ctx, req.(*ConnectAppCallbackRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// DaprAppCallback_ServiceDesc is the grpc.ServiceDesc for DaprAppCallback service.
+// DaprAppChannel_ServiceDesc is the grpc.ServiceDesc for DaprAppChannel service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var DaprAppCallback_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "dapr.proto.runtime.v1.DaprAppCallback",
-	HandlerType: (*DaprAppCallbackServer)(nil),
+var DaprAppChannel_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "dapr.proto.runtime.v1.DaprAppChannel",
+	HandlerType: (*DaprAppChannelServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "ConnectAppCallback",
-			Handler:    _DaprAppCallback_ConnectAppCallback_Handler,
+			Handler:    _DaprAppChannel_ConnectAppCallback_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

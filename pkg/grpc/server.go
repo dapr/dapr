@@ -161,7 +161,7 @@ func (s *server) StartNonBlocking() error {
 
 			// Register the DaprAppCallback only if the callback channel is enabled
 			if s.api.(*api).createAppCallbackListener != nil {
-				runtimev1pb.RegisterDaprAppCallbackServer(server, s.api)
+				runtimev1pb.RegisterDaprAppChannelServer(server, s.api)
 			}
 		}
 
