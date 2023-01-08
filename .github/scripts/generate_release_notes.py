@@ -198,9 +198,13 @@ lastSubtitle=""
 breakingChangeLines=[]
 lastBreakingChangeSubtitle=""
 
+deprecationNoticeLines=[]
+lastDeprecationNoticeSubtitle=""
+
 # generate changes for release notes (only issues/pr that have release notes)
 for change in sorted(changes, key=lambda c: (get_repo_priority(c[0].name), c[0].stargazers_count * -1, c[0].id, c[1].id)):
     breakingChange='breaking-change' in [l.name for l in change[1].labels]
+    deprecationNotice='deprecation' in [l.name for l in change[1].labels]
     subtitle=get_repo_subtitle(change[0].name)
     if lastSubtitle != subtitle:
         lastSubtitle = subtitle
@@ -215,6 +219,12 @@ for change in sorted(changes, key=lambda c: (get_repo_priority(c[0].name), c[0].
             breakingChangeLines.append("### " + subtitle)
         breakingChangeLines.append("- " + change[2] + changeUrl)
 
+    if deprecationNotice:
+        if lastDeprecationNoticeSubtitle != subtitle:
+            lastDeprecationNoticeSubtitle = subtitle
+            deprecationNoticeLines.append("### " + subtitle)
+        deprecationNoticeLines.append("- " + change[2] + changeUrl)
+
 if len(breakingChangeLines) > 0:
     warnings.append("> **Note: This release contains a few [breaking changes](#breaking-changes).**")
 
@@ -228,6 +238,9 @@ changesText='\n'.join(changeLines)
 breakingChangesText='None.'
 if len(breakingChangeLines) > 0:
     breakingChangesText='\n'.join(breakingChangeLines)
+deprecationNoticesText='None.'
+if len(deprecationNoticeLines) > 0:
+    deprecationNoticesText='\n'.join(deprecationNoticeLines)
 warningsText=''
 if len(warnings) > 0:
     warningsText='\n\n'.join(warnings)
@@ -238,6 +251,7 @@ with open(releaseNotePath, 'w') as file:
         dapr_dashboard_version=dashboardReleaseVersion,
         dapr_changes=changesText,
         dapr_breaking_changes=breakingChangesText,
+        dapr_deprecation_notices=deprecationNoticesText,
         warnings=warningsText,
         dapr_contributors=", ".join(sorted(list(contributors), key=str.casefold)),
         today=date.today().strftime("%Y-%m-%d")))
