@@ -5429,6 +5429,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	assert.NotNil(t, rt.pubsubCtx)
 	assert.NotNil(t, rt.topicCtxCancels)
 	assert.NotNil(t, rt.topicRoutes)
+	rt.running.Store(true)
 	go sendSigterm(rt)
 	select {
 	case <-rt.pubsubCtx.Done():
@@ -5468,6 +5469,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 
 	assert.Equal(t, len(rt.inputBindings), 1)
 	assert.Equal(t, len(rt.outputBindings), 1)
+	rt.running.Store(true)
 
 	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
@@ -5522,6 +5524,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	rt.namespace = "test"
 	rt.runtimeConfig.mtlsEnabled = true
 	assert.Nil(t, rt.initActors())
+	rt.running.Store(true)
 
 	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 3*time.Second)
@@ -5571,6 +5574,7 @@ func TestTraceShutdown(t *testing.T) {
 	tpStore := newOpentelemetryTracerProviderStore()
 	require.NoError(t, rt.setupTracing(rt.hostAddress, tpStore))
 	assert.NotNil(t, rt.tracerProvider)
+	rt.running.Store(true)
 
 	go sendSigterm(rt)
 	<-rt.ctx.Done()

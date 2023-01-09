@@ -76,7 +76,7 @@ func (acl *appCallbackListener) Start(port int) (int, error) {
 	log.Debugf("Started app callback listener on port %d", port)
 
 	// In a background goroutine, wait for the first client to establish a connection to the listener we just created
-	// The first connectiopn to be established wins
+	// The first connection to be established wins
 	// There's also a timeout after which we will close the listener if no one connected to it
 	timeout := acl.timeout
 	if timeout == 0 {
