@@ -52,6 +52,7 @@ const (
 	order9     string = `{"` + ext1Key + `":"` + ext1Value + `","orderId":"9","type":"type1"}`
 	order10    string = `{"data":` + data10 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"ded2rd44-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
 	wrongOrder string = `{"data":` + data2 + `,"datacontenttype":"application/xml;wwwwwww","` + ext2Key + `":"` + ext2Value + `","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
+	orders1    string = "orders1"
 )
 
 func getBulkMessageEntries(len int) []pubsub.BulkMessageEntry {
@@ -268,7 +269,7 @@ func TestBulkSubscribe(t *testing.T) {
 				Routes: runtimePubsub.RoutesJSON{
 					Rules: []*runtimePubsub.RuleJSON{
 						{
-							Path:  "orders1",
+							Path:  orders1,
 							Match: `event.type == "type1"`,
 						},
 						{
@@ -332,7 +333,7 @@ func TestBulkSubscribe(t *testing.T) {
 				Routes: runtimePubsub.RoutesJSON{
 					Rules: []*runtimePubsub.RuleJSON{
 						{
-							Path:  "orders1",
+							Path:  orders1,
 							Match: `event.type == "type1"`,
 						},
 						{
@@ -430,7 +431,7 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 
 	t.Run("verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
@@ -510,7 +511,7 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 
 	t.Run("verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
@@ -594,7 +595,7 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 
 	t.Run("verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
@@ -677,7 +678,7 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 }
 
@@ -774,7 +775,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 		assert.Contains(t, string(mockServer.RequestsReceived["orders"].GetEntries()[0].GetBytes()), `{"orderId":"1"}`)
 		assert.Contains(t, string(mockServer.RequestsReceived["orders"].GetEntries()[1].GetBytes()), `{"orderId":"2"}`)
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - bulk Subscribe cloud event Message on different paths and verify response", func(t *testing.T) {
@@ -797,7 +798,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Rules: []*runtimev1pb.TopicRule{
 							{
-								Path:  "orders1",
+								Path:  orders1,
 								Match: `event.type == "type1"`,
 							},
 							{
@@ -849,7 +850,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Statuses: responseEntries2,
 		}
 		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
-		mapResp["orders1"] = &responses1
+		mapResp[orders1] = &responses1
 		mapResp["orders2"] = &responses2
 		// create mock application server first
 		mockServer := &channelt.MockServer{
@@ -892,10 +893,10 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 		assert.True(t, verifyBulkSubscribeRequest(getExpectedBulkRequests()["type1"],
-			getExpectedExtension()["type1"], mockServer.RequestsReceived["orders1"]))
+			getExpectedExtension()["type1"], mockServer.RequestsReceived[orders1]))
 		assert.True(t, verifyBulkSubscribeRequest(getExpectedBulkRequests()["type2"],
 			getExpectedExtension()["type2"], mockServer.RequestsReceived["orders2"]))
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
@@ -973,7 +974,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
@@ -1063,7 +1064,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
@@ -1147,7 +1148,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - verify bulk Subscribe Response when error while fetching Entry due to wrong dataContentType", func(t *testing.T) {
@@ -1213,7 +1214,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
 	})
 }
 
@@ -1252,12 +1253,12 @@ type BulkResponseExpectation struct {
 	Responses []BulkResponseEntryExpectation
 }
 
-func verifyBulkSubscribeResponses(expected BulkResponseExpectation, actual pubsub.BulkSubscribeResponse) bool {
+func verifyBulkSubscribeResponses(expected BulkResponseExpectation, actual []pubsub.BulkSubscribeResponseEntry) bool {
 	for i, expectedEntryResponse := range expected.Responses {
-		if expectedEntryResponse.EntryId != actual.Statuses[i].EntryId {
+		if expectedEntryResponse.EntryId != actual[i].EntryId {
 			return false
 		}
-		if (actual.Statuses[i].Error != nil) != expectedEntryResponse.IsError {
+		if (actual[i].Error != nil) != expectedEntryResponse.IsError {
 			return false
 		}
 	}
