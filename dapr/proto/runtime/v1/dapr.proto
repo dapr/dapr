@@ -156,7 +156,7 @@ message GetStateRequest {
 // ComponentHealthResponseItem represents health of a single component item in the response
 message ComponentHealthResponseItem {
   // The name of component
-  optional string componentName = 1;
+  optional string component_name = 1;
 
   // Type of component
   optional string type = 2;
@@ -165,7 +165,7 @@ message ComponentHealthResponseItem {
   optional string status = 3;
 
   // error that is returned in case of health check failure
-  optional string errorCode = 4;
+  optional string error_code = 4;
 
   // message that may provide more insight for error, if any
   optional string message = 5;
