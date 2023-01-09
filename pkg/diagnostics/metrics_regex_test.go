@@ -17,7 +17,8 @@ func TestRegexRulesSingle(t *testing.T) {
 				{
 					Name: "method",
 					Regex: map[string]string{
-						"/orders/TEST": "/orders/.+",
+						"/orders/TEST":      "/orders/.+",
+						"/lightsabers/TEST": "/lightsabers/.+",
 					},
 				},
 			},
@@ -48,31 +49,14 @@ func TestRegexRulesSingle(t *testing.T) {
 
 		s := servicesMetrics()
 
-		s.ServiceInvocationRequestSent("testAppId2", "/lightsabers/123")
+		s.ServiceInvocationRequestSent("testAppId2", "/siths/123")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 		v := view.Find("runtime/service_invocation/req_sent_total")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, "/lightsabers/123", viewData[0].Tags[2].Value)
-	})
-}
-
-func TestRegexRulesMultiple(t *testing.T) {
-	InitMetrics("testAppId2", "", []config.MetricsRule{
-		{
-			Name: "dapr_runtime_service_invocation_req_sent_total",
-			Labels: []config.MetricLabel{
-				{
-					Name: "method",
-					Regex: map[string]string{
-						"/orders/TEST":      "/orders/.+",
-						"/lightsabers/TEST": "/lightsabers/.+",
-					},
-				},
-			},
-		},
+		assert.Equal(t, "/siths/123", viewData[0].Tags[2].Value)
 	})
 
 	t.Run("correct regex rules applied", func(t *testing.T) {
