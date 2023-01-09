@@ -4423,21 +4423,21 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	})
 
 	t.Run("StateStore healthz - 204 No Content", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0-alpha1/healthz/components?componentName=%s", storeName)
+		apiPath := fmt.Sprintf("v1.0-alpha1/healthz/component?componentName=%s", storeName)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("StateStore healthz - 400 Not Found", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/healthz/components?componentName=NotExists"
+		apiPath := "v1.0-alpha1/healthz/component?componentName=NotExists"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
 	t.Run("StateStore healthz - 500 Internal Server Error", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0-alpha1/healthz/components?componentName=%s", storeName)
+		apiPath := fmt.Sprintf("v1.0-alpha1/healthz/component?componentName=%s", storeName)
 		throwError = true
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
@@ -4445,28 +4445,28 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	})
 
 	t.Run("Pubsub healthz - 204 No Content", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/healthz/components?componentName=pubsubname"
+		apiPath := "v1.0-alpha1/healthz/component?componentName=pubsubname"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("Pubsub healthz - 400 Not Found", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/healthz/components?componentName=NotExists"
+		apiPath := "v1.0-alpha1/healthz/component?componentName=NotExists"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
 	t.Run("SecretStore healthz - 204 No Content", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/healthz/components?componentName=secretstore1"
+		apiPath := "v1.0-alpha1/healthz/component?componentName=secretstore1"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("SecretStore healthz - 400 Not Found", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/healthz/components?componentName=NotExists"
+		apiPath := "v1.0-alpha1/healthz/component?componentName=NotExists"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 400, resp.StatusCode)

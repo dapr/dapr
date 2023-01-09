@@ -34,7 +34,7 @@ const appPort = 3000
 
 // kubernetes is the name of the secret store
 const (
-	componentHealthcheckURL = "http://localhost:3500/v1.0-alpha1/healthz/components"
+	componentHealthcheckURL = "http://localhost:3500/v1.0-alpha1/healthz/component"
 )
 
 // requestResponse represents a request or response for the APIs in this app.

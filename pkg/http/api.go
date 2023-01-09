@@ -503,7 +503,7 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz/components",
+			Route:   "healthz/component",
 			Version: apiVersionV1alpha1,
 			Handler: a.onGetComponentHealthz,
 		},
