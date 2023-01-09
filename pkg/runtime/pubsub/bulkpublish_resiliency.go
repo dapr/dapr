@@ -38,7 +38,7 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 					filteredEntries := utils.Filter(*requestEntries.Load(), func(item contribPubsub.BulkMessageEntry) bool {
 						_, ok := failedEntryIds[item.EntryId]
 						return ok
-					}, false)
+					})
 					requestEntries.Store(&filteredEntries)
 				}
 			},
