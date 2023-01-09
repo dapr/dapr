@@ -127,12 +127,3 @@ func useEnvVar(envVar string, opt func(value string) Opt) Opt {
 
 	return noop
 }
-
-func atoi(str string, defaultValue int) int {
-	val, err := strconv.Atoi(str)
-	if err != nil {
-		return defaultValue
-	}
-
-	return val
-}
