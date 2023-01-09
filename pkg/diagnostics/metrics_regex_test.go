@@ -67,11 +67,22 @@ func TestRegexRulesSingle(t *testing.T) {
 		s := servicesMetrics()
 
 		s.ServiceInvocationRequestSent("testAppId2", "/orders/123")
-		s.ServiceInvocationRequestSent("testAppId2", "/lightsabers/123")
+		s.ServiceInvocationRequestSent("testAppId3", "/lightsabers/123")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 
-		assert.Equal(t, "/orders/TEST", viewData[0].Tags[2].Value)
-		assert.Equal(t, "/lightsabers/TEST", viewData[1].Tags[2].Value)
+		orders := false
+		lightsabers := false
+
+		for _, v := range viewData {
+			if v.Tags[1].Value == "testAppId2" && v.Tags[2].Value == "/orders/TEST" {
+				orders = true
+			} else if v.Tags[1].Value == "testAppId3" && v.Tags[2].Value == "/lightsabers/TEST" {
+				lightsabers = true
+			}
+		}
+
+		assert.True(t, orders)
+		assert.True(t, lightsabers)
 	})
 }
