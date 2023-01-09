@@ -395,7 +395,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 		var appBulkResponse pubsub.AppBulkResponse
 		err := json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
-			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += int64(len(rawMsgEntries))
+			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 			bscData.bulkSubDiag.elapsed = elapsed
 			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
 			return fmt.Errorf("failed unmarshalling app response for bulk subscribe: %w", err)
