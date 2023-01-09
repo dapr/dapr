@@ -32,8 +32,9 @@ func newDirectMessaging() *directMessaging {
 func TestDestinationHeaders(t *testing.T) {
 	t.Run("destination header present", func(t *testing.T) {
 		appID := "test1"
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.addDestinationAppIDHeaderToMetadata(appID, req)
@@ -46,8 +47,9 @@ func TestCallerAndCalleeHeaders(t *testing.T) {
 	t.Run("caller and callee header present", func(t *testing.T) {
 		callerAppID := "caller-app"
 		calleeAppID := "callee-app"
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.addCallerAndCalleeAppIDHeaderToMetadata(callerAppID, calleeAppID, req)
@@ -60,8 +62,9 @@ func TestCallerAndCalleeHeaders(t *testing.T) {
 
 func TestForwardedHeaders(t *testing.T) {
 	t.Run("forwarded headers present", func(t *testing.T) {
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.hostAddress = "1"
@@ -80,12 +83,13 @@ func TestForwardedHeaders(t *testing.T) {
 	})
 
 	t.Run("forwarded headers get appended", func(t *testing.T) {
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{
-			fasthttp.HeaderXForwardedFor:  {"originalXForwardedFor"},
-			fasthttp.HeaderXForwardedHost: {"originalXForwardedHost"},
-			fasthttp.HeaderForwarded:      {"originalForwarded"},
-		})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{
+				fasthttp.HeaderXForwardedFor:  {"originalXForwardedFor"},
+				fasthttp.HeaderXForwardedHost: {"originalXForwardedHost"},
+				fasthttp.HeaderForwarded:      {"originalForwarded"},
+			})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.hostAddress = "1"

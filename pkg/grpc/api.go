@@ -37,7 +37,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/acl"
+	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -109,6 +109,9 @@ type API interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
+	GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error)
+	StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error)
+	TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -119,6 +122,7 @@ type api struct {
 	appChannel                  channel.AppChannel
 	resiliency                  resiliency.Provider
 	stateStores                 map[string]state.Store
+	workflowComponents          map[string]workflows.Workflow
 	transactionalStateStores    map[string]state.TransactionalStore
 	secretStores                map[string]secretstores.SecretStore
 	secretsConfiguration        map[string]config.SecretsScope
@@ -173,7 +177,7 @@ func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 	// 4. delegate to the component
-	compResp, err := store.TryLock(compReq)
+	compResp, err := store.TryLock(ctx, compReq)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
@@ -213,7 +217,7 @@ func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) 
 		return newInternalErrorUnlockResponse(), err
 	}
 	// 4. delegate to the component
-	compResp, err := store.Unlock(compReq)
+	compResp, err := store.Unlock(ctx, compReq)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
@@ -277,6 +281,7 @@ type APIOpts struct {
 	SecretStores                map[string]secretstores.SecretStore
 	SecretsConfiguration        map[string]config.SecretsScope
 	ConfigurationStores         map[string]configuration.Store
+	WorkflowComponents          map[string]workflows.Workflow
 	LockStores                  map[string]lock.Store
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
@@ -310,6 +315,7 @@ func NewAPI(opts APIOpts) API {
 		stateStores:                 opts.StateStores,
 		transactionalStateStores:    transactionalStateStores,
 		secretStores:                opts.SecretStores,
+		workflowComponents:          opts.WorkflowComponents,
 		configurationStores:         opts.ConfigurationStores,
 		configurationSubscribe:      make(map[string]chan struct{}),
 		lockStores:                  opts.LockStores,
@@ -336,71 +342,6 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
-
-	if a.accessControlList != nil {
-		// An access control policy has been specified for the app. Apply the policies.
-		operation := req.Message().Method
-		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
-		// Get the http verb in case the application protocol is http
-		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
-			httpExt := req.Message().GetHttpExtension()
-			if httpExt != nil {
-				httpVerb = httpExt.GetVerb()
-			}
-		}
-		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol, a.accessControlList)
-
-		if !callAllowed {
-			return nil, status.Errorf(codes.PermissionDenied, errMsg)
-		}
-	}
-
-	var callerAppID string
-	callerIDHeader, ok := req.Metadata()[invokev1.CallerIDHeader]
-	if ok && len(callerIDHeader.Values) > 0 {
-		callerAppID = callerIDHeader.Values[0]
-	} else {
-		callerAppID = "unknown"
-	}
-
-	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message().Method)
-
-	var statusCode int32
-	defer func() {
-		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
-	}()
-
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		statusCode = int32(codes.Internal)
-		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
-		return nil, err
-	} else {
-		statusCode = resp.Status().Code
-	}
-
-	return resp.Proto(), err
-}
-
-// CallActor invokes a virtual actor.
-func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	req, err := invokev1.InternalInvokeRequest(in)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
-	}
-
-	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	resp, err := a.actor.Call(ctx, req)
-	if err != nil {
-		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
-		if errors.Is(err, actors.ErrDaprResponseHeader) {
-			return resp.Proto(), nil
-		}
-
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
-		return nil, err
-	}
-	return resp.Proto(), nil
 }
 
 // validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
@@ -513,24 +454,39 @@ type invokeServiceResp struct {
 	trailers metadata.MD
 }
 
+// Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
-	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
-	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
-		req.WithMetadata(incomingMD)
-	}
-
 	if a.directMessaging == nil {
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx,
-		a.resiliency.EndpointPolicy(in.Id, in.Id+":"+req.Message().Method),
-	)
+	apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
+	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
+
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage()).
+		WithReplay(policyDef.HasRetries())
+	defer req.Close()
+
+	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		req.WithMetadata(incomingMD)
+	}
+
+	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*invokeServiceResp, error) {
 		rResp := &invokeServiceResp{}
 		imr, rErr := a.directMessaging.Invoke(ctx, in.Id, req)
 		if imr != nil {
-			rResp.message = imr.Message()
+			// Read the entire message in memory then close imr
+			pd, pdErr := imr.ProtoWithData()
+			imr.Close()
+			if pd != nil {
+				rResp.message = pd.Message
+			}
+
+			// If we have an error, set it only if rErr is not already set
+			if pdErr != nil && rErr == nil {
+				rErr = pdErr
+			}
 		}
 		if rErr != nil {
 			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
@@ -539,10 +495,10 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
-			errorMessage := ""
-			if imr != nil {
-				_, b := imr.RawData()
-				errorMessage = string(b)
+			apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
+			var errorMessage string
+			if rResp.message != nil && rResp.message.Data != nil {
+				errorMessage = string(rResp.message.Data.Value)
 			}
 			code := int(imr.Status().Code)
 			// If the status is OK, will be nil
@@ -603,14 +559,17 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	features := thepubsub.Features()
+	entryIdSet := make(map[string]struct{}, len(in.Entries)) //nolint:stylecheck
 
 	entries := make([]pubsub.BulkMessageEntry, len(in.Entries))
 	for i, entry := range in.Entries {
-		if entry.EntryId == "" {
-			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "missing entryId")
+		// Validate entry_id
+		if _, ok := entryIdSet[entry.EntryId]; ok || entry.EntryId == "" {
+			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "entryId is duplicated or not present for entry")
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.BulkPublishResponse{}, err
 		}
+		entryIdSet[entry.EntryId] = struct{}{}
 		entries[i].EntryId = entry.EntryId
 		entries[i].ContentType = entry.ContentType
 		entries[i].Event = entry.Event
@@ -665,35 +624,25 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	start := time.Now()
+	// err is only nil if all entries are successfully published.
+	// For partial success, err is not nil and res contains the failed entries.
 	res, err := a.pubsubAdapter.BulkPublish(&req)
+
 	elapsed := diag.ElapsedSince(start)
-	var eventsPublished int64 = 0
+	eventsPublished := int64(len(req.Entries))
 
-	// BulkPublishResponse contains all failed entries from the request.
-	// If there are no failed entries, then the statuses array will be empty.
-	bulkRes := runtimev1pb.BulkPublishResponse{}
-
-	if len(res.Statuses) != 0 {
-		bulkRes.Statuses = make([]*runtimev1pb.BulkPublishResponseEntry, 0, len(res.Statuses))
-		for _, r := range res.Statuses {
-			if r.Status == pubsub.PublishSucceeded {
-				// Only count the events that have been successfully published to the pub/sub component
-				eventsPublished++
-			} else {
-				resEntry := runtimev1pb.BulkPublishResponseEntry{}
-				resEntry.EntryId = r.EntryId
-				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
-				if r.Error != nil {
-					resEntry.Error = r.Error.Error()
-				}
-				bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
-			}
-		}
+	if len(res.FailedEntries) != 0 {
+		eventsPublished -= int64(len(res.FailedEntries))
 	}
-
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
 
+	// BulkPublishResponse contains all failed entries from the request.
+	// If there are no failed entries, then the failedEntries array will be empty.
+	bulkRes := runtimev1pb.BulkPublishResponse{}
+
 	if err != nil {
+		// Only respond with error if it is  permission denied or not found.
+		// On error, the response will be empty.
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			nerr = status.Errorf(codes.PermissionDenied, err.Error())
@@ -707,7 +656,16 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		return &bulkRes, nerr
 	}
 
+	bulkRes.FailedEntries = make([]*runtimev1pb.BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
+	for _, r := range res.FailedEntries {
+		resEntry := runtimev1pb.BulkPublishResponseFailedEntry{EntryId: r.EntryId}
+		if r.Error != nil {
+			resEntry.Error = r.Error.Error()
+		}
+		bulkRes.FailedEntries = append(bulkRes.FailedEntries, &resEntry)
+	}
 	closeChildSpans(ctx, nil)
+	// even on partial failures, err is nil. As when error is set, the response is expected to not be processed.
 	return &bulkRes, nil
 }
 
@@ -784,7 +742,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	policyDef := a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
 	bgrPolicyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
 	bgr, err := bgrPolicyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-		rBulkGet, rBulkResponse, rErr := store.BulkGet(reqs)
+		rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, reqs)
 		return &bulkGetRes{
 			bulkGet:   rBulkGet,
 			responses: rBulkResponse,
@@ -825,7 +783,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			req := param.(*state.GetRequest)
 			policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
 			res, policyErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-				return store.Get(req)
+				return store.Get(ctx, req)
 			})
 
 			item := &runtimev1pb.BulkStateItem{
@@ -899,7 +857,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-		return store.Get(req)
+		return store.Get(ctx, req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -989,7 +947,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkSet(reqs)
+		return nil, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1038,7 +996,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
-		return querier.Query(&req)
+		return querier.Query(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1116,7 +1074,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.Delete(&req)
+		return nil, store.Delete(ctx, &req)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1166,7 +1124,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkDelete(reqs)
+		return nil, store.BulkDelete(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1408,7 +1366,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		Metadata:   in.Metadata,
 	}
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, transactionalStore.Multi(storeReq)
+		return nil, transactionalStore.Multi(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1642,14 +1600,18 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	req := invokev1.NewInvokeMethodRequest(in.Method)
-	req.WithActor(in.ActorType, in.ActorId)
-	req.WithRawData(in.Data, "")
-	reqMetadata := map[string][]string{}
+	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+
+	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
 		reqMetadata[k] = []string{v}
 	}
-	req.WithMetadata(reqMetadata)
+	req := invokev1.NewInvokeMethodRequest(in.Method).
+		WithActor(in.ActorType, in.ActorId).
+		WithRawDataBytes(in.Data).
+		WithMetadata(reqMetadata).
+		WithReplay(policyDef.HasRetries())
+	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1658,8 +1620,10 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
-		a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId),
+	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.actor.Call(ctx, req)
@@ -1673,7 +1637,12 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	if resp == nil {
 		resp = invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
 	}
-	_, response.Data = resp.RawData()
+	defer resp.Close()
+
+	response.Data, err = resp.RawDataFull()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response data: %w", err)
+	}
 	return response, nil
 }
 
@@ -1786,6 +1755,133 @@ func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataReques
 		return &emptypb.Empty{}, err
 	}
 	return &emptypb.Empty{}, nil
+}
+
+func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
+	if in.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+	if in.WorkflowComponent == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+	req := workflows.WorkflowReference{
+		InstanceID: in.InstanceId,
+	}
+	response, err := workflowRun.Get(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+
+	id := &runtimev1pb.WorkflowReference{
+		InstanceId: response.WFInfo.InstanceID,
+	}
+
+	t, err := time.Parse(time.RFC3339, response.StartTime)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTimerParse, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
+	}
+
+	res := &runtimev1pb.GetWorkflowResponse{
+		InstanceId: id.InstanceId,
+		StartTime:  t.Unix(),
+		Metadata:   response.Metadata,
+	}
+	return res, nil
+}
+
+func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error) {
+	if in.WorkflowName == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrWorkflowNameMissing)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	if in.WorkflowComponent == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	if in.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+
+	wf := workflows.WorkflowReference{
+		InstanceID: in.InstanceId,
+	}
+	req := workflows.StartRequest{
+		WorkflowReference: wf,
+		Options:           in.Options,
+		WorkflowName:      in.WorkflowName,
+		Input:             in.Input,
+	}
+
+	resp, err := workflowRun.Start(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrStartWorkflow, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.WorkflowReference{}, err
+	}
+	ret := &runtimev1pb.WorkflowReference{
+		InstanceId: resp.InstanceID,
+	}
+	return ret, nil
+}
+
+func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
+	if in.InstanceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
+	}
+
+	if in.WorkflowComponent == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
+	}
+
+	workflowRun := a.workflowComponents[in.WorkflowComponent]
+	if workflowRun == nil {
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
+	}
+
+	req := workflows.WorkflowReference{
+		InstanceID: in.InstanceId,
+	}
+
+	err := workflowRun.Terminate(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TerminateWorkflowResponse{}, nil
+	}
+	return &runtimev1pb.TerminateWorkflowResponse{}, nil
 }
 
 // Shutdown the sidecar.
@@ -1901,8 +1997,6 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	subscribeKeys := make([]string, 0)
 
 	// TODO(@halspang) provide a switch to use just resiliency or this.
-	newCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	if len(request.Keys) > 0 {
 		subscribeKeys = append(subscribeKeys, request.Keys...)
@@ -1921,7 +2015,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[string](newCtx,
+	policyRunner := resiliency.NewRunner[string](configurationServer.Context(),
 		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
 	)
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
@@ -2000,4 +2094,16 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
+}
+
+func (a *api) Close() error {
+	a.configurationSubscribeLock.Lock()
+	defer a.configurationSubscribeLock.Unlock()
+
+	for k, stop := range a.configurationSubscribe {
+		close(stop)
+		delete(a.configurationSubscribe, k)
+	}
+
+	return nil
 }

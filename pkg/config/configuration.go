@@ -16,17 +16,18 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/dapr/pkg/buildinfo"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -64,6 +65,9 @@ type Configuration struct {
 	metav1.ObjectMeta `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
+
+	// Internal fields
+	featuresEnabled map[Feature]struct{}
 }
 
 // AccessControlList is an in-memory access control list config for fast lookup.
@@ -169,7 +173,20 @@ type OtelSpec struct {
 
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
-	Enabled bool `json:"enabled" yaml:"enabled"`
+	Enabled bool          `json:"enabled" yaml:"enabled"`
+	Rules   []MetricsRule `json:"rules" yaml:"rules"`
+}
+
+// MetricsRule defines configuration options for a metric.
+type MetricsRule struct {
+	Name   string        `json:"name" yaml:"name"`
+	Labels []MetricLabel `json:"labels" yaml:"labels"`
+}
+
+// MetricsLabel defines an object that allows to set regex expressions for a label.
+type MetricLabel struct {
+	Name  string            `json:"name" yaml:"name"`
+	Regex map[string]string `json:"regex" yaml:"regex"`
 }
 
 // AppPolicySpec defines the policy data structure for each app.
@@ -302,7 +319,7 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 		return nil, err
 	}
 	if resp.GetConfiguration() == nil {
-		return nil, errors.Errorf("configuration %s not found", config)
+		return nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
 	err = json.Unmarshal(resp.GetConfiguration(), conf)
@@ -325,12 +342,12 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 	for _, scope := range scopes {
 		// validate scope
 		if set.Has(scope.StoreName) {
-			return errors.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
+			return fmt.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
 		}
 		if scope.DefaultAccess != "" &&
 			!strings.EqualFold(scope.DefaultAccess, AllowAccess) &&
 			!strings.EqualFold(scope.DefaultAccess, DenyAccess) {
-			return errors.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
+			return fmt.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
 		}
 		set.Insert(scope.StoreName)
 
@@ -373,11 +390,37 @@ func containsKey(s []string, key string) bool {
 	return index < len(s) && s[index] == key
 }
 
-func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
-	for _, feature := range features {
-		if feature.Name == target {
-			return feature.Enabled
+// LoadFeatures loads the list of enabled features, from the Configuration spec and from the buildinfo.
+func (c *Configuration) LoadFeatures() {
+	forced := buildinfo.Features()
+	c.featuresEnabled = make(map[Feature]struct{}, len(c.Spec.Features)+len(forced))
+	for _, feature := range c.Spec.Features {
+		if feature.Name == "" || !feature.Enabled {
+			continue
 		}
+		c.featuresEnabled[feature.Name] = struct{}{}
 	}
-	return false
+	for _, v := range forced {
+		if v == "" {
+			continue
+		}
+		c.featuresEnabled[Feature(v)] = struct{}{}
+	}
+}
+
+// IsFeatureEnabled returns true if a Feature (such as a preview) is enabled.
+func (c Configuration) IsFeatureEnabled(target Feature) (enabled bool) {
+	_, enabled = c.featuresEnabled[target]
+	return enabled
+}
+
+// EnabledFeatures returns the list of features that have been enabled.
+func (c Configuration) EnabledFeatures() []string {
+	features := make([]string, len(c.featuresEnabled))
+	i := 0
+	for f := range c.featuresEnabled {
+		features[i] = string(f)
+		i++
+	}
+	return features[:i]
 }

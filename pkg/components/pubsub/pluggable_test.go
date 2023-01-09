@@ -21,25 +21,20 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	guuid "github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
-
-	"go.uber.org/atomic"
-
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
-
 	"github.com/dapr/kit/logger"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"google.golang.org/grpc"
 )
 
 var testLogger = logger.NewLogger("pubsub-pluggable-test")
@@ -186,7 +181,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = ps.Publish(&pubsub.PublishRequest{
+		err = ps.Publish(context.Background(), &pubsub.PublishRequest{
 			Topic: fakeTopic,
 		})
 
@@ -207,7 +202,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = ps.Publish(&pubsub.PublishRequest{
+		err = ps.Publish(context.Background(), &pubsub.PublishRequest{
 			Topic: fakeTopic,
 		})
 

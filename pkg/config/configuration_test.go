@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadStandaloneConfiguration(t *testing.T) {
@@ -324,21 +325,24 @@ func TestContainsKey(t *testing.T) {
 }
 
 func TestFeatureEnabled(t *testing.T) {
-	t.Run("Test feature enabled is correct", func(t *testing.T) {
-		features := []FeatureSpec{
-			{
-				Name:    "testEnabled",
-				Enabled: true,
+	config := Configuration{
+		Spec: ConfigurationSpec{
+			Features: []FeatureSpec{
+				{
+					Name:    "testEnabled",
+					Enabled: true,
+				},
+				{
+					Name:    "testDisabled",
+					Enabled: false,
+				},
 			},
-			{
-				Name:    "testDisabled",
-				Enabled: false,
-			},
-		}
-		assert.True(t, IsFeatureEnabled(features, "testEnabled"))
-		assert.False(t, IsFeatureEnabled(features, "testDisabled"))
-		assert.False(t, IsFeatureEnabled(features, "testMissing"))
-	})
+		},
+	}
+	config.LoadFeatures()
+	assert.True(t, config.IsFeatureEnabled("testEnabled"))
+	assert.False(t, config.IsFeatureEnabled("testDisabled"))
+	assert.False(t, config.IsFeatureEnabled("testMissing"))
 }
 
 func TestFeatureSpecForStandAlone(t *testing.T) {
@@ -371,8 +375,9 @@ func TestFeatureSpecForStandAlone(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config, _, err := LoadStandaloneConfiguration(tc.confFile)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.featureEnabled, IsFeatureEnabled(config.Spec.Features, tc.featureName))
+			require.NoError(t, err)
+			config.LoadFeatures()
+			assert.Equal(t, tc.featureEnabled, config.IsFeatureEnabled(tc.featureName))
 		})
 	}
 }
@@ -380,7 +385,7 @@ func TestFeatureSpecForStandAlone(t *testing.T) {
 func TestMTLSSpecForStandAlone(t *testing.T) {
 	t.Run("test mtls spec config", func(t *testing.T) {
 		config, _, err := LoadStandaloneConfiguration("./testdata/mtls_config.yaml")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, config.Spec.MTLSSpec.Enabled)
 		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
 		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)

@@ -27,6 +27,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 // Dapr service provides APIs to user application to access Dapr building blocks.
 service Dapr {
   // Invokes a method on a remote Dapr app.
+  // Deprecated: Use proxy mode service invocation instead.
   rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
 
   // Gets the state for a specific key.
@@ -109,6 +110,15 @@ service Dapr {
 
   // Sets value in extended metadata of the sidecar
   rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
+
+  // Start Workflow
+  rpc StartWorkflowAlpha1 (StartWorkflowRequest) returns (WorkflowReference) {}
+
+  // Get Workflow details
+  rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
+
+  // Terminate Workflow
+  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
 
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
@@ -322,26 +332,18 @@ message BulkPublishRequestEntry {
 
 // BulkPublishResponse is the message returned from a BulkPublishEvent call
 message BulkPublishResponse {
-  // The publish statuses for different events in the BulkPublishEvent call
-  repeated BulkPublishResponseEntry statuses = 1;
+  // The entries for different events that failed publish in the BulkPublishEvent call
+  repeated BulkPublishResponseFailedEntry failedEntries = 1;
 }
 
-// BulkPublishResponseEntry is the message mapping response status for each event in the BulkPublishEvent call
-message BulkPublishResponseEntry {
-
-  enum Status {
-    SUCCESS = 0;
-    FAILED = 1;
-  }
+// BulkPublishResponseFailedEntry is the message containing the entryID and error of a failed event in BulkPublishEvent call
+message BulkPublishResponseFailedEntry {
 
   // The response scoped unique ID referring to this message
   string entry_id = 1;
 
-  // The status of event publish
-  Status status  = 2;
-
   // The error message if any on failure
-  string error = 3;
+  string error = 2;
 }
 
 
@@ -354,10 +356,10 @@ message InvokeBindingRequest {
   bytes data = 2;
 
   // The metadata passing to output binding components
-  // 
+  //
   // Common metadata property:
-  // - ttlInSeconds : the time to live in seconds for the message. 
-  // If set in the binding definition will cause all messages to 
+  // - ttlInSeconds : the time to live in seconds for the message.
+  // If set in the binding definition will cause all messages to
   // have a default time to live. The message ttl overrides any value
   // in the binding definition.
   map<string, string> metadata = 3;
@@ -420,7 +422,7 @@ message TransactionalStateOperation {
   // The type of operation to be executed
   string operationType = 1;
 
-  // State values to be operated on 
+  // State values to be operated on
   common.v1.StateItem request = 2;
 }
 
@@ -672,4 +674,36 @@ message UnlockResponse {
   }
 
   Status status = 1;
+}
+
+message WorkflowReference {
+  string instance_id = 1;
+}
+
+message GetWorkflowRequest {
+  string instance_id  = 1;
+  string workflow_type = 2;
+  string workflow_component = 3;
+}
+
+message GetWorkflowResponse {
+  string instance_id = 1;
+  int64 start_time = 2;
+  map<string, string> metadata = 3;
+}
+
+message StartWorkflowRequest {
+  string instance_id = 1;
+  string workflow_component = 2;
+  string workflow_name = 3;
+  map<string, string> options = 4;
+  google.protobuf.Any input = 5;
+}
+
+message TerminateWorkflowRequest {
+  string instance_id = 1;
+  string workflow_component = 2;
+}
+
+message TerminateWorkflowResponse {
 }
