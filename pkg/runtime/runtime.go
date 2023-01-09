@@ -216,6 +216,7 @@ type DaprRuntime struct {
 	appHealthReady            func() // Invoked the first time the app health becomes ready
 	appHealthLock             *sync.Mutex
 	appCallbackListener       *appCallbackListener
+	bulkSubLock               *sync.Mutex
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -301,6 +302,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		resiliency:                 resiliencyProvider,
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
+		bulkSubLock:                &sync.Mutex{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -431,7 +433,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Initialize metrics only if MetricSpec is enabled.
 	if a.globalConfig.Spec.MetricSpec.Enabled {
-		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace); err != nil {
+		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace, a.globalConfig.Spec.MetricSpec.Rules); err != nil {
 			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
 		}
 	}
@@ -806,15 +808,13 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub),
-	)
+	policyDef := a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub)
 	routeMetadata := route.metadata
 
 	namespaced := a.pubSubs[name].namespaceScoped
 
 	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
-		err := a.bulkSubscribeTopic(ctx, policyRunner, name, topic, route, namespaced)
+		err := a.bulkSubscribeTopic(ctx, policyDef, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
 			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
@@ -931,6 +931,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			path:       routePath,
 			pubsub:     name,
 		}
+		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			var pErr error
 			switch a.runtimeConfig.ApplicationProtocol {
