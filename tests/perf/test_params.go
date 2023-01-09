@@ -1,3 +1,17 @@
+/*
+Copyright 2022 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package perf
 
 import (
@@ -68,21 +82,50 @@ func WithPayload(payload string) Opt {
 	}
 }
 
+func noop(tp *TestParameters) {}
+
 func Params(opts ...Opt) TestParameters {
 	params := TestParameters{
-		QPS: atoi(getEnvVarOrDefault(qpsEnvVar, ""), defaultQPS),
-		ClientConnections: atoi(
-			getEnvVarOrDefault(clientConnectionsEnvVar, ""), defaultClientConnections),
-		TestDuration: getEnvVarOrDefault(testDurationEnvVar, defaultTestDuration),
-		Payload:      getEnvVarOrDefault(payloadEnvVar, defaultPayload),
-		PayloadSizeKB: atoi(
-			getEnvVarOrDefault(payloadSizeEnvVar, ""), defaultPayloadSizeKB),
+		QPS:               defaultQPS,
+		ClientConnections: defaultClientConnections,
+		TestDuration:      defaultTestDuration,
+		Payload:           defaultPayload,
+		PayloadSizeKB:     defaultPayloadSizeKB,
 	}
 
-	for _, o := range opts {
+	for _, o := range append(opts, // set environment variables to have precedence over manually-set and default params.
+		useEnvVar(qpsEnvVar, toStrParam(WithQPS)),
+		useEnvVar(clientConnectionsEnvVar, toStrParam(WithConnections)),
+		useEnvVar(testDurationEnvVar, WithDuration),
+		useEnvVar(payloadEnvVar, WithPayload),
+		useEnvVar(payloadSizeEnvVar, toStrParam(WithPayloadSize)),
+	) {
 		o(&params)
 	}
 	return params
+}
+
+// toStrParam receives a function A that receives a int as a parameter and returns a function B
+// that accepts a string. Applies the Atoi conversion on the given string from function B and if it fails it returns a no-op operation, otherwise the value
+// is applied to the received function.
+func toStrParam(opt func(value int) Opt) func(value string) Opt {
+	return func(value string) Opt {
+		val, err := strconv.Atoi(value)
+		if err != nil {
+			return noop
+		}
+		return opt(val)
+	}
+}
+
+// useEnvVar if the provided envVar exists it will be applied as a parameter of the `opt` function and returned as a Opt,
+// otherwise it will return a no-op function.
+func useEnvVar(envVar string, opt func(value string) Opt) Opt {
+	if val, ok := os.LookupEnv(envVar); ok && val != "" {
+		return opt(val)
+	}
+
+	return noop
 }
 
 func atoi(str string, defaultValue int) int {
@@ -92,12 +135,4 @@ func atoi(str string, defaultValue int) int {
 	}
 
 	return val
-}
-
-func getEnvVarOrDefault(envVar, defaultValue string) string {
-	if val, ok := os.LookupEnv(envVar); ok && val != "" {
-		return val
-	}
-
-	return defaultValue
 }
