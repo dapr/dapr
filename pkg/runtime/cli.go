@@ -54,7 +54,7 @@ func FromFlags() (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
-	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
+	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
 	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
@@ -228,9 +228,18 @@ func FromFlags() (*DaprRuntime, error) {
 		concurrency = *appMaxConcurrency
 	}
 
-	appPrtcl := string(HTTPProtocol)
-	if *appProtocol != string(HTTPProtocol) {
-		appPrtcl = *appProtocol
+	var appProtocol string
+	{
+		p := strings.ToLower(*appProtocolPtr)
+		switch p {
+		case string(HTTPProtocol),
+			string(GRPCProtocol):
+			appProtocol = p
+		case "":
+			appProtocol = string(HTTPProtocol)
+		default:
+			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocolPtr)
+		}
 	}
 
 	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
@@ -271,7 +280,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AllowedOrigins:               *allowedOrigins,
 		GlobalConfig:                 *config,
 		ComponentsPath:               *componentsPath,
-		AppProtocol:                  appPrtcl,
+		AppProtocol:                  appProtocol,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,
 		InternalGRPCPort:             daprInternalGRPC,
