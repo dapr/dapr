@@ -520,6 +520,9 @@ jobs:
       - name: Run stress test actor types without SDK
         if: env.TEST_PREFIX != ''
         run: make test-perf-actor_type_scale
+      - name: Run stress test pubsub publish http
+        if: env.TEST_PREFIX != ''
+        run: make test-perf-pubsub_publish_http
       - name: Save control plane logs
         if: always() && env.TEST_PREFIX != ''
         run: |
