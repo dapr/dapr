@@ -446,11 +446,13 @@ type invokeServiceResp struct {
 	trailers metadata.MD
 }
 
+// Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
+	apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
 	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage()).
@@ -485,6 +487,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
+			apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
 			var errorMessage string
 			if rResp.message != nil && rResp.message.Data != nil {
 				errorMessage = string(rResp.message.Data.Value)
