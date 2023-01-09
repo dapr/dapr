@@ -332,18 +332,6 @@ func NewAPI(opts APIOpts) API {
 	}
 }
 
-// CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
-func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	if a.appChannel == nil {
-		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
-	}
-
-	req, err := invokev1.InternalInvokeRequest(in)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
-	}
-}
-
 // validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
 // or an error.
 func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, error) {

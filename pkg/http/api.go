@@ -43,7 +43,6 @@ import (
 	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
@@ -83,7 +82,7 @@ type api struct {
 	getSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
 	resiliency                  resiliency.Provider
 	stateStores                 map[string]state.Store
-	workflowComponents         map[string]wfs.Workflow
+	workflowComponents          map[string]wfs.Workflow
 	lockStores                  map[string]lock.Store
 	configurationStores         map[string]configuration.Store
 	configurationSubscribe      map[string]chan struct{}
@@ -197,7 +196,7 @@ func NewAPI(opts APIOpts) API {
 		getSubscriptionsFn:          opts.GetSubscriptionsFn,
 		resiliency:                  opts.Resiliency,
 		stateStores:                 opts.StateStores,
-		workflowComponents:         opts.WorkflowsComponents,
+		workflowComponents:          opts.WorkflowsComponents,
 		lockStores:                  opts.LockStores,
 		secretStores:                opts.SecretStores,
 		secretsConfiguration:        opts.SecretsConfiguration,

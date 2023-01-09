@@ -55,6 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
@@ -74,7 +75,6 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
@@ -1507,7 +1507,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 
 func (a *DaprRuntime) storeMetadata() {
 	// store dapr runtime version
-	_ = a.extendedMetadata.MetadataSet(metadata.DaprRuntimeVersionKey, version.Version())
+	_ = a.extendedMetadata.MetadataSet(metadata.DaprRuntimeVersionKey, buildinfo.Version())
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
