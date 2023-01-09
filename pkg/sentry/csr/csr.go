@@ -95,6 +95,25 @@ func GenerateIssuerCertCSR(cn string, publicKey interface{}, ttl, skew time.Dura
 	return cert, nil
 }
 
+func GenerateClientCertCSR(cn string, publicKey interface{}, ttl, skew time.Duration) (*x509.Certificate, error) {
+	cert, err := generateBaseCert(ttl, skew, publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	cert.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
+	// used only for client auth
+	cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+	cert.Subject = pkix.Name{
+		CommonName: cn,
+	}
+	cert.DNSNames = []string{cn}
+	cert.IsCA = false
+	cert.BasicConstraintsValid = true
+	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
+	return cert, nil
+}
+
 // GenerateRootCertCSR returns a CA root cert x509 Certificate.
 func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl, skew time.Duration) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(ttl, skew, publicKey)

@@ -22,6 +22,9 @@ tls:
   issuer:
     certPEM: ""
     keyPEM: ""
+  client:
+    certPEM: ""
+    keyPEM: ""
   root:
     certPEM: ""
   trustDomain: cluster.local

@@ -1,4 +1,5 @@
 {{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-trust-bundle"}}
+{{- $existingClientSecret := lookup "v1" "Secret" .Release.Namespace "dapr-client-bundle"}}
 ---
 apiVersion: v1
 kind: Secret
@@ -18,6 +19,26 @@ data:
   {{end}}
   {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
   {{ else if $existingSecret }}ca.crt: {{ index $existingSecret.data "ca.crt" }}
+  {{end}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dapr-client-bundle
+  labels:
+    app: dapr-sentry
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+data:
+  {{ if .Values.tls.client.certPEM }}client.crt: {{ b64enc .Values.tls.client.certPEM | trim }}
+  {{ else if $existingClientSecret }}client.crt: {{ index $existingClientSecret.data "client.crt" }}
+  {{ end }}
+  {{ if .Values.tls.client.keyPEM }}client.key: {{ b64enc .Values.tls.client.keyPEM | trim }}
+  {{ else if $existingClientSecret }}client.key: {{ index $existingClientSecret.data "client.key" }}
+  {{end}}
+  {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
+  {{ else if $existingClientSecret }}ca.crt: {{ index $existingClientSecret.data "ca.crt" }}
   {{end}}
 ---
 apiVersion: apps/v1

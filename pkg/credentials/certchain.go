@@ -11,6 +11,10 @@ var (
 	IssuerCertFilename = "issuer.crt"
 	// IssuerKeyFilename is the filename that holds the issuer key.
 	IssuerKeyFilename = "issuer.key"
+	// ClientCertFilename is the filename that holds the client certificate using to communicate with sentry.
+	ClientCertFilename = "client.crt"
+	// ClientKeyFilename is the filename that holds the client key.
+	ClientKeyFilename = "client.key"
 )
 
 // CertChain holds the certificate trust chain PEM values.

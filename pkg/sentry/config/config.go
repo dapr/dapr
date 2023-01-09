@@ -39,6 +39,8 @@ type SentryConfig struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
+	ClientCertPath   string
+	ClientKeyPath    string
 	Features         []daprGlobalConfig.FeatureSpec
 	TokenAudience    *string
 }

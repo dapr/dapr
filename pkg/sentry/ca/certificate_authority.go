@@ -23,6 +23,7 @@ import (
 const (
 	caOrg                      = "dapr.io/sentry"
 	caCommonName               = "cluster.local"
+	clientCommonName           = "client"
 	selfSignedRootCertLifetime = time.Hour * 8760
 	certLoadTimeout            = time.Second * 30
 	certDetectInterval         = time.Second * 1
@@ -230,8 +231,12 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	clientCertPem, clientKeyPem, err := GetClientCertificates(certsCredentials.Certificate, certsCredentials.PrivateKey, selfSignedRootCertLifetime, c.config.AllowedClockSkew)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "error generating client certificate")
+	}
 	// store credentials so that next time sentry restarts it'll load normally
-	err = certs.StoreCredentials(c.config, rootCertPem, issuerCertPem, issuerKeyPem)
+	err = certs.StoreCredentials(c.config, rootCertPem, issuerCertPem, issuerKeyPem, clientCertPem, clientKeyPem)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -292,4 +297,26 @@ func GetNewSelfSignedCertificates(
 		PrivateKey:  issuerKey,
 		Certificate: issuerCert,
 	}, rootCertPem, issuerCertPem, issuerKeyPem, nil
+}
+
+func GetClientCertificates(signingCert *x509.Certificate, signingKey any, selfSignedCertLifetime, allowedClockSkew time.Duration) ([]byte, []byte, error) {
+	clientKey, err := certs.GenerateECPrivateKey()
+	if err != nil {
+		return nil, nil, err
+	}
+	clientCsr, err := csr.GenerateClientCertCSR(clientCommonName, &clientKey.PublicKey, selfSignedCertLifetime, allowedClockSkew)
+	if err != nil {
+		return nil, nil, err
+	}
+	clientCertBytes, err := x509.CreateCertificate(rand.Reader, clientCsr, signingCert, &clientKey.PublicKey, signingKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	clientCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: clientCertBytes})
+	clientEncodeKey, err := x509.MarshalECPrivateKey(clientKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	clientKeyPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeECPrivateKey, Bytes: clientEncodeKey})
+	return clientCertPem, clientKeyPem, nil
 }

@@ -23,6 +23,9 @@ import (
 
 	"k8s.io/client-go/util/homedir"
 
+	"github.com/dapr/kit/fswatcher"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -32,8 +35,6 @@ import (
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/fswatcher"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.sentry")
@@ -95,6 +96,8 @@ func main() {
 	issuerCertPath := filepath.Join(*credsPath, credentials.IssuerCertFilename)
 	issuerKeyPath := filepath.Join(*credsPath, credentials.IssuerKeyFilename)
 	rootCertPath := filepath.Join(*credsPath, credentials.RootCertFilename)
+	clientKeyPath := filepath.Join(*credsPath, credentials.ClientKeyFilename)
+	clientCertPath := filepath.Join(*credsPath, credentials.ClientCertFilename)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -107,6 +110,8 @@ func main() {
 	config.IssuerCertPath = issuerCertPath
 	config.IssuerKeyPath = issuerKeyPath
 	config.RootCertPath = rootCertPath
+	config.ClientKeyPath = clientKeyPath
+	config.ClientCertPath = clientCertPath
 	config.TrustDomain = *trustDomain
 	if *tokenAudience != "" {
 		config.TokenAudience = tokenAudience

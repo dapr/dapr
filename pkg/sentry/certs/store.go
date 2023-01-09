@@ -19,14 +19,14 @@ const (
 )
 
 // StoreCredentials saves the trust bundle in a Kubernetes secret store or locally on disk, depending on the hosting platform.
-func StoreCredentials(conf config.SentryConfig, rootCertPem, issuerCertPem, issuerKeyPem []byte) error {
+func StoreCredentials(conf config.SentryConfig, rootCertPem, issuerCertPem, issuerKeyPem []byte, clientCertPem, clientCertKey []byte) error {
 	if config.IsKubernetesHosted() {
-		return storeKubernetes(rootCertPem, issuerCertPem, issuerKeyPem)
+		return storeKubernetes(rootCertPem, issuerCertPem, issuerKeyPem, clientCertPem, clientCertKey)
 	}
-	return storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem, conf.RootCertPath, conf.IssuerCertPath, conf.IssuerKeyPath)
+	return storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem, clientCertPem, clientCertKey, conf.RootCertPath, conf.IssuerCertPath, conf.IssuerKeyPath, conf.ClientCertPath, conf.ClientKeyPath)
 }
 
-func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
+func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey, clientCertPem, clientCertKey []byte) error {
 	kubeClient, err := kubernetes.GetClient()
 	if err != nil {
 		return err
@@ -50,6 +50,33 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 	_, err = kubeClient.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "failed saving secret to kubernetes")
+	}
+
+	clientSecret := &v1.Secret{
+		Data: map[string][]byte{
+			credentials.RootCertFilename:   rootCertPem,
+			credentials.ClientCertFilename: append(clientCertPem, issuerCertPem...),
+			credentials.ClientKeyFilename:  clientCertKey,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      consts.ClientBundleK8sSecretName,
+			Namespace: namespace,
+		},
+		Type: v1.SecretTypeOpaque,
+	}
+	s, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), consts.TrustBundleK8sSecretName, metav1.GetOptions{})
+	if err != nil {
+		return errors.Wrap(err, "failed get client secret from kubernetes")
+	}
+	exist := len(s.Data) > 0
+	// since this is newly added, we need to check if the secret already exists
+	if exist {
+		_, err = kubeClient.CoreV1().Secrets(namespace).Update(context.TODO(), clientSecret, metav1.UpdateOptions{})
+	} else {
+		_, err = kubeClient.CoreV1().Secrets(namespace).Create(context.TODO(), clientSecret, metav1.CreateOptions{})
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed saving client secret to kubernetes")
 	}
 	return nil
 }
@@ -81,7 +108,7 @@ func CredentialsExist(conf config.SentryConfig) (bool, error) {
 }
 
 /* #nosec. */
-func storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem []byte, rootCertPath, issuerCertPath, issuerKeyPath string) error {
+func storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem, clientCertPem, clientKeyPem []byte, rootCertPath, issuerCertPath, issuerKeyPath, clientCertPath, clientKeyPath string) error {
 	err := os.WriteFile(rootCertPath, rootCertPem, 0o644)
 	if err != nil {
 		return errors.Wrapf(err, "failed saving file to %s", rootCertPath)
@@ -95,6 +122,17 @@ func storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem []byte, rootCertPa
 	err = os.WriteFile(issuerKeyPath, issuerKeyPem, 0o644)
 	if err != nil {
 		return errors.Wrapf(err, "failed saving file to %s", issuerKeyPath)
+	}
+
+	// write client cert with its intermediate ca cert
+	err = os.WriteFile(clientCertPath, append(clientCertPem, issuerCertPem...), 0o644)
+	if err != nil {
+		return errors.Wrapf(err, "failed saving file to %s", clientCertPath)
+	}
+
+	err = os.WriteFile(clientKeyPath, clientKeyPem, 0o644)
+	if err != nil {
+		return errors.Wrapf(err, "failed saving file to %s", clientKeyPath)
 	}
 	return nil
 }

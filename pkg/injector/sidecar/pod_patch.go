@@ -22,10 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/dapr/kit/ptr"
+
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
-	"github.com/dapr/kit/ptr"
 )
 
 // PatchOperation represents a discreet change to be applied to a Kubernetes resource.
@@ -257,7 +258,17 @@ func GetTokenVolume() corev1.Volume {
 
 // GetTrustAnchorsAndCertChain returns the trust anchor and certs.
 func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, sentryConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, sentryConsts.ClientBundleK8sSecretName, metav1.GetOptions{})
+	if err != nil {
+		return "", "", ""
+	}
+	if len(secret.Data) > 0 {
+		return string(secret.Data[credentials.RootCertFilename]),
+			string(secret.Data[credentials.ClientCertFilename]),
+			string(secret.Data[credentials.ClientKeyFilename])
+	}
+	// if client is empty fallback to the bundle
+	secret, err = kubeClient.CoreV1().Secrets(namespace).Get(ctx, sentryConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
