@@ -97,7 +97,8 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 		perf.WithConnections(10),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
-	) // Get the ingress external url of test app
+	)
+	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(serviceApplicationName)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
