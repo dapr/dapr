@@ -99,7 +99,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	cmd := mux.Vars(r)["command"]
 	switch cmd {
-	case "GetAllComponentsHealthAlpha1":
+	case "GetComponentHealthAlpha1":
 		healthResponse, err = getComponentsHealth("ALL")
 		if err != nil {
 			statusCode = http.StatusInternalServerError

@@ -85,7 +85,6 @@ var endpoints = map[string][]string{
 		"/dapr.proto.runtime.v1.Dapr/Shutdown",
 	},
 	"healthz.v1": {
-		"/dapr.proto.runtime.v1.Dapr/GetAllComponentsHealthAlpha1",
 		"/dapr.proto.runtime.v1.Dapr/GetComponentHealthAlpha1",
 	},
 }

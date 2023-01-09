@@ -57,7 +57,7 @@ var testCases = []struct {
 }{
 	{
 		"all components",
-		"GetAllComponentsHealthAlpha1",
+		"GetComponentHealthAlpha1",
 		expectedAllComponentsHealthResult(),
 	},
 }

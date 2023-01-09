@@ -503,15 +503,9 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz/components/{componentName}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onGetComponentHealthz,
-		},
-		{
-			Methods: []string{fasthttp.MethodGet},
 			Route:   "healthz/components",
 			Version: apiVersionV1alpha1,
-			Handler: a.onGetAllComponentsHealthz,
+			Handler: a.onGetComponentHealthz,
 		},
 	}
 }
@@ -2625,31 +2619,17 @@ func (a *api) getComponent(componentKind string, componentName string) (componen
 	return
 }
 
-func (a *api) onGetAllComponentsHealthz(reqCtx *fasthttp.RequestCtx) {
-	components := a.getComponentsFn()
-	hresp := ComponentsHealthResponse{
-		Results: make([]ComponentHealthItem, len(components)),
-	}
-	for i, comp := range components {
-		a.componentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
-	}
-	b, _ := json.Marshal(hresp)
-	respond(reqCtx, withJSON(fasthttp.StatusOK, b))
-}
-
-func (a *api) componentsHealthResponsePopulator(componentType string, hresp ComponentsHealthResponse, ind int, name string) {
-	compHealth := a.onGetComponentHealthzUtil(nil, componentType, name)
-	hresp.Results[ind] = ComponentHealthItem{
-		Component: name,
-		Type:      componentType,
-		Status:    compHealth.HealthStatus,
-		ErrorCode: compHealth.ErrorCode,
-		Message:   compHealth.ErrorMessage,
-	}
-}
-
+// onGetComponentsHealthz returns the health of components.
+// If a componentName is specified, it returns the health of that component.
+// If no componentName is specified, it returns the health of all components.
 func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
-	componentName := reqCtx.UserValue(componentNameParam).(string)
+	componentName := string(reqCtx.QueryArgs().Peek(componentNameParam))
+	if componentName == "" {
+		hresp := a.getAllComponentsHealth()
+		b, _ := json.Marshal(hresp)
+		respond(reqCtx, withJSON(fasthttp.StatusOK, b))
+		return
+	}
 	components := a.getComponentsFn()
 	found := false
 	for _, comp := range components {
@@ -2668,6 +2648,28 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 		msg := NewComponentHealth(utils.StatusUndefined, messages.ErrComponentNotFound, "")
 		log.Debug(msg)
 		respond(reqCtx, withHealthStatus(fasthttp.StatusBadRequest, msg))
+	}
+}
+
+func (a *api) getAllComponentsHealth() ComponentsHealthResponse {
+	components := a.getComponentsFn()
+	hresp := ComponentsHealthResponse{
+		Results: make([]ComponentHealthItem, len(components)),
+	}
+	for i, comp := range components {
+		a.componentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
+	}
+	return hresp
+}
+
+func (a *api) componentsHealthResponsePopulator(componentType string, hresp ComponentsHealthResponse, ind int, name string) {
+	compHealth := a.onGetComponentHealthzUtil(nil, componentType, name)
+	hresp.Results[ind] = ComponentHealthItem{
+		Component: name,
+		Type:      componentType,
+		Status:    compHealth.HealthStatus,
+		ErrorCode: compHealth.ErrorCode,
+		Message:   compHealth.ErrorMessage,
 	}
 }
 

@@ -82,8 +82,7 @@ type API interface {
 	BulkPublishEventAlpha1(ctx context.Context, req *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
-	GetAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.AllComponentsHealthRequest) (*runtimev1pb.AllComponentsHealthResponse, error)
-	GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*runtimev1pb.ComponentHealthResponseItem, error)
+	GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*runtimev1pb.ComponentHealthResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
@@ -856,9 +855,45 @@ func (a *api) getComponent(componentKind string, componentName string) (componen
 	return
 }
 
-func (a *api) GetAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.AllComponentsHealthRequest) (*runtimev1pb.AllComponentsHealthResponse, error) {
+// GetComponentHealthAlpha1 returns the health of components.
+// If a componentName is specified, it returns the health of that component.
+// If no componentName is specified, it returns the health of all components.
+func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*runtimev1pb.ComponentHealthResponse, error) {
+	componentName := in.ComponentName
 	components := a.getComponentsFn()
-	hresp := &runtimev1pb.AllComponentsHealthResponse{
+	if componentName == nil || *componentName == "" {
+		return a.getAllComponentsHealth(ctx)
+	}
+	for _, comp := range components {
+		if *componentName == comp.Name {
+			status, _, _, err := a.checkHealthUtil(strings.Split(comp.Spec.Type, ".")[0], comp.Name)
+			return &runtimev1pb.ComponentHealthResponse{
+				Results: []*runtimev1pb.ComponentHealthResponseItem{
+					{
+						Status: &status,
+					},
+				},
+			}, err
+		}
+	}
+	err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound)
+	apiServerLogger.Debug(err)
+
+	undefinedStatus := utils.StatusUndefined
+	errCompNotFound := messages.ErrComponentNotFound
+	return &runtimev1pb.ComponentHealthResponse{
+		Results: []*runtimev1pb.ComponentHealthResponseItem{
+			{
+				Status:    &undefinedStatus,
+				ErrorCode: &errCompNotFound,
+			},
+		},
+	}, err
+}
+
+func (a *api) getAllComponentsHealth(ctx context.Context) (*runtimev1pb.ComponentHealthResponse, error) {
+	components := a.getComponentsFn()
+	hresp := &runtimev1pb.ComponentHealthResponse{
 		Results: make([]*runtimev1pb.ComponentHealthResponseItem, len(components)),
 	}
 	for i, comp := range components {
@@ -867,7 +902,7 @@ func (a *api) GetAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.
 	return hresp, nil
 }
 
-func (a *api) componentsHealthResponsePopulator(componentType string, hresp *runtimev1pb.AllComponentsHealthResponse, ind int, name string) {
+func (a *api) componentsHealthResponsePopulator(componentType string, hresp *runtimev1pb.ComponentHealthResponse, ind int, name string) {
 	status, errStr, message, _ := a.checkHealthUtil(componentType, name)
 	item := &runtimev1pb.ComponentHealthResponseItem{
 		ComponentName: &name,
@@ -881,29 +916,6 @@ func (a *api) componentsHealthResponsePopulator(componentType string, hresp *run
 		item.Message = &message
 	}
 	hresp.Results[ind] = item
-}
-
-func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*runtimev1pb.ComponentHealthResponseItem, error) {
-	componentName := in.ComponentName
-	components := a.getComponentsFn()
-	for _, comp := range components {
-		if componentName == comp.Name {
-			status, _, _, err := a.checkHealthUtil(strings.Split(comp.Spec.Type, ".")[0], comp.Name)
-			chr := &runtimev1pb.ComponentHealthResponseItem{
-				Status: &status,
-			}
-			return chr, err
-		}
-	}
-	err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound)
-	apiServerLogger.Debug(err)
-
-	undefinedStatus := utils.StatusUndefined
-	errCompNotFound := messages.ErrComponentNotFound
-	return &runtimev1pb.ComponentHealthResponseItem{
-		Status:    &undefinedStatus,
-		ErrorCode: &errCompNotFound,
-	}, err
 }
 
 func (a *api) checkHealthUtil(componentKind string, componentName string) (
