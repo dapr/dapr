@@ -20,7 +20,7 @@ const (
 	ErrStateTransaction           = "error while executing state transaction: %s"
 
 	// Binding.
-	ErrInvokeOutputBinding = "error when invoke output binding %s: %s"
+	ErrInvokeOutputBinding = "error invoking output binding %s: %s"
 
 	// PubSub.
 	ErrPubsubNotConfigured      = "no pubsub is configured"

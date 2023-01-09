@@ -14,12 +14,12 @@ limitations under the License.
 package raft
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"sync"
 
 	"github.com/hashicorp/raft"
-	"github.com/pkg/errors"
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
