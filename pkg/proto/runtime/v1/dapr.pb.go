@@ -221,8 +221,7 @@ func (x *GetStateRequest) GetMetadata() map[string]string {
 	return nil
 }
 
-// ComponentHealthResponseItem represents health of a single component item when enquired about
-// health of all components.
+// ComponentHealthResponseItem represents health of a single component item in the response
 type ComponentHealthResponseItem struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -307,7 +306,7 @@ func (x *ComponentHealthResponseItem) GetMessage() string {
 	return ""
 }
 
-// ComponentHealthResponse is the response that would comprise of HealthItems per component basis
+// ComponentHealthResponse is the response that would comprise of HealthItems
 type ComponentHealthResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -355,7 +354,9 @@ func (x *ComponentHealthResponse) GetResults() []*ComponentHealthResponseItem {
 	return nil
 }
 
-// CheckHealthRequest is the message to get health of a component.
+// CheckHealthRequest is the message to get health of component(s).
+// component_name is optional. If not specified, health of all components is returned.
+// If specified, health of the component with the specified name is returned.
 type ComponentHealthRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

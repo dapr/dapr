@@ -27,7 +27,9 @@ type DaprClient interface {
 	// Invokes a method on a remote Dapr app.
 	// Deprecated: Use proxy mode service invocation instead.
 	InvokeService(ctx context.Context, in *InvokeServiceRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error)
-	// Get health of a component
+	// Get health of component(s)
+	// In request, if componentName is empty or not provided, it will return health of all components.
+	// If componentName is provided, it will return health of that component.
 	GetComponentHealthAlpha1(ctx context.Context, in *ComponentHealthRequest, opts ...grpc.CallOption) (*ComponentHealthResponse, error)
 	// Gets the state for a specific key.
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
@@ -428,7 +430,9 @@ type DaprServer interface {
 	// Invokes a method on a remote Dapr app.
 	// Deprecated: Use proxy mode service invocation instead.
 	InvokeService(context.Context, *InvokeServiceRequest) (*v1.InvokeResponse, error)
-	// Get health of a component
+	// Get health of component(s)
+	// In request, if componentName is empty or not provided, it will return health of all components.
+	// If componentName is provided, it will return health of that component.
 	GetComponentHealthAlpha1(context.Context, *ComponentHealthRequest) (*ComponentHealthResponse, error)
 	// Gets the state for a specific key.
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)

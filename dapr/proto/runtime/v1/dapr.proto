@@ -30,7 +30,9 @@ service Dapr {
   // Deprecated: Use proxy mode service invocation instead.
   rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
 
-  // Get health of a component
+  // Get health of component(s)
+  // In request, if componentName is empty or not provided, it will return health of all components.
+  // If componentName is provided, it will return health of that component.
   rpc GetComponentHealthAlpha1(ComponentHealthRequest) returns (ComponentHealthResponse) {}
 
   // Gets the state for a specific key.
@@ -151,8 +153,7 @@ message GetStateRequest {
   map<string, string> metadata = 4;
 }
 
-// ComponentHealthResponseItem represents health of a single component item when enquired about
-// health of all components.
+// ComponentHealthResponseItem represents health of a single component item in the response
 message ComponentHealthResponseItem {
   // The name of component
   optional string componentName = 1;
@@ -170,12 +171,14 @@ message ComponentHealthResponseItem {
   optional string message = 5;
 }
 
-// ComponentHealthResponse is the response that would comprise of HealthItems per component basis
+// ComponentHealthResponse is the response that would comprise of HealthItems
 message ComponentHealthResponse {
   repeated ComponentHealthResponseItem results = 1;
 }
 
-// CheckHealthRequest is the message to get health of a component.
+// CheckHealthRequest is the message to get health of component(s).
+// component_name is optional. If not specified, health of all components is returned.
+// If specified, health of the component with the specified name is returned.
 message ComponentHealthRequest {
   // The name of component.
   optional string component_name = 1;
