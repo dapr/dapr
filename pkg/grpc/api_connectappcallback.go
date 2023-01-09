@@ -15,7 +15,6 @@ package grpc
 
 import (
 	"context"
-	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,9 +27,6 @@ func (a *api) SetCreateAppCallbackListener(fn func() (int, error)) {
 }
 
 func (a *api) ConnectAppCallback(context.Context, *runtimev1pb.ConnectAppCallbackRequest) (*runtimev1pb.ConnectAppCallbackResponse, error) {
-	// Timeout for accepting connections from clients before the ephemeral listener is terminated
-	const connectionTimeout = 10 * time.Second
-
 	// If createAppCallbackListener is nil, it means that the callback channel is not enabled
 	var err error
 	if a.createAppCallbackListener == nil {
