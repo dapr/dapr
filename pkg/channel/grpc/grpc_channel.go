@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -39,7 +40,7 @@ import (
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
 	appCallbackClient    runtimev1pb.AppCallbackClient
-	appHealthClient      runtimev1pb.AppCallbackHealthCheckClient
+	conn                 *grpc.ClientConn
 	baseAddress          string
 	ch                   chan struct{}
 	tracingSpec          config.TracingSpec
@@ -53,7 +54,7 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	// readBufferSize is unused
 	c := &Channel{
 		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		appHealthClient:      runtimev1pb.NewAppCallbackHealthCheckClient(conn),
+		conn:                 conn,
 		baseAddress:          net.JoinHostPort(channel.DefaultChannelAddress, strconv.Itoa(port)),
 		tracingSpec:          spec,
 		appMetadataToken:     auth.GetAppToken(),
@@ -150,9 +151,20 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	return rsp, nil
 }
 
+var emptyPbPool = sync.Pool{
+	New: func() any {
+		return &emptypb.Empty{}
+	},
+}
+
 // HealthProbe performs a health probe.
 func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
-	_, err := g.appHealthClient.HealthCheck(ctx, &emptypb.Empty{})
+	// We use the low-level method here so we can avoid allocating multiple &emptypb.Empty and use the pool
+	in := emptyPbPool.Get()
+	defer emptyPbPool.Put(in)
+	out := emptyPbPool.Get()
+	defer emptyPbPool.Put(out)
+	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
 
 	// Errors here are network-level errors, so we are not returning them as errors
 	// Instead, we just return a failed probe
