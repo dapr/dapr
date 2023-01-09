@@ -5471,6 +5471,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	assert.Equal(t, len(rt.outputBindings), 1)
 	rt.running.Store(true)
 
+	rt.running.Store(true)
 	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
 	assert.Nil(t, rt.inputBindingsCancel)
@@ -5526,6 +5527,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	assert.Nil(t, rt.initActors())
 	rt.running.Store(true)
 
+	rt.running.Store(true)
 	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 3*time.Second)
 
@@ -5576,6 +5578,7 @@ func TestTraceShutdown(t *testing.T) {
 	assert.NotNil(t, rt.tracerProvider)
 	rt.running.Store(true)
 
+	rt.running.Store(true)
 	go sendSigterm(rt)
 	<-rt.ctx.Done()
 	assert.Nil(t, rt.tracerProvider)

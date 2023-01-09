@@ -122,10 +122,6 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	return dm
 }
 
-func (d *directMessaging) SetAppChannel(appChannel channel.AppChannel) {
-	d.appChannel = appChannel
-}
-
 // Invoke takes a message requests and invokes an app, either local or remote.
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	app, err := d.getRemoteApp(targetAppID)
@@ -137,6 +133,11 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 		return d.invokeLocal(ctx, req)
 	}
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
+}
+
+// SetAppChannel sets the appChannel property in the object.
+func (d *directMessaging) SetAppChannel(appChannel channel.AppChannel) {
+	d.appChannel = appChannel
 }
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.

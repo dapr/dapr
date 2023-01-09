@@ -618,6 +618,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
 
+	if a.runtimeConfig.MaxConcurrency > 0 {
+		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+	}
+
 	a.appHealthReady = func() {
 		a.appHealthReadyInit(opts)
 	}
@@ -2887,7 +2891,20 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 
 	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
+	stopCh := ShutdownSignal()
+	defer signal.Stop(stopCh)
 	for {
+		select {
+		case <-stopCh:
+			// Cause a shutdown
+			a.ShutdownWithWait()
+			return
+		case <-a.ctx.Done():
+			// Return
+			return
+		default:
+			// nop - continue execution
+		}
 		conn, _ := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(a.runtimeConfig.ApplicationPort), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()

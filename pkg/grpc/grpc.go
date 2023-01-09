@@ -83,6 +83,9 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 // GetAppChannel returns a connection to the local channel.
 // If there's no active connection to the app, it creates one.
 func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
+	g.localConnLock.RLock()
+	defer g.localConnLock.RUnlock()
+
 	conn, err := g.GetAppClient()
 	if err != nil {
 		return nil, err
