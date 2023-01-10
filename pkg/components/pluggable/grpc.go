@@ -95,7 +95,7 @@ func instanceIDStreamInterceptor(instanceID string) grpc.StreamClientInterceptor
 // socketDialer creates a dialer for the given socket.
 func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnectionDialer {
 	return func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-		additionalOpts = append(additionalOpts, grpc.WithStreamInterceptor(instanceIDStreamInterceptor(name)), grpc.WithUnaryInterceptor(instanceIDUnaryInterceptor(name)))
+		additionalOpts = append(additionalOpts, grpc.WithChainStreamInterceptor(instanceIDStreamInterceptor(name)), grpc.WithChainUnaryInterceptor(instanceIDUnaryInterceptor(name)))
 		return SocketDial(ctx, socket, append(additionalOpts, opts...)...)
 	}
 }
