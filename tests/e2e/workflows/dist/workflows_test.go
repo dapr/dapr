@@ -66,40 +66,24 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-var workflowAppTests = []struct {
-	in               string
-	app              string
-	testCommand      string
-	expectedResponse string
-}{
-	{
-		"workflow dapr",
-		"workflowsapp",
-		"start",
-		"Terminated",
-	},
-}
-
 func TestWorkflow(t *testing.T) {
-	for _, tt := range workflowAppTests {
-		t.Run(tt.in, func(t *testing.T) {
-			// Get the ingress external url of test app
-			externalURL := tr.Platform.AcquireAppExternalURL(tt.app)
-			require.NotEmpty(t, externalURL, "external URL must not be empty")
-			// Check if test app endpoint is available
-			_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-			require.NoError(t, err)
-			// Trigger test
-			body, err := json.Marshal(testCommandRequest{
-				Message: "Hello Workflow.",
-			})
-			require.NoError(t, err)
-			resp, err := utils.HTTPPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
-			require.NoError(t, err)
-			var appResp appResponse
-			err = json.Unmarshal(resp, &appResp)
-			require.NoError(t, err)
-			require.Equal(t, tt.expectedResponse, appResp.Message)
+	t.Run("workflow dapr", func(t *testing.T) {
+		// Get the ingress external url of test app
+		externalURL := tr.Platform.AcquireAppExternalURL("workflowsapp")
+		require.NotEmpty(t, externalURL, "external URL must not be empty")
+		// Check if test app endpoint is available
+		_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+		require.NoError(t, err)
+		// Trigger test
+		body, err := json.Marshal(testCommandRequest{
+			Message: "Hello Workflow.",
 		})
-	}
+		require.NoError(t, err)
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/tests/%s", externalURL, "start"), body)
+		require.NoError(t, err)
+		var appResp appResponse
+		err = json.Unmarshal(resp, &appResp)
+		require.NoError(t, err)
+		require.Equal(t, "Terminated", appResp.Message)
+	})
 }
