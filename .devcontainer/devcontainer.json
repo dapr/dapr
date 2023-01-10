@@ -1,7 +1,7 @@
 {
 	"name": "Dapr Dev Environment",
 	// Update the container version when you publish dev-container
-	"image": "ghcr.io/dapr/dapr-dev:0.1.9",
+	"image": "ghcr.io/dapr/dapr-dev:latest",
 	// Replace with uncommented line below to build your own local copy of the image
 	//"dockerFile": "../docker/Dockerfile-dev",
 	"containerEnv": {
