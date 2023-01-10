@@ -371,8 +371,6 @@ github.com/DataDog/datadog-go v2.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3
 github.com/DataDog/datadog-go v3.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3tL4fMGNddJ+vMq1mwgfaqoQ=
 github.com/DataDog/zstd v1.5.0 h1:+K/VEwIAaPcHiMtQvpLD4lqW7f0Gk3xdYZmI1hD+CXo=
 github.com/DataDog/zstd v1.5.0/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
-github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230109080342-02a89961c533 h1:VHDauDnP4awpG/M5YANW9fxa3R9FwSL9QQCeXO+raBA=
-github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230109080342-02a89961c533/go.mod h1:X66euM1fbasNdcChonomP8GycfEVk1V9W6eojqdENQo=
 github.com/HdrHistogram/hdrhistogram-go v1.1.2/go.mod h1:yDgFjdqOqDEKOvasDdhWNXYg9BVp4O+o5f6V/ehm6Oo=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
@@ -612,6 +610,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
+github.com/dapr/components-contrib v1.9.1-0.20230110173025-b2d8e6013b5f h1:j740MdFckzCLloga1KMiSjM1xhgAqrj57qdA9EdkcTg=
+github.com/dapr/components-contrib v1.9.1-0.20230110173025-b2d8e6013b5f/go.mod h1:Rpfq302jjJA+BuNO5FgUREkE+lcGS5zDAf7k90SQtoU=
 github.com/dapr/kit v0.0.3 h1:1FCnWjIuAS3OJzJhOlUKNzLxoazYhYIS4oCOOULmWBA=
 github.com/dapr/kit v0.0.3/go.mod h1:+vh2UIRT0KzFm5YJWfj7az4XVSdodys1OCz1WzNe1Eo=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=

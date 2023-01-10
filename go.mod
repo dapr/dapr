@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20221222230611-870ff8dc2e34
+	github.com/dapr/components-contrib v1.9.1-0.20230110173025-b2d8e6013b5f
 	github.com/dapr/kit v0.0.3
 	github.com/fasthttp/router v1.4.14
 	github.com/ghodss/yaml v1.0.0
@@ -422,7 +422,7 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230109080342-02a89961c533
-
+// replace github.com/dapr/components-contrib => ../components-contrib
+//
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
