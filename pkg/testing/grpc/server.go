@@ -78,10 +78,10 @@ func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*g
 		}()
 
 		return func(ctx context.Context, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-				newOpts := append(opts, grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+				opts = append(opts, grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 					return lis.Dial()
 				}), grpc.WithTransportCredentials(insecure.NewCredentials()))
-				return grpc.DialContext(ctx, "bufnet", newOpts...)
+				return grpc.DialContext(ctx, "bufnet", opts...)
 			}, func() {
 				lis.Close()
 			}, nil
