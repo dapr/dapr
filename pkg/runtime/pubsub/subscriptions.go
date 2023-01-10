@@ -9,9 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/ghodss/yaml"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/retry"
 )
 
 const (
@@ -62,43 +59,25 @@ type (
 	}
 )
 
-func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
+func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
 		WithHTTPExtension(http.MethodGet, "").
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
-	var (
-		resp *invokev1.InvokeMethodResponse
-		err  error
-	)
-
-	// TODO: Use only resiliency once it is no longer a preview feature.
-	if resiliencyEnabled {
-		policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
-		if policyDef.HasRetries() {
-			req.WithReplay(true)
-		}
-
-		policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
-			resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
-			},
-		)
-		resp, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			return channel.InvokeMethod(ctx, req)
-		})
-	} else {
+	policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
+	if policyDef.HasRetries() {
 		req.WithReplay(true)
-
-		backoff := getSubscriptionsBackoff()
-		resp, err = retry.NotifyRecoverWithData(func() (*invokev1.InvokeMethodResponse, error) {
-			return channel.InvokeMethod(context.TODO(), req)
-		}, backoff, func(err error, d time.Duration) {
-			log.Debug("failed getting http subscriptions, starting retry")
-		}, func() {})
 	}
 
+	policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
+	)
+	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+		return channel.InvokeMethod(ctx, req)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -181,59 +160,24 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 	return subscriptions[:i]
 }
 
-func getSubscriptionsBackoff() backoff.BackOff {
-	config := retry.DefaultConfig()
-	config.MaxRetries = 3
-	config.Duration = time.Second * 2
-	config.MaxElapsedTime = time.Second * 10
-	config.Policy = retry.PolicyExponential
-	return config.NewBackOff()
-}
-
-func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
-	var (
-		err  error
-		resp *runtimev1pb.ListTopicSubscriptionsResponse
+func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
+	policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
+		r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
 	)
+	resp, err := policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+		rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
 
-	// TODO: Use only resiliency once it is no longer a preview feature.
-	if resiliencyEnabled {
-		policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
-			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
-		)
-		resp, err = policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-			rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
-
-			if rErr != nil {
-				s, ok := status.FromError(rErr)
-				if ok && s != nil {
-					if s.Code() == codes.Unimplemented {
-						log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
-						return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
-					}
-				}
-			}
-			return rResp, rErr
-		})
-	} else {
-		bo := getSubscriptionsBackoff()
-
-		resp, err = retry.NotifyRecoverWithData(func() (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-			rResp, rErr := channel.ListTopicSubscriptions(context.TODO(), &emptypb.Empty{})
-
-			if rErr != nil {
-				s, ok := status.FromError(rErr)
-				if ok && s != nil && s.Code() == codes.Unimplemented {
+		if rErr != nil {
+			s, ok := status.FromError(rErr)
+			if ok && s != nil {
+				if s.Code() == codes.Unimplemented {
 					log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
 					return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
 				}
 			}
-			return rResp, rErr
-		}, bo, func(err error, d time.Duration) {
-			log.Debug("failed getting gRPC subscriptions, starting retry")
-		}, func() {})
-	}
-
+		}
+		return rResp, rErr
+	})
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
 		log.Errorf(getTopicsError, err)
