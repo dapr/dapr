@@ -152,6 +152,7 @@ func NewGRPCConnectorWithDialer[TClient GRPCClient](dialer GRPCConnectionDialer,
 	}
 }
 
+// NewGRPCConnector creates a new grpc connector for the given client factory and socket file, using the default socket dialer.
 func NewGRPCConnector[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
 	return NewGRPCConnectorWithDialer(socketDialer(socket), factory)
 }
