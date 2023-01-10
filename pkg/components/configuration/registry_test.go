@@ -14,16 +14,15 @@ limitations under the License.
 package configuration_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
+	c "github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/kit/logger"
-
-	c "github.com/dapr/components-contrib/configuration"
 )
 
 type mockState struct {
@@ -79,7 +78,7 @@ func TestRegistry(t *testing.T) {
 
 		// act
 		p, actualError := testRegistry.Create(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find configuration store %s/v1", componentName)
+		expectedError := fmt.Errorf("couldn't find configuration store %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)

@@ -14,9 +14,8 @@ limitations under the License.
 package secretstores
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/components"
@@ -59,7 +58,7 @@ func (s *Registry) Create(name, version string) (secretstores.SecretStore, error
 		return method(), nil
 	}
 
-	return nil, errors.Errorf("couldn't find secret store %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find secret store %s/%s", name, version)
 }
 
 func (s *Registry) getSecretStore(name, version string) (func() secretstores.SecretStore, bool) {

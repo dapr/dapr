@@ -16,6 +16,7 @@ package resiliency
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -969,11 +970,6 @@ func (e *circuitBreakerInstances) Remove(name string) {
 	e.Unlock()
 }
 
-// HasRetries returns true if the policy is configured to have more than 1 retry.
-func (p PolicyDescription) HasRetries() bool {
-	return p.RetryPolicy != nil && p.RetryPolicy.MaxRetries != 0
-}
-
 func toMap(val interface{}) (interface{}, error) {
 	jsonBytes, err := json.Marshal(val)
 	if err != nil {
@@ -1003,6 +999,16 @@ func ParseActorCircuitBreakerScope(val string) (ActorCircuitBreakerScope, error)
 		return ActorCircuitBreakerScopeBoth, nil
 	}
 	return ActorCircuitBreakerScope(0), fmt.Errorf("unknown circuit breaker scope %q", val)
+}
+
+// IsTimeExceeded returns true if the context timeout has elapsed.
+func IsTimeoutExeceeded(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded)
+}
+
+// IsCircuitBreakerError returns true if the error is cicuit breaker open or too many requests in half-open state.
+func IsCircuitBreakerError(err error) bool {
+	return errors.Is(err, breaker.ErrOpenState) || errors.Is(err, breaker.ErrTooManyRequests)
 }
 
 func filterResiliencyConfigs(resiliences []*resiliencyV1alpha.Resiliency, runtimeID string) []*resiliencyV1alpha.Resiliency {

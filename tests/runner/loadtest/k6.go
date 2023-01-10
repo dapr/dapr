@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 
 	k6api "github.com/grafana/k6-operator/api/v1alpha1"
-	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -138,6 +137,7 @@ type K6 struct {
 	name              string
 	configName        string
 	script            string
+	appID             string
 	parallelism       int
 	runnerEnv         []corev1.EnvVar
 	addDapr           bool
@@ -173,7 +173,7 @@ func collectResult[T any](k6 *K6, podName string) (*T, error) {
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, podLogs)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to copy logs from the pod")
+		return nil, fmt.Errorf("unable to copy logs from the pod: %w", err)
 	}
 
 	bts := buf.Bytes()
@@ -185,7 +185,7 @@ func collectResult[T any](k6 *K6, podName string) (*T, error) {
 	var k6Result K6RunnerSummary[T]
 	if err := json.Unmarshal(bts, &k6Result); err != nil {
 		// this shouldn't normally happen but if it does, let's log output by default
-		return nil, errors.Wrap(err, fmt.Sprintf("unable to marshal: `%s`", string(bts)))
+		return nil, fmt.Errorf("unable to marshal `%s`: %w", string(bts), err)
 	}
 
 	return &k6Result.Metrics, nil
@@ -242,7 +242,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	runnerAnnotations := make(map[string]string)
 	if k6.addDapr {
 		runnerAnnotations[annotations.KeyEnabled] = "true"
-		runnerAnnotations[annotations.KeyAppID] = "tester-app"
+		runnerAnnotations[annotations.KeyAppID] = k6.appID
 		runnerAnnotations[annotations.KeyMemoryLimit] = k6.daprMemoryLimit
 		runnerAnnotations[annotations.KeyMemoryRequest] = k6.daprMemoryRequest
 	}
@@ -457,6 +457,13 @@ func WithName(name string) K6Opt {
 	}
 }
 
+// WithAppID sets the appID when dapr is enabled.
+func WithAppID(appID string) K6Opt {
+	return func(k *K6) {
+		k.appID = appID
+	}
+}
+
 // WithScript set the test script.
 func WithScript(script string) K6Opt {
 	return func(k *K6) {
@@ -524,6 +531,7 @@ func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 	ctx, cancel := context.WithCancel(context.Background())
 	k6Tester := &K6{
 		name:              "k6-test",
+		appID:             "tester-app",
 		script:            scriptPath,
 		parallelism:       1,
 		addDapr:           true,

@@ -15,10 +15,10 @@ package raft
 
 import (
 	"bytes"
+	"errors"
 	"os"
 
 	"github.com/hashicorp/go-msgpack/codec"
-	"github.com/pkg/errors"
 )
 
 const defaultDirPermission = 0o755
