@@ -39,6 +39,8 @@ const (
 	Resiliency Feature = "Resiliency"
 	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
+	// Enable the workflow engine
+	WorkflowEngine Feature = "WorkflowEngine"
 )
 
 // end feature flags section

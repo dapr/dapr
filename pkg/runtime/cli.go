@@ -365,6 +365,11 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
 
+	if !daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.WorkflowEngine) && *enableWorkflowEngine {
+		log.Warnf("Dapr workflow engine is a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.WorkflowEngine)
+		runtimeConfig.workflowEngineEnabled = false
+	}
+
 	// TODO: Remove once AppHealthCheck feature is finalized
 	if !daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
 		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
