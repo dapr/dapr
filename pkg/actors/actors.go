@@ -147,15 +147,15 @@ var ErrDaprResponseHeader = errors.New("error indicated via actor header respons
 
 // ActorsOpts contains options for NewActors.
 type ActorsOpts struct {
-	StateStore       state.Store
-	AppChannel       channel.AppChannel
-	GRPCConnectionFn GRPCConnectionFn
-	Config           Config
-	CertChain        *daprCredentials.CertChain
-	TracingSpec      configuration.TracingSpec
-	Features         []configuration.FeatureSpec
-	Resiliency       resiliency.Provider
-	StateStoreName   string
+	StateStore          state.Store
+	AppChannel          channel.AppChannel
+	GRPCConnectionFn    GRPCConnectionFn
+	Config              Config
+	CertChain           *daprCredentials.CertChain
+	TracingSpec         configuration.TracingSpec
+	Resiliency          resiliency.Provider
+	IsResiliencyEnabled bool
+	StateStoreName      string
 }
 
 // NewActors create a new actors runtime with given config.
@@ -196,10 +196,10 @@ func newActorsWithClock(opts ActorsOpts, clock clocklib.Clock) Actors {
 		evaluationLock:         &sync.RWMutex{},
 		evaluationChan:         make(chan struct{}, 1),
 		appHealthy:             appHealthy,
-		isResiliencyEnabled:    configuration.IsFeatureEnabled(opts.Features, configuration.Resiliency),
 		ctx:                    ctx,
 		cancel:                 cancel,
 		clock:                  clock,
+		isResiliencyEnabled:    opts.IsResiliencyEnabled,
 	}
 }
 

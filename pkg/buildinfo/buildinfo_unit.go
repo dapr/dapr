@@ -1,8 +1,8 @@
-//go:build !windows
-// +build !windows
+//go:build unit
+// +build unit
 
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,19 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package buildinfo
 
 import (
-	"github.com/dapr/dapr/pkg/modes"
+	"strings"
 )
 
-// GetDialAddressPrefix returns a dial prefix for a gRPC client connections for a given DaprMode.
-// This is used on non-Windows hosts.
-func GetDialAddressPrefix(mode modes.DaprMode) string {
-	switch mode {
-	case modes.KubernetesMode:
-		return "dns:///"
-	default:
-		return ""
+// Comma-separated list of features to enable in unit tests
+const unitTestFeatures = "Resiliency"
+
+// Set values for feature flags used in unit tests
+func init() {
+	if unitTestFeatures == "" {
+		featuresSlice = []string{}
+	} else {
+		featuresSlice = strings.Split(unitTestFeatures, ",")
 	}
 }

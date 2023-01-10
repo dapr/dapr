@@ -1,3 +1,6 @@
+//go:build windows
+// +build windows
+
 /*
 Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,27 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package version
+package grpc
 
-// Values for these are injected by the build.
-var (
-	version = "edge"
-
-	gitcommit, gitversion string
+import (
+	"github.com/dapr/dapr/pkg/modes"
 )
 
-// Version returns the Dapr version. This is either a semantic version
-// number or else, in the case of unreleased code, the string "edge".
-func Version() string {
-	return version
-}
-
-// Commit returns the git commit SHA for the code that Dapr was built from.
-func Commit() string {
-	return gitcommit
-}
-
-// GitVersion returns the git version for the code that Dapr was built from.
-func GitVersion() string {
-	return gitversion
+// GetDialAddressPrefix returns a dial prefix for a gRPC client connections for a given DaprMode.
+// This is used on Windows hosts.
+func GetDialAddressPrefix(mode modes.DaprMode) string {
+	return ""
 }
