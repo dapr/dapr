@@ -21,6 +21,11 @@
 		"ms-azuretools.vscode-docker",
 		"ms-kubernetes-tools.vscode-kubernetes-tools"
 	],
+	"features": {
+		"ghcr.io/devcontainers/features/sshd:1": {},
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		"ghcr.io/devcontainers/features/azure-cli:1": {}
+	},
 	"mounts": [
 		// Mount docker-in-docker library volume
 		"type=volume,source=dind-var-lib-docker,target=/var/lib/docker",
