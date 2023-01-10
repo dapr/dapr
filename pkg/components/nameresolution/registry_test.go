@@ -14,16 +14,15 @@ limitations under the License.
 package nameresolution_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/nameresolution"
+	"github.com/dapr/kit/logger"
 )
 
 type mockResolver struct {
@@ -77,7 +76,7 @@ func TestRegistry(t *testing.T) {
 
 		// act
 		p, actualError := testRegistry.Create(resolverName, "v1")
-		expectedError := errors.Errorf("couldn't find name resolver %s/v1", resolverName)
+		expectedError := fmt.Errorf("couldn't find name resolver %s/v1", resolverName)
 
 		// assert
 		assert.Nil(t, p)

@@ -29,18 +29,16 @@ import (
 	"google.golang.org/grpc/status"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
-
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
@@ -52,6 +50,7 @@ type messageClientConnection func(ctx context.Context, address string, id string
 // DirectMessaging is the API interface for invoking a remote app.
 type DirectMessaging interface {
 	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
+	SetAppChannel(appChannel channel.AppChannel)
 }
 
 type directMessaging struct {
@@ -136,6 +135,11 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
 }
 
+// SetAppChannel sets the appChannel property in the object.
+func (d *directMessaging) SetAppChannel(appChannel channel.AppChannel) {
+	d.appChannel = appChannel
+}
+
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
 func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, string, error) {
 	if targetAppID == "" {
@@ -165,8 +169,14 @@ func (d *directMessaging) invokeWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
+			// This policy has built-in retries so enable replay in the request
+			req.WithReplay(true)
+
+			policyRunner := resiliency.NewRunnerWithOptions(ctx,
 				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
+				resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+					Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+				},
 			)
 			attempts := atomic.Int32{}
 			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
@@ -192,6 +202,12 @@ func (d *directMessaging) invokeWithRetry(
 		teardown(false)
 		return resp, err
 	}
+
+	// The following path is used when resiliency is disabled
+
+	// We need to enable replaying because the request may be attempted again in this path
+	req.WithReplay(true)
+
 	for i := 0; i < numRetries; i++ {
 		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
@@ -211,6 +227,7 @@ func (d *directMessaging) invokeWithRetry(
 		teardown(false)
 		return resp, err
 	}
+
 	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
@@ -248,6 +265,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB << 20),
 	}
 
+	// Set up timers
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
 
@@ -258,7 +276,11 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 		}
 	}()
 
-	resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
+	pd, err := req.ProtoWithData()
+	if err != nil {
+		return nil, teardown, fmt.Errorf("failed to read data from request object: %w", err)
+	}
+	resp, err = clientV1.CallLocal(ctx, pd, opts...)
 	if err != nil {
 		return nil, teardown, err
 	}

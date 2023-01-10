@@ -47,17 +47,17 @@ var (
 
 // RecordServiceCreatedCount records the number of dapr service created.
 func RecordServiceCreatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(appIDKey, appID), serviceCreatedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceCreatedTotal.Name(), appIDKey, appID), serviceCreatedTotal.M(1))
 }
 
 // RecordServiceDeletedCount records the number of dapr service deleted.
 func RecordServiceDeletedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(appIDKey, appID), serviceDeletedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceDeletedTotal.Name(), appIDKey, appID), serviceDeletedTotal.M(1))
 }
 
 // RecordServiceUpdatedCount records the number of dapr service updated.
 func RecordServiceUpdatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceUpdatedTotal.Name(), appIDKey, appID), serviceUpdatedTotal.M(1))
 }
 
 // InitMetrics initialize the operator service metrics.

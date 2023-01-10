@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/config"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 var endpoints = map[string][]string{
@@ -113,7 +113,7 @@ func setAPIEndpointsMiddlewareUnary(rules []config.APIAccessRule) grpc.UnaryServ
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		_, ok := allowed[info.FullMethod]
 		if !ok {
-			return nil, v1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+			return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
 		}
 
 		return handler(ctx, req)
