@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -24,7 +24,7 @@ import (
 )
 
 func TestComposeErrorsConverters(t *testing.T) {
-	t.Run("compose should call outer function when the error was not converted", func(t *testing.T) {
+	t.Run("compose should not call outer function when the error was converted", func(t *testing.T) {
 		outerCalled := 0
 		outer := ErrorConverter(func(s status.Status) error {
 			outerCalled++
@@ -38,10 +38,10 @@ func TestComposeErrorsConverters(t *testing.T) {
 		composed := outer.Compose(inner)
 		err := composed(*status.New(codes.Unknown, ""))
 		require.NotNil(t, err)
-		assert.Equal(t, outerCalled, 0)
-		assert.Equal(t, innerCalled, 1)
+		assert.Equal(t, 0, outerCalled)
+		assert.Equal(t, 1, innerCalled)
 	})
-	t.Run("compose should not call outer function when the error was converted", func(t *testing.T) {
+	t.Run("compose should call outer function when the error was not converted", func(t *testing.T) {
 		outerCalled := 0
 		outer := ErrorConverter(func(s status.Status) error {
 			outerCalled++
@@ -55,8 +55,8 @@ func TestComposeErrorsConverters(t *testing.T) {
 		composed := outer.Compose(inner)
 		err := composed(*status.New(codes.Unknown, ""))
 		require.NotNil(t, err)
-		assert.Equal(t, outerCalled, 1)
-		assert.Equal(t, innerCalled, 1)
+		assert.Equal(t, 1, outerCalled)
+		assert.Equal(t, 1, innerCalled)
 	})
 }
 
@@ -83,7 +83,7 @@ func TestErrorsMerge(t *testing.T) {
 		assert.True(t, ok)
 		err := f(*status.New(codes.Unknown, ""))
 		assert.NotNil(t, err)
-		assert.Equal(t, innerCalled, 1)
-		assert.Equal(t, outerCalled, 1)
+		assert.Equal(t, 1, innerCalled)
+		assert.Equal(t, 1, outerCalled)
 	})
 }
