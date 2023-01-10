@@ -25,6 +25,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DaprClient interface {
 	// Invokes a method on a remote Dapr app.
+	// Deprecated: Use proxy mode service invocation instead.
 	InvokeService(ctx context.Context, in *InvokeServiceRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error)
 	// Gets the state for a specific key.
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
@@ -491,6 +492,7 @@ func (c *daprClient) Shutdown(ctx context.Context, in *emptypb.Empty, opts ...gr
 // for forward compatibility
 type DaprServer interface {
 	// Invokes a method on a remote Dapr app.
+	// Deprecated: Use proxy mode service invocation instead.
 	InvokeService(context.Context, *InvokeServiceRequest) (*v1.InvokeResponse, error)
 	// Gets the state for a specific key.
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)

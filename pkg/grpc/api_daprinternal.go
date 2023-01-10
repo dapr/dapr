@@ -40,6 +40,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
+	defer req.Close()
 
 	err = a.callLocalValidateACL(ctx, req)
 	if err != nil {
@@ -62,15 +63,16 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}()
 
 	// stausCode will be read by the deferred method above
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	res, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		statusCode = int32(codes.Internal)
 		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	} else {
-		statusCode = resp.Status().Code
+		statusCode = res.Status().Code
 	}
+	defer res.Close()
 
-	return resp.Proto(), nil
+	return res.ProtoWithData()
 }
 
 // CallActor invokes a virtual actor.
@@ -79,19 +81,22 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
+	defer req.Close()
 
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
-		if errors.Is(err, actors.ErrDaprResponseHeader) {
-			return resp.Proto(), nil
+		if resp != nil && errors.Is(err, actors.ErrDaprResponseHeader) {
+			defer resp.Close()
+			return resp.ProtoWithData()
 		}
 
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
-	return resp.Proto(), nil
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list

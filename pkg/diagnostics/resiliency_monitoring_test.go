@@ -124,7 +124,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			t.Cleanup(func() {
 				view.Unregister(view.Find(resiliencyCountViewName))
 			})
-			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace")
+			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil)
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -155,7 +155,7 @@ func TestResiliencyLoadedMonitoring(t *testing.T) {
 		t.Cleanup(func() {
 			view.Unregister(view.Find(resiliencyCountViewName))
 		})
-		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace")
+		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil)
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)

@@ -65,7 +65,8 @@ type (
 func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
 		WithHTTPExtension(http.MethodGet, "").
-		WithRawData(nil, invokev1.JSONContentType)
+		WithContentType(invokev1.JSONContentType)
+	defer req.Close()
 
 	var (
 		resp *invokev1.InvokeMethodResponse
@@ -74,13 +75,22 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
-		policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
-			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+		policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
+		if policyDef.HasRetries() {
+			req.WithReplay(true)
+		}
+
+		policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
+			resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+			},
 		)
 		resp, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 			return channel.InvokeMethod(ctx, req)
 		})
 	} else {
+		req.WithReplay(true)
+
 		backoff := getSubscriptionsBackoff()
 		resp, err = retry.NotifyRecoverWithData(func() (*invokev1.InvokeMethodResponse, error) {
 			return channel.InvokeMethod(context.TODO(), req)
@@ -92,6 +102,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Close()
 
 	var (
 		subscriptions     []Subscription
@@ -100,8 +111,8 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 
 	switch resp.Status().Code {
 	case http.StatusOK:
-		_, body := resp.RawData()
-		if err := json.Unmarshal(body, &subscriptionItems); err != nil {
+		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
+		if err != nil {
 			log.Errorf(deserializeTopicsError, err)
 			return nil, fmt.Errorf(deserializeTopicsError, err)
 		}
@@ -197,7 +208,8 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 				s, ok := status.FromError(rErr)
 				if ok && s != nil {
 					if s.Code() == codes.Unimplemented {
-						return rResp, backoff.Permanent(rErr)
+						log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
+						return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
 					}
 				}
 			}
@@ -212,7 +224,8 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			if rErr != nil {
 				s, ok := status.FromError(rErr)
 				if ok && s != nil && s.Code() == codes.Unimplemented {
-					return rResp, backoff.Permanent(rErr)
+					log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
+					return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
 				}
 			}
 			return rResp, rErr
