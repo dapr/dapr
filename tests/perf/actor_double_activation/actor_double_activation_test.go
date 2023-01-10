@@ -78,8 +78,7 @@ func TestActorDoubleActivation(t *testing.T) {
 
 	k6Test := loadtest.NewK6(
 		"./test.js",
-		loadtest.WithName("x3"),
-		loadtest.WithParallelism(1),
+		loadtest.WithParallelism(3),
 		loadtest.WithRunnerEnvVar("TEST_APP_NAME", serviceApplicationName),
 	)
 	defer k6Test.Dispose()
