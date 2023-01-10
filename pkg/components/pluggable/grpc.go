@@ -35,19 +35,15 @@ type GRPCClient interface {
 	Ping(ctx context.Context, in *proto.PingRequest, opts ...grpc.CallOption) (*proto.PingResponse, error)
 }
 
-// unaryErrorConverterInterceptor receives a target method and a mapping error that will be used to map from grpc errors to business level errors.
-func unaryErrorConverterInterceptor(errorsConverters ErrorsConverters) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		err := invoker(ctx, method, req, reply, cc, opts...)
-		converters, ok := errorsConverters[method]
-		if !ok {
-			return err
-		}
+// NewConverterFunc returns a function that maps from any error to a business error.
+// if the error is unknown it is kept as is, otherwise a converter function will be used.
+func NewConverterFunc(errorsConverters MethodErrorConverter) func(error) error {
+	return func(err error) error {
 		s, ok := status.FromError(err)
 		if !ok {
 			return err
 		}
-		convert, ok := converters[s.Code()]
+		convert, ok := errorsConverters[s.Code()]
 		if !ok {
 			return err
 		}
@@ -57,10 +53,10 @@ func unaryErrorConverterInterceptor(errorsConverters ErrorsConverters) grpc.Unar
 
 type GRPCConnectionDialer func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error)
 
-// MapErrors returns a new connection dialer that adds a mapping errors interceptor into it.
-func (g GRPCConnectionDialer) MapErrors(converters ErrorsConverters) GRPCConnectionDialer {
+// WithOptions returns a new connection dialer that adds the new options to it.
+func (g GRPCConnectionDialer) WithOptions(newOpts ...grpc.DialOption) GRPCConnectionDialer {
 	return func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-		return g(ctx, name, append(opts, grpc.WithChainUnaryInterceptor(unaryErrorConverterInterceptor(converters)))...)
+		return g(ctx, name, append(opts, newOpts...)...)
 	}
 }
 
@@ -156,12 +152,6 @@ func NewGRPCConnectorWithDialer[TClient GRPCClient](dialer GRPCConnectionDialer,
 	}
 }
 
-// NewGRPCConnectorUseDialer creates a new grpc connector for the given client factory and socket, and use the dial callback to allow dialer modifications.
-func NewGRPCConnectorUseDialer[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient, useDialer func(dialer GRPCConnectionDialer) GRPCConnectionDialer) *GRPCConnector[TClient] {
-	return NewGRPCConnectorWithDialer(useDialer(socketDialer(socket)), factory)
-}
-
-// NewGRPCConnector creates a new grpc connector for the given client factory and socket.
 func NewGRPCConnector[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
-	return NewGRPCConnectorUseDialer(socket, factory, func(dialer GRPCConnectionDialer) GRPCConnectionDialer { return dialer })
+	return NewGRPCConnectorWithDialer(socketDialer(socket), factory)
 }

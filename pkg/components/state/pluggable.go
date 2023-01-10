@@ -16,6 +16,8 @@ package state
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/dapr/components-contrib/state"
@@ -24,8 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/kit/logger"
-
-	"github.com/pkg/errors"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -115,7 +115,7 @@ var bulkDeleteErrors = pluggable.MethodErrorConverter{
 
 		expected, err := strconv.Atoi(expectedStr)
 		if err != nil {
-			return errors.Wrapf(s.Err(), "cannot convert 'expected' rows to integer: %s", err)
+			return fmt.Errorf("%w; cannot convert 'expected' rows to integer: %s", s.Err(), err)
 		}
 
 		affectedStr, ok := metadata[affectedRowsMetadataKey]
@@ -125,19 +125,20 @@ var bulkDeleteErrors = pluggable.MethodErrorConverter{
 
 		affected, err := strconv.Atoi(affectedStr)
 		if err != nil {
-			return errors.Wrapf(s.Err(), "cannot convert 'affected' rows to integer: %s", err)
+			return fmt.Errorf("%w; cannot convert 'affected' rows to integer: %s", s.Err(), err)
 		}
 
 		return state.NewBulkDeleteRowMismatchError(uint64(expected), uint64(affected))
 	},
 }
 
-var errorsConverters = pluggable.NewErrorsConverter(proto.StateStore_ServiceDesc.ServiceName, map[string]pluggable.MethodErrorConverter{
-	"Set":        etagErrorsConverters,
-	"Delete":     etagErrorsConverters,
-	"BulkSet":    etagErrorsConverters,
-	"BulkDelete": etagErrorsConverters.Merge(bulkDeleteErrors),
-})
+var (
+	mapETagErrs       = pluggable.NewConverterFunc(etagErrorsConverters)
+	mapSetErrs        = mapETagErrs
+	mapDeleteErrs     = mapETagErrs
+	mapBulkSetErrs    = mapETagErrs
+	mapBulkDeleteErrs = pluggable.NewConverterFunc(etagErrorsConverters.Merge(bulkDeleteErrors))
+)
 
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
 type grpcStateStore struct {
@@ -194,7 +195,7 @@ func (ss *grpcStateStore) GetComponentMetadata() map[string]string {
 func (ss *grpcStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	_, err := ss.Client.Delete(ctx, toDeleteRequest(req))
 
-	return err
+	return mapDeleteErrs(err)
 }
 
 // Get performs a get on the state store.
@@ -218,7 +219,7 @@ func (ss *grpcStateStore) Set(ctx context.Context, req *state.SetRequest) error 
 		return err
 	}
 	_, err = ss.Client.Set(ctx, protoRequest)
-	return err
+	return mapSetErrs(err)
 }
 
 // BulkDelete performs a delete operation for many keys at once.
@@ -234,7 +235,7 @@ func (ss *grpcStateStore) BulkDelete(ctx context.Context, reqs []state.DeleteReq
 	}
 
 	_, err := ss.Client.BulkDelete(ctx, bulkDeleteRequest)
-	return err
+	return mapBulkDeleteErrs(err)
 }
 
 // BulkGet performs a get operation for many keys at once.
@@ -280,7 +281,7 @@ func (ss *grpcStateStore) BulkSet(ctx context.Context, req []state.SetRequest) e
 	_, err := ss.Client.BulkSet(ctx, &proto.BulkSetRequest{
 		Items: requests,
 	})
-	return err
+	return mapBulkSetErrs(err)
 }
 
 // Query performsn a query in the state store
@@ -557,20 +558,15 @@ func fromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[stateStor
 	}
 }
 
-// useErrorsConverters receives a grpc connection dialer and apply the errors converters intercetor to the target methods
-func useErrorsConverters(dialer pluggable.GRPCConnectionDialer) pluggable.GRPCConnectionDialer {
-	return dialer.MapErrors(errorsConverters)
-}
-
 // NewGRPCStateStore creates a new grpc state store using the given socket factory.
 func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
-	return fromConnector(l, pluggable.NewGRPCConnectorUseDialer(socket, newStateStoreClient, useErrorsConverters))
+	return fromConnector(l, pluggable.NewGRPCConnector(socket, newStateStoreClient))
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
 func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) state.Store {
 	return func(l logger.Logger) state.Store {
-		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(useErrorsConverters(dialer), newStateStoreClient))
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, newStateStoreClient))
 	}
 }
 

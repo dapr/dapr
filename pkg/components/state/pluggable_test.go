@@ -960,14 +960,3 @@ func TestMappers(t *testing.T) {
 		})
 	})
 }
-
-func TestTargetErrorsMethodsShouldExists(t *testing.T) {
-	methodMap := map[string]bool{}
-	for _, method := range proto.StateStore_ServiceDesc.Methods {
-		methodMap[fmt.Sprintf("/%s/%s", proto.StateStore_ServiceDesc.ServiceName, method.MethodName)] = true
-	}
-
-	for targetMethod := range errorsConverters {
-		assert.Contains(t, methodMap, targetMethod)
-	}
-}

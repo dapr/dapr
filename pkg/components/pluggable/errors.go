@@ -14,8 +14,6 @@ limitations under the License.
 package pluggable
 
 import (
-	"fmt"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -53,16 +51,4 @@ func (m MethodErrorConverter) Merge(other MethodErrorConverter) MethodErrorConve
 		}
 	}
 	return n
-}
-
-// ErrorsConverters represents a simple map that maps from a method name to all grpc statuscode to a domain-level error.
-type ErrorsConverters map[string]MethodErrorConverter
-
-// NewErrorsConverter create a new error converters for the given protoref.
-func NewErrorsConverter(protoRef string, m map[string]MethodErrorConverter) ErrorsConverters {
-	prefixed := ErrorsConverters{}
-	for method, methodConverter := range m {
-		prefixed[fmt.Sprintf("/%s/%s", protoRef, method)] = methodConverter
-	}
-	return prefixed
 }
