@@ -109,6 +109,13 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
 	})
+
+	for actorType, actor := range internalActors {
+		if err := a.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := a.Init(); err != nil {
 		return nil, err
 	}

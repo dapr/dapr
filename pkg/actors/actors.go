@@ -2123,8 +2123,10 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 		log.Debugf("registering internal actor type: %s", actorType)
 		actor.SetActorRuntime(a)
 		a.config.HostedActorTypes = append(a.config.HostedActorTypes, actorType)
-		if err := a.placement.AddHostedActorType(actorType); err != nil {
-			return fmt.Errorf("error updating hosted actor types: %s", err)
+		if a.placement != nil {
+			if err := a.placement.AddHostedActorType(actorType); err != nil {
+				return fmt.Errorf("error updating hosted actor types: %s", err)
+			}
 		}
 	}
 	return nil
