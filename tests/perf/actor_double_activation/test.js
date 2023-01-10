@@ -11,7 +11,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-
 import { PodDisruptor } from "k6/x/disruptor";
 import http from "k6/http";
 import { check } from "k6";
@@ -28,13 +27,12 @@ export const options = {
   },
   scenarios: {
     base: {
-      duration: "15s",
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "5s", target: 1000 },
-        { duration: "5s", target: 3000 },
-        { duration: "5s", target: 5000 },
+        { duration: "5s", target: 100 },
+        { duration: "5s", target: 300 },
+        { duration: "5s", target: 500 },
       ],
       gracefulRampDown: "0s",
     },
@@ -46,17 +44,15 @@ export const options = {
       startTime: "15s",
     },
     faults: {
-      duration: "15s",
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "5s", target: 1000 },
-        { duration: "5s", target: 3000 },
-        { duration: "5s", target: 5000 },
+        { duration: "5s", target: 100 },
+        { duration: "5s", target: 300 },
+        { duration: "5s", target: 500 },
       ],
       gracefulRampDown: "0s",
       startTime: "15s",
-      duration: "15s",
     }
   },
 };

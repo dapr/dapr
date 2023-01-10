@@ -13,4 +13,3 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: k6-sa
-  namespace: httpbin-ns

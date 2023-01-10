@@ -16,6 +16,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: "k6-sa"
+    namespace: dapr-tests
 roleRef:
   kind: ClusterRole
   name: cluster-admin
