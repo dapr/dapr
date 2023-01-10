@@ -78,9 +78,18 @@ func (wfe *WorkflowEngine) ConfigureExecutor(factory func(be backend.Backend) ba
 	wfe.executor = factory(wfe.backend)
 }
 
-func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) {
+func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) error {
 	wfLogger.Info("configuring workflow engine with actors backend")
+	for actorType, actor := range wfe.InternalActors() {
+		if err := actorRuntime.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
+			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
+		}
+	}
+
+	wfLogger.Infof("workflow actors registered, workflow engine is ready")
 	wfe.backend.SetActorRuntime(actorRuntime)
+
+	return nil
 }
 
 // DisableActorCaching turns off the default caching done by the workflow and activity actors.

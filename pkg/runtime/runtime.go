@@ -582,20 +582,9 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			a.daprGRPCAPI.SetActorRuntime(a.actor)
 			if a.runtimeConfig.workflowEngineEnabled {
-
-				workflowActors := a.workflowEngine.InternalActors()
-				actorsRegistered := true
-				for actorType, actor := range workflowActors {
-					if err := a.actor.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
-						log.Errorf("failed to register workflow actor: %v", err)
-						actorsRegistered = false
-					}
-				}
-
-				if actorsRegistered {
-					log.Infof("workflow actors registered, workflow engine is ready")
-					a.workflowEngine.SetActorRuntime(a.actor)
-
+				if wfInitErr := a.workflowEngine.SetActorRuntime(a.actor); wfInitErr != nil {
+					log.Warnf("failed to set actor runtime for workflow engine - workflow engine will not start: %w", wfInitErr)
+				} else {
 					if err = a.workflowEngine.Start(a.ctx); err != nil {
 						log.Errorf("failed to start workflow engine: %v", err)
 					} else {
