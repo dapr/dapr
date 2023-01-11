@@ -262,7 +262,7 @@ func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Inte
 	if err != nil {
 		return "", "", ""
 	}
-	if len(secret.Data) > 0 {
+	if len(secret.Data) >= 3 {
 		return string(secret.Data[credentials.RootCertFilename]),
 			string(secret.Data[credentials.ClientCertFilename]),
 			string(secret.Data[credentials.ClientKeyFilename])
