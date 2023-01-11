@@ -3999,12 +3999,16 @@ func TestV1SecretEndpoints(t *testing.T) {
 	}
 
 	l := logger.NewLogger("fakeLogger")
+	res := resiliency.FromConfigurations(l, testResiliency)
 	testAPI := &api{
+		secretsConfiguration: secretsConfiguration,
+		secretStores:         fakeStores,
+		resiliency:           res,
 		universal: &universalapi.UniversalAPI{
 			Logger:               l,
 			SecretsConfiguration: secretsConfiguration,
 			SecretStores:         fakeStores,
-			Resiliency:           resiliency.FromConfigurations(l, testResiliency),
+			Resiliency:           res,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
@@ -4099,7 +4103,9 @@ func TestV1SecretEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
 		testAPI.universal.SecretStores = nil
+		testAPI.secretStores = nil
 		defer func() {
+			testAPI.secretStores = fakeStores
 			testAPI.universal.SecretStores = fakeStores
 		}()
 
