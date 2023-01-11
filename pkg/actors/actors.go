@@ -480,7 +480,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
 
 	// If the request can be retried, we need to enable replaying
-	if policyDef.HasRetries() {
+	if policyDef != nil && policyDef.HasRetries() {
 		req.WithReplay(true)
 	}
 
@@ -1014,8 +1014,10 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	req := invokev1.NewInvokeMethodRequest("remind/"+reminder.Name).
 		WithActor(reminder.ActorType, reminder.ActorID).
 		WithRawDataBytes(b).
-		WithContentType(invokev1.JSONContentType).
-		WithReplay(policyDef.HasRetries())
+		WithContentType(invokev1.JSONContentType)
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
 	defer req.Close()
 
 	policyRunner := resiliency.NewRunnerWithOptions(
@@ -1394,8 +1396,10 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req := invokev1.NewInvokeMethodRequest("timer/"+name).
 		WithActor(actorType, actorID).
 		WithRawDataBytes(b).
-		WithContentType(invokev1.JSONContentType).
-		WithReplay(policyDef.HasRetries())
+		WithContentType(invokev1.JSONContentType)
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
 	defer req.Close()
 
 	policyRunner := resiliency.NewRunnerWithOptions(

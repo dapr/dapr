@@ -1059,8 +1059,10 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		req := invokev1.NewInvokeMethodRequest("/configuration/"+h.storeName+"/"+key).
 			WithHTTPExtension(nethttp.MethodPost, "").
 			WithRawData(eventBody).
-			WithContentType(invokev1.JSONContentType).
-			WithReplay(policyDef.HasRetries())
+			WithContentType(invokev1.JSONContentType)
+		if policyDef != nil {
+			req.WithReplay(policyDef.HasRetries())
+		}
 		defer req.Close()
 
 		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
@@ -1576,9 +1578,11 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
 		WithRawDataBytes(reqCtx.Request.Body()).
 		WithContentType(string(reqCtx.Request.Header.ContentType())).
-		WithReplay(policyDef.HasRetries()).
 		// Save headers to internal metadata
 		WithFastHTTPHeaders(&reqCtx.Request.Header)
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
 	defer req.Close()
 
 	policyRunner := resiliency.NewRunner[*directMessagingPolicyRes](reqCtx, policyDef)
@@ -1948,9 +1952,11 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
 		WithRawDataBytes(reqCtx.PostBody()).
 		WithContentType(string(reqCtx.Request.Header.ContentType())).
-		WithReplay(policyDef.HasRetries()).
-		// Save headers to metadata.
+		// Save headers to metadata
 		WithMetadata(metadata)
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
 	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
