@@ -1300,8 +1300,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			WithHTTPExtension(nethttp.MethodPost, "").
 			WithRawDataBytes(data).
 			WithContentType(invokev1.JSONContentType).
-			WithMetadata(reqMetadata).
-			WithReplay(policyDef.HasRetries())
+			WithMetadata(reqMetadata)
+		if policyDef != nil {
+			req.WithReplay(policyDef.HasRetries())
+		}
 		defer req.Close()
 
 		respErr := errors.New("error sending binding event to application")
