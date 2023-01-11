@@ -72,8 +72,11 @@ service_invocation_grpc \
 state_get_grpc \
 state_get_http \
 pubsub_publish_grpc \
+pubsub_publish_http \
 pubsub_bulk_publish_grpc \
 actor_double_activation \
+actor_id_scale \
+actor_type_scale \
 
 KUBECTL=kubectl
 
@@ -231,7 +234,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -389,7 +392,7 @@ endif
 
 # install k6 loadtesting to the cluster
 setup-test-env-k6:
-	rm -rf /tmp/.k6-operator >/dev/null && git clone https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
+	export IMG=ghcr.io/grafana/operator:controller-v0.0.8 && rm -rf /tmp/.k6-operator >/dev/null && git clone --depth 1 --branch v0.0.8 https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
 delete-test-env-k6:
 	rm -rf /tmp/.k6-operator >/dev/null && git clone https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make delete && cd - && rm -rf /tmp/.k6-operator
 
@@ -432,11 +435,9 @@ delete-test-env-mongodb:
 
 # install zipkin to the cluster
 setup-test-env-zipkin:
-	$(KUBECTL) create deployment dapr-zipkin -n $(DAPR_TEST_NAMESPACE) --image ghcr.io/dapr/3rdparty/zipkin:latest
-	$(KUBECTL) expose deployment dapr-zipkin -n $(DAPR_TEST_NAMESPACE) --type ClusterIP --port 9411
+	$(KUBECTL) apply -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 delete-test-env-zipkin:
-	$(KUBECTL) delete service dapr-zipkin -n ${DAPR_TEST_NAMESPACE}
-	$(KUBECTL) delete deployment dapr-zipkin -n ${DAPR_TEST_NAMESPACE}
+	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin

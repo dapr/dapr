@@ -16,12 +16,12 @@ package apphealth
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
 )
 
 func TestAppHealth_setResult(t *testing.T) {
@@ -34,14 +34,14 @@ func TestAppHealth_setResult(t *testing.T) {
 	h.setResult(true)
 
 	statusChange := make(chan uint8, 1)
-	unexpectedStatusChanges := atomic.NewUint32(0)
+	unexpectedStatusChanges := atomic.Int32{}
 	h.OnHealthChange(func(status uint8) {
 		select {
 		case statusChange <- status:
 			// Do nothing
 		default:
 			// If the channel is full, it means we were not expecting a status change
-			unexpectedStatusChanges.Inc()
+			unexpectedStatusChanges.Add(1)
 		}
 	})
 
@@ -121,7 +121,7 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 	var minInterval int64 = 1e5
 
 	h := &AppHealth{
-		lastReport:        atomic.NewInt64(0),
+		lastReport:        &atomic.Int64{},
 		reportMinInterval: minInterval,
 	}
 
@@ -166,7 +166,7 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 	// Repeat, but run with 3 parallel goroutines
 	time.Sleep(time.Duration(minInterval+10) * time.Microsecond)
 	wg := sync.WaitGroup{}
-	totalPassed := atomic.NewInt64(0)
+	totalPassed := atomic.Int64{}
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func() {

@@ -12,8 +12,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 )
@@ -32,17 +30,17 @@ var oidSubjectAlternativeName = asn1.ObjectIdentifier{2, 5, 29, 17}
 func GenerateCSR(org string, pkcs8 bool) ([]byte, []byte, error) {
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "unable to generate private keys")
+		return nil, nil, fmt.Errorf("unable to generate private keys: %w", err)
 	}
 
 	templ, err := genCSRTemplate(org)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "error generating csr template")
+		return nil, nil, fmt.Errorf("error generating csr template: %w", err)
 	}
 
 	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, templ, key)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create CSR")
+		return nil, nil, fmt.Errorf("failed to create CSR: %w", err)
 	}
 
 	crtPem, keyPem, err := encode(true, csrBytes, key, pkcs8)
@@ -140,7 +138,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 ) ([]byte, error) {
 	cert, err := generateBaseCert(ttl, skew, publicKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "error generating csr certificate")
+		return nil, fmt.Errorf("error generating csr certificate: %w", err)
 	}
 	if isCA {
 		cert.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign
@@ -166,7 +164,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 	if identityBundle != nil {
 		spiffeID, err := identity.CreateSPIFFEID(identityBundle.TrustDomain, identityBundle.Namespace, identityBundle.ID)
 		if err != nil {
-			return nil, errors.Wrap(err, "error generating spiffe id")
+			return nil, fmt.Errorf("error generating spiffe id: %w", err)
 		}
 
 		rv := []asn1.RawValue{
@@ -184,7 +182,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 
 		b, err := asn1.Marshal(rv)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal asn1 raw value for spiffe id")
+			return nil, fmt.Errorf("failed to marshal asn1 raw value for spiffe id: %w", err)
 		}
 
 		cert.ExtraExtensions = append(cert.ExtraExtensions, pkix.Extension{
@@ -226,7 +224,7 @@ func newSerialNumber() (*big.Int, error) {
 	serialNumLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNum, err := rand.Int(rand.Reader, serialNumLimit)
 	if err != nil {
-		return nil, errors.Wrap(err, "error generating serial number")
+		return nil, fmt.Errorf("error generating serial number: %w", err)
 	}
 	return serialNum, nil
 }

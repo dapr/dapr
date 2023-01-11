@@ -180,13 +180,13 @@ func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, pr
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
+			diagUtils.WithTags(c.pubsubIngressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
 			c.pubsubIngressCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
+				diagUtils.WithTags(c.pubsubIngressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
 				c.pubsubIngressLatency.M(elapsed))
 		}
 	}
@@ -197,13 +197,13 @@ func (c *componentMetrics) BulkPubsubIngressEvent(ctx context.Context, component
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, topicKey, topic),
+			diagUtils.WithTags(c.bulkPubsubIngressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, topicKey, topic),
 			c.bulkPubsubIngressCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, topicKey, topic),
+				diagUtils.WithTags(c.bulkPubsubIngressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, topicKey, topic),
 				c.bulkPubsubIngressLatency.M(elapsed))
 		}
 	}
@@ -214,7 +214,7 @@ func (c *componentMetrics) BulkPubsubIngressEventEntries(ctx context.Context, co
 	if c.enabled && eventCount > 0 {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
+			diagUtils.WithTags(c.bulkPubsubEventIngressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
 			c.bulkPubsubEventIngressCount.M(eventCount))
 	}
 }
@@ -225,19 +225,19 @@ func (c *componentMetrics) BulkPubsubEgressEvent(ctx context.Context, component,
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
+			diagUtils.WithTags(c.bulkPubsubEgressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
 			c.bulkPubsubEgressCount.M(1))
 		if eventCount > 0 {
 			// There is at leaset one success in the bulk publish call even if overall success of the call might be a failure
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, true, topicKey, topic),
+				diagUtils.WithTags(c.bulkPubsubEventEgressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, true, topicKey, topic),
 				c.bulkPubsubEventEgressCount.M(eventCount))
 		}
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
+				diagUtils.WithTags(c.bulkPubsubEgressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
 				c.bulkPubsubEgressLatency.M(elapsed))
 		}
 	}
@@ -248,13 +248,13 @@ func (c *componentMetrics) PubsubEgressEvent(ctx context.Context, component, top
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
+			diagUtils.WithTags(c.pubsubEgressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
 			c.pubsubEgressCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
+				diagUtils.WithTags(c.pubsubEgressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic),
 				c.pubsubEgressLatency.M(elapsed))
 		}
 	}
@@ -265,13 +265,13 @@ func (c *componentMetrics) InputBindingEvent(ctx context.Context, component stri
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
+			diagUtils.WithTags(c.inputBindingCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
 			c.inputBindingCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
+				diagUtils.WithTags(c.inputBindingLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
 				c.inputBindingLatency.M(elapsed))
 		}
 	}
@@ -282,13 +282,13 @@ func (c *componentMetrics) OutputBindingEvent(ctx context.Context, component, op
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+			diagUtils.WithTags(c.outputBindingCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			c.outputBindingCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+				diagUtils.WithTags(c.outputBindingLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.outputBindingLatency.M(elapsed))
 		}
 	}
@@ -299,13 +299,13 @@ func (c *componentMetrics) StateInvoked(ctx context.Context, component, operatio
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+			diagUtils.WithTags(c.stateCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			c.stateCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+				diagUtils.WithTags(c.stateLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.stateLatency.M(elapsed))
 		}
 	}
@@ -316,13 +316,13 @@ func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, 
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+			diagUtils.WithTags(c.configurationCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			c.configurationCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+				diagUtils.WithTags(c.configurationLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.configurationLatency.M(elapsed))
 		}
 	}
@@ -333,13 +333,13 @@ func (c *componentMetrics) SecretInvoked(ctx context.Context, component, operati
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+			diagUtils.WithTags(c.secretCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			c.secretCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+				diagUtils.WithTags(c.secretLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.secretLatency.M(elapsed))
 		}
 	}

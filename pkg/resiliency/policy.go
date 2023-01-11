@@ -16,6 +16,9 @@ package resiliency
 import (
 	"context"
 	"errors"
+	"io"
+	"reflect"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -47,12 +50,36 @@ type PolicyDefinition struct {
 	cb   *breaker.CircuitBreaker
 }
 
+// HasRetries returns true if the policy is configured to have more than 1 retry.
+func (p PolicyDefinition) HasRetries() bool {
+	return p.r != nil && p.r.MaxRetries != 0
+}
+
+type RunnerOpts[T any] struct {
+	// The disposer is a function which is invoked when the operation fails, including due to timing out in a background goroutine. It receives the value returned by the operation function as long as it's non-zero (e.g. non-nil for pointer types).
+	// The disposer can be used to perform cleanup tasks on values returned by the operation function that would otherwise leak (because they're not returned by the result of the runner).
+	Disposer func(T)
+
+	// The accumulator is a function that is invoked synchronously when an operation completes without timing out, whether successfully or not. It receives the value returned by the operation function as long as it's non-zero (e.g. non-nil for pointer types).
+	// The accumulator can be used to collect intermediate results and not just the final ones, for example in case of working with batched operations.
+	Accumulator func(T)
+}
+
 // NewRunner returns a policy runner that encapsulates the configured resiliency policies in a simple execution wrapper.
 // We can't implement this as a method of the Resiliency struct because we can't yet use generic methods in structs.
 func NewRunner[T any](ctx context.Context, def *PolicyDefinition) Runner[T] {
+	return NewRunnerWithOptions(ctx, def, RunnerOpts[T]{})
+}
+
+// NewRunnerWithOptions is like NewRunner but allows setting additional options
+func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opts RunnerOpts[T]) Runner[T] {
 	if def == nil {
 		return func(oper Operation[T]) (T, error) {
-			return oper(ctx)
+			rRes, rErr := oper(ctx)
+			if opts.Accumulator != nil && !isZero(rRes) {
+				opts.Accumulator(rRes)
+			}
+			return rRes, rErr
 		}
 	}
 
@@ -61,24 +88,42 @@ func NewRunner[T any](ctx context.Context, def *PolicyDefinition) Runner[T] {
 		operation := oper
 		if def.t > 0 {
 			// Handle timeout
-			// TODO: This should ideally be handled by the underlying service/component. Revisit once those understand contexts
 			operCopy := operation
 			operation = func(ctx context.Context) (T, error) {
 				ctx, cancel := context.WithTimeout(ctx, def.t)
 				defer cancel()
 
 				done := make(chan doneCh[T])
+				timedOut := atomic.Bool{}
 				go func() {
 					rRes, rErr := operCopy(ctx)
-					done <- doneCh[T]{rRes, rErr}
+					if !timedOut.Load() {
+						done <- doneCh[T]{rRes, rErr}
+					} else if opts.Disposer != nil && !isZero(rRes) {
+						// Invoke the disposer if we have a non-zero return value
+						// Note that in case of timeouts we do not invoke the accumulator
+						opts.Disposer(rRes)
+					}
 				}()
 
 				select {
 				case v := <-done:
 					return v.res, v.err
 				case <-ctx.Done():
+					timedOut.Store(true)
 					return zero, ctx.Err()
 				}
+			}
+		}
+
+		if opts.Accumulator != nil {
+			operCopy := operation
+			operation = func(ctx context.Context) (T, error) {
+				rRes, rErr := operCopy(ctx)
+				if !isZero(rRes) {
+					opts.Accumulator(rRes)
+				}
+				return rRes, rErr
 			}
 		}
 
@@ -112,7 +157,13 @@ func NewRunner[T any](ctx context.Context, def *PolicyDefinition) Runner[T] {
 		b := def.r.NewBackOffWithContext(ctx)
 		return retry.NotifyRecoverWithData(
 			func() (T, error) {
-				return operation(ctx)
+				rRes, rErr := operation(ctx)
+				// In case of an error, if we have a disposer we invoke it with the return value, then reset the return value
+				if rErr != nil && opts.Disposer != nil && !isZero(rRes) {
+					opts.Disposer(rRes)
+					rRes = zero
+				}
+				return rRes, rErr
 			},
 			b,
 			func(opErr error, _ time.Duration) {
@@ -124,4 +175,13 @@ func NewRunner[T any](ctx context.Context, def *PolicyDefinition) Runner[T] {
 			},
 		)
 	}
+}
+
+// DisposerCloser is a Disposer function for RunnerOpts that invokes Close() on the object.
+func DisposerCloser[T io.Closer](obj T) {
+	_ = obj.Close()
+}
+
+func isZero(val any) bool {
+	return reflect.ValueOf(val).IsZero()
 }

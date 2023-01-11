@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -33,7 +34,6 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -81,7 +81,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Infof("starting sentry certificate authority -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	// Initialize dapr metrics exporter

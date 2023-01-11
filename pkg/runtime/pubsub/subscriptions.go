@@ -4,23 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/dapr/dapr/utils"
-
-	"github.com/cenkalti/backoff/v4"
 	"github.com/ghodss/yaml"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/dapr/kit/retry"
 
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -30,6 +24,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -64,36 +59,29 @@ type (
 	}
 )
 
-func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
+func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
 		WithHTTPExtension(http.MethodGet, "").
-		WithRawData(nil, invokev1.JSONContentType)
+		WithContentType(invokev1.JSONContentType)
+	defer req.Close()
 
-	var (
-		resp *invokev1.InvokeMethodResponse
-		err  error
-	)
-
-	// TODO: Use only resiliency once it is no longer a preview feature.
-	if resiliencyEnabled {
-		policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
-			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
-		)
-		resp, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			return channel.InvokeMethod(ctx, req)
-		})
-	} else {
-		backoff := getSubscriptionsBackoff()
-		resp, err = retry.NotifyRecoverWithData(func() (*invokev1.InvokeMethodResponse, error) {
-			return channel.InvokeMethod(context.TODO(), req)
-		}, backoff, func(err error, d time.Duration) {
-			log.Debug("failed getting http subscriptions, starting retry")
-		}, func() {})
+	policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
+	if policyDef.HasRetries() {
+		req.WithReplay(true)
 	}
 
+	policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
+	)
+	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+		return channel.InvokeMethod(ctx, req)
+	})
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Close()
 
 	var (
 		subscriptions     []Subscription
@@ -102,10 +90,10 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 
 	switch resp.Status().Code {
 	case http.StatusOK:
-		_, body := resp.RawData()
-		if err := json.Unmarshal(body, &subscriptionItems); err != nil {
+		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
+		if err != nil {
 			log.Errorf(deserializeTopicsError, err)
-			return nil, errors.Errorf(deserializeTopicsError, err)
+			return nil, fmt.Errorf(deserializeTopicsError, err)
 		}
 		subscriptions = make([]Subscription, len(subscriptionItems))
 		for i, si := range subscriptionItems {
@@ -172,57 +160,24 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 	return subscriptions[:i]
 }
 
-func getSubscriptionsBackoff() backoff.BackOff {
-	config := retry.DefaultConfig()
-	config.MaxRetries = 3
-	config.Duration = time.Second * 2
-	config.MaxElapsedTime = time.Second * 10
-	config.Policy = retry.PolicyExponential
-	return config.NewBackOff()
-}
-
-func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
-	var (
-		err  error
-		resp *runtimev1pb.ListTopicSubscriptionsResponse
+func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
+	policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
+		r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
 	)
+	resp, err := policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+		rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
 
-	// TODO: Use only resiliency once it is no longer a preview feature.
-	if resiliencyEnabled {
-		policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
-			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
-		)
-		resp, err = policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-			rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
-
-			if rErr != nil {
-				s, ok := status.FromError(rErr)
-				if ok && s != nil {
-					if s.Code() == codes.Unimplemented {
-						return rResp, backoff.Permanent(rErr)
-					}
+		if rErr != nil {
+			s, ok := status.FromError(rErr)
+			if ok && s != nil {
+				if s.Code() == codes.Unimplemented {
+					log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
+					return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
 				}
 			}
-			return rResp, rErr
-		})
-	} else {
-		bo := getSubscriptionsBackoff()
-
-		resp, err = retry.NotifyRecoverWithData(func() (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-			rResp, rErr := channel.ListTopicSubscriptions(context.TODO(), &emptypb.Empty{})
-
-			if rErr != nil {
-				s, ok := status.FromError(rErr)
-				if ok && s != nil && s.Code() == codes.Unimplemented {
-					return rResp, backoff.Permanent(rErr)
-				}
-			}
-			return rResp, rErr
-		}, bo, func(err error, d time.Duration) {
-			log.Debug("failed getting gRPC subscriptions, starting retry")
-		}, func() {})
-	}
-
+		}
+		return rResp, rErr
+	})
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
 		log.Errorf(getTopicsError, err)
