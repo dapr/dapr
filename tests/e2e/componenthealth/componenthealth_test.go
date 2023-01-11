@@ -47,7 +47,7 @@ type mockHealthResponse struct {
 }
 
 type mockAllHealthResponse struct {
-	Results []mockHealthResponse `json:"results"`
+	Result []mockHealthResponse `json:"result"`
 }
 
 var testCases = []struct {
@@ -108,7 +108,7 @@ func testGetComponentHealth(t *testing.T, compHealthAppExternalURL string) {
 		err = json.Unmarshal(resp, &healthResponse)
 		require.NoError(t, err)
 		for _, expectedComponentResult := range tc.compHealthResult {
-			for _, health := range healthResponse.Results {
+			for _, health := range healthResponse.Result {
 				if expectedComponentResult.componentName == health.Component {
 					require.Equal(t, expectedComponentResult.componentType, health.Type, "Expected Type to be equal")
 					if !expectedComponentResult.errorExpected {

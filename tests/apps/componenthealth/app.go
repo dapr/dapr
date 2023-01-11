@@ -53,7 +53,7 @@ type mockHealthResponse struct {
 }
 
 type mockAllHealthResponse struct {
-	Results []mockHealthResponse `json:"results"`
+	Result []mockHealthResponse `json:"result"`
 }
 
 func indexHandler(w http.ResponseWriter, _ *http.Request) {

@@ -155,6 +155,12 @@ message GetStateRequest {
 
 // ComponentHealthResponseItem represents health of a single component item in the response
 message ComponentHealthResponseItem {
+  enum Status {
+    OK = 0;
+    NOT_OK = 1;
+    UNDEFINED = 2;
+  }
+
   // The name of component
   optional string component_name = 1;
 
@@ -162,7 +168,7 @@ message ComponentHealthResponseItem {
   optional string type = 2;
 
   // Status of component, OK or NOT OK or UNDEFINED
-  optional string status = 3;
+  optional Status status = 3;
 
   // error that is returned in case of health check failure
   optional string error_code = 4;
@@ -171,9 +177,11 @@ message ComponentHealthResponseItem {
   optional string message = 5;
 }
 
-// ComponentHealthResponse is the response that would comprise of HealthItems
+// // ComponentHealthResponse is the response that would be returned by the runtime
+// // for a single component OR for all componnets' health check request
 message ComponentHealthResponse {
-  repeated ComponentHealthResponseItem results = 1;
+  // The list of health response items
+  repeated ComponentHealthResponseItem result = 1;
 }
 
 // CheckHealthRequest is the message to get health of component(s).
@@ -181,7 +189,7 @@ message ComponentHealthResponse {
 // If specified, health of the component with the specified name is returned.
 message ComponentHealthRequest {
   // The name of component.
-  optional string component_name = 1;
+  string component_name = 1;
 }
 
 // GetBulkStateRequest is the message to get a list of key-value states from specific state store.

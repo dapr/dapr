@@ -2654,7 +2654,7 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 func (a *api) getAllComponentsHealth() ComponentsHealthResponse {
 	components := a.getComponentsFn()
 	hresp := ComponentsHealthResponse{
-		Results: make([]ComponentHealthItem, len(components)),
+		Result: make([]ComponentHealthItem, len(components)),
 	}
 	for i, comp := range components {
 		a.componentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
@@ -2664,7 +2664,7 @@ func (a *api) getAllComponentsHealth() ComponentsHealthResponse {
 
 func (a *api) componentsHealthResponsePopulator(componentType string, hresp ComponentsHealthResponse, ind int, name string) {
 	compHealth := a.onGetComponentHealthzUtil(nil, componentType, name)
-	hresp.Results[ind] = ComponentHealthItem{
+	hresp.Result[ind] = ComponentHealthItem{
 		Component: name,
 		Type:      componentType,
 		Status:    compHealth.HealthStatus,
@@ -2679,9 +2679,9 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 	component := a.getComponent(componentKind, componentName)
 	if component == nil {
 		return componentHealth{
-			HTTPStatusCode: fasthttp.StatusBadRequest,
+			HTTPStatusCode: fasthttp.StatusMethodNotAllowed,
 			HealthStatus:   utils.StatusUndefined,
-			ErrorCode:      messages.ErrComponentNotFound,
+			ErrorCode:      messages.ErrPingNotImplemented,
 		}
 	}
 	if pinger, ok := component.(health.Pinger); ok {

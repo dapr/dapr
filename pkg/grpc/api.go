@@ -825,14 +825,14 @@ func (a *api) getComponent(componentKind string, componentName string) (componen
 func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*runtimev1pb.ComponentHealthResponse, error) {
 	componentName := in.ComponentName
 	components := a.getComponentsFn()
-	if componentName == nil || *componentName == "" {
+	if componentName == "" {
 		return a.getAllComponentsHealth(ctx)
 	}
 	for _, comp := range components {
-		if *componentName == comp.Name {
+		if componentName == comp.Name {
 			status, _, _, err := a.checkHealthUtil(strings.Split(comp.Spec.Type, ".")[0], comp.Name)
 			return &runtimev1pb.ComponentHealthResponse{
-				Results: []*runtimev1pb.ComponentHealthResponseItem{
+				Result: []*runtimev1pb.ComponentHealthResponseItem{
 					{
 						Status: &status,
 					},
@@ -843,12 +843,12 @@ func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.Comp
 	err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound)
 	apiServerLogger.Debug(err)
 
-	undefinedStatus := utils.StatusUndefined
+	statusUndefined := runtimev1pb.ComponentHealthResponseItem_Status(2)
 	errCompNotFound := messages.ErrComponentNotFound
 	return &runtimev1pb.ComponentHealthResponse{
-		Results: []*runtimev1pb.ComponentHealthResponseItem{
+		Result: []*runtimev1pb.ComponentHealthResponseItem{
 			{
-				Status:    &undefinedStatus,
+				Status:    &statusUndefined,
 				ErrorCode: &errCompNotFound,
 			},
 		},
@@ -858,7 +858,7 @@ func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.Comp
 func (a *api) getAllComponentsHealth(ctx context.Context) (*runtimev1pb.ComponentHealthResponse, error) {
 	components := a.getComponentsFn()
 	hresp := &runtimev1pb.ComponentHealthResponse{
-		Results: make([]*runtimev1pb.ComponentHealthResponseItem, len(components)),
+		Result: make([]*runtimev1pb.ComponentHealthResponseItem, len(components)),
 	}
 	for i, comp := range components {
 		a.componentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
@@ -879,19 +879,19 @@ func (a *api) componentsHealthResponsePopulator(componentType string, hresp *run
 	if message != "" {
 		item.Message = &message
 	}
-	hresp.Results[ind] = item
+	hresp.Result[ind] = item
 }
 
 func (a *api) checkHealthUtil(componentKind string, componentName string) (
-	string, string, string, error,
+	runtimev1pb.ComponentHealthResponseItem_Status, string, string, error,
 ) {
 	component := a.getComponent(componentKind, componentName)
 
 	if component == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound)
+		err := status.Errorf(codes.Unimplemented, messages.ErrPingNotImplemented)
 		apiServerLogger.Debug(err)
-
-		return utils.StatusUndefined, messages.ErrComponentNotFound, "", err
+		return runtimev1pb.ComponentHealthResponseItem_Status(2),
+			messages.ErrPingNotImplemented, "", err
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
@@ -900,12 +900,14 @@ func (a *api) checkHealthUtil(componentKind string, componentName string) (
 			err := status.Errorf(codes.Unknown, messages.ErrHealthNotOk)
 			apiServerLogger.Debug(pingErr)
 
-			return utils.StatusNotOk, messages.ErrHealthNotOk, pingErr.Error(), err
+			return runtimev1pb.ComponentHealthResponseItem_Status(1),
+				messages.ErrHealthNotOk, pingErr.Error(), err
 		}
-		return utils.StatusOk, "", "", nil
+		return runtimev1pb.ComponentHealthResponseItem_Status(0), "", "", nil
 	}
 	err := status.Errorf(codes.Unimplemented, messages.ErrPingNotImplemented)
-	return utils.StatusUndefined, messages.ErrPingNotImplemented, "", err
+	return runtimev1pb.ComponentHealthResponseItem_Status(2),
+		messages.ErrPingNotImplemented, "", err
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {

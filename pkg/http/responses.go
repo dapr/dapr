@@ -62,7 +62,7 @@ type QueryItem struct {
 }
 
 type ComponentsHealthResponse struct {
-	Results []ComponentHealthItem `json:"results"`
+	Result []ComponentHealthItem `json:"result"`
 }
 
 type ComponentHealthItem struct {

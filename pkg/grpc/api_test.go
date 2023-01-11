@@ -1591,7 +1591,7 @@ func TestGetComponentHealth(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
 			req := &runtimev1pb.ComponentHealthRequest{
-				ComponentName: &tt.componentName,
+				ComponentName: tt.componentName,
 			}
 
 			_, err := client.GetComponentHealthAlpha1(context.Background(), req)
