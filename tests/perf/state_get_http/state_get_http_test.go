@@ -63,7 +63,12 @@ func TestMain(m *testing.M) {
 }
 
 func TestStateGetGrpcPerformance(t *testing.T) {
-	p := perf.Params()
+	p := perf.Params(
+		perf.WithQPS(1000),
+		perf.WithConnections(16),
+		perf.WithDuration("1m"),
+		perf.WithPayloadSize(0),
+	)
 	t.Logf("running state get http test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 	// Get the ingress external url of tester app
