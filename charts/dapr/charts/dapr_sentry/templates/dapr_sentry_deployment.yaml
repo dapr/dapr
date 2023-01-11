@@ -32,13 +32,13 @@ metadata:
     {{- end }}
 data:
   {{ if .Values.tls.client.certPEM }}client.crt: {{ b64enc .Values.tls.client.certPEM | trim }}
-  {{ else if $existingClientSecret }}client.crt: {{ index $existingClientSecret.data "client.crt" }}
+  {{ else if and $existingClientSecret $existingClientSecret.data }}client.crt: {{ index $existingClientSecret.data "client.crt" }}
   {{ end }}
   {{ if .Values.tls.client.keyPEM }}client.key: {{ b64enc .Values.tls.client.keyPEM | trim }}
-  {{ else if $existingClientSecret }}client.key: {{ index $existingClientSecret.data "client.key" }}
+  {{ else if and $existingClientSecret $existingClientSecret.data }}client.key: {{ index $existingClientSecret.data "client.key" }}
   {{end}}
   {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
-  {{ else if $existingClientSecret }}ca.crt: {{ index $existingClientSecret.data "ca.crt" }}
+  {{ else if and $existingClientSecret $existingClientSecret.data }}ca.crt: {{ index $existingClientSecret.data "ca.crt" }}
   {{end}}
 ---
 apiVersion: apps/v1
