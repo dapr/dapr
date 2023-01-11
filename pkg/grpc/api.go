@@ -424,8 +424,10 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	}
 	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
-	req := invokev1.FromInvokeRequestMessage(in.GetMessage()).
-		WithReplay(policyDef.HasRetries())
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
 	defer req.Close()
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
@@ -1572,8 +1574,10 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req := invokev1.NewInvokeMethodRequest(in.Method).
 		WithActor(in.ActorType, in.ActorId).
 		WithRawDataBytes(in.Data).
-		WithMetadata(reqMetadata).
-		WithReplay(policyDef.HasRetries())
+		WithMetadata(reqMetadata)
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
 	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.

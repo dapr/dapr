@@ -66,7 +66,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	defer req.Close()
 
 	policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
-	if policyDef.HasRetries() {
+	if policyDef != nil && policyDef.HasRetries() {
 		req.WithReplay(true)
 	}
 
