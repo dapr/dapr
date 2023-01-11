@@ -95,7 +95,12 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorReminderRegistrationPerformance(t *testing.T) {
-	p := perf.Params()
+	p := perf.Params(
+		perf.WithQPS(500),
+		perf.WithConnections(8),
+		perf.WithDuration("1m"),
+		perf.WithPayload("{}"),
+	)
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(serviceApplicationName)
