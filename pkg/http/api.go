@@ -2641,7 +2641,7 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 	for _, comp := range components {
 		if componentName == comp.Name {
 			found = true
-			comphealth := a.onGetComponentHealthzUtil(reqCtx, strings.Split(comp.Spec.Type, ".")[0], comp.Name)
+			comphealth := a.onGetComponentHealthzUtil(reqCtx, strings.SplitN(comp.Spec.Type, ".", 2)[0], comp.Name)
 			msg := NewComponentHealth(comphealth.HealthStatus, comphealth.ErrorCode, comphealth.ErrorMessage)
 			if comphealth.ErrorMessage != "" {
 				log.Debug(msg)
@@ -2663,7 +2663,7 @@ func (a *api) getAllComponentsHealth() ComponentsHealthResponse {
 		Result: make([]ComponentHealthItem, len(components)),
 	}
 	for i, comp := range components {
-		a.componentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
+		a.componentsHealthResponsePopulator(strings.SplitN(comp.Spec.Type, ".", 2)[0], hresp, i, comp.Name)
 	}
 	return hresp
 }

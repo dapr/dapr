@@ -832,7 +832,7 @@ func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.Comp
 	}
 	for _, comp := range components {
 		if componentName == comp.Name {
-			status, _, _, err := a.checkHealthUtil(strings.Split(comp.Spec.Type, ".")[0], comp.Name)
+			status, _, _, err := a.checkHealthUtil(strings.SplitN(comp.Spec.Type, ".", 2)[0], comp.Name)
 			return &runtimev1pb.ComponentHealthResponse{
 				Result: []*runtimev1pb.ComponentHealthResponseItem{
 					{
@@ -863,7 +863,7 @@ func (a *api) getAllComponentsHealth(ctx context.Context) (*runtimev1pb.Componen
 		Result: make([]*runtimev1pb.ComponentHealthResponseItem, len(components)),
 	}
 	for i, comp := range components {
-		a.componentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
+		a.componentsHealthResponsePopulator(strings.SplitN(comp.Spec.Type, ".", 2)[0], hresp, i, comp.Name)
 	}
 	return hresp, nil
 }
