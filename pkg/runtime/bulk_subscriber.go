@@ -100,6 +100,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 	req := pubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
 		Metadata: route.metadata,
+		BulkSubscribeConfig: pubsub.BulkSubscribeConfig{
+			MaxMessagesCount:   int(route.bulkSubscribe.MaxMessagesCount),
+			MaxAwaitDurationMs: int(route.bulkSubscribe.MaxAwaitDurationMs),
+		},
 	}
 
 	bulkHandler := func(ctx context.Context, msg *pubsub.BulkMessage) ([]pubsub.BulkSubscribeResponseEntry, error) {
@@ -391,7 +395,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 		var appBulkResponse pubsub.AppBulkResponse
 		err := json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
-			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += int64(len(rawMsgEntries))
+			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 			bscData.bulkSubDiag.elapsed = elapsed
 			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
 			return fmt.Errorf("failed unmarshalling app response for bulk subscribe: %w", err)
