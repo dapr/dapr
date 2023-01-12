@@ -3060,6 +3060,11 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
+	publishMetadata := map[string]string{
+		pubsubName:         TestPubsubName,
+		"someUserMetadata": "customvalue",
+	}
+
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "", []byte("Test Message"), "", "")
 	// add custom attributes
@@ -3076,7 +3081,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		cloudEvent: envelope,
 		topic:      topic,
 		data:       b,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
+		metadata:   publishMetadata,
 		path:       "topic1",
 	}
 
@@ -3096,7 +3101,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		cloudEvent: envelope,
 		topic:      topic,
 		data:       base64,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
+		metadata:   publishMetadata,
 		path:       "topic1",
 	}
 
@@ -3160,12 +3165,14 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
 			validateCloudEventExtension: ptr.Of(map[string]interface{}{
-				"customInt":    float64(123),
-				"customString": "abc",
-				"customBool":   true,
-				"customFloat":  float64(1.23),
-				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
-				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+				"customInt":                  float64(123),
+				"customString":               "abc",
+				"customBool":                 true,
+				"customFloat":                float64(1.23),
+				"customArray":                []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":                  map[string]interface{}{"a": "b", "c": float64(456)},
+				"topic":                      topic,
+				"_metadata_someUserMetadata": "customvalue",
 			}),
 		},
 		{
@@ -3173,12 +3180,14 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			message:        testPubSubMessageBase64,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
 			validateCloudEventExtension: ptr.Of(map[string]interface{}{
-				"customInt":    float64(123),
-				"customString": "abc",
-				"customBool":   true,
-				"customFloat":  float64(1.23),
-				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
-				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+				"customInt":                  float64(123),
+				"customString":               "abc",
+				"customBool":                 true,
+				"customFloat":                float64(1.23),
+				"customArray":                []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":                  map[string]interface{}{"a": "b", "c": float64(456)},
+				"topic":                      topic,
+				"_metadata_someUserMetadata": "customvalue",
 			}),
 		},
 	}
