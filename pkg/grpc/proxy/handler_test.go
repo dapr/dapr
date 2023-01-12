@@ -126,7 +126,7 @@ type ProxyHappySuite struct {
 
 func (s *ProxyHappySuite) ctx() context.Context {
 	// Make all RPC calls last at most 1 sec, meaning all async issues or deadlock will not kill tests.
-	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second) //nolint:govet
 	return ctx
 }
 
@@ -270,7 +270,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 			}
 		}
 		// Explicitly copy the metadata, otherwise the tests will fail.
-		outCtx, _ := context.WithCancel(ctx)
+		outCtx, _ := context.WithCancel(ctx) //nolint:govet
 		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
 		return outCtx, s.serverClientConn, nil, func(bool) {}, nil
 	}
