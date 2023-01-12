@@ -134,106 +134,6 @@ func TestComponentsPatch(t *testing.T) {
 			&socketSharedVolumeMount,
 		},
 		{
-			"patch should create injectable containers operations when app is scopped but and has annotations",
-			appName,
-			[]componentsapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: componentName,
-					Annotations: map[string]string{
-						annotations.KeyPluggableComponentContainerImage:                 componentImage,
-						annotations.KeyPluggableComponentContainerVolumeMountsReadOnly:  "readonly:/read-only",
-						annotations.KeyPluggableComponentContainerVolumeMountsReadWrite: "readwrite:/read-write",
-						annotations.KeyPluggableComponentContainerEnvironment:           "A=B",
-					},
-				},
-				Scopes: []string{appName},
-			}},
-			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						annotations.KeyPluggableComponents: "component",
-					},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{appContainer, {
-						Name: "component",
-					}},
-				},
-			},
-			[]sidecar.PatchOperation{
-				{
-					Op:    "add",
-					Path:  sidecar.PatchPathVolumes,
-					Value: []corev1.Volume{sharedComponentsSocketVolume()},
-				},
-				{
-					Op:   "add",
-					Path: "/spec/containers/1/env",
-					Value: []corev1.EnvVar{{
-						Name:  componentsUnixDomainSocketMountPathEnvVar,
-						Value: socketSharedVolumeMount.MountPath,
-					}},
-				},
-				{
-					Op:    "add",
-					Path:  "/spec/containers/1/volumeMounts",
-					Value: []corev1.VolumeMount{socketSharedVolumeMount},
-				},
-				{
-					Op:   "add",
-					Path: sidecar.PatchPathVolumes + "/-",
-					Value: corev1.Volume{
-						Name: "readonly",
-						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
-						},
-					},
-				},
-				{
-					Op:   "add",
-					Path: sidecar.PatchPathVolumes + "/-",
-					Value: corev1.Volume{
-						Name: "readwrite",
-						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
-						},
-					},
-				},
-				{
-					Op:   "add",
-					Path: "/spec/containers/-",
-					Value: corev1.Container{
-						Name:  componentName,
-						Image: componentImage,
-						Env: []corev1.EnvVar{
-							{
-								Name:  "A",
-								Value: "B",
-							},
-							{
-								Name:  componentsUnixDomainSocketMountPathEnvVar,
-								Value: socketSharedVolumeMount.MountPath,
-							},
-						},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "readonly",
-								ReadOnly:  true,
-								MountPath: "/read-only",
-							},
-							{
-								Name:      "readwrite",
-								ReadOnly:  false,
-								MountPath: "/read-write",
-							},
-							socketSharedVolumeMount,
-						},
-					},
-				},
-			},
-			&socketSharedVolumeMount,
-		},
-		{
 			"patch should add pluggable component unix socket volume when pod already has volumes",
 			"",
 			[]componentsapi.Component{},
@@ -277,7 +177,7 @@ func TestComponentsPatch(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			_, componentContainers := SplitContainers(*test.pod)
-			patch, volumeMount := PatchOps(componentContainers, Injectable(test.appID, test.componentsList), test.pod)
+			patch, volumeMount := PatchOps(componentContainers, test.pod)
 			assert.Equal(t, patch, test.expPatch)
 			assert.Equal(t, volumeMount, test.expMount)
 		})
