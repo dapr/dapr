@@ -122,9 +122,6 @@ const (
 	componentFormat = "%s (%s/%s)"
 
 	defaultComponentInitTimeout = time.Second * 5
-
-	// Metadata needed to call bulk subscribe
-	BulkSubscribe = "bulkSubscribe"
 )
 
 type ComponentCategory string
@@ -154,6 +151,7 @@ type TopicRouteElem struct {
 	metadata        map[string]string
 	rules           []*runtimePubsub.Rule
 	deadLetterTopic string
+	bulkSubscribe   *runtimePubsub.BulkSubscribe
 }
 
 // Type of function that determines if a component is authorized.
@@ -743,7 +741,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 	namespaced := a.pubSubs[name].namespaceScoped
 
-	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
+	if route.bulkSubscribe != nil && route.bulkSubscribe.Enabled {
 		err := a.bulkSubscribeTopic(ctx, policyDef, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
@@ -1880,6 +1878,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 			metadata:        s.Metadata,
 			rules:           s.Rules,
 			deadLetterTopic: s.DeadLetterTopic,
+			bulkSubscribe:   s.BulkSubscribe,
 		}
 	}
 
@@ -2716,6 +2715,14 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	a.shutdownC <- nil
 }
 
+// SetRunning updates the value of the running flag.
+// This method is used by tests in dapr/components-contrib.
+func (a *DaprRuntime) SetRunning(val bool) {
+	a.running.Store(val)
+}
+
+// WaitUntilShutdown waits until the Shutdown() method is done.
+// This method is used by tests in dapr/components-contrib.
 func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
