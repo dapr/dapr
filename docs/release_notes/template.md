@@ -143,3 +143,7 @@ kubectl rollout restart deploy/<deployment-name>
 ## Breaking Changes
 
 $dapr_breaking_changes
+
+## Deprecation Notices
+
+$dapr_deprecation_notices

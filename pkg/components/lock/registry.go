@@ -1,9 +1,8 @@
 package lock
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/dapr/pkg/components"
@@ -38,7 +37,7 @@ func (r *Registry) Create(name, version string) (lock.Store, error) {
 	if method, ok := r.getStore(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find lock store %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find lock store %s/%s", name, version)
 }
 
 func (r *Registry) getStore(name, version string) (func() lock.Store, bool) {

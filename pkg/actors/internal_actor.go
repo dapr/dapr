@@ -150,7 +150,8 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		return nil, fmt.Errorf("failed to encode the internal actor response: %w", err)
 	}
 	res := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-		WithRawData(resultData, invokev1.OctetStreamContentType)
+		WithRawDataBytes(resultData).
+		WithContentType(invokev1.OctetStreamContentType)
 	return res, nil
 }
 

@@ -135,12 +135,14 @@ func TestInternalActorCall(t *testing.T) {
 
 	req := invokev1.NewInvokeMethodRequest(testMethod).
 		WithActor(testActorType, testActorID).
-		WithRawData([]byte(testInput), invokev1.OctetStreamContentType)
+		WithRawDataBytes([]byte(testInput)).
+		WithContentType(invokev1.OctetStreamContentType)
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	if assert.NoError(t, err) && assert.NotNil(t, resp) {
 		// Verify the response metadata matches what we expect
 		assert.Equal(t, int32(200), resp.Status().Code)
-		contentType, data := resp.RawData()
+		contentType := resp.ContentType()
+		data := resp.RawData()
 		assert.Equal(t, invokev1.OctetStreamContentType, contentType)
 
 		// Verify the actor got all the expected inputs (which are echoed back to us)

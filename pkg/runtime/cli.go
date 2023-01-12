@@ -15,6 +15,7 @@ limitations under the License.
 package runtime
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -23,17 +24,15 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pkg/errors"
-
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -41,8 +40,9 @@ import (
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
@@ -55,7 +55,7 @@ func FromFlags() (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
-	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
+	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
 	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
@@ -111,12 +111,12 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if *runtimeVersion {
-		fmt.Println(version.Version())
+		fmt.Println(buildinfo.Version())
 		os.Exit(0)
 	}
 
 	if *buildInfo {
-		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", version.Version(), version.Commit(), version.GitVersion())
+		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", buildinfo.Version(), buildinfo.Commit(), buildinfo.GitVersion())
 		os.Exit(0)
 	}
 
@@ -137,7 +137,7 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	// Initialize dapr metrics exporter
@@ -147,29 +147,29 @@ func FromFlags() (*DaprRuntime, error) {
 
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {
-		return nil, errors.Wrap(err, "error parsing dapr-http-port flag")
+		return nil, fmt.Errorf("error parsing dapr-http-port flag: %w", err)
 	}
 
 	daprAPIGRPC, err := strconv.Atoi(*daprAPIGRPCPort)
 	if err != nil {
-		return nil, errors.Wrap(err, "error parsing dapr-grpc-port flag")
+		return nil, fmt.Errorf("error parsing dapr-grpc-port flag: %w", err)
 	}
 
 	profPort, err := strconv.Atoi(*profilePort)
 	if err != nil {
-		return nil, errors.Wrap(err, "error parsing profile-port flag")
+		return nil, fmt.Errorf("error parsing profile-port flag: %w", err)
 	}
 
 	var daprInternalGRPC int
 	if *daprInternalGRPCPort != "" && *daprInternalGRPCPort != "0" {
 		daprInternalGRPC, err = strconv.Atoi(*daprInternalGRPCPort)
 		if err != nil {
-			return nil, errors.Wrap(err, "error parsing dapr-internal-grpc-port")
+			return nil, fmt.Errorf("error parsing dapr-internal-grpc-port: %w", err)
 		}
 	} else {
 		daprInternalGRPC, err = freeport.GetFreePort()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get free port for internal grpc server")
+			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
 		}
 	}
 
@@ -177,7 +177,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if *daprPublicPort != "" {
 		port, cerr := strconv.Atoi(*daprPublicPort)
 		if cerr != nil {
-			return nil, errors.Wrap(cerr, "error parsing dapr-public-port")
+			return nil, fmt.Errorf("error parsing dapr-public-port: %w", cerr)
 		}
 		publicPort = &port
 	}
@@ -186,7 +186,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
 		if err != nil {
-			return nil, errors.Wrap(err, "error parsing app-port")
+			return nil, fmt.Errorf("error parsing app-port: %w", err)
 		}
 	}
 
@@ -229,9 +229,18 @@ func FromFlags() (*DaprRuntime, error) {
 		concurrency = *appMaxConcurrency
 	}
 
-	appPrtcl := string(HTTPProtocol)
-	if *appProtocol != string(HTTPProtocol) {
-		appPrtcl = *appProtocol
+	var appProtocol string
+	{
+		p := strings.ToLower(*appProtocolPtr)
+		switch p {
+		case string(HTTPProtocol),
+			string(GRPCProtocol):
+			appProtocol = p
+		case "":
+			appProtocol = string(HTTPProtocol)
+		default:
+			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocolPtr)
+		}
 	}
 
 	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
@@ -272,7 +281,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AllowedOrigins:               *allowedOrigins,
 		GlobalConfig:                 *config,
 		ComponentsPath:               *componentsPath,
-		AppProtocol:                  appPrtcl,
+		AppProtocol:                  appProtocol,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,
 		InternalGRPCPort:             daprInternalGRPC,
@@ -363,30 +372,35 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
 
+	globalConfig.LoadFeatures()
+	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
+		log.Info("Enabled features: " + strings.Join(enabledFeatures, " "))
+	}
+
 	// TODO: Remove once AppHealthCheck feature is finalized
-	if !daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
+	if !globalConfig.IsFeatureEnabled(daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
 		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
 		runtimeConfig.AppHealthCheck = nil
 	}
 
-	resiliencyEnabled := daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.Resiliency)
-	var resiliencyProvider resiliencyConfig.Provider
-
-	if resiliencyEnabled {
-		var resiliencyConfigs []*resiliencyV1alpha.Resiliency
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
-			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
-		case modes.StandaloneMode:
-			resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
+	// Initialize metrics only if MetricSpec is enabled.
+	if globalConfig.Spec.MetricSpec.Enabled {
+		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
 		}
-		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
-		log.Info("Resiliency configuration loaded.")
-	} else {
-		log.Debug("Resiliency is not enabled.")
-		resiliencyProvider = &resiliencyConfig.NoOp{}
 	}
+
+	// Load Resiliency
+	var resiliencyConfigs []*resiliencyV1alpha.Resiliency
+	switch modes.DaprMode(*mode) {
+	case modes.KubernetesMode:
+		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+	case modes.StandaloneMode:
+		resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
+	}
+	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
+	resiliencyProvider := resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+	log.Info("Resiliency configuration loaded.")
 
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {

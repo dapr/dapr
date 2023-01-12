@@ -16,6 +16,7 @@ package resiliency
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,20 +24,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dapr/dapr/utils"
-
 	"github.com/ghodss/yaml"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
-
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-
-	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/config"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
@@ -66,6 +63,8 @@ const (
 	Pubsub                        ComponentType         = "Pubsub"
 	Secretstore                   ComponentType         = "Secretstore"
 	Statestore                    ComponentType         = "Statestore"
+	Inbound                       ComponentDirection    = "Inbound"
+	Outbound                      ComponentDirection    = "Outbound"
 )
 
 // ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
@@ -179,12 +178,13 @@ type (
 		getPolicyLevels() []string
 		getPolicyTypeName() PolicyTypeName
 	}
-	EndpointPolicy  struct{}
-	ActorPolicy     struct{}
-	ComponentType   string
-	ComponentPolicy struct {
+	EndpointPolicy     struct{}
+	ActorPolicy        struct{}
+	ComponentType      string
+	ComponentDirection string
+	ComponentPolicy    struct {
 		componentType      ComponentType
-		componentDirection string
+		componentDirection ComponentDirection
 	}
 )
 
@@ -785,7 +785,7 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
-		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: "Inbound"}); ok {
+		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: Inbound}); ok {
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
@@ -827,18 +827,21 @@ func (r *Resiliency) GetPolicy(target string, policyType PolicyType) *PolicyDesc
 		componentPolicy, exists = r.components[target]
 		if exists {
 			policy, _ := policyType.(*ComponentPolicy)
-			if policy.componentDirection == "Inbound" {
+			switch policy.componentDirection {
+			case Inbound:
 				policyName = PolicyNames{
 					Retry:          componentPolicy.Inbound.Retry,
 					CircuitBreaker: componentPolicy.Inbound.CircuitBreaker,
 					Timeout:        componentPolicy.Inbound.Timeout,
 				}
-			} else {
+			case Outbound:
 				policyName = PolicyNames{
 					Retry:          componentPolicy.Outbound.Retry,
 					CircuitBreaker: componentPolicy.Outbound.CircuitBreaker,
 					Timeout:        componentPolicy.Outbound.Timeout,
 				}
+			default:
+				panic(fmt.Errorf("invalid component policy direction: '%s'", policy.componentDirection))
 			}
 		}
 	case Actor:
@@ -967,11 +970,6 @@ func (e *circuitBreakerInstances) Remove(name string) {
 	e.Unlock()
 }
 
-// HasRetries returns true if the policy is configured to have more than 1 retry.
-func (p PolicyDescription) HasRetries() bool {
-	return p.RetryPolicy != nil && p.RetryPolicy.MaxRetries != 0
-}
-
 func toMap(val interface{}) (interface{}, error) {
 	jsonBytes, err := json.Marshal(val)
 	if err != nil {
@@ -1001,6 +999,16 @@ func ParseActorCircuitBreakerScope(val string) (ActorCircuitBreakerScope, error)
 		return ActorCircuitBreakerScopeBoth, nil
 	}
 	return ActorCircuitBreakerScope(0), fmt.Errorf("unknown circuit breaker scope %q", val)
+}
+
+// IsTimeExceeded returns true if the context timeout has elapsed.
+func IsTimeoutExeceeded(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded)
+}
+
+// IsCircuitBreakerError returns true if the error is cicuit breaker open or too many requests in half-open state.
+func IsCircuitBreakerError(err error) bool {
+	return errors.Is(err, breaker.ErrOpenState) || errors.Is(err, breaker.ErrTooManyRequests)
 }
 
 func filterResiliencyConfigs(resiliences []*resiliencyV1alpha.Resiliency, runtimeID string) []*resiliencyV1alpha.Resiliency {
@@ -1052,9 +1060,9 @@ func (*ComponentPolicy) getPolicyTypeName() PolicyTypeName {
 }
 
 var ComponentInboundPolicy = ComponentPolicy{
-	componentDirection: "Inbound",
+	componentDirection: Inbound,
 }
 
 var ComponentOutboundPolicy = ComponentPolicy{
-	componentDirection: "Outbound",
+	componentDirection: Outbound,
 }

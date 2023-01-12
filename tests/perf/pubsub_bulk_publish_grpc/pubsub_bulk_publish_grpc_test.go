@@ -93,7 +93,12 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			p := perf.Params()
+			p := perf.Params(
+				perf.WithQPS(200),
+				perf.WithConnections(16),
+				perf.WithDuration("1m"),
+				perf.WithPayloadSize(1024),
+			)
 			t.Logf("running pubsub bulk publish grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 			// Get the ingress external url of tester app

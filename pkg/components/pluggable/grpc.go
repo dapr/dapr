@@ -15,10 +15,9 @@ package pluggable
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/dapr/kit/logger"
-
-	"github.com/pkg/errors"
 
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 
@@ -85,7 +84,7 @@ func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialO
 
 	grpcConn, err := grpc.DialContext(ctx, udsSocket, additionalOpts...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
+		return nil, fmt.Errorf("unable to open GRPC connection using socket '%s': %w", udsSocket, err)
 	}
 	return grpcConn, nil
 }
@@ -94,13 +93,13 @@ func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialO
 func (g *GRPCConnector[TClient]) Dial(name string) error {
 	grpcConn, err := g.dialer(g.Context, name)
 	if err != nil {
-		return errors.Wrapf(err, "unable to open GRPC connection using the dialer")
+		return fmt.Errorf("unable to open GRPC connection using the dialer: %w", err)
 	}
 	g.conn = grpcConn
 
 	g.Client = g.clientFactory(grpcConn)
 
-	return g.Ping()
+	return nil
 }
 
 // Ping pings the grpc component.

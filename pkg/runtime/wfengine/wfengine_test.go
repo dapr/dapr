@@ -220,8 +220,8 @@ func (*mockPlacement) Stop() {
 }
 
 // WaitUntilPlacementTableIsReady implements internal.PlacementService
-func (*mockPlacement) WaitUntilPlacementTableIsReady() {
-	// no-op
+func (*mockPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error {
+	return nil
 }
 
 // TestStartWorkflowEngine validates that starting the workflow engine returns no errors.
