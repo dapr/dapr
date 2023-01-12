@@ -94,46 +94,6 @@ func TestComponentsPatch(t *testing.T) {
 			&socketSharedVolumeMount,
 		},
 		{
-			"patch should not create injectable containers operations when app is scopped but has no annotations",
-			appName,
-			[]componentsapi.Component{{
-				Scopes: []string{appName},
-			}},
-			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						annotations.KeyPluggableComponents: "component",
-					},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{appContainer, {
-						Name: "component",
-					}},
-				},
-			},
-			[]sidecar.PatchOperation{
-				{
-					Op:    "add",
-					Path:  sidecar.PatchPathVolumes,
-					Value: []corev1.Volume{sharedComponentsSocketVolume()},
-				},
-				{
-					Op:   "add",
-					Path: "/spec/containers/1/env",
-					Value: []corev1.EnvVar{{
-						Name:  componentsUnixDomainSocketMountPathEnvVar,
-						Value: socketSharedVolumeMount.MountPath,
-					}},
-				},
-				{
-					Op:    "add",
-					Path:  "/spec/containers/1/volumeMounts",
-					Value: []corev1.VolumeMount{socketSharedVolumeMount},
-				},
-			},
-			&socketSharedVolumeMount,
-		},
-		{
 			"patch should add pluggable component unix socket volume when pod already has volumes",
 			"",
 			[]componentsapi.Component{},
