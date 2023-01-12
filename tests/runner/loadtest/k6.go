@@ -38,8 +38,9 @@ import (
 )
 
 const (
-	k6ConfigMapPrefix = "k6-tests"
-	scriptName        = "test.js"
+	k6ConfigMapPrefix       = "k6-tests"
+	scriptName              = "test.js"
+	defaultK6ServiceAccount = "k6-sa"
 	// pollInterval is how frequently will poll for updates.
 	pollInterval = 5 * time.Second
 	// pollTimeout is how long the test should took.
@@ -270,6 +271,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 			Parallelism: int32(k6.parallelism),
 			Arguments:   args,
 			Runner: k6api.Pod{
+				ServiceAccountName: defaultK6ServiceAccount,
 				Env: append(k6.runnerEnv, corev1.EnvVar{
 					Name:  "TEST_NAMESPACE",
 					Value: k6.namespace,
