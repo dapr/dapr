@@ -243,7 +243,7 @@ func (s *proxyTestSuite) TestPingStream_MultipleThreads() {
 }
 
 func (s *proxyTestSuite) TestRecoveryFromNetworkFailure() {
-	// Make sure everthing works before we break things
+	// Make sure everything works before we break things
 	s.TestPingEmptyCarriesClientMetadata()
 
 	s.T().Run("Fails when no server is running", func(t *testing.T) {
@@ -407,8 +407,8 @@ func (s *proxyTestSuite) SetupSuite() {
 		}
 		// Explicitly copy the metadata, otherwise the tests will fail.
 		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
-		conn, teardown, err := s.getServerClientConn()
-		if err != nil {
+		conn, teardown, sErr := s.getServerClientConn()
+		if sErr != nil {
 			return ctx, nil, target, teardown, status.Errorf(codes.PermissionDenied, "testing rejection")
 		}
 		return outCtx, conn, target, teardown, nil
