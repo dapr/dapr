@@ -73,6 +73,8 @@ func getTestCertAuth() CertificateAuthority {
 	conf.RootCertPath = "./ca.crt"
 	conf.IssuerCertPath = "./issuer.crt"
 	conf.IssuerKeyPath = "./issuer.key"
+	conf.ClientCertPath = "./client.crt"
+	conf.ClientKeyPath = "./client.key"
 	conf.AllowedClockSkew = allowedClockSkew
 	conf.WorkloadCertTTL = workloadCertTTL
 	certAuth, _ := NewCertificateAuthority(conf)
@@ -90,6 +92,8 @@ func cleanupCredentials() {
 	os.Remove("ca.crt")
 	os.Remove("issuer.crt")
 	os.Remove("issuer.key")
+	os.Remove("client.crt")
+	os.Remove("client.key")
 }
 
 func TestCertValidity(t *testing.T) {
