@@ -46,11 +46,18 @@ type (
 		Metadata        map[string]string `json:"metadata,omitempty"`
 		Route           string            `json:"route"`  // Single route from v1alpha1
 		Routes          RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
+		BulkSubscribe   BulkSubscribeJSON `json:"bulkSubscribe,omitempty"`
 	}
 
 	RoutesJSON struct {
 		Rules   []*RuleJSON `json:"rules,omitempty"`
 		Default string      `json:"default,omitempty"`
+	}
+
+	BulkSubscribeJSON struct {
+		Enabled            bool  `json:"enabled"`
+		MaxMessagesCount   int32 `json:"maxMessagesCount,omitempty"`
+		MaxAwaitDurationMs int32 `json:"maxAwaitDurationMs,omitempty"`
 	}
 
 	RuleJSON struct {
@@ -125,13 +132,18 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 				}
 				n++
 			}
-
+			bulkSubscribe := &BulkSubscribe{
+				Enabled:            si.BulkSubscribe.Enabled,
+				MaxMessagesCount:   si.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: si.BulkSubscribe.MaxAwaitDurationMs,
+			}
 			subscriptions[i] = Subscription{
 				PubsubName:      si.PubsubName,
 				Topic:           si.Topic,
 				Metadata:        si.Metadata,
 				DeadLetterTopic: si.DeadLetterTopic,
 				Rules:           rules[:n],
+				BulkSubscribe:   bulkSubscribe,
 			}
 		}
 
@@ -194,12 +206,21 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			if err != nil {
 				return nil, err
 			}
+			var bulkSubscribe *BulkSubscribe
+			if s.BulkSubscribe != nil {
+				bulkSubscribe = &BulkSubscribe{
+					Enabled:            s.BulkSubscribe.Enabled,
+					MaxMessagesCount:   s.BulkSubscribe.MaxMessagesCount,
+					MaxAwaitDurationMs: s.BulkSubscribe.MaxAwaitDurationMs,
+				}
+			}
 			subscriptions[i] = Subscription{
 				PubsubName:      s.PubsubName,
 				Topic:           s.GetTopic(),
 				Metadata:        s.GetMetadata(),
 				DeadLetterTopic: s.DeadLetterTopic,
 				Rules:           rules,
+				BulkSubscribe:   bulkSubscribe,
 			}
 		}
 	}
@@ -284,6 +305,11 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Metadata:        sub.Spec.Metadata,
 			Scopes:          sub.Scopes,
 			DeadLetterTopic: sub.Spec.DeadLetterTopic,
+			BulkSubscribe: &BulkSubscribe{
+				Enabled:            sub.Spec.BulkSubscribe.Enabled,
+				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
+			},
 		}, nil
 
 	default:
@@ -305,6 +331,11 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Metadata:        sub.Spec.Metadata,
 			Scopes:          sub.Scopes,
 			DeadLetterTopic: sub.Spec.DeadLetterTopic,
+			BulkSubscribe: &BulkSubscribe{
+				Enabled:            sub.Spec.BulkSubscribe.Enabled,
+				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
+			},
 		}, nil
 	}
 }
