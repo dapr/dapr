@@ -347,7 +347,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			req := invokev1.
 				NewInvokeMethodRequest("Execute").
 				WithActor(ActivityActorType, targetActorID).
-				WithRawData(activityRequestBytes, invokev1.OctetStreamContentType)
+				WithRawDataBytes(activityRequestBytes).
+				WithContentType(invokev1.OctetStreamContentType)
 			if _, err := wf.actors.Call(ctx, req); err != nil {
 				return newRecoverableError(
 					fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
@@ -367,7 +368,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			req := invokev1.
 				NewInvokeMethodRequest(method).
 				WithActor(WorkflowActorType, msg.TargetInstanceID).
-				WithRawData(eventData, invokev1.OctetStreamContentType)
+				WithRawDataBytes(eventData).
+				WithContentType(invokev1.OctetStreamContentType)
 			if _, err := wf.actors.Call(ctx, req); err != nil {
 				// workflow-related actor methods are never expected to return errors
 				return newRecoverableError(

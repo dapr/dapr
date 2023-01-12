@@ -194,7 +194,8 @@ loop:
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
 		WithActor(WorkflowActorType, workflowID).
-		WithRawData(resultData, invokev1.OctetStreamContentType)
+		WithRawDataBytes(resultData).
+		WithContentType(invokev1.OctetStreamContentType)
 	if _, err := a.actorRuntime.Call(ctx, req); err != nil {
 		return newRecoverableError(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", AddWorkflowEventMethod, err))
 	}
