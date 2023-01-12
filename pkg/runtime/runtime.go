@@ -2711,6 +2711,14 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	a.shutdownC <- nil
 }
 
+// SetRunning updates the value of the running flag.
+// This method is used by tests in dapr/components-contrib.
+func (a *DaprRuntime) SetRunning(val bool) {
+	a.running.Store(val)
+}
+
+// WaitUntilShutdown waits until the Shutdown() method is done.
+// This method is used by tests in dapr/components-contrib.
 func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
