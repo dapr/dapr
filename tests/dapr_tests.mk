@@ -352,7 +352,7 @@ ifeq ($(DAPR_PERF_TEST),)
 		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 		--format standard-quiet \
 		-- \
-			-p 1 -count=1 -v -tags=perf ./tests/perf/...
+			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
 	for app in $(DAPR_PERF_TEST); do \
