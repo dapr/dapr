@@ -54,6 +54,6 @@ func (*NoOp) BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition {
 	return nil
 }
 
-func (*NoOp) GetPolicy(target string, policyType PolicyType) *PolicyDescription {
-	return &PolicyDescription{}
+func (*NoOp) PolicyDefined(target string, policyType PolicyType) bool {
+	return true
 }
