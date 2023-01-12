@@ -14,10 +14,6 @@ limitations under the License.
 package main
 
 import (
-	"os"
-	"os/signal"
-	"syscall"
-
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
@@ -61,6 +57,8 @@ func main() {
 	workflowsLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
+	stopCh := runtime.ShutdownSignal()
+
 	err = rt.Run(
 		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),
 		runtime.WithStates(stateLoader.DefaultRegistry),
@@ -76,8 +74,6 @@ func main() {
 		log.Fatalf("fatal error from runtime: %s", err)
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
-	<-stop
+	<-stopCh
 	rt.ShutdownWithWait()
 }

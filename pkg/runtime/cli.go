@@ -32,6 +32,7 @@ import (
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -54,7 +55,7 @@ func FromFlags() (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
-	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
+	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
 	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
@@ -228,9 +229,18 @@ func FromFlags() (*DaprRuntime, error) {
 		concurrency = *appMaxConcurrency
 	}
 
-	appPrtcl := string(HTTPProtocol)
-	if *appProtocol != string(HTTPProtocol) {
-		appPrtcl = *appProtocol
+	var appProtocol string
+	{
+		p := strings.ToLower(*appProtocolPtr)
+		switch p {
+		case string(HTTPProtocol),
+			string(GRPCProtocol):
+			appProtocol = p
+		case "":
+			appProtocol = string(HTTPProtocol)
+		default:
+			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocolPtr)
+		}
 	}
 
 	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
@@ -271,7 +281,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AllowedOrigins:               *allowedOrigins,
 		GlobalConfig:                 *config,
 		ComponentsPath:               *componentsPath,
-		AppProtocol:                  appPrtcl,
+		AppProtocol:                  appProtocol,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,
 		InternalGRPCPort:             daprInternalGRPC,
@@ -373,24 +383,24 @@ func FromFlags() (*DaprRuntime, error) {
 		runtimeConfig.AppHealthCheck = nil
 	}
 
-	resiliencyEnabled := globalConfig.IsFeatureEnabled(daprGlobalConfig.Resiliency)
-	var resiliencyProvider resiliencyConfig.Provider
-
-	if resiliencyEnabled {
-		var resiliencyConfigs []*resiliencyV1alpha.Resiliency
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
-			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
-		case modes.StandaloneMode:
-			resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
+	// Initialize metrics only if MetricSpec is enabled.
+	if globalConfig.Spec.MetricSpec.Enabled {
+		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
 		}
-		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
-		log.Info("Resiliency configuration loaded.")
-	} else {
-		log.Debug("Resiliency is not enabled.")
-		resiliencyProvider = &resiliencyConfig.NoOp{}
 	}
+
+	// Load Resiliency
+	var resiliencyConfigs []*resiliencyV1alpha.Resiliency
+	switch modes.DaprMode(*mode) {
+	case modes.KubernetesMode:
+		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+	case modes.StandaloneMode:
+		resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
+	}
+	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
+	resiliencyProvider := resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+	log.Info("Resiliency configuration loaded.")
 
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
