@@ -618,6 +618,8 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("pubsub")
 	utils.InitHTTPClient(true)
 
+	components := []kube.ComponentDescription{}
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -644,6 +646,25 @@ func TestMain(m *testing.M) {
 	}
 
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+		components = append(components, kube.ComponentDescription{
+			Name:      PubSubPluggableName,
+			Namespace: &kube.DaprTestNamespace,
+			TypeName:  "pubsub.redis-pluggable",
+			MetaData: map[string]kube.MetadataValue{
+				"redisHost": {
+					FromSecretRef: &kube.SecretRef{
+						Name: "redissecret",
+						Key:  "host",
+					},
+				},
+				"redisPassword":      {Raw: `""`},
+				"processingTimeout":  {Raw: `"1s"`},
+				"redeliverInterval":  {Raw: `"1s"`},
+				"idleCheckFrequency": {Raw: `"1s"`},
+				"readTimeout":        {Raw: `"1s"`},
+			},
+			Scopes: []string{publisherPluggableAppName, subscriberPluggableAppName},
+		})
 		redisPubsubPluggableComponent := []apiv1.Container{
 			{
 				Name:  "redis-pubsub-pluggable",
@@ -693,7 +714,7 @@ func TestMain(m *testing.M) {
 	}
 
 	log.Printf("Creating TestRunner\n")
-	tr = runner.NewTestRunner("pubsubtest", testApps, nil, nil)
+	tr = runner.NewTestRunner("pubsubtest", testApps, components, nil)
 	log.Printf("Starting TestRunner\n")
 	os.Exit(tr.Start(m))
 }
