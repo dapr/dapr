@@ -11,12 +11,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
-	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -232,7 +233,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 	}
 	clientCertPem, clientKeyPem, err := GetClientCertificates(certsCredentials.Certificate, certsCredentials.PrivateKey, selfSignedRootCertLifetime, c.config.AllowedClockSkew)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "error generating client certificate")
+		return nil, nil, nil, fmt.Errorf("error generating client certificate: %w", err)
 	}
 	// store credentials so that next time sentry restarts it'll load normally
 	err = certs.StoreCredentials(c.config, rootCertPem, issuerCertPem, issuerKeyPem, clientCertPem, clientKeyPem)
