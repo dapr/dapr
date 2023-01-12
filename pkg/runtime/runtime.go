@@ -23,11 +23,14 @@ import (
 	"net"
 	nethttp "net/http"
 	"os"
+	"os/signal"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -205,11 +208,13 @@ type DaprRuntime struct {
 	subscriptions             []runtimePubsub.Subscription
 	inputBindingRoutes        map[string]string
 	shutdownC                 chan error
+	running                   atomic.Bool
 	apiClosers                []io.Closer
 	componentAuthorizers      []ComponentAuthorizer
 	appHealth                 *apphealth.AppHealth
 	appHealthReady            func() // Invoked the first time the app health becomes ready
 	appHealthLock             *sync.Mutex
+	bulkSubLock               *sync.Mutex
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -295,6 +300,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		resiliency:                 resiliencyProvider,
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
+		bulkSubLock:                &sync.Mutex{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -320,6 +326,8 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	if err := a.initRuntime(&o); err != nil {
 		return err
 	}
+
+	a.running.Store(true)
 
 	d := time.Since(start).Milliseconds()
 	log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
@@ -421,13 +429,6 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.namespace = a.getNamespace()
 
-	// Initialize metrics only if MetricSpec is enabled.
-	if a.globalConfig.Spec.MetricSpec.Enabled {
-		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace, a.globalConfig.Spec.MetricSpec.Rules); err != nil {
-			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
-		}
-	}
-
 	err := a.establishSecurity(a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
 		return err
@@ -504,6 +505,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Infof("API gRPC server is running on port %v", a.runtimeConfig.APIGRPCPort)
 	}
 
+	a.initDirectMessaging(a.nameResolver)
+
 	// Start HTTP Server
 	err = a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.PublicPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	if err != nil {
@@ -534,17 +537,25 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
+	a.directMessaging.SetAppChannel(a.appChannel)
 
 	a.initDirectMessaging(a.nameResolver)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
 
+	if a.runtimeConfig.MaxConcurrency > 0 {
+		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+	}
+
 	a.appHealthReady = func() {
 		a.appHealthReadyInit(opts)
 	}
 	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
-		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
+		// We can't just pass "a.appChannel.HealthProbe" because appChannel may be re-created
+		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
+			return a.appChannel.HealthProbe(ctx)
+		})
 		a.appHealth.OnHealthChange(a.appHealthChanged)
 		a.appHealth.StartProbes(a.ctx)
 
@@ -727,15 +738,13 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub),
-	)
+	policyDef := a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub)
 	routeMetadata := route.metadata
 
 	namespaced := a.pubSubs[name].namespaceScoped
 
 	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
-		err := a.bulkSubscribeTopic(ctx, policyRunner, name, topic, route, namespaced)
+		err := a.bulkSubscribeTopic(ctx, policyDef, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
 			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
@@ -852,6 +861,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			path:       routePath,
 			pubsub:     name,
 		}
+		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			var pErr error
 			switch a.runtimeConfig.ApplicationProtocol {
@@ -968,18 +978,17 @@ func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) 
 
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
-		AppID:               a.runtimeConfig.ID,
-		Namespace:           a.namespace,
-		Port:                a.runtimeConfig.InternalGRPCPort,
-		Mode:                a.runtimeConfig.Mode,
-		AppChannel:          a.appChannel,
-		ClientConnFn:        a.grpc.GetGRPCConnection,
-		Resolver:            resolver,
-		MaxRequestBodySize:  a.runtimeConfig.MaxRequestBodySize,
-		Proxy:               a.proxy,
-		ReadBufferSize:      a.runtimeConfig.ReadBufferSize,
-		Resiliency:          a.resiliency,
-		IsResiliencyEnabled: a.globalConfig.IsFeatureEnabled(config.Resiliency),
+		AppID:              a.runtimeConfig.ID,
+		Namespace:          a.namespace,
+		Port:               a.runtimeConfig.InternalGRPCPort,
+		Mode:               a.runtimeConfig.Mode,
+		AppChannel:         a.appChannel,
+		ClientConnFn:       a.grpc.GetGRPCConnection,
+		Resolver:           resolver,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
+		Proxy:              a.proxy,
+		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
+		Resiliency:         a.resiliency,
 	})
 }
 
@@ -1293,8 +1302,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			WithHTTPExtension(nethttp.MethodPost, "").
 			WithRawDataBytes(data).
 			WithContentType(invokev1.JSONContentType).
-			WithMetadata(reqMetadata).
-			WithReplay(policyDef.HasRetries())
+			WithMetadata(reqMetadata)
+		if policyDef != nil {
+			req.WithReplay(policyDef.HasRetries())
+		}
 		defer req.Close()
 
 		respErr := errors.New("error sending binding event to application")
@@ -1800,9 +1811,8 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	}
 
 	// handle app subscriptions
-	resiliencyEnabled := a.globalConfig.IsFeatureEnabled(config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
+		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		var conn gogrpc.ClientConnInterface
 		conn, err = a.grpc.GetAppClient()
@@ -1810,7 +1820,7 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
 		client := runtimev1pb.NewAppCallbackClient(conn)
-		subscriptions, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
+		subscriptions, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency)
 	}
 	if err != nil {
 		return nil, err
@@ -2364,15 +2374,14 @@ func (a *DaprRuntime) initActors() error {
 		AppConfig:          a.appConfig,
 	})
 	act := actors.NewActors(actors.ActorsOpts{
-		StateStore:          a.stateStores[a.actorStateStoreName],
-		AppChannel:          a.appChannel,
-		GRPCConnectionFn:    a.grpc.GetGRPCConnection,
-		Config:              actorConfig,
-		CertChain:           a.runtimeConfig.CertChain,
-		TracingSpec:         a.globalConfig.Spec.TracingSpec,
-		Resiliency:          a.resiliency,
-		IsResiliencyEnabled: a.globalConfig.IsFeatureEnabled(config.Resiliency),
-		StateStoreName:      a.actorStateStoreName,
+		StateStore:       a.stateStores[a.actorStateStoreName],
+		AppChannel:       a.appChannel,
+		GRPCConnectionFn: a.grpc.GetGRPCConnection,
+		Config:           actorConfig,
+		CertChain:        a.runtimeConfig.CertChain,
+		TracingSpec:      a.globalConfig.Spec.TracingSpec,
+		Resiliency:       a.resiliency,
+		StateStoreName:   a.actorStateStoreName,
 	})
 	err = act.Init()
 	if err == nil {
@@ -2653,6 +2662,13 @@ func closeComponent(component any, logmsg string, merr *error) {
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
+	// Another shutdown signal causes an instant shutdown and interrupts the graceful shutdown
+	go func() {
+		<-ShutdownSignal()
+		log.Info("Received another shutdown signal - shutting down right away")
+		os.Exit(0)
+	}()
+
 	a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 	os.Exit(0)
 }
@@ -2666,6 +2682,11 @@ func (a *DaprRuntime) cleanSocket() {
 }
 
 func (a *DaprRuntime) Shutdown(duration time.Duration) {
+	// If the shutdown has already been invoked, do nothing
+	if !a.running.CompareAndSwap(true, false) {
+		return
+	}
+
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 	log.Info("Dapr shutting down")
@@ -2691,6 +2712,14 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	a.shutdownC <- nil
 }
 
+// SetRunning updates the value of the running flag.
+// This method is used by tests in dapr/components-contrib.
+func (a *DaprRuntime) SetRunning(val bool) {
+	a.running.Store(val)
+}
+
+// WaitUntilShutdown waits until the Shutdown() method is done.
+// This method is used by tests in dapr/components-contrib.
 func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
@@ -2796,7 +2825,20 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 
 	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
+	stopCh := ShutdownSignal()
+	defer signal.Stop(stopCh)
 	for {
+		select {
+		case <-stopCh:
+			// Cause a shutdown
+			a.ShutdownWithWait()
+			return
+		case <-a.ctx.Done():
+			// Return
+			return
+		default:
+			// nop - continue execution
+		}
 		conn, _ := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(a.runtimeConfig.ApplicationPort), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()
@@ -2850,10 +2892,6 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
 	default:
 		return fmt.Errorf("cannot create app channel for protocol %s", a.runtimeConfig.ApplicationProtocol)
-	}
-
-	if a.runtimeConfig.MaxConcurrency > 0 {
-		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
 	}
 
 	a.appChannel = ch
@@ -3133,4 +3171,11 @@ func (a *DaprRuntime) stopTrace() {
 	} else {
 		a.tracerProvider = nil
 	}
+}
+
+// ShutdownSignal returns a signal that receives a message when the app needs to shut down
+func ShutdownSignal() chan os.Signal {
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
+	return stop
 }

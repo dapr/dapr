@@ -1,5 +1,5 @@
-//go:build !windows
-// +build !windows
+//go:build windows
+// +build windows
 
 /*
 Copyright 2021 The Dapr Authors
@@ -21,12 +21,7 @@ import (
 )
 
 // GetDialAddressPrefix returns a dial prefix for a gRPC client connections for a given DaprMode.
-// This is used on non-Windows hosts.
+// This is used on Windows hosts.
 func GetDialAddressPrefix(mode modes.DaprMode) string {
-	switch mode {
-	case modes.KubernetesMode:
-		return "dns:///"
-	default:
-		return ""
-	}
+	return ""
 }
