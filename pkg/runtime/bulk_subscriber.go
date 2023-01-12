@@ -479,7 +479,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	return retriableError
 }
 
-func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
+func extractCloudEvent(event map[string]interface{}, metadata map[string]string) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
 	envelope := &runtimev1pb.TopicEventCERequest{
 		Id:              extractCloudEventProperty(event, pubsub.IDField),
 		Source:          extractCloudEventProperty(event, pubsub.SourceField),
@@ -504,7 +504,7 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}
-	extensions, extensionsErr := extractCloudEventExtensions(event)
+	extensions, extensionsErr := extractCloudEventExtensions(event, metadata)
 	if extensionsErr != nil {
 		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
 	}
@@ -521,7 +521,7 @@ func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[
 			Metadata:    entry.Metadata,
 		}, nil
 	} else {
-		eventLocal, err := extractCloudEvent(cloudEvent)
+		eventLocal, err := extractCloudEvent(cloudEvent, entry.Metadata)
 		if err != nil {
 			return nil, err
 		}

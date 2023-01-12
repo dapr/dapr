@@ -2253,7 +2253,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		}
 	}
 
-	extensions, extensionsErr := extractCloudEventExtensions(cloudEvent)
+	extensions, extensionsErr := extractCloudEventExtensions(cloudEvent, msg.metadata)
 	if extensionsErr != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
 		return extensionsErr
@@ -2318,15 +2318,19 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], res.GetStatus())
 }
 
-func extractCloudEventExtensions(cloudEvent map[string]interface{}) (*structpb.Struct, error) {
+func extractCloudEventExtensions(cloudEvent map[string]interface{}, metadata map[string]string) (*structpb.Struct, error) {
 	// Assemble Cloud Event Extensions:
 	// Create copy of the cloud event with duplicated data removed
+	// Merge in the pubsub publish metadata with prefix _metadata_
 
 	extensions := map[string]interface{}{}
 	for key, value := range cloudEvent {
 		if !cloudEventDuplicateKeys.Has(key) {
 			extensions[key] = value
 		}
+	}
+	for key, value := range metadata {
+		extensions[fmt.Sprintf("_metadata_%s", key)] = value
 	}
 	extensionsStruct := structpb.Struct{}
 	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
