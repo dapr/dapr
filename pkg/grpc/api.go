@@ -21,7 +21,6 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
@@ -409,8 +408,8 @@ type invokeServiceResp struct {
 }
 
 var (
-	invokeServiceDeprecationNoticeShown     = atomic.Bool{}
-	invokeServiceHTTPDeprecationNoticeShown = atomic.Bool{}
+	invokeServiceDeprecationNoticeOnce     = sync.Once{}
+	invokeServiceHTTPDeprecationNoticeOnce = sync.Once{}
 )
 
 // Deprecated: Use proxy mode service invocation instead.
@@ -419,9 +418,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
+	invokeServiceDeprecationNoticeOnce.Do(func() {
 		apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
-	}
+	})
 	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
@@ -458,9 +457,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
-			if invokeServiceHTTPDeprecationNoticeShown.CompareAndSwap(false, true) {
+			invokeServiceHTTPDeprecationNoticeOnce.Do(func() {
 				apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
-			}
+			})
 			var errorMessage string
 			if rResp.message != nil && rResp.message.Data != nil {
 				errorMessage = string(rResp.message.Data.Value)
