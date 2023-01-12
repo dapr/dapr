@@ -408,6 +408,10 @@ type invokeServiceResp struct {
 	trailers metadata.MD
 }
 
+// These flags are used to make sure that we are printing the deprecation warning log messages in "InvokeService" just once.
+// By using "CompareAndSwap(false, true)" we replace the value "false" with "true" only if it's not already "true".
+// "CompareAndSwap" returns true if the swap happened (i.e. if the value was not already "true"), so we can use that as a flag to make sure we only run the code once.
+// Why not using "sync.Once"? In our tests (https://github.com/dapr/dapr/pull/5740), that seems to be causing a regression in the perf tests. This is probably because when using "sync.Once" and the callback needs to be executed for the first time, all concurrent requests are blocked too. Additionally, the use of closures in this case _could_ have an impact on the GC as well.
 var (
 	invokeServiceDeprecationNoticeShown     = atomic.Bool{}
 	invokeServiceHTTPDeprecationNoticeShown = atomic.Bool{}
