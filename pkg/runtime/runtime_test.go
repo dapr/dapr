@@ -1183,8 +1183,8 @@ func TestMetadataAppID(t *testing.T) {
 		clientID := metadata.Properties["clientID"]
 		appIds := strings.Split(clientID, " ")
 		assert.Equal(t, 2, len(appIds))
-		for _, appId := range appIds {
-			assert.Equal(t, TestRuntimeConfigID, appId)
+		for _, appID := range appIds {
+			assert.Equal(t, TestRuntimeConfigID, appID)
 		}
 	})
 
