@@ -429,13 +429,6 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.namespace = a.getNamespace()
 
-	// Initialize metrics only if MetricSpec is enabled.
-	if a.globalConfig.Spec.MetricSpec.Enabled {
-		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace, a.globalConfig.Spec.MetricSpec.Rules); err != nil {
-			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
-		}
-	}
-
 	err := a.establishSecurity(a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
 		return err
@@ -985,18 +978,17 @@ func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) 
 
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
-		AppID:               a.runtimeConfig.ID,
-		Namespace:           a.namespace,
-		Port:                a.runtimeConfig.InternalGRPCPort,
-		Mode:                a.runtimeConfig.Mode,
-		AppChannel:          a.appChannel,
-		ClientConnFn:        a.grpc.GetGRPCConnection,
-		Resolver:            resolver,
-		MaxRequestBodySize:  a.runtimeConfig.MaxRequestBodySize,
-		Proxy:               a.proxy,
-		ReadBufferSize:      a.runtimeConfig.ReadBufferSize,
-		Resiliency:          a.resiliency,
-		IsResiliencyEnabled: a.globalConfig.IsFeatureEnabled(config.Resiliency),
+		AppID:              a.runtimeConfig.ID,
+		Namespace:          a.namespace,
+		Port:               a.runtimeConfig.InternalGRPCPort,
+		Mode:               a.runtimeConfig.Mode,
+		AppChannel:         a.appChannel,
+		ClientConnFn:       a.grpc.GetGRPCConnection,
+		Resolver:           resolver,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
+		Proxy:              a.proxy,
+		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
+		Resiliency:         a.resiliency,
 	})
 }
 
@@ -1310,8 +1302,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			WithHTTPExtension(nethttp.MethodPost, "").
 			WithRawDataBytes(data).
 			WithContentType(invokev1.JSONContentType).
-			WithMetadata(reqMetadata).
-			WithReplay(policyDef.HasRetries())
+			WithMetadata(reqMetadata)
+		if policyDef != nil {
+			req.WithReplay(policyDef.HasRetries())
+		}
 		defer req.Close()
 
 		respErr := errors.New("error sending binding event to application")
@@ -1817,9 +1811,8 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	}
 
 	// handle app subscriptions
-	resiliencyEnabled := a.globalConfig.IsFeatureEnabled(config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
+		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		var conn gogrpc.ClientConnInterface
 		conn, err = a.grpc.GetAppClient()
@@ -1827,7 +1820,7 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
 		client := runtimev1pb.NewAppCallbackClient(conn)
-		subscriptions, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
+		subscriptions, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency)
 	}
 	if err != nil {
 		return nil, err
@@ -2381,15 +2374,14 @@ func (a *DaprRuntime) initActors() error {
 		AppConfig:          a.appConfig,
 	})
 	act := actors.NewActors(actors.ActorsOpts{
-		StateStore:          a.stateStores[a.actorStateStoreName],
-		AppChannel:          a.appChannel,
-		GRPCConnectionFn:    a.grpc.GetGRPCConnection,
-		Config:              actorConfig,
-		CertChain:           a.runtimeConfig.CertChain,
-		TracingSpec:         a.globalConfig.Spec.TracingSpec,
-		Resiliency:          a.resiliency,
-		IsResiliencyEnabled: a.globalConfig.IsFeatureEnabled(config.Resiliency),
-		StateStoreName:      a.actorStateStoreName,
+		StateStore:       a.stateStores[a.actorStateStoreName],
+		AppChannel:       a.appChannel,
+		GRPCConnectionFn: a.grpc.GetGRPCConnection,
+		Config:           actorConfig,
+		CertChain:        a.runtimeConfig.CertChain,
+		TracingSpec:      a.globalConfig.Spec.TracingSpec,
+		Resiliency:       a.resiliency,
+		StateStoreName:   a.actorStateStoreName,
 	})
 	err = act.Init()
 	if err == nil {
@@ -2720,6 +2712,14 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	a.shutdownC <- nil
 }
 
+// SetRunning updates the value of the running flag.
+// This method is used by tests in dapr/components-contrib.
+func (a *DaprRuntime) SetRunning(val bool) {
+	a.running.Store(val)
+}
+
+// WaitUntilShutdown waits until the Shutdown() method is done.
+// This method is used by tests in dapr/components-contrib.
 func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
