@@ -27,7 +27,7 @@ import (
 )
 
 func TestComponentsPatch(t *testing.T) {
-	const appName, componentImage, componentName = "my-app", "my-image", "my-component"
+	const appName = "my-app"
 	socketSharedVolumeMount := sharedComponentsUnixSocketVolumeMount("/tmp/dapr-components-sockets")
 	appContainer := corev1.Container{
 		Name: "app",
