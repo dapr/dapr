@@ -100,9 +100,13 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		WithActor(WorkflowActorType, workflowInstanceID).
 		WithRawDataBytes(eventData).
 		WithContentType(invokev1.OctetStreamContentType)
-	if _, err := be.actors.Call(ctx, req); err != nil {
+	defer req.Close()
+
+	resp, err := be.actors.Call(ctx, req)
+	if err != nil {
 		return err
 	}
+	defer resp.Close()
 	return nil
 }
 
@@ -113,9 +117,12 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 		NewInvokeMethodRequest(GetWorkflowMetadataMethod).
 		WithActor(WorkflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
+	defer req.Close()
+
 	if res, err := be.actors.Call(ctx, req); err != nil {
 		return nil, err
 	} else {
+		defer res.Close()
 		data, err := res.RawDataFull()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read the internal actor response: %w", err)
@@ -168,9 +175,13 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 		WithActor(WorkflowActorType, string(id)).
 		WithRawDataBytes(data).
 		WithContentType(invokev1.OctetStreamContentType)
-	if _, err := be.actors.Call(ctx, req); err != nil {
+	defer req.Close()
+
+	resp, err := be.actors.Call(ctx, req)
+	if err != nil {
 		return err
 	}
+	defer resp.Close()
 	return nil
 }
 

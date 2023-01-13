@@ -196,9 +196,13 @@ loop:
 		WithActor(WorkflowActorType, workflowID).
 		WithRawDataBytes(resultData).
 		WithContentType(invokev1.OctetStreamContentType)
-	if _, err := a.actorRuntime.Call(ctx, req); err != nil {
+	defer req.Close()
+
+	resp, err := a.actorRuntime.Call(ctx, req)
+	if err != nil {
 		return newRecoverableError(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", AddWorkflowEventMethod, err))
 	}
+	defer resp.Close()
 	return nil
 }
 

@@ -11,7 +11,7 @@ The workflow engine is entirely encapsulated within the [dapr sidecar (a.k.a. da
 Internally, this engine depends on the [Durable Task Framework for Go](https://github.com/microsoft/durabletask-go), an MIT-licensed open-source project for authoring workflows as code. Use the following command to get the latest build of this dependency:
 
 ```bash
-go get github.com/microsoft/durabletask-go@dapr
+go get github.com/microsoft/durabletask-go
 ```
 
 The following command can be used to build a version of Daprd that supports the workflow engine.
@@ -49,7 +49,7 @@ DEBU[0000] activity-processor: waiting for new work items...       app_id=foo in
 
 ## Running tests
 
-There are no tests that directly target Dapr Workflows yet. However, this engine is fully compatible with .NET and Java Durable Task SDKs.
+There are no end-to-end tests that directly target the Dapr Workflows engine yet. However, this engine is fully compatible with .NET and Java Durable Task SDKs.
 
 | Language/Stack | Package | Project Home | Samples |
 | - | - | - | - |

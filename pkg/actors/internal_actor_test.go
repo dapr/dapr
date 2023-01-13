@@ -137,12 +137,16 @@ func TestInternalActorCall(t *testing.T) {
 		WithActor(testActorType, testActorID).
 		WithRawDataBytes([]byte(testInput)).
 		WithContentType(invokev1.OctetStreamContentType)
+	defer req.Close()
+
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+	defer resp.Close()
+
 	if assert.NoError(t, err) && assert.NotNil(t, resp) {
 		// Verify the response metadata matches what we expect
 		assert.Equal(t, int32(200), resp.Status().Code)
 		contentType := resp.ContentType()
-		data := resp.RawData()
+		data, _ := resp.RawDataFull()
 		assert.Equal(t, invokev1.OctetStreamContentType, contentType)
 
 		// Verify the actor got all the expected inputs (which are echoed back to us)
@@ -214,7 +218,12 @@ func TestInternalActorDeactivation(t *testing.T) {
 
 	// Call the internal actor to "activate" it
 	req := invokev1.NewInvokeMethodRequest("Foo").WithActor(testActorType, testActorID)
-	_, err = testActorRuntime.callLocalActor(context.Background(), req)
+	defer req.Close()
+
+	var resp *invokev1.InvokeMethodResponse
+	resp, err = testActorRuntime.callLocalActor(context.Background(), req)
+	defer resp.Close()
+
 	assert.NoError(t, err)
 
 	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.
