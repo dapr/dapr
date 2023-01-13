@@ -288,9 +288,9 @@ test: test-deps
 			--format standard-quiet \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
-				$(COVERAGE_OPTS)
+				$(COVERAGE_OPTS) $(GCFLAGS) -ldflags=$(LDFLAGS)
 	CGO_ENABLED=$(CGO) \
-		go test ./tests/...
+		go test ./tests/... $(GCFLAGS) -ldflags=$(LDFLAGS)
 
 ################################################################################
 # Target: test-race                                                            #
@@ -328,7 +328,7 @@ TEST_WITH_RACE=./pkg/acl/... \
 .PHONY: test-race
 test-race:
 	echo "$(TEST_WITH_RACE)" | xargs \
-		go test -race
+		go test -race $(GCFLAGS) -ldflags=$(LDFLAGS)
 
 ################################################################################
 # Target: lint                                                                 #
