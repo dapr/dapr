@@ -349,10 +349,14 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				WithActor(ActivityActorType, targetActorID).
 				WithRawDataBytes(activityRequestBytes).
 				WithContentType(invokev1.OctetStreamContentType)
-			if _, err := wf.actors.Call(ctx, req); err != nil {
+			defer req.Close()
+
+			resp, err := wf.actors.Call(ctx, req)
+			if err != nil {
 				return newRecoverableError(
 					fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
 			}
+			defer resp.Close()
 		} else {
 			wfLogger.Warn("don't know how to process task %v", e)
 		}
@@ -370,11 +374,15 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				WithActor(WorkflowActorType, msg.TargetInstanceID).
 				WithRawDataBytes(eventData).
 				WithContentType(invokev1.OctetStreamContentType)
-			if _, err := wf.actors.Call(ctx, req); err != nil {
+			defer req.Close()
+
+			resp, err := wf.actors.Call(ctx, req)
+			if err != nil {
 				// workflow-related actor methods are never expected to return errors
 				return newRecoverableError(
 					fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
 			}
+			defer resp.Close()
 		}
 	}
 

@@ -117,7 +117,11 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		}
 		methodName := methodURL[methodStartIndex+len("/method/"):]
 
-		requestData := req.Message().GetData().GetValue()
+		var requestData []byte
+		requestData, err = req.RawDataFull()
+		if err != nil {
+			return nil, err
+		}
 
 		// Check for well-known method names; otherwise, just call InvokeMethod on the internal actor.
 		if strings.HasPrefix(methodName, "remind/") {
