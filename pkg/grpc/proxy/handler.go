@@ -117,6 +117,12 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	}
 	headersSent := &atomic.Bool{}
 	counter := atomic.Int32{}
+	// When using resiliency, we need to put special care in handling proxied gRPC requests that are streams, because these can be long-lived.
+	// - For unary gRPC calls, we need to apply the timeout and retry policies to the entire call, from start to end
+	// - For streaming gRPC calls, timeouts and retries should only kick in during the initial "handshake". After that, the connection is to be considered established and we should continue with it until it's stopped or canceled or failed. Errors after the initial handshake should be sent directly to the client and server and not handled by Dapr.
+	// With gRPC, every call is, at its core, a stream. The gRPC library maintains a list of which calls are to be interpreted as "unary" RPCs, and then "wraps them" so users can write code that behaves like a regular RPC without having to worry about underlying streams. This is possible by having knowledge of the proto files.
+	// Because Dapr doesn't have the protos that are used for gRPC proxying, we cannot determine if a RPC is stream-based or "unary", so we can't do what the gRPC library does.
+	// Instead, we're going to rely on the "dapr-stream" boolean header: if set, we consider the RPC as stream-based and apply Resiliency features (timeouts and retries) only to the initial handshake.
 	_, cErr := policyRunner(func(ctx context.Context) (struct{}, error) {
 		// Get the current iteration count
 		iter := counter.Add(1)
