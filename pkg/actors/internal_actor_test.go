@@ -140,6 +140,9 @@ func TestInternalActorCall(t *testing.T) {
 	defer req.Close()
 
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer resp.Close()
 
 	if assert.NoError(t, err) && assert.NotNil(t, resp) {
@@ -222,6 +225,9 @@ func TestInternalActorDeactivation(t *testing.T) {
 
 	var resp *invokev1.InvokeMethodResponse
 	resp, err = testActorRuntime.callLocalActor(context.Background(), req)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer resp.Close()
 
 	assert.NoError(t, err)
