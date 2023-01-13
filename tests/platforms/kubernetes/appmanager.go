@@ -774,7 +774,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 
 // StreamContainerLogs get container logs for all containers in the pod and saves them to disk.
 func (m *AppManager) StreamContainerLogs() error {
-	return StreamContainerLogsToDisk(m.ctx, fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName), m.client.Pods(m.namespace))
+	return StreamContainerLogsToDisk(m.ctx, m.app.AppName, m.client.Pods(m.namespace))
 }
 
 // GetCPUAndMemory returns the Cpu and Memory usage for the dapr app or sidecar.
