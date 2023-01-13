@@ -252,6 +252,9 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	if !k6.logEnabled {
 		args += " --log-output=none"
 	}
+	labels := map[string]string{
+		testplatform.TestAppLabelKey: k6.name,
+	}
 	k6Test := k6api.K6{
 		TypeMeta: v1.TypeMeta{
 			Kind:       "K6",
@@ -270,6 +273,11 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 			},
 			Parallelism: int32(k6.parallelism),
 			Arguments:   args,
+			Starter: k6api.Pod{
+				Metadata: k6api.PodMetadata{
+					Labels: labels,
+				},
+			},
 			Runner: k6api.Pod{
 				ServiceAccountName: defaultK6ServiceAccount,
 				Env: append(k6.runnerEnv, corev1.EnvVar{
@@ -279,6 +287,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 				Image: runner.BuildTestImageName(k6.runnerImage),
 				Metadata: k6api.PodMetadata{
 					Annotations: runnerAnnotations,
+					Labels:      labels,
 				},
 				Resources: corev1.ResourceRequirements{
 					Limits: map[corev1.ResourceName]resource.Quantity{
@@ -300,7 +309,15 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	if err != nil {
 		return err
 	}
-	return k6.waitForCompletion()
+	err = k6.waitForCompletion()
+	if err != nil {
+		return err
+	}
+	return k6.streamLogs()
+}
+
+func (k6 *K6) streamLogs() error {
+	return testplatform.StreamContainerLogsToDisk(k6.ctx, k6.name, k6.kubeClient.CoreV1().Pods(k6.namespace))
 }
 
 // selector return the label selector for the k6 running pods and jobs.
@@ -533,7 +550,7 @@ func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 	ctx, cancel := context.WithCancel(context.Background())
 	k6Tester := &K6{
 		name:              "k6-test",
-		appID:             "tester-app",
+		appID:             "k6-tester-app",
 		script:            scriptPath,
 		parallelism:       1,
 		addDapr:           true,
