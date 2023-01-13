@@ -349,6 +349,7 @@ ifeq ($(DAPR_PERF_TEST),)
 		gotestsum \
 		--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json \
 		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
+		--hide-summary=output \
 		--format standard-quiet \
 		-- \
 			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
