@@ -14,10 +14,17 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/pubsub/mqtt"
-	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	"github.com/dapr/components-contrib/bindings"
+	mqtt3 "github.com/dapr/components-contrib/bindings/mqtt3"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	"github.com/dapr/kit/logger"
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(mqtt.NewMQTTPubSub, "mqtt")
+	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
+		return mqtt3.NewMQTT(l)
+	}, "mqtt3", "mqtt")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
+		return mqtt3.NewMQTT(l)
+	}, "mqtt3", "mqtt")
 }
