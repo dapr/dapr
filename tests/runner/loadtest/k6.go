@@ -19,9 +19,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"sync"
 	"time"
+
+	guuid "github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	testplatform "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -309,8 +312,8 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	if err != nil {
 		return err
 	}
-	err = k6.waitForCompletion()
-	if err != nil {
+
+	if err = k6.waitForCompletion(); err != nil {
 		return err
 	}
 	return k6.streamLogs()
@@ -548,9 +551,12 @@ func EnableLog() K6Opt {
 // NewK6 creates a new k6 load testing with the given options.
 func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 	ctx, cancel := context.WithCancel(context.Background())
+	uniqueTestID := guuid.New().String()[:6] // to avoid name clash when a clean up is happening
+	log.Printf("starting %s k6 test", uniqueTestID)
+
 	k6Tester := &K6{
-		name:              "k6-test",
-		appID:             "k6-tester-app",
+		name:              fmt.Sprintf("k6-test-%s", uniqueTestID),
+		appID:             fmt.Sprintf("k6-tester-app-%s", uniqueTestID),
 		script:            scriptPath,
 		parallelism:       1,
 		addDapr:           true,
