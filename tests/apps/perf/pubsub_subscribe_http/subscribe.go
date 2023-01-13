@@ -19,6 +19,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/google/uuid"
 )
 
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +32,9 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 			PubsubName: pubSubName,
 			Topic:      topic + "-bulk",
 			Route:      route + "-bulk",
-			Metadata:   map[string]string{"bulkSubscribe": "true"},
+			BulkSubscribe: bulkSubscribe{
+				Enabled: true,
+			},
 		})
 	} else {
 		subscriptions = append(subscriptions, subscription{
@@ -66,10 +70,10 @@ func bulkMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("received %d messages", len(bulkSubscribeMessage.Entries))
-	messagesCh <- len(bulkSubscribeMessage.Entries)
 
 	var bulkSubscribeResponseStatuses []bulkSubscribeResponseStatus
 	for _, entry := range bulkSubscribeMessage.Entries {
+		messagesCh <- entry.EntryId
 		bulkSubscribeResponseStatuses = append(bulkSubscribeResponseStatuses, bulkSubscribeResponseStatus{
 			EntryID: entry.EntryId,
 			Status:  "SUCCESS",
@@ -96,7 +100,11 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("received 1 message\n")
-	messagesCh <- 1
+	uuid, err := uuid.NewUUID()
+	if err != nil {
+		log.Fatalf("error generating uuid: %s", err)
+	}
+	messagesCh <- uuid.String()
 
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write([]byte("SUCCESS"))

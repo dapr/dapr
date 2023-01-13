@@ -16,10 +16,17 @@ package main
 import cloudevents "github.com/cloudevents/sdk-go"
 
 type subscription struct {
-	PubsubName string            `json:"pubsubName"`
-	Topic      string            `json:"topic"`
-	Route      string            `json:"route"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
+	PubsubName    string            `json:"pubsubName"`
+	Topic         string            `json:"topic"`
+	Route         string            `json:"route"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	BulkSubscribe bulkSubscribe     `json:"bulkSubscribe,omitempty"`
+}
+
+type bulkSubscribe struct {
+	Enabled            bool  `json:"enabled"`
+	MaxMessagesCount   int32 `json:"maxMessagesCount,omitempty"`
+	MaxAwaitDurationMs int32 `json:"maxAwaitDurationMs,omitempty"`
 }
 
 type bulkSubscribeMessage struct {

@@ -13,6 +13,7 @@ limitations under the License.
 
 import http from "k6/http";
 import { check } from "k6";
+import exec from "k6/execution";
 import ws from "k6/ws";
 import { Counter } from 'k6/metrics';
 
@@ -66,7 +67,7 @@ function publishMessages(pubsub, topic, message, count) {
     const bulkPublishBody = [];
     for (let i = 0; i < count; i++) {
         bulkPublishBody.push({
-            entryId: i.toString(),
+            entryId: exec.vu.idInTest + "-" + i, // unique id for the message
             event: message,
             contentType: "text/plain",
         });

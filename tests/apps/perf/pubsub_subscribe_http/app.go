@@ -33,11 +33,15 @@ var numMessages = 100
 
 var upgrader = websocket.Upgrader{}
 
-// messagesCh contains the number of messages received
-var messagesCh chan int
+// messagesCh contains the messages received
+var messagesCh chan string
 
 // notifyCh is used to notify completion of receiving messages
 var notifyCh = make(chan struct{})
+
+// messagesMap is used to track messages received
+// and only count unique messages
+var messagesMap = map[string]struct{}{}
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -64,11 +68,18 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func notify(msgRecvCh chan int, notifySendCh chan struct{}) {
+func notify(msgRecvCh chan string, notifySendCh chan struct{}) {
 	total := 0
 	for {
-		count := <-msgRecvCh
-		total += count
+		msg := <-msgRecvCh
+
+		// only count unique messages
+		if _, present := messagesMap[msg]; !present {
+			messagesMap[msg] = struct{}{}
+			total++
+		}
+
+		// notify when we have received all messages
 		if total >= numMessages {
 			notifySendCh <- struct{}{}
 			total -= numMessages
@@ -87,7 +98,7 @@ func main() {
 		}
 	}
 
-	messagesCh = make(chan int, numMessages)
+	messagesCh = make(chan string, numMessages)
 
 	go notify(messagesCh, notifyCh)
 
