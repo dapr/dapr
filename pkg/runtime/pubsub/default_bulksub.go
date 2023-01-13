@@ -25,11 +25,8 @@ import (
 )
 
 const (
-	maxBulkSubCountKey           string = "maxBulkSubCount"
-	maxBulkSubAwaitDurationMsKey string = "maxBulkSubAwaitDurationMs"
-
-	defaultMaxBulkSubCount           int = 100
-	defaultMaxBulkSubAwaitDurationMs int = 1 * 1000
+	defaultMaxMessagesCount   int = 100
+	defaultMaxAwaitDurationMs int = 1 * 1000
 )
 
 // msgWithCallback is a wrapper around a message that includes a callback function
@@ -57,11 +54,11 @@ func NewDefaultBulkSubscriber(p contribPubsub.PubSub) *defaultBulkSubscriber {
 // when the buffer is full or max await duration is reached.
 func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPubsub.SubscribeRequest, handler contribPubsub.BulkHandler) error {
 	cfg := contribPubsub.BulkSubscribeConfig{
-		MaxBulkSubCount:           utils.GetIntOrDefault(req.Metadata, maxBulkSubCountKey, defaultMaxBulkSubCount),
-		MaxBulkSubAwaitDurationMs: utils.GetIntOrDefault(req.Metadata, maxBulkSubAwaitDurationMsKey, defaultMaxBulkSubAwaitDurationMs),
+		MaxMessagesCount:   utils.GetIntValOrDefault(req.BulkSubscribeConfig.MaxMessagesCount, defaultMaxMessagesCount),
+		MaxAwaitDurationMs: utils.GetIntValOrDefault(req.BulkSubscribeConfig.MaxAwaitDurationMs, defaultMaxAwaitDurationMs),
 	}
 
-	msgCbChan := make(chan msgWithCallback, cfg.MaxBulkSubCount)
+	msgCbChan := make(chan msgWithCallback, cfg.MaxMessagesCount)
 	go processBulkMessages(ctx, req.Topic, msgCbChan, cfg, handler)
 
 	// Subscribe to the topic and listen for messages.
@@ -99,10 +96,10 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 // processBulkMessages reads messages from msgChan and publishes them to a BulkHandler.
 // It buffers messages in memory and publishes them in bulk.
 func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeConfig, handler contribPubsub.BulkHandler) {
-	messages := make([]contribPubsub.BulkMessageEntry, cfg.MaxBulkSubCount)
-	msgCbMap := make(map[string]func(error), cfg.MaxBulkSubCount)
+	messages := make([]contribPubsub.BulkMessageEntry, cfg.MaxMessagesCount)
+	msgCbMap := make(map[string]func(error), cfg.MaxMessagesCount)
 
-	ticker := time.NewTicker(time.Duration(cfg.MaxBulkSubAwaitDurationMs) * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(cfg.MaxAwaitDurationMs) * time.Millisecond)
 	defer ticker.Stop()
 
 	n := 0
@@ -115,7 +112,7 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 			messages[n] = msgCb.msg
 			n++
 			msgCbMap[msgCb.msg.EntryId] = msgCb.cb
-			if n >= cfg.MaxBulkSubCount {
+			if n >= cfg.MaxMessagesCount {
 				flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 				n = 0
 				maps.Clear(msgCbMap)
