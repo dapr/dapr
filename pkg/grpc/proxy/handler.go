@@ -18,7 +18,11 @@ import (
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/utils"
 )
+
+// Metadata header used to indicate if the call should be handled as a gRPC stream.
+const StreamMetadataKey = "dapr-stream"
 
 var clientStreamDescForProxying = &grpc.StreamDesc{
 	ServerStreams: true,
@@ -110,19 +114,24 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			policyDef = noOp.EndpointPolicy("", "")
 		}
 	}
-	policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
 
-	clientStreamOpts := []grpc.CallOption{
-		grpc.CallContentSubtype((&codec.Proxy{}).Name()),
-	}
-	headersSent := &atomic.Bool{}
-	counter := atomic.Int32{}
 	// When using resiliency, we need to put special care in handling proxied gRPC requests that are streams, because these can be long-lived.
 	// - For unary gRPC calls, we need to apply the timeout and retry policies to the entire call, from start to end
 	// - For streaming gRPC calls, timeouts and retries should only kick in during the initial "handshake". After that, the connection is to be considered established and we should continue with it until it's stopped or canceled or failed. Errors after the initial handshake should be sent directly to the client and server and not handled by Dapr.
 	// With gRPC, every call is, at its core, a stream. The gRPC library maintains a list of which calls are to be interpreted as "unary" RPCs, and then "wraps them" so users can write code that behaves like a regular RPC without having to worry about underlying streams. This is possible by having knowledge of the proto files.
 	// Because Dapr doesn't have the protos that are used for gRPC proxying, we cannot determine if a RPC is stream-based or "unary", so we can't do what the gRPC library does.
 	// Instead, we're going to rely on the "dapr-stream" boolean header: if set, we consider the RPC as stream-based and apply Resiliency features (timeouts and retries) only to the initial handshake.
+	var isStream bool
+	v = md[StreamMetadataKey]
+	if len(v) > 0 {
+		isStream = utils.IsTruthy(v[0])
+	}
+	_ = isStream
+
+	policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
+	clientStreamOptSubtype := grpc.CallContentSubtype((&codec.Proxy{}).Name())
+	headersSent := &atomic.Bool{}
+	counter := atomic.Int32{}
 	_, cErr := policyRunner(func(ctx context.Context) (struct{}, error) {
 		// Get the current iteration count
 		iter := counter.Add(1)
@@ -137,13 +146,14 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 		defer clientCancel()
 
+		// (The next TODO comes from the original author of the library we adapted - leaving it here in case we want to do that for our own reasons)
 		// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
 		clientStream, err := grpc.NewClientStream(
 			clientCtx,
 			clientStreamDescForProxying,
 			backendConn,
 			fullMethodName,
-			clientStreamOpts...,
+			clientStreamOptSubtype,
 		)
 		if err != nil {
 			code := status.Code(err)
@@ -165,7 +175,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 					return struct{}{}, err
 				}
 
-				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOpts...)
+				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOptSubtype)
 				if err != nil {
 					return struct{}{}, err
 				}
@@ -180,8 +190,14 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		s2cErrChan := s.forwardServerToClient(serverStream, clientStream, requestID)
 		c2sErrChan := s.forwardClientToServer(clientStream, serverStream, headersSent)
 		// We don't know which side is going to stop sending first, so we need a select between the two.
-		for i := 0; i < 2; i++ {
+		for {
 			select {
+			case <-clientCtx.Done():
+				// Abort the request
+				return struct{}{}, status.FromContextError(clientCtx.Err()).Err()
+			case <-outgoingCtx.Done():
+				// Abort the request
+				return struct{}{}, status.FromContextError(outgoingCtx.Err()).Err()
 			case s2cErr := <-s2cErrChan:
 				if s2cErr == io.EOF {
 					// this is the happy case where the sender has encountered io.EOF, and won't be sending anymore.
@@ -206,8 +222,6 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 				return struct{}{}, nil
 			}
 		}
-
-		return struct{}{}, status.Error(codes.Internal, "gRPC proxying should never reach this stage")
 	})
 
 	// Clear the request's buffered calls.
