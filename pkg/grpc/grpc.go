@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -41,9 +40,6 @@ const (
 	maxConnIdle       = 3 * time.Minute
 )
 
-// ConnCreatorFn is a function that returns a gRPC connection
-type ConnCreatorFn = func() (grpc.ClientConnInterface, error)
-
 // AppChannelConfig contains the configuration for the app channel.
 type AppChannelConfig struct {
 	Port                 int
@@ -61,8 +57,7 @@ type Manager struct {
 	mode              modes.DaprMode
 	channelConfig     *AppChannelConfig
 	localConn         *ConnectionPool
-	localConnCreateFn ConnCreatorFn
-	localConnLock     sync.RWMutex
+	localConnCreateFn func() (grpc.ClientConnInterface, error)
 }
 
 // NewGRPCManager returns a new grpc manager.
@@ -83,9 +78,6 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 // GetAppChannel returns a connection to the local channel.
 // If there's no active connection to the app, it creates one.
 func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
-	g.localConnLock.RLock()
-	defer g.localConnLock.RUnlock()
-
 	conn, err := g.GetAppClient()
 	if err != nil {
 		return nil, err
@@ -116,14 +108,10 @@ func (g *Manager) CloseAppClient() {
 	g.localConn.DestroyAll()
 }
 
-// SetLocalConnCreateFn sets the function used to create local connections.
-// It also destroys all existing local channel connections.
+// SetLocalConnCreateFn sets the function used to create connections.
+// It does not destroy connections that have been established already; use CloseAppClient() after invoking this method if needed.
 // Set fn to nil to reset to the built-in function.
-func (g *Manager) SetLocalConnCreateFn(fn ConnCreatorFn) {
-	g.localConnLock.Lock()
-	defer g.localConnLock.Unlock()
-
-	g.localConn.DestroyAll()
+func (g *Manager) SetLocalConnCreateFn(fn func() (grpc.ClientConnInterface, error)) {
 	g.localConnCreateFn = fn
 }
 

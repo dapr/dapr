@@ -18,7 +18,6 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	"github.com/dapr/dapr/pkg/channel"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -48,10 +47,6 @@ func (_m *MockDirectMessaging) Invoke(ctx context.Context, targetAppID string, r
 	return r0, r1
 }
 
-func (_m *MockDirectMessaging) SetAppChannel(appChannel channel.AppChannel) {
-	// nop
-}
-
 func (_m *MockDirectMessaging) Close() error {
 	return nil
 }
@@ -72,8 +67,4 @@ func (f *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string,
 	resp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 		WithRawDataBytes(r.Message.Data.Value)
 	return resp, nil
-}
-
-func (f *FailingDirectMessaging) SetAppChannel(appChannel channel.AppChannel) {
-	// nop
 }
