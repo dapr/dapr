@@ -556,7 +556,7 @@ func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 
 	k6Tester := &K6{
 		name:              fmt.Sprintf("k6-test-%s", uniqueTestID),
-		appID:             fmt.Sprintf("k6-tester-app-%s", uniqueTestID),
+		appID:             "k6-tester",
 		script:            scriptPath,
 		parallelism:       1,
 		addDapr:           true,
