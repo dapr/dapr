@@ -7,6 +7,13 @@ type Subscription struct {
 	Metadata        map[string]string `json:"metadata"`
 	Rules           []*Rule           `json:"rules,omitempty"`
 	Scopes          []string          `json:"scopes"`
+	BulkSubscribe   *BulkSubscribe    `json:"bulkSubscribe"`
+}
+
+type BulkSubscribe struct {
+	Enabled            bool  `json:"enabled"`
+	MaxMessagesCount   int32 `json:"maxMessagesCount,omitempty"`
+	MaxAwaitDurationMs int32 `json:"maxAwaitDurationMs,omitempty"`
 }
 
 type Rule struct {

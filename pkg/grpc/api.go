@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
@@ -411,13 +412,24 @@ type invokeServiceResp struct {
 	trailers metadata.MD
 }
 
+// These flags are used to make sure that we are printing the deprecation warning log messages in "InvokeService" just once.
+// By using "CompareAndSwap(false, true)" we replace the value "false" with "true" only if it's not already "true".
+// "CompareAndSwap" returns true if the swap happened (i.e. if the value was not already "true"), so we can use that as a flag to make sure we only run the code once.
+// Why not using "sync.Once"? In our tests (https://github.com/dapr/dapr/pull/5740), that seems to be causing a regression in the perf tests. This is probably because when using "sync.Once" and the callback needs to be executed for the first time, all concurrent requests are blocked too. Additionally, the use of closures in this case _could_ have an impact on the GC as well.
+var (
+	invokeServiceDeprecationNoticeShown     = atomic.Bool{}
+	invokeServiceHTTPDeprecationNoticeShown = atomic.Bool{}
+)
+
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
+	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
+		apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
+	}
 	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
@@ -454,7 +466,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
-			apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
+			if invokeServiceHTTPDeprecationNoticeShown.CompareAndSwap(false, true) {
+				apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
+			}
 			var errorMessage string
 			if rResp.message != nil && rResp.message.Data != nil {
 				errorMessage = string(rResp.message.Data.Value)

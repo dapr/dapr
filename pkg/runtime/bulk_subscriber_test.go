@@ -122,7 +122,11 @@ func TestBulkSubscribe(t *testing.T) {
 		)
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true", "rawPayload": "true"}},
+			{
+				PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders",
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
+				Metadata:      map[string]string{"rawPayload": "true"},
+			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -163,7 +167,10 @@ func TestBulkSubscribe(t *testing.T) {
 			"mockPubSub",
 		)
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true"}},
+			{
+				PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders",
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
+			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -207,7 +214,10 @@ func TestBulkSubscribe(t *testing.T) {
 		)
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true"}},
+			{
+				PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders",
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
+			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -268,7 +278,7 @@ func TestBulkSubscribe(t *testing.T) {
 						},
 					},
 				},
-				Metadata: map[string]string{"bulkSubscribe": "true"},
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
@@ -332,7 +342,7 @@ func TestBulkSubscribe(t *testing.T) {
 						},
 					},
 				},
-				Metadata: map[string]string{"bulkSubscribe": "true"},
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
@@ -436,10 +446,10 @@ func TestBulkSubscribe(t *testing.T) {
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{
-				PubsubName: testBulkSubscribePubsub,
-				Topic:      "topic0",
-				Route:      "orders",
-				Metadata:   map[string]string{"bulkSubscribe": "true"},
+				PubsubName:    testBulkSubscribePubsub,
+				Topic:         "topic0",
+				Route:         "orders",
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
@@ -516,10 +526,10 @@ func TestBulkSubscribe(t *testing.T) {
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{
-				PubsubName: testBulkSubscribePubsub,
-				Topic:      "topic0",
-				Route:      "orders",
-				Metadata:   map[string]string{"bulkSubscribe": "true"},
+				PubsubName:    testBulkSubscribePubsub,
+				Topic:         "topic0",
+				Route:         "orders",
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
@@ -600,10 +610,10 @@ func TestBulkSubscribe(t *testing.T) {
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{
-				PubsubName: testBulkSubscribePubsub,
-				Topic:      "topic0",
-				Route:      "orders",
-				Metadata:   map[string]string{"bulkSubscribe": "true"},
+				PubsubName:    testBulkSubscribePubsub,
+				Topic:         "topic0",
+				Route:         "orders",
+				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
 			},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
@@ -705,7 +715,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					Metadata: map[string]string{"bulkSubscribe": "true", "rawPayload": "true"},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
+					Metadata:      map[string]string{"rawPayload": "true"},
 				},
 			},
 		}
@@ -796,7 +807,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 							},
 						},
 					},
-					Metadata: map[string]string{"bulkSubscribe": "true"},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
@@ -908,7 +919,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					Metadata: map[string]string{"bulkSubscribe": "true"},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
@@ -986,7 +997,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					Metadata: map[string]string{"bulkSubscribe": "true"},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
@@ -1076,7 +1087,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					Metadata: map[string]string{"bulkSubscribe": "true"},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
@@ -1160,7 +1171,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
-					Metadata: map[string]string{"bulkSubscribe": "true"},
+					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
 				},
 			},
 		}
