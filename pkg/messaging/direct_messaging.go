@@ -71,7 +71,6 @@ type directMessaging struct {
 	proxy                Proxy
 	readBufferSize       int
 	resiliency           resiliency.Provider
-	isResiliencyEnabled  bool
 	isStreamingEnabled   bool
 }
 
@@ -83,19 +82,18 @@ type remoteApp struct {
 
 // NewDirectMessaging contains the options for NewDirectMessaging.
 type NewDirectMessagingOpts struct {
-	AppID               string
-	Namespace           string
-	Port                int
-	Mode                modes.DaprMode
-	AppChannel          channel.AppChannel
-	ClientConnFn        messageClientConnection
-	Resolver            nr.Resolver
-	MaxRequestBodySize  int
-	Proxy               Proxy
-	ReadBufferSize      int
-	Resiliency          resiliency.Provider
-	IsResiliencyEnabled bool
-	IsStreamingEnabled  bool
+	AppID              string
+	Namespace          string
+	Port               int
+	Mode               modes.DaprMode
+	AppChannel         channel.AppChannel
+	ClientConnFn       messageClientConnection
+	Resolver           nr.Resolver
+	MaxRequestBodySize int
+	Proxy              Proxy
+	ReadBufferSize     int
+	Resiliency         resiliency.Provider
+	IsStreamingEnabled bool
 }
 
 // NewDirectMessaging returns a new direct messaging api.
@@ -115,7 +113,6 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 		proxy:                opts.Proxy,
 		readBufferSize:       opts.ReadBufferSize,
 		resiliency:           opts.Resiliency,
-		isResiliencyEnabled:  opts.IsResiliencyEnabled,
 		isStreamingEnabled:   opts.IsStreamingEnabled,
 		hostAddress:          hAddr,
 		hostName:             hName,
@@ -173,69 +170,39 @@ func (d *directMessaging) invokeWithRetry(
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	// TODO: Once resiliency is out of preview, we can have this be the only path.
-	if d.isResiliencyEnabled {
-		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			// This policy has built-in retries so enable replay in the request
-			req.WithReplay(true)
+	if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
+		// This policy has built-in retries so enable replay in the request
+		req.WithReplay(true)
 
-			policyRunner := resiliency.NewRunnerWithOptions(ctx,
-				d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
-				resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-					Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
-				},
-			)
-			attempts := atomic.Int32{}
-			return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-				attempt := attempts.Add(1)
-				rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
-				if rErr == nil {
-					teardown(false)
-					return rResp, nil
-				}
-
-				code := status.Code(rErr)
-				if code == codes.Unavailable || code == codes.Unauthenticated {
-					// Destroy the connection and force a re-connection on the next attempt
-					teardown(true)
-					return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
-				}
+		policyRunner := resiliency.NewRunnerWithOptions(ctx,
+			d.resiliency.BuiltInPolicy(resiliency.BuiltInServiceRetries),
+			resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+			},
+		)
+		attempts := atomic.Int32{}
+		return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+			attempt := attempts.Add(1)
+			rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
+			if rErr == nil {
 				teardown(false)
-				return rResp, backoff.Permanent(rErr)
-			})
-		}
+				return rResp, nil
+			}
 
-		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
-		teardown(false)
-		return resp, err
-	}
-
-	// The following path is used when resiliency is disabled
-
-	// We need to enable replaying because the request may be attempted again in this path
-	req.WithReplay(true)
-
-	for i := 0; i < numRetries; i++ {
-		resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
-		if err == nil {
+			code := status.Code(rErr)
+			if code == codes.Unavailable || code == codes.Unauthenticated {
+				// Destroy the connection and force a re-connection on the next attempt
+				teardown(true)
+				return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
+			}
 			teardown(false)
-			return resp, nil
-		}
-		log.Debugf("retry count: %d, grpc call failed, ns: %s, addr: %s, appid: %s, err: %s",
-			i+1, app.namespace, app.address, app.id, err.Error())
-		time.Sleep(backoffInterval)
-
-		code := status.Code(err)
-		if code == codes.Unavailable || code == codes.Unauthenticated {
-			// Destroy the connection and force a re-connection on the next attempt
-			teardown(true)
-			continue
-		}
-		teardown(false)
-		return resp, err
+			return rResp, backoff.Permanent(rErr)
+		})
 	}
 
-	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
+	resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
+	teardown(false)
+	return resp, err
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {

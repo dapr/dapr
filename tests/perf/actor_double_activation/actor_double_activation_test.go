@@ -2,7 +2,7 @@
 // +build perf
 
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -66,11 +66,6 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-type ActivationMetrics struct {
-	loadtest.K6RunnerMetricsSummary `json:",inline"`
-	DoubleActivation                loadtest.K6CounterMetric `json:"double_activations"`
-}
-
 func TestActorDoubleActivation(t *testing.T) {
 	// Get the ingress external url of test app
 	testServiceAppURL := tr.Platform.AcquireAppExternalURL(serviceApplicationName)
@@ -81,11 +76,15 @@ func TestActorDoubleActivation(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(testServiceAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
-	k6Test := loadtest.NewK6("./test.js", loadtest.WithParallelism(3))
+	k6Test := loadtest.NewK6(
+		"./test.js",
+		loadtest.WithParallelism(3),
+		loadtest.WithRunnerEnvVar("TEST_APP_NAME", serviceApplicationName),
+	)
 	defer k6Test.Dispose()
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
-	summary, err := loadtest.K6Result[ActivationMetrics](k6Test)
+	summary, err := loadtest.K6Result[json.RawMessage](k6Test)
 	require.NoError(t, err)
 	require.NotNil(t, summary)
 	bts, err := json.MarshalIndent(summary, "", " ")
