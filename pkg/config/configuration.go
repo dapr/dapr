@@ -36,8 +36,6 @@ import (
 type Feature string
 
 const (
-	// Enable support for resiliency
-	Resiliency Feature = "Resiliency"
 	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
 )

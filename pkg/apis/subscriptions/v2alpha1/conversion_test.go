@@ -24,6 +24,11 @@ func TestConversion(t *testing.T) {
 				Default: "testPath",
 			},
 			DeadLetterTopic: "testDeadLetterTopic",
+			BulkSubscribe: v2alpha1.BulkSubscribe{
+				Enabled:            true,
+				MaxMessagesCount:   10,
+				MaxAwaitDurationMs: 1000,
+			},
 		},
 	}
 

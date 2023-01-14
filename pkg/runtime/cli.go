@@ -32,6 +32,7 @@ import (
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -382,24 +383,24 @@ func FromFlags() (*DaprRuntime, error) {
 		runtimeConfig.AppHealthCheck = nil
 	}
 
-	resiliencyEnabled := globalConfig.IsFeatureEnabled(daprGlobalConfig.Resiliency)
-	var resiliencyProvider resiliencyConfig.Provider
-
-	if resiliencyEnabled {
-		var resiliencyConfigs []*resiliencyV1alpha.Resiliency
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
-			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
-		case modes.StandaloneMode:
-			resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
+	// Initialize metrics only if MetricSpec is enabled.
+	if globalConfig.Spec.MetricSpec.Enabled {
+		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
 		}
-		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
-		log.Info("Resiliency configuration loaded.")
-	} else {
-		log.Debug("Resiliency is not enabled.")
-		resiliencyProvider = &resiliencyConfig.NoOp{}
 	}
+
+	// Load Resiliency
+	var resiliencyConfigs []*resiliencyV1alpha.Resiliency
+	switch modes.DaprMode(*mode) {
+	case modes.KubernetesMode:
+		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+	case modes.StandaloneMode:
+		resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
+	}
+	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
+	resiliencyProvider := resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+	log.Info("Resiliency configuration loaded.")
 
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
