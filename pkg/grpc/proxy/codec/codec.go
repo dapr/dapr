@@ -56,10 +56,12 @@ type Frame struct {
 }
 
 // ProtoMessage tags a frame as valid proto message.
-func (f *Frame) ProtoMessage() {}
+func (f *Frame) ProtoMessage() {
+	// nop
+}
 
 // Marshal implements the encoding.Codec interface method.
-func (p *Proxy) Marshal(v interface{}) ([]byte, error) {
+func (p *Proxy) Marshal(v any) ([]byte, error) {
 	out, ok := v.(*Frame)
 	if !ok {
 		return p.parentCodec.Marshal(v)
@@ -69,7 +71,7 @@ func (p *Proxy) Marshal(v interface{}) ([]byte, error) {
 }
 
 // Unmarshal implements the encoding.Codec interface method.
-func (p *Proxy) Unmarshal(data []byte, v interface{}) error {
+func (p *Proxy) Unmarshal(data []byte, v any) error {
 	dst, ok := v.(*Frame)
 	if !ok {
 		return p.parentCodec.Unmarshal(data, v)
@@ -86,25 +88,25 @@ func (*Proxy) Name() string {
 // protoCodec is a Codec implementation with protobuf. It is the default rawCodec for gRPC.
 type protoCodec struct{}
 
-func (*protoCodec) Marshal(v interface{}) ([]byte, error) {
-	switch t := v.(type) {
+func (*protoCodec) Marshal(v any) ([]byte, error) {
+	switch x := v.(type) {
 	case proto.Message:
-		return proto.Marshal(v.(proto.Message))
+		return proto.Marshal(x)
 	case protoV1.Message:
-		return protoV1.Marshal(v.(protoV1.Message))
+		return protoV1.Marshal(x)
 	default:
-		return nil, fmt.Errorf("failed to marshal, message is %T, want proto.Message", t)
+		return nil, fmt.Errorf("failed to marshal: message is %T, want proto.Message", x)
 	}
 }
 
-func (*protoCodec) Unmarshal(data []byte, v interface{}) error {
-	switch t := v.(type) {
+func (*protoCodec) Unmarshal(data []byte, v any) error {
+	switch x := v.(type) {
 	case proto.Message:
-		return proto.Unmarshal(data, v.(proto.Message))
+		return proto.Unmarshal(data, x)
 	case protoV1.Message:
-		return protoV1.Unmarshal(data, v.(protoV1.Message))
+		return protoV1.Unmarshal(data, x)
 	default:
-		return fmt.Errorf("failed to unmarshal, message is %T, want proto.Message", t)
+		return fmt.Errorf("failed to unmarshal: message is %T, want proto.Message", x)
 	}
 }
 
