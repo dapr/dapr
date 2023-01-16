@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"time"
@@ -106,11 +105,7 @@ func (m *AppManager) Init(runCtx context.Context) error {
 		return err
 	}
 
-	m.logPrefix = os.Getenv(ContainerLogPathEnvVar)
-
-	if m.logPrefix == "" {
-		m.logPrefix = ContainerLogDefaultPath
-	}
+	m.logPrefix = logPrefix
 
 	if err := os.MkdirAll(m.logPrefix, os.ModePerm); err != nil {
 		log.Printf("Failed to create output log directory '%s' Error was: '%s'. Container logs will be discarded", m.logPrefix, err)
@@ -779,65 +774,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 
 // StreamContainerLogs get container logs for all containers in the pod and saves them to disk.
 func (m *AppManager) StreamContainerLogs() error {
-	podClient := m.client.Pods(m.namespace)
-
-	// Filter only 'testapp=appName' labeled Pods
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
-	podList, err := podClient.List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
-	})
-	cancel()
-	if err != nil {
-		return err
-	}
-
-	for _, pod := range podList.Items {
-		for _, container := range pod.Spec.Containers {
-			go func(pod, container string) {
-				filename := fmt.Sprintf("%s/%s.%s.log", m.logPrefix, pod, container)
-				log.Printf("Streaming Kubernetes logs to %s", filename)
-				req := podClient.GetLogs(pod, &apiv1.PodLogOptions{
-					Container: container,
-					Follow:    true,
-				})
-				stream, err := req.Stream(m.ctx)
-				if err != nil {
-					if err != context.Canceled {
-						log.Printf("Error reading log stream for %s. Error was %s", filename, err)
-					} else {
-						log.Printf("Saved container logs to %s", filename)
-					}
-					return
-				}
-				defer stream.Close()
-
-				fh, err := os.Create(filename)
-				if err != nil {
-					if err != context.Canceled {
-						log.Printf("Error creating %s. Error was %s", filename, err)
-					} else {
-						log.Printf("Saved container logs to %s", filename)
-					}
-					return
-				}
-				defer fh.Close()
-
-				_, err = io.Copy(fh, stream)
-				if err != nil {
-					if err != context.Canceled {
-						log.Printf("Error reading log stream for %s. Error was %s", filename, err)
-					} else {
-						log.Printf("Saved container logs to %s", filename)
-					}
-					return
-				}
-
-				log.Printf("Saved container logs to %s", filename)
-			}(pod.GetName(), container.Name)
-		}
-	}
-
-	return nil
+	return StreamContainerLogsToDisk(m.ctx, m.app.AppName, m.client.Pods(m.namespace))
 }
 
 // GetCPUAndMemory returns the Cpu and Memory usage for the dapr app or sidecar.

@@ -31,7 +31,7 @@ import (
 
 const (
 	numHealthChecks        = 60 // Number of times to check for endpoint health per app.
-	serviceApplicationName = "perf-actorfeatures"
+	serviceApplicationName = "perf-actor-id"
 	actorType              = "scale-id"
 )
 
