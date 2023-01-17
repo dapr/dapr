@@ -311,7 +311,7 @@ func (s *proxyTestSuite) TestStreamConnectionInterrupted() {
 	// Restart the server
 	s.restartServer(s.T())
 
-	// Pings should still fail with EOF because the strea is closed
+	// Pings should still fail with EOF because the stream is closed
 	err = stream.Send(ping)
 	require.Error(s.T(), err, "sending to PingStream must fail on a closed stream")
 	assert.ErrorIs(s.T(), err, io.EOF)
@@ -418,8 +418,7 @@ func (s *proxyTestSuite) SetupSuite() {
 	}
 	th := TransparentHandler(
 		director,
-		resiliency.New(nil),
-		func(string) (bool, error) { return true, nil },
+		nil,
 		func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
 			return s.getServerClientConn()
 		},

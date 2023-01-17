@@ -18,13 +18,10 @@ import (
 	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 )
 
 // Metadata header used to indicate if the call should be handled as a gRPC stream.
 const StreamMetadataKey = "dapr-stream"
-
-var log = logger.NewLogger("dapr.grpc.proxy")
 
 var clientStreamDescForProxying = &grpc.StreamDesc{
 	ServerStreams: true,
@@ -36,14 +33,15 @@ var errRetryOnStreamingRPC = status.Error(codes.FailedPrecondition, "cannot use 
 
 type replayBufferCh chan *codec.Frame
 
+type getPolicyFn func(appID, methodName string) *resiliency.PolicyDefinition
+
 // RegisterService sets up a proxy handler for a particular gRPC service and method.
 // The behaviour is the same as if you were registering a handler method, e.g. from a codegenerated pb.go file.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func RegisterService(server *grpc.Server, director StreamDirector, resiliency resiliency.Provider, serviceName string, methodNames ...string) {
 	streamer := &handler{
-		director:   director,
-		resiliency: resiliency,
+		director: director,
 	}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
@@ -66,11 +64,10 @@ func RegisterService(server *grpc.Server, director StreamDirector, resiliency re
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector, resiliency resiliency.Provider, isLocalFn func(string) (bool, error), connFactory DirectorConnectionFactory) grpc.StreamHandler {
+func TransparentHandler(director StreamDirector, getPolicyFn getPolicyFn, connFactory DirectorConnectionFactory) grpc.StreamHandler {
 	streamer := &handler{
 		director:    director,
-		resiliency:  resiliency,
-		isLocalFn:   isLocalFn,
+		getPolicyFn: getPolicyFn,
 		connFactory: connFactory,
 	}
 	return streamer.handler
@@ -78,8 +75,7 @@ func TransparentHandler(director StreamDirector, resiliency resiliency.Provider,
 
 type handler struct {
 	director    StreamDirector
-	resiliency  resiliency.Provider
-	isLocalFn   func(string) (bool, error)
+	getPolicyFn getPolicyFn
 	connFactory DirectorConnectionFactory
 }
 
@@ -87,7 +83,6 @@ type handler struct {
 // It is invoked like any gRPC server stream and uses the gRPC server framing to get and receive bytes from the wire,
 // forwarding it to a ClientStream established against the relevant ClientConn.
 func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
-	// little bit of gRPC internals never hurt anyone
 	fullMethodName, ok := grpc.MethodFromServerStream(serverStream)
 	if !ok {
 		return status.Errorf(codes.Internal, "full method name not found in stream")
@@ -100,17 +95,10 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 
 	// The app id check is handled in the StreamDirector. If we don't have it here, we just use a NoOp policy since we know the request is impossible.
 	var policyDef *resiliency.PolicyDefinition
-	if len(v) == 0 {
-		noOp := resiliency.NoOp{}
-		policyDef = noOp.EndpointPolicy("", "")
+	if len(v) == 0 || s.getPolicyFn == nil {
+		policyDef = resiliency.NoOp{}.EndpointPolicy("", "")
 	} else {
-		isLocal, err := s.isLocalFn(v[0])
-		if err == nil && !isLocal {
-			policyDef = s.resiliency.EndpointPolicy(v[0], v[0]+":"+fullMethodName)
-		} else {
-			noOp := resiliency.NoOp{}
-			policyDef = noOp.EndpointPolicy("", "")
-		}
+		policyDef = s.getPolicyFn(v[0], fullMethodName)
 	}
 
 	// When using resiliency, we need to put special care in handling proxied gRPC requests that are streams, because these can be long-lived.
