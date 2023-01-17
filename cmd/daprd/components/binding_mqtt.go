@@ -23,8 +23,8 @@ import (
 func init() {
 	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
 		return mqtt.NewMQTT(l)
-	}, "mqtt")
+	}, "mqtt3", "mqtt")
 	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
 		return mqtt.NewMQTT(l)
-	}, "mqtt")
+	}, "mqtt3", "mqtt")
 }

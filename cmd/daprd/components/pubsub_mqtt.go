@@ -19,5 +19,5 @@ import (
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(mqtt.NewMQTTPubSub, "mqtt")
+	pubsubLoader.DefaultRegistry.RegisterComponent(mqtt.NewMQTTPubSub, "mqtt3", "mqtt")
 }
