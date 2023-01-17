@@ -18,6 +18,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -97,7 +98,7 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 	counter := int32(0)
 	for {
 		ping, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			if s.expectPingStreamError.Load() {
@@ -195,6 +196,7 @@ func (s *proxyTestSuite) TestDirectorErrorIsPropagated() {
 func (s *proxyTestSuite) TestPingStream_FullDuplexWorks() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(StreamMetadataKey, "true"))
 	stream, err := s.testClient.PingStream(ctx)
 	require.NoError(s.T(), err, "PingStream request should be successful")
 
@@ -205,10 +207,10 @@ func (s *proxyTestSuite) TestPingStream_FullDuplexWorks() {
 	}
 	require.NoError(s.T(), stream.CloseSend(), "no error on close send")
 	_, err = stream.Recv()
-	require.Equal(s.T(), io.EOF, err, "stream should close with io.EOF, meaining OK")
+	require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
 	// Check that the trailer headers are here.
 	trailerMd := stream.Trailer()
-	assert.Len(s.T(), trailerMd, 1, "PingList trailer headers user contain metadata")
+	assert.Len(s.T(), trailerMd, 1, "PingStream trailer headers user contain metadata")
 }
 
 func (s *proxyTestSuite) TestPingStream_StressTest() {
@@ -270,7 +272,7 @@ func (s *proxyTestSuite) sendPing(stream pb.TestService_PingStreamClient, i int)
 	err := stream.Send(ping)
 	require.NoError(s.T(), err, "sending to PingStream must not fail")
 	resp, err := stream.Recv()
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return true
 	}
 	if i == 0 {
@@ -287,6 +289,7 @@ func (s *proxyTestSuite) sendPing(stream pb.TestService_PingStreamClient, i int)
 func (s *proxyTestSuite) TestStreamConnectionInterrupted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(StreamMetadataKey, "true"))
 	stream, err := s.testClient.PingStream(ctx)
 	require.NoError(s.T(), err, "PingStream request should be successful")
 
