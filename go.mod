@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20230116193906-7aa7a0061ab2
+	github.com/dapr/components-contrib v1.9.1-0.20230117165952-4ffca2d4ae35
 	github.com/dapr/kit v0.0.4-0.20230105202559-fcb09958bfb0
 	github.com/fasthttp/router v1.4.14
 	github.com/ghodss/yaml v1.0.0
@@ -241,7 +241,7 @@ require (
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
 	github.com/hazelcast/hazelcast-go-client v0.0.0-20190530123621-6cf767c2f31a // indirect
-	github.com/http-wasm/http-wasm-host-go v0.2.0 // indirect
+	github.com/http-wasm/http-wasm-host-go v0.3.1 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.22.11+incompatible // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.1.22 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
@@ -347,7 +347,7 @@ require (
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.579 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.0.579 // indirect
-	github.com/tetratelabs/wazero v1.0.0-pre.4 // indirect
+	github.com/tetratelabs/wazero v1.0.0-pre.7 // indirect
 	github.com/tidwall/gjson v1.13.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
