@@ -15,7 +15,7 @@ package components
 
 import (
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/bindings/mqtt"
+	mqtt "github.com/dapr/components-contrib/bindings/mqtt3"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/kit/logger"
 )
