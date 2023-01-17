@@ -74,8 +74,8 @@ func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.Ping
 
 func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.PingResponse, error) {
 	// Send user trailers and headers.
-	grpc.SendHeader(ctx, metadata.Pairs(serverHeaderMdKey, "I like turtles."))
-	grpc.SetTrailer(ctx, metadata.Pairs(serverTrailerMdKey, "I like ending turtles."))
+	grpc.SendHeader(ctx, metadata.Pairs(serverHeaderMdKey, "I like cats."))
+	grpc.SetTrailer(ctx, metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
 	return &pb.PingResponse{Value: ping.Value, Counter: 42}, nil
 }
 
@@ -85,16 +85,16 @@ func (s *assertingService) PingError(ctx context.Context, ping *pb.PingRequest) 
 
 func (s *assertingService) PingList(ping *pb.PingRequest, stream pb.TestService_PingListServer) error {
 	// Send user trailers and headers.
-	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like turtles."))
+	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	for i := 0; i < countListResponses; i++ {
 		stream.Send(&pb.PingResponse{Value: ping.Value, Counter: int32(i)})
 	}
-	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I like ending turtles."))
+	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
 	return nil
 }
 
 func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) error {
-	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like turtles."))
+	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	counter := int32(0)
 	for {
 		ping, err := stream.Recv()
@@ -114,7 +114,7 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 		}
 		counter++
 	}
-	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I like ending turtles."))
+	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
 	return nil
 }
 
