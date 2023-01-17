@@ -530,6 +530,11 @@ jobs:
       - name: Run E2E tests
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: make test-e2e-all
+      - name: Show test summary
+        if: always()
+        uses: test-summary/action@v2
+        with:
+          paths: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*.xml
       - name: Save control plane K8s resources
         if: always() && env.TEST_PREFIX != ''
         run: |
