@@ -97,7 +97,7 @@ type PlacementService interface {
 type GRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type actorsRuntime struct {
-	externalAppChannel     channel.AppChannel
+	appChannel             channel.AppChannel
 	store                  state.Store
 	transactionalStore     state.TransactionalStore
 	placement              PlacementService
@@ -119,7 +119,7 @@ type actorsRuntime struct {
 	resiliency             resiliency.Provider
 	storeName              string
 	internalActors         map[string]InternalActor
-	internalAppChannel     *internalActorChannel
+	internalActorChannel   *internalActorChannel
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -185,7 +185,7 @@ func NewActors(opts ActorsOpts) Actors {
 	appHealthy.Store(true)
 	return &actorsRuntime{
 		store:                  opts.StateStore,
-		externalAppChannel:     opts.AppChannel,
+		appChannel:             opts.AppChannel,
 		grpcConnectionFn:       opts.GRPCConnectionFn,
 		config:                 opts.Config,
 		certChain:              opts.CertChain,
@@ -206,7 +206,7 @@ func NewActors(opts ActorsOpts) Actors {
 		evaluationChan:         make(chan struct{}, 1),
 		appHealthy:             appHealthy,
 		internalActors:         opts.InternalActors,
-		internalAppChannel:     newInternalActorChannel(),
+		internalActorChannel:   newInternalActorChannel(),
 	}
 }
 
@@ -218,7 +218,7 @@ func (a *actorsRuntime) Init() error {
 	// Configure the internal app channel with the provided internal actors and add
 	// them to the list of hosted actor types.
 	for actorType, actorImpl := range a.internalActors {
-		if err := a.internalAppChannel.AddInternalActor(actorType, actorImpl); err != nil {
+		if err := a.internalActorChannel.AddInternalActor(actorType, actorImpl); err != nil {
 			return err
 		}
 		log.Debugf("registering internal actor type: %s", actorType)
@@ -273,11 +273,11 @@ func (a *actorsRuntime) Init() error {
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
-	if len(a.config.HostedActorTypes) == 0 || a.externalAppChannel == nil {
+	if len(a.config.HostedActorTypes) == 0 || a.appChannel == nil {
 		return
 	}
 
-	ch := health.StartEndpointHealthCheck(a.externalAppChannel.GetBaseAddress()+"/healthz", opts...)
+	ch := health.StartEndpointHealthCheck(a.appChannel.GetBaseAddress()+"/healthz", opts...)
 	for {
 		appHealthy := <-ch
 		a.appHealthy.Store(appHealthy)
@@ -549,11 +549,10 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 }
 
 func (a *actorsRuntime) getAppChannel(actorType string) channel.AppChannel {
-	if a.internalAppChannel.Contains(actorType) {
-		return a.internalAppChannel
-	} else {
-		return a.externalAppChannel
+	if a.internalActorChannel.Contains(actorType) {
+		return a.internalActorChannel
 	}
+	return a.appChannel
 }
 
 func (a *actorsRuntime) callRemoteActor(
