@@ -122,9 +122,6 @@ const (
 	componentFormat = "%s (%s/%s)"
 
 	defaultComponentInitTimeout = time.Second * 5
-
-	// Metadata needed to call bulk subscribe
-	BulkSubscribe = "bulkSubscribe"
 )
 
 type ComponentCategory string
@@ -154,6 +151,7 @@ type TopicRouteElem struct {
 	metadata        map[string]string
 	rules           []*runtimePubsub.Rule
 	deadLetterTopic string
+	bulkSubscribe   *runtimePubsub.BulkSubscribe
 }
 
 // Type of function that determines if a component is authorized.
@@ -428,13 +426,6 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.namespace = a.getNamespace()
-
-	// Initialize metrics only if MetricSpec is enabled.
-	if a.globalConfig.Spec.MetricSpec.Enabled {
-		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace, a.globalConfig.Spec.MetricSpec.Rules); err != nil {
-			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
-		}
-	}
 
 	err := a.establishSecurity(a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
@@ -750,7 +741,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 	namespaced := a.pubSubs[name].namespaceScoped
 
-	if utils.IsTruthy(routeMetadata[BulkSubscribe]) {
+	if route.bulkSubscribe != nil && route.bulkSubscribe.Enabled {
 		err := a.bulkSubscribeTopic(ctx, policyDef, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
@@ -1309,8 +1300,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			WithHTTPExtension(nethttp.MethodPost, "").
 			WithRawDataBytes(data).
 			WithContentType(invokev1.JSONContentType).
-			WithMetadata(reqMetadata).
-			WithReplay(policyDef.HasRetries())
+			WithMetadata(reqMetadata)
+		if policyDef != nil {
+			req.WithReplay(policyDef.HasRetries())
+		}
 		defer req.Close()
 
 		respErr := errors.New("error sending binding event to application")
@@ -1881,6 +1874,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 			metadata:        s.Metadata,
 			rules:           s.Rules,
 			deadLetterTopic: s.DeadLetterTopic,
+			bulkSubscribe:   s.BulkSubscribe,
 		}
 	}
 
@@ -2717,6 +2711,14 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	a.shutdownC <- nil
 }
 
+// SetRunning updates the value of the running flag.
+// This method is used by tests in dapr/components-contrib.
+func (a *DaprRuntime) SetRunning(val bool) {
+	a.running.Store(val)
+}
+
+// WaitUntilShutdown waits until the Shutdown() method is done.
+// This method is used by tests in dapr/components-contrib.
 func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
@@ -2951,6 +2953,9 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha
 		}
 		for strings.Contains(val, "{namespace}") {
 			val = strings.Replace(val, "{namespace}", fmt.Sprintf("%s.%s", a.namespace, a.runtimeConfig.ID), 1)
+		}
+		for strings.Contains(val, "{appID}") {
+			val = strings.Replace(val, "{appID}", a.runtimeConfig.ID, 1)
 		}
 		properties[c.Name] = val
 	}

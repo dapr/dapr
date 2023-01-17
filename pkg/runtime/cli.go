@@ -32,6 +32,7 @@ import (
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -380,6 +381,13 @@ func FromFlags() (*DaprRuntime, error) {
 	if !globalConfig.IsFeatureEnabled(daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
 		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
 		runtimeConfig.AppHealthCheck = nil
+	}
+
+	// Initialize metrics only if MetricSpec is enabled.
+	if globalConfig.Spec.MetricSpec.Enabled {
+		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
+		}
 	}
 
 	// Load Resiliency
