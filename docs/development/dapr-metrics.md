@@ -127,14 +127,14 @@ We support only server side metrics.
 * dapr_http_server_request_count: Number of HTTP requests started in server
 * dapr_http_server_request_bytes: HTTP request body size if set as ContentLength (uncompressed) in server
 * dapr_http_server_response_bytes: HTTP response body size (uncompressed) in server.
-* dapr_http_server_latency: HTTP request end to end latency in server.
+* dapr_http_server_latency_bucket: HTTP request end to end latency in server.
 
 #### Client metrics
 
-* dapr_http/client/sent_bytes: Total bytes sent in request body (not including headers)
-* dapr_http/client/received_bytes: Total bytes received in response bodies (not including headers but including error responses with bodies)
-* dapr_http/client/roundtrip_latency: End-to-end latency
-* dapr_http/client/completed_count: Count of completed requests
+* dapr_http_client_sent_bytes: Total bytes sent in request body (not including headers)
+* dapr_http_client_received_bytes: Total bytes received in response bodies (not including headers but including error responses with bodies)
+* dapr_http_client_roundtrip_latency_bucket: End-to-end latency
+* dapr_http_client_completed_count: Count of completed requests
 
 ## Dapr Component Metrics
 
