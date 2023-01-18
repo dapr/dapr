@@ -51,6 +51,17 @@ type PolicyDefinition struct {
 	cb   *breaker.CircuitBreaker
 }
 
+// NewPolicyDefinition returns a PolicyDefinition object with the given parameters.
+func NewPolicyDefinition(log logger.Logger, name string, t time.Duration, r *retry.Config, cb *breaker.CircuitBreaker) *PolicyDefinition {
+	return &PolicyDefinition{
+		log:  log,
+		name: name,
+		t:    t,
+		r:    r,
+		cb:   cb,
+	}
+}
+
 // String implements fmt.Stringer and is used for debugging.
 func (p PolicyDefinition) String() string {
 	return fmt.Sprintf(

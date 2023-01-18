@@ -9,6 +9,7 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -39,9 +40,10 @@ type getPolicyFn func(appID, methodName string) *resiliency.PolicyDefinition
 // The behaviour is the same as if you were registering a handler method, e.g. from a codegenerated pb.go file.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func RegisterService(server *grpc.Server, director StreamDirector, resiliency resiliency.Provider, serviceName string, methodNames ...string) {
+func RegisterService(server *grpc.Server, director StreamDirector, getPolicyFn getPolicyFn, serviceName string, methodNames ...string) {
 	streamer := &handler{
-		director: director,
+		director:    director,
+		getPolicyFn: getPolicyFn,
 	}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
@@ -114,7 +116,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	}
 
 	var replayBuffer replayBufferCh
-	if !isStream {
+	if !isStream && policyDef != nil && policyDef.HasRetries() {
 		replayBuffer = make(replayBufferCh, 1)
 	}
 
@@ -211,6 +213,10 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 
 		err = pr.run()
 		if err != nil {
+			// If the error is errRetryOnStreamingRPC, then that's permanent and should not cause the policy to retry
+			if errors.Is(err, errRetryOnStreamingRPC) {
+				err = backoff.Permanent(errRetryOnStreamingRPC)
+			}
 			return nil, err
 		}
 		return nil, nil
@@ -263,6 +269,10 @@ func (r proxyRunner) run() error {
 				// We may have gotten a receive error (stream disconnected, a read error etc) in which case we need
 				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 				// exit with an error to the stack
+				if _, ok := status.FromError(s2cErr); ok && s2cErr != nil {
+					// If the error is already a gRPC one, return it as-is
+					return s2cErr
+				}
 				return status.Error(codes.Internal, "failed proxying server-to-client: "+s2cErr.Error())
 			}
 
@@ -336,6 +346,8 @@ func (r proxyRunner) forwardServerToClient() chan error {
 			select {
 			case msg := <-r.replayBuffer:
 				err = r.clientStream.SendMsg(msg)
+				// Re-add the message to the replay buffer
+				r.replayBuffer <- msg
 				if err != nil {
 					ret <- err
 					return

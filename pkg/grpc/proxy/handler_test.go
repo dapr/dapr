@@ -40,9 +40,12 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/diagnostics"
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/retry"
 )
 
 const (
@@ -56,11 +59,15 @@ const (
 	countListResponses = 20
 )
 
+var testLogger = logger.NewLogger("proxy-test")
+
 // asserting service is implemented on the server side and serves as a handler for stuff.
 type assertingService struct {
 	pb.UnimplementedTestServiceServer
 	t                     *testing.T
 	expectPingStreamError *atomic.Bool
+	simulatePingFailures  *atomic.Int32
+	pingCallCount         *atomic.Int32
 }
 
 func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
@@ -73,6 +80,15 @@ func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.Ping
 }
 
 func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.PingResponse, error) {
+	s.pingCallCount.Add(1)
+
+	// Simulate failures
+	if s.simulatePingFailures.Add(-1) >= 0 {
+		return nil, status.Errorf(codes.Internal, "Simulated failure")
+	} else {
+		s.simulatePingFailures.Store(0)
+	}
+
 	// Send user trailers and headers.
 	grpc.SendHeader(ctx, metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	grpc.SetTrailer(ctx, metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
@@ -110,7 +126,11 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 		}
 		pong := &pb.PingResponse{Value: ping.Value, Counter: counter}
 		if err := stream.Send(pong); err != nil {
-			require.NoError(s.t, err, "can't fail sending back a pong")
+			if s.expectPingStreamError.Load() {
+				require.Error(s.t, err, "should have failed sending back a pong")
+			} else {
+				require.NoError(s.t, err, "can't fail sending back a pong")
+			}
 		}
 		counter++
 	}
@@ -128,6 +148,7 @@ type proxyTestSuite struct {
 	serverClientConn *grpc.ClientConn
 	service          *assertingService
 	lock             sync.Mutex
+	policyDef        *resiliency.PolicyDefinition
 
 	client     *grpc.ClientConn
 	testClient pb.TestServiceClient
@@ -317,6 +338,93 @@ func (s *proxyTestSuite) TestStreamConnectionInterrupted() {
 	assert.ErrorIs(s.T(), err, io.EOF)
 }
 
+func (s *proxyTestSuite) TestPingSimulateFailure() {
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	s.service.simulatePingFailures.Store(1)
+	defer func() {
+		s.service.simulatePingFailures.Store(0)
+	}()
+
+	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "Ciao mamma guarda come mi diverto"})
+	require.Error(s.T(), err, "Ping should return a simulated failure")
+	require.ErrorContains(s.T(), err, "Simulated failure")
+}
+
+func (s *proxyTestSuite) TestResiliencyUnary() {
+	const message = "Ciao mamma guarda come mi diverto"
+
+	ctx, cancel := s.ctx()
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+
+	// Set the resiliency policy and the number of simulated failures in a row
+	rc := &retry.Config{
+		Policy:     retry.PolicyConstant,
+		Duration:   200 * time.Millisecond,
+		MaxRetries: 3,
+	}
+	s.policyDef = resiliency.NewPolicyDefinition(testLogger, "test", 0, rc, nil)
+	s.service.simulatePingFailures.Store(2)
+	defer func() {
+		s.policyDef = nil
+		s.service.simulatePingFailures.Store(0)
+	}()
+
+	// Reset callCount before this test
+	s.service.pingCallCount.Store(0)
+
+	res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
+	require.NoError(s.T(), err, "Ping should succeed after retrying")
+	require.NotNil(s.T(), res, "Response should not be nil")
+	require.Equal(s.T(), int32(3), s.service.pingCallCount.Load())
+	require.Equal(s.T(), message, res.Value)
+}
+
+func (s *proxyTestSuite) TestResiliencyStreaming() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+
+	// Set the resiliency policy
+	rc := &retry.Config{
+		Policy:     retry.PolicyConstant,
+		Duration:   200 * time.Millisecond,
+		MaxRetries: 3,
+	}
+	s.policyDef = resiliency.NewPolicyDefinition(testLogger, "test", 0, rc, nil)
+	defer func() {
+		s.policyDef = nil
+	}()
+
+	// Invoke the stream
+	stream, err := s.testClient.PingStream(ctx)
+	require.NoError(s.T(), err, "PingStream request should be successful")
+
+	// First message should succeed
+	err = stream.Send(&pb.PingRequest{Value: "1"})
+	require.NoError(s.T(), err, "First message should be sent")
+	res, err := stream.Recv()
+	require.NoError(s.T(), err, "First response should be received")
+	require.NotNil(s.T(), res)
+
+	// Second message should fail
+	s.service.expectPingStreamError.Store(true)
+	defer func() {
+		s.service.expectPingStreamError.Store(false)
+	}()
+	err = stream.SendMsg(&pb.PingRequest{Value: "2"})
+	require.NoError(s.T(), err, "Second message should be sent")
+	_, err = stream.Recv()
+	require.Error(s.T(), err, "Second Recv should fail with error")
+
+	grpcStatus, ok := status.FromError(err)
+	require.True(s.T(), ok, "Error should have a gRPC status code")
+	require.Equal(s.T(), codes.FailedPrecondition, grpcStatus.Code())
+	require.ErrorIs(s.T(), err, errRetryOnStreamingRPC)
+}
+
 func (s *proxyTestSuite) initServer() {
 	s.server = grpc.NewServer()
 	pb.RegisterTestServiceServer(s.server, s.service)
@@ -394,6 +502,8 @@ func (s *proxyTestSuite) SetupSuite() {
 	s.service = &assertingService{
 		t:                     s.T(),
 		expectPingStreamError: &atomic.Bool{},
+		simulatePingFailures:  &atomic.Int32{},
+		pingCallCount:         &atomic.Int32{},
 	}
 
 	s.initServer()
@@ -416,9 +526,10 @@ func (s *proxyTestSuite) SetupSuite() {
 		}
 		return outCtx, conn, target, teardown, nil
 	}
-	th := TransparentHandler(
-		director,
-		nil,
+	getPolicyFn := func(appID, methodName string) *resiliency.PolicyDefinition {
+		return s.policyDef
+	}
+	th := TransparentHandler(director, getPolicyFn,
 		func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
 			return s.getServerClientConn()
 		},
@@ -427,7 +538,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		grpc.UnknownServiceHandler(th),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.
-	RegisterService(s.proxy, director, resiliency.New(nil),
+	RegisterService(s.proxy, director, getPolicyFn,
 		"mwitkow.testproto.TestService",
 		"Ping")
 
