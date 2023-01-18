@@ -243,7 +243,9 @@ func (s *proxyTestSuite) TestPingStream_FullDuplexWorks() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
-		StreamMetadataKey, "true",
+		// We are purposely not setting "dapr-stream" here so we can confirm that proxying of streamed requests works without the "dapr-stream" metadata as long as there's no resiliency policy with retries
+		// Another test below will validate that, with retries enabled, an error is returned if "dapr-stream" is unset
+		// StreamMetadataKey, "true",
 		"dapr-test", s.T().Name(),
 	))
 	stream, err := s.testClient.PingStream(ctx)
