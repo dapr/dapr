@@ -68,6 +68,7 @@ type assertingService struct {
 	expectPingStreamError *atomic.Bool
 	simulatePingFailures  *atomic.Int32
 	pingCallCount         *atomic.Int32
+	simulateDelay         *atomic.Int32
 }
 
 func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
@@ -83,6 +84,9 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 	s.pingCallCount.Add(1)
 
 	// Simulate failures
+	if delay := s.simulateDelay.Load(); delay > 0 {
+		time.Sleep(time.Duration(delay) * time.Millisecond)
+	}
 	if s.simulatePingFailures.Add(-1) >= 0 {
 		return nil, status.Errorf(codes.Internal, "Simulated failure")
 	} else {
@@ -113,6 +117,10 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	counter := int32(0)
 	for {
+		if delay := s.simulateDelay.Load(); delay > 0 {
+			time.Sleep(time.Duration(delay) * time.Millisecond)
+		}
+
 		ping, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
 			break
@@ -352,48 +360,75 @@ func (s *proxyTestSuite) TestPingSimulateFailure() {
 	require.ErrorContains(s.T(), err, "Simulated failure")
 }
 
-func (s *proxyTestSuite) TestResiliencyUnary() {
-	const message = "Ciao mamma guarda come mi diverto"
-
-	ctx, cancel := s.ctx()
-	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
-
-	// Set the resiliency policy and the number of simulated failures in a row
+func (s *proxyTestSuite) setupResiliency() {
+	timeout := 500 * time.Millisecond
 	rc := &retry.Config{
 		Policy:     retry.PolicyConstant,
 		Duration:   200 * time.Millisecond,
 		MaxRetries: 3,
 	}
-	s.policyDef = resiliency.NewPolicyDefinition(testLogger, "test", 0, rc, nil)
-	s.service.simulatePingFailures.Store(2)
+	s.policyDef = resiliency.NewPolicyDefinition(testLogger, "test", timeout, rc, nil)
+}
+
+func (s *proxyTestSuite) TestResiliencyUnary() {
+	const message = "Ciao mamma guarda come mi diverto"
+
+	// Set the resiliency policy and the number of simulated failures in a row
+	s.setupResiliency()
 	defer func() {
 		s.policyDef = nil
-		s.service.simulatePingFailures.Store(0)
 	}()
 
-	// Reset callCount before this test
-	s.service.pingCallCount.Store(0)
+	s.T().Run("retries", func(t *testing.T) {
+		s.service.simulatePingFailures.Store(2)
+		defer func() {
+			s.service.simulatePingFailures.Store(0)
+		}()
 
-	res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
-	require.NoError(s.T(), err, "Ping should succeed after retrying")
-	require.NotNil(s.T(), res, "Response should not be nil")
-	require.Equal(s.T(), int32(3), s.service.pingCallCount.Load())
-	require.Equal(s.T(), message, res.Value)
+		ctx, cancel := s.ctx()
+		defer cancel()
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+
+		// Reset callCount before this test
+		s.service.pingCallCount.Store(0)
+
+		res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
+		require.NoError(t, err, "Ping should succeed after retrying")
+		require.NotNil(t, res, "Response should not be nil")
+		require.Equal(t, int32(3), s.service.pingCallCount.Load())
+		require.Equal(t, message, res.Value)
+	})
+
+	s.T().Run("timeouts", func(t *testing.T) {
+		s.service.simulateDelay.Store(1000)
+		defer func() {
+			s.service.simulateDelay.Store(0)
+		}()
+
+		// Reset callCount before this test
+		s.service.pingCallCount.Store(0)
+
+		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+
+		_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
+		require.Error(t, err, "Ping should fail due to timeouts")
+		require.Equal(t, int32(4), s.service.pingCallCount.Load())
+
+		grpcStatus, ok := status.FromError(err)
+		require.True(s.T(), ok, "Error should have a gRPC status code")
+		require.Equal(s.T(), codes.DeadlineExceeded, grpcStatus.Code())
+	})
 }
 
 func (s *proxyTestSuite) TestResiliencyStreaming() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+
+	// We're purposedly not setting dapr-stream=true here because we want to simulate the failure when the RPC is not marked as streaming
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
 
 	// Set the resiliency policy
-	rc := &retry.Config{
-		Policy:     retry.PolicyConstant,
-		Duration:   200 * time.Millisecond,
-		MaxRetries: 3,
-	}
-	s.policyDef = resiliency.NewPolicyDefinition(testLogger, "test", 0, rc, nil)
+	s.setupResiliency()
 	defer func() {
 		s.policyDef = nil
 	}()
@@ -504,6 +539,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		expectPingStreamError: &atomic.Bool{},
 		simulatePingFailures:  &atomic.Int32{},
 		pingCallCount:         &atomic.Int32{},
+		simulateDelay:         &atomic.Int32{},
 	}
 
 	s.initServer()
