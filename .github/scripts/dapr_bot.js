@@ -8,6 +8,7 @@ const owners = [
     'halspang',
     'ItalyPaleAle',
     'johnewart',
+    'joshvanl',
     'mcandeia',
     'msfussell',
     'mukundansundar',
