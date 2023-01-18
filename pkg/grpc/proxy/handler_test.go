@@ -498,7 +498,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 	}()
 
 	s.T().Run("retries are not allowed", func(t *testing.T) {
-		// We're purposedly not setting dapr-stream=true in this context because we want to simulate the failure when the RPC is not marked as streaming
+		// We're purposely not setting dapr-stream=true in this context because we want to simulate the failure when the RPC is not marked as streaming
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
@@ -555,10 +555,10 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 
 		// Send and receive 2 messages
 		for i := 0; i < 2; i++ {
-			err = stream.Send(&pb.PingRequest{Value: strconv.Itoa(i)})
-			require.NoError(t, err, "Message should be sent")
-			res, err := stream.Recv()
-			require.NoError(t, err, "Response should be received")
+			innerErr := stream.Send(&pb.PingRequest{Value: strconv.Itoa(i)})
+			require.NoError(t, innerErr, "Message should be sent")
+			res, innerErr := stream.Recv()
+			require.NoError(t, innerErr, "Response should be received")
 			require.NotNil(t, res)
 		}
 
