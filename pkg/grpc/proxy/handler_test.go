@@ -400,7 +400,8 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 	})
 
 	s.T().Run("timeouts", func(t *testing.T) {
-		s.service.simulateDelay.Store(1000)
+		// The delay is longer than the timeout set in the resiliency policy (500ms)
+		s.service.simulateDelay.Store(800)
 		defer func() {
 			s.service.simulateDelay.Store(0)
 		}()
@@ -417,47 +418,85 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		grpcStatus, ok := status.FromError(err)
 		require.True(s.T(), ok, "Error should have a gRPC status code")
 		require.Equal(s.T(), codes.DeadlineExceeded, grpcStatus.Code())
+
+		// Sleep for 500ms before returning to allow all goroutines to catch up with the timeouts
+		time.Sleep(500 * time.Millisecond)
 	})
 }
 
 func (s *proxyTestSuite) TestResiliencyStreaming() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	// We're purposedly not setting dapr-stream=true here because we want to simulate the failure when the RPC is not marked as streaming
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
-
 	// Set the resiliency policy
 	s.setupResiliency()
 	defer func() {
 		s.policyDef = nil
 	}()
 
-	// Invoke the stream
-	stream, err := s.testClient.PingStream(ctx)
-	require.NoError(s.T(), err, "PingStream request should be successful")
+	s.T().Run("retries are not allowed", func(t *testing.T) {
+		// We're purposedly not setting dapr-stream=true in this context because we want to simulate the failure when the RPC is not marked as streaming
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
 
-	// First message should succeed
-	err = stream.Send(&pb.PingRequest{Value: "1"})
-	require.NoError(s.T(), err, "First message should be sent")
-	res, err := stream.Recv()
-	require.NoError(s.T(), err, "First response should be received")
-	require.NotNil(s.T(), res)
+		// Invoke the stream
+		stream, err := s.testClient.PingStream(ctx)
+		require.NoError(t, err, "PingStream request should be successful")
 
-	// Second message should fail
-	s.service.expectPingStreamError.Store(true)
-	defer func() {
-		s.service.expectPingStreamError.Store(false)
-	}()
-	err = stream.SendMsg(&pb.PingRequest{Value: "2"})
-	require.NoError(s.T(), err, "Second message should be sent")
-	_, err = stream.Recv()
-	require.Error(s.T(), err, "Second Recv should fail with error")
+		// First message should succeed
+		err = stream.Send(&pb.PingRequest{Value: "1"})
+		require.NoError(t, err, "First message should be sent")
+		res, err := stream.Recv()
+		require.NoError(t, err, "First response should be received")
+		require.NotNil(t, res)
 
-	grpcStatus, ok := status.FromError(err)
-	require.True(s.T(), ok, "Error should have a gRPC status code")
-	require.Equal(s.T(), codes.FailedPrecondition, grpcStatus.Code())
-	require.ErrorIs(s.T(), err, errRetryOnStreamingRPC)
+		// Second message should fail
+		s.service.expectPingStreamError.Store(true)
+		defer func() {
+			s.service.expectPingStreamError.Store(false)
+		}()
+		err = stream.SendMsg(&pb.PingRequest{Value: "2"})
+		require.NoError(t, err, "Second message should be sent")
+		_, err = stream.Recv()
+		require.Error(t, err, "Second Recv should fail with error")
+
+		grpcStatus, ok := status.FromError(err)
+		require.True(t, ok, "Error should have a gRPC status code")
+		require.Equal(t, codes.FailedPrecondition, grpcStatus.Code())
+		require.ErrorIs(t, err, errRetryOnStreamingRPC)
+	})
+
+	s.T().Run("timeouts do not apply after initial handshake", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+			diagnostics.GRPCProxyAppIDKey, "test",
+			StreamMetadataKey, "1",
+		))
+
+		// Set a delay of 600ms, which is longer than the timeout set in the resiliency policy (500ms)
+		s.service.simulateDelay.Store(600)
+		defer func() {
+			s.service.simulateDelay.Store(0)
+		}()
+
+		// Invoke the stream
+		start := time.Now()
+		stream, err := s.testClient.PingStream(ctx)
+		require.NoError(t, err, "PingStream request should be successful")
+
+		// Send and receive 2 messages
+		for i := 0; i < 2; i++ {
+			err = stream.Send(&pb.PingRequest{Value: strconv.Itoa(i)})
+			require.NoError(t, err, "Message should be sent")
+			res, err := stream.Recv()
+			require.NoError(t, err, "Response should be received")
+			require.NotNil(t, res)
+		}
+
+		// At least 1200ms (2 * 600ms) should have passed
+		require.GreaterOrEqual(t, time.Since(start), 1200*time.Millisecond)
+
+		require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+	})
 }
 
 func (s *proxyTestSuite) initServer() {
