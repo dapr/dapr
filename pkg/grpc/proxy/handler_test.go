@@ -64,11 +64,12 @@ var testLogger = logger.NewLogger("proxy-test")
 // asserting service is implemented on the server side and serves as a handler for stuff.
 type assertingService struct {
 	pb.UnimplementedTestServiceServer
-	t                     *testing.T
-	expectPingStreamError *atomic.Bool
-	simulatePingFailures  *atomic.Int32
-	pingCallCount         *atomic.Int32
-	simulateDelay         *atomic.Int32
+	t                      *testing.T
+	expectPingStreamError  *atomic.Bool
+	simulatePingFailures   *atomic.Int32
+	pingCallCount          *atomic.Int32
+	simulateDelay          *atomic.Int32
+	simulateRandomFailures *atomic.Bool
 }
 
 func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
@@ -81,7 +82,7 @@ func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.Ping
 }
 
 func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.PingResponse, error) {
-	s.pingCallCount.Add(1)
+	count := s.pingCallCount.Add(1)
 
 	// Simulate failures
 	if delay := s.simulateDelay.Load(); delay > 0 {
@@ -91,6 +92,13 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 		return nil, status.Errorf(codes.Internal, "Simulated failure")
 	} else {
 		s.simulatePingFailures.Store(0)
+	}
+	if s.simulateRandomFailures.Load() {
+		if count%14 == 0 {
+			time.Sleep(800 * time.Millisecond)
+		} else if count%12 == 0 {
+			return nil, status.Errorf(codes.Internal, "Simulated random failure")
+		}
 	}
 
 	// Send user trailers and headers.
@@ -434,7 +442,50 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		require.True(s.T(), ok, "Error should have a gRPC status code")
 		require.Equal(s.T(), codes.DeadlineExceeded, grpcStatus.Code())
 
-		// Sleep for 500ms before returning to allow all goroutines to catch up with the timeouts
+		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
+		time.Sleep(500 * time.Millisecond)
+	})
+
+	s.T().Run("multiple threads", func(t *testing.T) {
+		// Reset callCount before this test
+		s.service.pingCallCount.Store(0)
+
+		// Simulate random failures during this test
+		// Note that because failures are simulated based on the counter, they're not really "random", although they impact "random" operations since they're parallelized
+		s.service.simulateRandomFailures.Store(true)
+		defer func() {
+			s.service.simulateRandomFailures.Store(false)
+		}()
+
+		wg := sync.WaitGroup{}
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func(i int) {
+				for j := 0; j < 10; j++ {
+					pingMsg := fmt.Sprintf("%d:%d", i, j)
+					ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+					res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: pingMsg})
+					require.NoErrorf(t, err, "Ping should succeed for operation %d:%d", i, j)
+					require.NotNilf(t, res, "Response should not be nil for operation %d:%d", i, j)
+					require.Equalf(t, pingMsg, res.Value, "Value should match for operation %d:%d", i, j)
+				}
+				wg.Done()
+			}(i)
+		}
+
+		ch := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(ch)
+		}()
+		select {
+		case <-time.After(time.Second * 10):
+			assert.Fail(s.T(), "Timed out waiting for proxy to return.")
+		case <-ch:
+			return
+		}
+
+		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
 	})
 }
@@ -595,11 +646,12 @@ func (s *proxyTestSuite) SetupSuite() {
 	grpclog.SetLoggerV2(testingLog{s.T()})
 
 	s.service = &assertingService{
-		t:                     s.T(),
-		expectPingStreamError: &atomic.Bool{},
-		simulatePingFailures:  &atomic.Int32{},
-		pingCallCount:         &atomic.Int32{},
-		simulateDelay:         &atomic.Int32{},
+		t:                      s.T(),
+		expectPingStreamError:  &atomic.Bool{},
+		simulatePingFailures:   &atomic.Int32{},
+		pingCallCount:          &atomic.Int32{},
+		simulateDelay:          &atomic.Int32{},
+		simulateRandomFailures: &atomic.Bool{},
 	}
 
 	s.initServer()
