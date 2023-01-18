@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20230117165952-4ffca2d4ae35
+	github.com/dapr/components-contrib v1.9.1-0.20230118014229-d058bd03dc13
 	github.com/dapr/kit v0.0.4-0.20230105202559-fcb09958bfb0
 	github.com/fasthttp/router v1.4.14
 	github.com/ghodss/yaml v1.0.0
