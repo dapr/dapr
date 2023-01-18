@@ -114,6 +114,15 @@ func (s *assertingService) PingList(ping *pb.PingRequest, stream pb.TestService_
 }
 
 func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) error {
+	var testName string
+	{
+		md, _ := metadata.FromIncomingContext(stream.Context())
+		v := md["dapr-test"]
+		if len(v) > 0 {
+			testName = v[0]
+		}
+	}
+
 	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	counter := int32(0)
 	for {
@@ -126,18 +135,18 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 			break
 		} else if err != nil {
 			if s.expectPingStreamError.Load() {
-				require.Error(s.t, err, "should have failed reading stream")
+				require.Error(s.t, err, "should have failed reading stream - test name: "+testName)
 			} else {
-				require.NoError(s.t, err, "can't fail reading stream")
+				require.NoError(s.t, err, "can't fail reading stream - test name: "+testName)
 			}
 			return err
 		}
 		pong := &pb.PingResponse{Value: ping.Value, Counter: counter}
 		if err := stream.Send(pong); err != nil {
 			if s.expectPingStreamError.Load() {
-				require.Error(s.t, err, "should have failed sending back a pong")
+				require.Error(s.t, err, "should have failed sending back a pong - test name: "+testName)
 			} else {
-				require.NoError(s.t, err, "can't fail sending back a pong")
+				require.NoError(s.t, err, "can't fail sending back a pong - test name: "+testName)
 			}
 		}
 		counter++
@@ -225,7 +234,10 @@ func (s *proxyTestSuite) TestDirectorErrorIsPropagated() {
 func (s *proxyTestSuite) TestPingStream_FullDuplexWorks() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(StreamMetadataKey, "true"))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		StreamMetadataKey, "true",
+		"dapr-test", s.T().Name(),
+	))
 	stream, err := s.testClient.PingStream(ctx)
 	require.NoError(s.T(), err, "PingStream request should be successful")
 
@@ -318,7 +330,10 @@ func (s *proxyTestSuite) sendPing(stream pb.TestService_PingStreamClient, i int)
 func (s *proxyTestSuite) TestStreamConnectionInterrupted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(StreamMetadataKey, "true"))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		StreamMetadataKey, "true",
+		"dapr-test", s.T().Name(),
+	))
 	stream, err := s.testClient.PingStream(ctx)
 	require.NoError(s.T(), err, "PingStream request should be successful")
 
@@ -435,7 +450,10 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		// We're purposedly not setting dapr-stream=true in this context because we want to simulate the failure when the RPC is not marked as streaming
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+			diagnostics.GRPCProxyAppIDKey, "test",
+			"dapr-test", t.Name(),
+		))
 
 		// Invoke the stream
 		stream, err := s.testClient.PingStream(ctx)
@@ -470,6 +488,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 			diagnostics.GRPCProxyAppIDKey, "test",
 			StreamMetadataKey, "1",
+			"dapr-test", t.Name(),
 		))
 
 		// Set a delay of 600ms, which is longer than the timeout set in the resiliency policy (500ms)
@@ -496,6 +515,8 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		require.GreaterOrEqual(t, time.Since(start), 1200*time.Millisecond)
 
 		require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+		_, err = stream.Recv()
+		require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
 	})
 }
 
