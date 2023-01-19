@@ -14,18 +14,19 @@ limitations under the License.
 package http
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	routing "github.com/fasthttp/router"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 
@@ -106,16 +107,17 @@ func (s *server) StartNonBlocking() error {
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
+			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
+			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.Port, err)
+				log.Warnf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				listeners = append(listeners, l)
 			}
 		}
 	}
 	if len(listeners) == 0 {
-		return errors.Errorf("could not listen on any endpoint")
+		return errors.New("could not listen on any endpoint")
 	}
 
 	for _, listener := range listeners {
@@ -155,17 +157,18 @@ func (s *server) StartNonBlocking() error {
 
 	if s.config.EnableProfiling {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			log.Infof("starting profiling server on %v:%v", apiListenAddress, s.config.ProfilePort)
-			pl, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.ProfilePort))
+			addr := apiListenAddress + ":" + strconv.Itoa(s.config.ProfilePort)
+			log.Infof("starting profiling server on %s", addr)
+			pl, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.ProfilePort, err)
+				log.Warnf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				profilingListeners = append(profilingListeners, pl)
 			}
 		}
 
 		if len(profilingListeners) == 0 {
-			return errors.Errorf("could not listen on any endpoint for profiling API")
+			return errors.New("could not listen on any endpoint for profiling API")
 		}
 
 		s.profilingListeners = profilingListeners

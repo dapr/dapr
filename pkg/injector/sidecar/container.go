@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -400,7 +399,7 @@ func getResourceRequirements(an Annotations) (*corev1.ResourceRequirements, erro
 	if ok {
 		list, err := appendQuantityToResourceList(cpuLimit, corev1.ResourceCPU, r.Limits)
 		if err != nil {
-			return nil, errors.Wrap(err, "error parsing sidecar cpu limit")
+			return nil, fmt.Errorf("error parsing sidecar cpu limit: %w", err)
 		}
 		r.Limits = *list
 	}
@@ -408,7 +407,7 @@ func getResourceRequirements(an Annotations) (*corev1.ResourceRequirements, erro
 	if ok {
 		list, err := appendQuantityToResourceList(memLimit, corev1.ResourceMemory, r.Limits)
 		if err != nil {
-			return nil, errors.Wrap(err, "error parsing sidecar memory limit")
+			return nil, fmt.Errorf("error parsing sidecar memory limit: %w", err)
 		}
 		r.Limits = *list
 	}
@@ -416,7 +415,7 @@ func getResourceRequirements(an Annotations) (*corev1.ResourceRequirements, erro
 	if ok {
 		list, err := appendQuantityToResourceList(cpuRequest, corev1.ResourceCPU, r.Requests)
 		if err != nil {
-			return nil, errors.Wrap(err, "error parsing sidecar cpu request")
+			return nil, fmt.Errorf("error parsing sidecar cpu request: %w", err)
 		}
 		r.Requests = *list
 	}
@@ -424,7 +423,7 @@ func getResourceRequirements(an Annotations) (*corev1.ResourceRequirements, erro
 	if ok {
 		list, err := appendQuantityToResourceList(memRequest, corev1.ResourceMemory, r.Requests)
 		if err != nil {
-			return nil, errors.Wrap(err, "error parsing sidecar memory request")
+			return nil, fmt.Errorf("error parsing sidecar memory request: %w", err)
 		}
 		r.Requests = *list
 	}

@@ -219,7 +219,7 @@ func (s *serviceMetrics) Init(appID string) error {
 // ComponentLoaded records metric when component is loaded successfully.
 func (s *serviceMetrics) ComponentLoaded() {
 	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(appIDKey, s.appID), s.componentLoaded.M(1))
+		stats.RecordWithTags(s.ctx, diagUtils.WithTags(s.componentLoaded.Name(), appIDKey, s.appID), s.componentLoaded.M(1))
 	}
 }
 
@@ -228,7 +228,7 @@ func (s *serviceMetrics) ComponentInitialized(component string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, componentKey, component),
+			diagUtils.WithTags(s.componentInitCompleted.Name(), appIDKey, s.appID, componentKey, component),
 			s.componentInitCompleted.M(1))
 	}
 }
@@ -238,7 +238,7 @@ func (s *serviceMetrics) ComponentInitFailed(component string, reason string, na
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name),
+			diagUtils.WithTags(s.componentInitFailed.Name(), appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name),
 			s.componentInitFailed.M(1))
 	}
 }
@@ -246,7 +246,7 @@ func (s *serviceMetrics) ComponentInitFailed(component string, reason string, na
 // MTLSInitCompleted records metric when component is initialized.
 func (s *serviceMetrics) MTLSInitCompleted() {
 	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(appIDKey, s.appID), s.mtlsInitCompleted.M(1))
+		stats.RecordWithTags(s.ctx, diagUtils.WithTags(s.mtlsInitCompleted.Name(), appIDKey, s.appID), s.mtlsInitCompleted.M(1))
 	}
 }
 
@@ -254,7 +254,7 @@ func (s *serviceMetrics) MTLSInitCompleted() {
 func (s *serviceMetrics) MTLSInitFailed(reason string) {
 	if s.enabled {
 		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, failReasonKey, reason),
+			s.ctx, diagUtils.WithTags(s.mtlsInitFailed.Name(), appIDKey, s.appID, failReasonKey, reason),
 			s.mtlsInitFailed.M(1))
 	}
 }
@@ -262,7 +262,7 @@ func (s *serviceMetrics) MTLSInitFailed(reason string) {
 // MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
 	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
+		stats.RecordWithTags(s.ctx, diagUtils.WithTags(s.mtlsWorkloadCertRotated.Name(), appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
 	}
 }
 
@@ -270,7 +270,7 @@ func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
 func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
 	if s.enabled {
 		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, failReasonKey, reason),
+			s.ctx, diagUtils.WithTags(s.mtlsWorkloadCertRotatedFailed.Name(), appIDKey, s.appID, failReasonKey, reason),
 			s.mtlsWorkloadCertRotatedFailed.M(1))
 	}
 }
@@ -279,7 +279,7 @@ func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
 func (s *serviceMetrics) ActorStatusReported(operation string) {
 	if s.enabled {
 		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, operationKey, operation),
+			s.ctx, diagUtils.WithTags(s.actorStatusReportTotal.Name(), appIDKey, s.appID, operationKey, operation),
 			s.actorStatusReportTotal.M(1))
 	}
 }
@@ -288,7 +288,7 @@ func (s *serviceMetrics) ActorStatusReported(operation string) {
 func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string) {
 	if s.enabled {
 		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, operationKey, operation, failReasonKey, reason),
+			s.ctx, diagUtils.WithTags(s.actorStatusReportFailedTotal.Name(), appIDKey, s.appID, operationKey, operation, failReasonKey, reason),
 			s.actorStatusReportFailedTotal.M(1))
 	}
 }
@@ -297,7 +297,7 @@ func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string
 func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) {
 	if s.enabled {
 		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(appIDKey, s.appID, operationKey, operation),
+			s.ctx, diagUtils.WithTags(s.actorTableOperationRecvTotal.Name(), appIDKey, s.appID, operationKey, operation),
 			s.actorTableOperationRecvTotal.M(1))
 	}
 }
@@ -307,7 +307,7 @@ func (s *serviceMetrics) ActorRebalanced(actorType string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
+			diagUtils.WithTags(s.actorRebalancedTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType),
 			s.actorRebalancedTotal.M(1))
 	}
 }
@@ -317,7 +317,7 @@ func (s *serviceMetrics) ActorDeactivated(actorType string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
+			diagUtils.WithTags(s.actorDeactivationTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType),
 			s.actorDeactivationTotal.M(1))
 	}
 }
@@ -327,7 +327,7 @@ func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
+			diagUtils.WithTags(s.actorDeactivationFailedTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
 			s.actorDeactivationFailedTotal.M(1))
 	}
 }
@@ -337,7 +337,7 @@ func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks 
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
+			diagUtils.WithTags(s.actorPendingCalls.Name(), appIDKey, s.appID, actorTypeKey, actorType),
 			s.actorPendingCalls.M(int64(pendingLocks)))
 	}
 }
@@ -348,6 +348,7 @@ func (s *serviceMetrics) RequestAllowedByAppAction(appID, trustDomain, namespace
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.appPolicyActionAllowed.Name(),
 				appIDKey, appID,
 				trustDomainKey, trustDomain,
 				namespaceKey, namespace,
@@ -364,6 +365,7 @@ func (s *serviceMetrics) RequestBlockedByAppAction(appID, trustDomain, namespace
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.appPolicyActionBlocked.Name(),
 				appIDKey, appID,
 				trustDomainKey, trustDomain,
 				namespaceKey, namespace,
@@ -380,6 +382,7 @@ func (s *serviceMetrics) RequestAllowedByGlobalAction(appID, trustDomain, namesp
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.globalPolicyActionAllowed.Name(),
 				appIDKey, appID,
 				trustDomainKey, trustDomain,
 				namespaceKey, namespace,
@@ -396,6 +399,7 @@ func (s *serviceMetrics) RequestBlockedByGlobalAction(appID, trustDomain, namesp
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.globalPolicyActionBlocked.Name(),
 				appIDKey, appID,
 				trustDomainKey, trustDomain,
 				namespaceKey, namespace,
@@ -412,6 +416,7 @@ func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID, method s
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.serviceInvocationRequestSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
 				methodKey, method),
@@ -425,6 +430,7 @@ func (s *serviceMetrics) ServiceInvocationRequestReceived(sourceAppID, method st
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.serviceInvocationRequestReceivedTotal.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method),
@@ -439,6 +445,7 @@ func (s *serviceMetrics) ServiceInvocationResponseSent(destinationAppID, method 
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.serviceInvocationResponseSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
 				methodKey, method,
@@ -454,6 +461,7 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.serviceInvocationResponseReceivedTotal.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method,
@@ -462,6 +470,7 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
+				s.serviceInvocationResponseReceivedLatency.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method,

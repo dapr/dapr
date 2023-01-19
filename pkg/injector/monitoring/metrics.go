@@ -58,12 +58,12 @@ func RecordSidecarInjectionRequestsCount() {
 
 // RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections.
 func RecordSuccessfulSidecarInjectionCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(appIDKey, appID), succeededSidecarInjectedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(succeededSidecarInjectedTotal.Name(), appIDKey, appID), succeededSidecarInjectedTotal.M(1))
 }
 
 // RecordFailedSidecarInjectionCount records the number of failed sidecar injections.
 func RecordFailedSidecarInjectionCount(appID, reason string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(appIDKey, appID, failedReasonKey, reason), failedSidecarInjectedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(failedSidecarInjectedTotal.Name(), appIDKey, appID, failedReasonKey, reason), failedSidecarInjectedTotal.M(1))
 }
 
 // InitMetrics initialize the injector service metrics.

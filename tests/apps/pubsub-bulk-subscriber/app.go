@@ -70,6 +70,13 @@ type subscription struct {
 	Route           string            `json:"route"`
 	DeadLetterTopic string            `json:"deadLetterTopic"`
 	Metadata        map[string]string `json:"metadata"`
+	BulkSubscribe   BulkSubscribe     `json:"bulkSubscribe"`
+}
+
+type BulkSubscribe struct {
+	Enabled            bool  `json:"enabled"`
+	MaxMessagesCount   int32 `json:"maxMessagesCount,omitempty"`
+	MaxAwaitDurationMs int32 `json:"maxAwaitDurationMs,omitempty"`
 }
 
 type BulkRawMessage struct {
@@ -135,10 +142,10 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesSubRaw  sets.String
-	receivedMessagesSubCE   sets.String
-	receivedMessagesBulkRaw sets.String
-	receivedMessagesBulkCE  sets.String
+	receivedMessagesSubRaw  sets.Set[string]
+	receivedMessagesSubCE   sets.Set[string]
+	receivedMessagesBulkRaw sets.Set[string]
+	receivedMessagesBulkCE  sets.Set[string]
 	desiredResponse         respondWith
 	lock                    sync.Mutex
 )
@@ -172,21 +179,23 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			PubsubName: pubsubkafkaName,
 			Topic:      pubsubRawBulkSubTopic,
 			Route:      pubsubRawBulkSubTopic,
+			BulkSubscribe: BulkSubscribe{
+				Enabled:            true,
+				MaxMessagesCount:   60,
+				MaxAwaitDurationMs: 1000,
+			},
 			Metadata: map[string]string{
-				"bulkSubscribe":             "true",
-				"rawPayload":                "true",
-				"maxBulkSubCount":           "60",
-				"maxBulkSubAwaitDurationMs": "1000",
+				"rawPayload": "true",
 			},
 		},
 		{
 			PubsubName: pubsubkafkaName,
 			Topic:      pubsubCEBulkSubTopic,
 			Route:      pubsubCEBulkSubTopic,
-			Metadata: map[string]string{
-				"bulkSubscribe":             "true",
-				"maxBulkSubCount":           "60",
-				"maxBulkSubAwaitDurationMs": "1000",
+			BulkSubscribe: BulkSubscribe{
+				Enabled:            true,
+				MaxMessagesCount:   60,
+				MaxAwaitDurationMs: 1000,
 			},
 		},
 	}
@@ -491,10 +500,10 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicRawSub:     unique(receivedMessagesSubRaw.List()),
-		ReceivedByTopicCESub:      unique(receivedMessagesSubCE.List()),
-		ReceivedByTopicRawBulkSub: unique(receivedMessagesBulkRaw.List()),
-		ReceivedByTopicCEBulkSub:  unique(receivedMessagesBulkCE.List()),
+		ReceivedByTopicRawSub:     unique(sets.List(receivedMessagesSubRaw)),
+		ReceivedByTopicCESub:      unique(sets.List(receivedMessagesSubCE)),
+		ReceivedByTopicRawBulkSub: unique(sets.List(receivedMessagesBulkRaw)),
+		ReceivedByTopicCEBulkSub:  unique(sets.List(receivedMessagesBulkCE)),
 	}
 
 	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
@@ -525,10 +534,10 @@ func initializeHandler(w http.ResponseWriter, _ *http.Request) {
 // initialize all the sets for a clean test.
 func initializeSets() {
 	// initialize all the sets
-	receivedMessagesSubRaw = sets.NewString()
-	receivedMessagesSubCE = sets.NewString()
-	receivedMessagesBulkRaw = sets.NewString()
-	receivedMessagesBulkCE = sets.NewString()
+	receivedMessagesSubRaw = sets.New[string]()
+	receivedMessagesSubCE = sets.New[string]()
+	receivedMessagesBulkRaw = sets.New[string]()
+	receivedMessagesBulkCE = sets.New[string]()
 }
 
 // appRouter initializes restful api router

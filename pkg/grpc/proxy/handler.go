@@ -4,17 +4,16 @@
 package proxy
 
 import (
-	"fmt"
+	"context"
 	"io"
 	"sync"
+	"sync/atomic"
 
-	"golang.org/x/net/context"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-
-	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
@@ -37,7 +36,7 @@ func RegisterService(server *grpc.Server, director StreamDirector, resiliency re
 	}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
-		HandlerType: (*interface{})(nil),
+		HandlerType: (*any)(nil),
 	}
 	for _, m := range methodNames {
 		streamDesc := grpc.StreamDesc{
@@ -58,11 +57,10 @@ func RegisterService(server *grpc.Server, director StreamDirector, resiliency re
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func TransparentHandler(director StreamDirector, resiliency resiliency.Provider, isLocalFn func(string) (bool, error), connFactory DirectorConnectionFactory) grpc.StreamHandler {
 	streamer := &handler{
-		director:      director,
-		resiliency:    resiliency,
-		isLocalFn:     isLocalFn,
-		bufferedCalls: sync.Map{},
-		connFactory:   connFactory,
+		director:    director,
+		resiliency:  resiliency,
+		isLocalFn:   isLocalFn,
+		connFactory: connFactory,
 	}
 	return streamer.handler
 }
@@ -72,27 +70,25 @@ type handler struct {
 	resiliency    resiliency.Provider
 	isLocalFn     func(string) (bool, error)
 	bufferedCalls sync.Map
-	headersSent   sync.Map
 	connFactory   DirectorConnectionFactory
 }
 
 // handler is where the real magic of proxying happens.
 // It is invoked like any gRPC server stream and uses the gRPC server framing to get and receive bytes from the wire,
 // forwarding it to a ClientStream established against the relevant ClientConn.
-func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error {
+func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	// Create buffered calls for this request.
 	requestIDObj, err := uuid.NewRandom()
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to generate UUID: %v", err)
 	}
 	requestID := requestIDObj.String()
-	s.bufferedCalls.Store(requestID, []interface{}{})
-	s.headersSent.Store(requestID, false)
+	s.bufferedCalls.Store(requestID, []any{})
 
 	// little bit of gRPC internals never hurt anyone
 	fullMethodName, ok := grpc.MethodFromServerStream(serverStream)
 	if !ok {
-		return status.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
+		return status.Errorf(codes.Internal, "full method name not found in stream")
 	}
 
 	// Fetch the AppId so we can reference it for resiliency.
@@ -101,39 +97,58 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	v := md[diagnostics.GRPCProxyAppIDKey]
 
 	// The app id check is handled in the StreamDirector. If we don't have it here, we just use a NoOp policy since we know the request is impossible.
-	var policy resiliency.Runner
+	var policyDef *resiliency.PolicyDefinition
 	if len(v) == 0 {
 		noOp := resiliency.NoOp{}
-		policy = noOp.EndpointPolicy(ctx, "", "")
+		policyDef = noOp.EndpointPolicy("", "")
 	} else {
 		isLocal, err := s.isLocalFn(v[0])
-
-		if err == nil && isLocal {
-			policy = s.resiliency.EndpointPolicy(ctx, v[0], fmt.Sprintf("%s:%s", v[0], fullMethodName))
+		if err == nil && !isLocal {
+			policyDef = s.resiliency.EndpointPolicy(v[0], v[0]+":"+fullMethodName)
 		} else {
 			noOp := resiliency.NoOp{}
-			policy = noOp.EndpointPolicy(ctx, "", "")
+			policyDef = noOp.EndpointPolicy("", "")
 		}
 	}
+	policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
 
 	clientStreamOpts := []grpc.CallOption{
 		grpc.CallContentSubtype((&codec.Proxy{}).Name()),
 	}
-	cErr := policy(func(ctx context.Context) (rErr error) {
+	headersSent := &atomic.Bool{}
+	counter := atomic.Int32{}
+	_, cErr := policyRunner(func(ctx context.Context) (struct{}, error) {
+		// Get the current iteration count
+		iter := counter.Add(1)
+
 		// We require that the director's returned context inherits from the ctx.
 		outgoingCtx, backendConn, target, teardown, err := s.director(ctx, fullMethodName)
 		defer teardown(false)
 		if err != nil {
-			return err
+			return struct{}{}, err
 		}
 
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
+		defer clientCancel()
 
 		// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-		clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOpts...)
+		clientStream, err := grpc.NewClientStream(
+			clientCtx,
+			clientStreamDescForProxying,
+			backendConn,
+			fullMethodName,
+			clientStreamOpts...,
+		)
 		if err != nil {
 			code := status.Code(err)
 			if target != nil && (code == codes.Unavailable || code == codes.Unauthenticated) {
+				// It's possible that we get to this point while another goroutine is executing the same policy function.
+				// For example, this could happen if this iteration has timed out and "policyRunner" has triggered a new execution already.
+				// In this case, we should not teardown the connection because it could being used by the next execution. So just return and move on.
+				if counter.Load() != iter {
+					return struct{}{}, err
+				}
+
 				// Destroy the connection so it can be recreated
 				teardown(true)
 
@@ -141,13 +156,15 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				backendConn, teardown, err = s.connFactory(outgoingCtx, target.Address, target.ID, target.Namespace)
 				defer teardown(false)
 				if err != nil {
-					return err
+					return struct{}{}, err
 				}
 
 				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOpts...)
 				if err != nil {
-					return err
+					return struct{}{}, err
 				}
+			} else {
+				return struct{}{}, err
 			}
 		}
 
@@ -155,13 +172,13 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		// Channels do not have to be closed, it is just a control flow mechanism, see
 		// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
 		s2cErrChan := s.forwardServerToClient(serverStream, clientStream, requestID)
-		c2sErrChan := s.forwardClientToServer(clientStream, serverStream, requestID)
+		c2sErrChan := s.forwardClientToServer(clientStream, serverStream, headersSent)
 		// We don't know which side is going to stop sending first, so we need a select between the two.
 		for i := 0; i < 2; i++ {
 			select {
 			case s2cErr := <-s2cErrChan:
 				if s2cErr == io.EOF {
-					// this is the happy case where the sender has encountered io.EOF, and won't be sending anymore./
+					// this is the happy case where the sender has encountered io.EOF, and won't be sending anymore.
 					// the clientStream>serverStream may continue pumping though.
 					clientStream.CloseSend()
 					continue
@@ -169,8 +186,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 					// however, we may have gotten a receive error (stream disconnected, a read error etc) in which case we need
 					// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 					// exit with an error to the stack
-					clientCancel()
-					return status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
+					return struct{}{}, status.Error(codes.Internal, "failed proxying s2c: "+s2cErr.Error())
 				}
 			case c2sErr := <-c2sErrChan:
 				// This happens when the clientStream has nothing else to offer (io.EOF), returned a gRPC error. In those two
@@ -179,47 +195,49 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				serverStream.SetTrailer(clientStream.Trailer())
 				// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
 				if c2sErr != io.EOF {
-					return c2sErr
+					return struct{}{}, c2sErr
 				}
-				return nil
+				return struct{}{}, nil
 			}
 		}
-		return status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
+
+		return struct{}{}, status.Error(codes.Internal, "gRPC proxying should never reach this stage")
 	})
 
 	// Clear the request's buffered calls.
 	s.bufferedCalls.Delete(requestID)
-	s.headersSent.Delete(requestID)
 	return cErr
 }
 
-func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream, requestID string) chan error {
+func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream, headersSent *atomic.Bool) chan error {
 	ret := make(chan error, 1)
 	go func() {
+		var err error
 		f := &codec.Frame{}
-		syncMapValue, _ := s.headersSent.Load(requestID)
-		localHeaders := syncMapValue.(bool)
-		for i := 0; ; i++ {
-			if err := src.RecvMsg(f); err != nil {
+
+		for src.Context().Err() == nil && dst.Context().Err() == nil {
+			err = src.RecvMsg(f)
+			if err != nil {
 				ret <- err // this can be io.EOF which is happy case
 				break
 			}
 			// In the case of retries, don't resend the headers.
-			if i == 0 && !localHeaders {
+			if headersSent.CompareAndSwap(false, true) {
 				// This is a bit of a hack, but client to server headers are only readable after first client msg is
 				// received but must be written to server stream before the first msg is flushed.
 				// This is the only place to do it nicely.
-				md, err := src.Header()
+				var md metadata.MD
+				md, err = src.Header()
 				if err != nil {
 					break
 				}
-				if err := dst.SendHeader(md); err != nil {
+				err = dst.SendHeader(md)
+				if err != nil {
 					break
 				}
-				localHeaders = true
-				s.headersSent.Store(requestID, true)
 			}
-			if err := dst.SendMsg(f); err != nil {
+			err = dst.SendMsg(f)
+			if err != nil {
 				break
 			}
 		}
@@ -230,23 +248,31 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream, requestID string) chan error {
 	ret := make(chan error, 1)
 	go func() {
-		f := &codec.Frame{}
+		var err error
+
+		// Start by sending buffered messages
 		syncMapValue, _ := s.bufferedCalls.Load(requestID)
-		bufferedFrames := syncMapValue.([]interface{})
+		bufferedFrames := syncMapValue.([]any)
 		for _, msg := range bufferedFrames {
-			if err := dst.SendMsg(msg); err != nil {
+			err = dst.SendMsg(msg)
+			if err != nil {
 				ret <- err
 				return
 			}
 		}
-		for i := 0; ; i++ {
-			if err := src.RecvMsg(f); err != nil {
+
+		// Receive messages from the source stream and forward them to the destination stream
+		for src.Context().Err() == nil && dst.Context().Err() == nil {
+			f := &codec.Frame{}
+			err = src.RecvMsg(f)
+			if err != nil {
 				s.bufferedCalls.Store(requestID, bufferedFrames)
 				ret <- err // this can be io.EOF which is happy case
 				break
 			}
 			bufferedFrames = append(bufferedFrames, f)
-			if err := dst.SendMsg(f); err != nil {
+			err = dst.SendMsg(f)
+			if err != nil {
 				s.bufferedCalls.Store(requestID, bufferedFrames)
 				break
 			}

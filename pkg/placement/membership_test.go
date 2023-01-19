@@ -17,10 +17,9 @@ package placement
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
-
-	"go.uber.org/atomic"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"

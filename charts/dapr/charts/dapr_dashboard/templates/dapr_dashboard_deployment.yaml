@@ -24,7 +24,7 @@ spec:
           {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: dashboard-reader
+      serviceAccountName: dapr-dashboard
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

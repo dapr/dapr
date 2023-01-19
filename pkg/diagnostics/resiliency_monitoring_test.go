@@ -1,7 +1,6 @@
 package diagnostics_test
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -41,7 +40,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.EndpointPolicy(context.TODO(), "fakeApp", "fakeEndpoint")
+				_ = r.EndpointPolicy("fakeApp", "fakeEndpoint")
 			},
 			wantNumberOfRows: 3,
 			wantTags: []tag.Tag{
@@ -58,7 +57,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.ActorPreLockPolicy(context.TODO(), "fakeActor", "fakeActorId")
+				_ = r.ActorPreLockPolicy("fakeActor", "fakeActorId")
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -74,7 +73,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.ActorPostLockPolicy(context.TODO(), "fakeActor", "fakeActorId")
+				_ = r.ActorPostLockPolicy("fakeActor", "fakeActorId")
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -89,7 +88,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, testStateStoreName)
-				_ = r.ComponentOutboundPolicy(context.TODO(), testStateStoreName, resiliency.Statestore)
+				_ = r.ComponentOutboundPolicy(testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -106,7 +105,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, testStateStoreName)
-				_ = r.ComponentInboundPolicy(context.TODO(), testStateStoreName, resiliency.Statestore)
+				_ = r.ComponentInboundPolicy(testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -125,7 +124,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			t.Cleanup(func() {
 				view.Unregister(view.Find(resiliencyCountViewName))
 			})
-			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace")
+			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil)
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -156,7 +155,7 @@ func TestResiliencyLoadedMonitoring(t *testing.T) {
 		t.Cleanup(func() {
 			view.Unregister(view.Find(resiliencyCountViewName))
 		})
-		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace")
+		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil)
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)

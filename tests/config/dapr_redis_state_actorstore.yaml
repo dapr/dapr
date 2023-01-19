@@ -51,3 +51,6 @@ scopes:
 - perf-actor-timer-service
 - perf-actor-timer-client
 - perf-actor-double-activation
+- perf-actorfeatures
+- perf-actor-id
+- perf-actor-type

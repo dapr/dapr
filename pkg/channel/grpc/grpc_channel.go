@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -39,7 +40,7 @@ import (
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
 	appCallbackClient    runtimev1pb.AppCallbackClient
-	appHealthClient      runtimev1pb.AppCallbackHealthCheckClient
+	conn                 *grpc.ClientConn
 	baseAddress          string
 	ch                   chan struct{}
 	tracingSpec          config.TracingSpec
@@ -53,7 +54,7 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	// readBufferSize is unused
 	c := &Channel{
 		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		appHealthClient:      runtimev1pb.NewAppCallbackHealthCheckClient(conn),
+		conn:                 conn,
 		baseAddress:          net.JoinHostPort(channel.DefaultChannelAddress, strconv.Itoa(port)),
 		tracingSpec:          spec,
 		appMetadataToken:     auth.GetAppToken(),
@@ -103,7 +104,13 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		g.ch <- struct{}{}
 	}
 
-	md := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
+	// Read the request, including the data
+	pd, err := req.ProtoWithData()
+	if err != nil {
+		return nil, err
+	}
+
+	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.Metadata, true)
 
 	if g.appMetadataToken != "" {
 		md.Set(authConsts.APITokenHeader, g.appMetadataToken)
@@ -114,16 +121,14 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	var header, trailer grpcMetadata.MD
 
-	var opts []grpc.CallOption
-	opts = append(
-		opts,
+	opts := []grpc.CallOption{
 		grpc.Header(&header),
 		grpc.Trailer(&trailer),
-		grpc.MaxCallSendMsgSize(g.maxRequestBodySizeMB<<20),
-		grpc.MaxCallRecvMsgSize(g.maxRequestBodySizeMB<<20),
-	)
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySizeMB << 20),
+		grpc.MaxCallRecvMsgSize(g.maxRequestBodySizeMB << 20),
+	}
 
-	resp, err := g.appCallbackClient.OnInvoke(ctx, req.Message(), opts...)
+	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.Message, opts...)
 
 	if g.ch != nil {
 		<-g.ch
@@ -139,14 +144,27 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
 	}
 
-	rsp.WithHeaders(header).WithTrailers(trailer)
+	rsp.WithHeaders(header).
+		WithTrailers(trailer).
+		WithMessage(resp)
 
-	return rsp.WithMessage(resp), nil
+	return rsp, nil
+}
+
+var emptyPbPool = sync.Pool{
+	New: func() any {
+		return &emptypb.Empty{}
+	},
 }
 
 // HealthProbe performs a health probe.
 func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
-	_, err := g.appHealthClient.HealthCheck(ctx, &emptypb.Empty{})
+	// We use the low-level method here so we can avoid allocating multiple &emptypb.Empty and use the pool
+	in := emptyPbPool.Get()
+	defer emptyPbPool.Put(in)
+	out := emptyPbPool.Get()
+	defer emptyPbPool.Put(out)
+	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
 
 	// Errors here are network-level errors, so we are not returning them as errors
 	// Instead, we just return a failed probe

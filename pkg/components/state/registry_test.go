@@ -14,16 +14,15 @@ limitations under the License.
 package state_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	s "github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/state"
+	"github.com/dapr/kit/logger"
 )
 
 type mockState struct {
@@ -79,7 +78,7 @@ func TestRegistry(t *testing.T) {
 
 		// act
 		p, actualError := testRegistry.Create(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find state store %s/v1", componentName)
+		expectedError := fmt.Errorf("couldn't find state store %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)

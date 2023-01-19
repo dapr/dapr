@@ -186,10 +186,16 @@ func multihopHandler(w http.ResponseWriter, r *http.Request) {
 // Handles a request with a JSON body.  Extracts s string from the input json and returns in it an appResponse.
 func withBodyHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("withBodyHandler called. HTTP Verb: %s\n", r.Method)
-	var s string
-	err := json.NewDecoder(r.Body).Decode(&s)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		onBadRequest(w, err)
+		return
+	}
+	fmt.Printf("withBodyHandler body: %s\n", string(body))
+	var s string
+	err = json.Unmarshal(body, &s)
+	if err != nil {
+		onDeserializationFailed(w, err)
 		return
 	}
 
@@ -869,6 +875,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 				onSerializationFailed(w, err)
 				return
 			}
+			log.Printf("sending body: %s\n", string(b))
 		}
 
 		resp, err := httpWrapper(test.Verb, url, b)
@@ -892,25 +899,20 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 
 // data should be serialized by caller
 func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error) {
-	var body []byte
+	var appResp appResponse
 
 	var requestBody io.Reader
-	if data != nil && len(data) > 0 {
+	if len(data) > 0 {
 		requestBody = bytes.NewReader(data)
 	}
 
 	req, err := http.NewRequest(httpMethod, sanitizeHTTPURL(url), requestBody)
 	if err != nil {
-		return appResponse{}, err
+		return appResp, err
 	}
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return appResponse{}, err
-	}
-
-	body, err = io.ReadAll(res.Body)
-	if err != nil {
-		return appResponse{}, err
+		return appResp, err
 	}
 	defer func() {
 		// Drain before closing
@@ -921,14 +923,18 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 	actualVerb := res.Header.Get("x-dapr-tests-request-method")
 
 	if httpMethod != actualVerb {
-		return appResponse{}, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb) //nolint:stylecheck
+		return appResp, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb) //nolint:stylecheck
 	}
 
-	var appResp appResponse
-	if body != nil && len(body) > 0 {
+	body, err := io.ReadAll(res.Body)
+	log.Printf("response body: %s\n", string(body))
+	if err != nil {
+		return appResp, err
+	}
+	if len(body) > 0 {
 		err = json.Unmarshal(body, &appResp)
 		if err != nil {
-			return appResponse{}, err
+			return appResp, err
 		}
 	}
 
@@ -1235,7 +1241,7 @@ func main() {
 
 	httpMethods = []string{"POST", "GET", "PUT", "DELETE"}
 
-	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
+	log.Printf("Dapr service_invocation - listening on http://localhost:%d", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }
 

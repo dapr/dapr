@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	nethttp "net/http"
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,22 +25,40 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
-type pubsubBulkSubscribedMessage struct {
-	cloudEvents []map[string]interface{}
-	rawData     []runtimePubsub.BulkSubscribeMessageItem
-	entries     []*pubsub.BulkMessageEntry
-	data        []byte
-	topic       string
-	metadata    map[string]string
-	pubsub      string
-	path        string
-	length      int
+// pubSubMessage contains all the essential information related to a particular entry.
+// This need to be maintained as a separate struct, as we need to filter out messages and
+// their related info doing retries of resiliency support.
+type pubSubMessage struct {
+	cloudEvent map[string]interface{}
+	rawData    *runtimePubsub.BulkSubscribeMessageItem
+	entry      *pubsub.BulkMessageEntry
 }
 
+// pubsubBulkSubscribedMessage contains all the essential information related to
+// a bulk subscribe message.
+type pubsubBulkSubscribedMessage struct {
+	pubSubMessages []pubSubMessage
+	topic          string
+	metadata       map[string]string
+	pubsub         string
+	path           string
+	length         int
+}
+
+// bulkSubIngressDiagnostics holds diagnostics information for bulk subscribe ingress.
 type bulkSubIngressDiagnostics struct {
 	statusWiseDiag map[string]int64
 	elapsed        float64
 	retryReported  bool
+}
+
+// bulkSubscribeCallData holds data for a bulk subscribe call.
+type bulkSubscribeCallData struct {
+	bulkResponses   *[]pubsub.BulkSubscribeResponseEntry
+	bulkSubDiag     *bulkSubIngressDiagnostics
+	entryIdIndexMap *map[string]int //nolint:stylecheck
+	psName          string
+	topic           string
 }
 
 // bulkSubscribeTopic subscribes to a topic for bulk messages and invokes subscriber app endpoint(s).
@@ -52,22 +69,22 @@ type bulkSubIngressDiagnostics struct {
 //  2. Iterate through each message and validate entryId is NOT blank
 //     2.A. If it is a raw payload:
 //     2.A.i. Get route path, if processable
-//     2.A.ii. If route path is non-blank, generate base64 encoding of event data
+//     2.A.ii. Check route path is non-blank if protocol used is HTTP; generate base64 encoding of event data
 //     and set contentType, if provided, else set to "application/octet-stream"
 //     2.A.iii. Finally, form a child message to be sent to app and add it to the list of messages,
 //     to be sent to app (this list of messages is registered against correct path in an internal map)
 //     2.B. If it is NOT a raw payload (it is considered a cloud event):
 //     2.B.i. Unmarshal it into a map[string]interface{}
-//     2.B.ii. If any error while unmarshalling, send to DLQ if configured, else register error for this message
+//     2.B.ii. If any error while unmarshalling, register error for this message
 //     2.B.iii. Check if message expired
 //     2.B.iv. Get route path, if processable
-//     2.B.v. If route path is non-blank, form a child message to be sent to app and add it to the list of messages,
+//     2.B.v. Check route path is non-blank if protocol used is HTTP, form a child message to be sent to app and add it to the list of messages,
 //  3. Iterate through map prepared for path vs list of messages to be sent on this path
 //     3.A. Prepare envelope for the list of messages to be sent to app on this path
-//     3.B. Send the envelope to app by invoking http endpoint
+//     3.B. Send the envelope to app by invoking http/grpc endpoint
 //  4. Check if any error has occurred so far in processing for any of the message and invoke DLQ, if configured.
 //  5. Send back responses array to broker interface.
-func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.Runner,
+func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.PolicyDefinition,
 	psName string, topic string, route TopicRouteElem, namespacedConsumer bool,
 ) error {
 	ps, ok := a.pubSubs[psName]
@@ -83,6 +100,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 	req := pubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
 		Metadata: route.metadata,
+		BulkSubscribeConfig: pubsub.BulkSubscribeConfig{
+			MaxMessagesCount:   int(route.bulkSubscribe.MaxMessagesCount),
+			MaxAwaitDurationMs: int(route.bulkSubscribe.MaxAwaitDurationMs),
+		},
 	}
 
 	bulkHandler := func(ctx context.Context, msg *pubsub.BulkMessage) ([]pubsub.BulkSubscribeResponseEntry, error) {
@@ -93,10 +114,19 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 		msg.Metadata[pubsubName] = psName
 		bulkSubDiag := newBulkSubIngressDiagnostics()
 		bulkResponses := make([]pubsub.BulkSubscribeResponseEntry, len(msg.Entries))
+		routePathBulkMessageMap := make(map[string]pubsubBulkSubscribedMessage)
+		entryIdIndexMap := make(map[string]int, len(msg.Entries)) //nolint:stylecheck
+		bulkSubCallData := bulkSubscribeCallData{
+			bulkResponses:   &bulkResponses,
+			bulkSubDiag:     &bulkSubDiag,
+			entryIdIndexMap: &entryIdIndexMap,
+			psName:          psName,
+			topic:           topic,
+		}
 		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, psName, msg, route, nil, nil, &bulkSubDiag); dlqErr != nil {
+			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route); dlqErr != nil {
 				populateAllBulkResponsesWithError(msg, &bulkResponses, err)
 				reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
@@ -104,8 +134,6 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 			reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 			return nil, nil
 		}
-		routePathBulkMessageMap := make(map[string]pubsubBulkSubscribedMessage)
-		entryIdIndexMap := make(map[string]int, len(msg.Entries)) //nolint:stylecheck
 		hasAnyError := false
 		for i, message := range msg.Entries {
 			if entryIdErr := validateEntryId(message.EntryId, i); entryIdErr != nil { //nolint:stylecheck
@@ -115,7 +143,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 			}
 			entryIdIndexMap[message.EntryId] = i
 			if rawPayload {
-				rPath, routeErr := a.getRouteIfProcessable(ctx, route, &(msg.Entries[i]), i, &bulkResponses, string(message.Event), psName, topic, &bulkSubDiag)
+				rPath, routeErr := a.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, string(message.Event))
 				if routeErr != nil {
 					hasAnyError = true
 					continue
@@ -125,13 +153,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
-				var contenttype string
-				if message.ContentType != "" {
-					contenttype = message.ContentType
-				} else {
-					contenttype = "application/octet-stream"
+				if message.ContentType == "" {
+					message.ContentType = "application/octet-stream"
 				}
-				populateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, contenttype, namespacedConsumer, a.namespace)
+				populateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, message.ContentType, namespacedConsumer, a.namespace)
 			} else {
 				var cloudEvent map[string]interface{}
 				err = json.Unmarshal(message.Event, &cloudEvent)
@@ -157,7 +182,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 					bulkResponses[i].Error = nil
 					continue
 				}
-				rPath, routeErr := a.getRouteIfProcessable(ctx, route, &(msg.Entries[i]), i, &bulkResponses, cloudEvent, psName, topic, &bulkSubDiag)
+				rPath, routeErr := a.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, cloudEvent)
 				if routeErr != nil {
 					hasAnyError = true
 					continue
@@ -166,12 +191,15 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 				if rPath == "" && a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 					continue
 				}
+				if message.ContentType == "" {
+					message.ContentType = contenttype.CloudEventContentType
+				}
 				populateBulkSubcribedMessage(&(msg.Entries[i]), cloudEvent, &routePathBulkMessageMap, rPath, i, msg, true, psName, message.ContentType, namespacedConsumer, a.namespace)
 			}
 		}
 		var overallInvokeErr error
 		for path, psm := range routePathBulkMessageMap {
-			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, psm, topic, psName, msg, route, &bulkResponses, &entryIdIndexMap, path, policy, &bulkSubDiag)
+			invokeErr := a.createEnvelopeAndInvokeSubscriber(ctx, &bulkSubCallData, psm, msg, route, path, policyDef, rawPayload)
 			if invokeErr != nil {
 				hasAnyError = true
 				err = invokeErr
@@ -186,7 +214,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			bulkSubDiag.retryReported = true
-			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, psName, msg, route, &entryIdIndexMap, &bulkResponses, &bulkSubDiag); dlqErr != nil {
+			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route); dlqErr != nil {
 				reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
 			}
@@ -205,133 +233,136 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 }
 
 // sendBulkToDLQIfConfigured sends the message to the dead letter queue if configured.
-func (a *DaprRuntime) sendBulkToDLQIfConfigured(ctx context.Context, psName string, msg *pubsub.BulkMessage, route TopicRouteElem,
-	entryIdIndexMap *map[string]int, bulkResponses *[]pubsub.BulkSubscribeResponseEntry, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+func (a *DaprRuntime) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, msg *pubsub.BulkMessage,
+	sendAllEntries bool, route TopicRouteElem,
 ) error {
+	bscData := *bulkSubCallData
 	if route.deadLetterTopic != "" {
-		if dlqErr := a.sendBulkToDeadLetter(ctx, psName, msg, route.deadLetterTopic, nil, nil, bulkSubDiag); dlqErr == nil {
+		if dlqErr := a.sendBulkToDeadLetter(bulkSubCallData, msg, route.deadLetterTopic, sendAllEntries); dlqErr == nil {
 			// dlq has been configured and whole bulk of messages is successfully sent to dlq.
 			return nil
 		}
 	}
-	if !bulkSubDiag.retryReported {
-		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.Entries))
+	if !bscData.bulkSubDiag.retryReported {
+		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.Entries))
 	}
 	return errors.New("failed to send to DLQ as DLQ was not configured")
 }
 
 // getRouteIfProcessable returns the route path if the message is processable.
-func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, route TopicRouteElem, message *pubsub.BulkMessageEntry,
-	i int, bulkResponses *[]pubsub.BulkSubscribeResponseEntry, matchElem interface{},
-	psName string, topic string, bulkSubDiag *bulkSubIngressDiagnostics,
+func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, route TopicRouteElem, message *pubsub.BulkMessageEntry,
+	i int, matchElem interface{},
 ) (string, error) {
+	bscData := *bulkSubCallData
 	rPath, shouldProcess, routeErr := findMatchingRoute(route.rules, matchElem)
 	if routeErr != nil {
-		log.Errorf("error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", psName, topic, message.EntryId, routeErr)
-		setBulkResponseEntry(bulkResponses, i, message.EntryId, routeErr)
+		log.Errorf("Error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", bscData.psName, bscData.topic, message.EntryId, routeErr)
+		setBulkResponseEntry(bscData.bulkResponses, i, message.EntryId, routeErr)
 		return "", routeErr
 	}
 	if !shouldProcess {
 		// The event does not match any route specified so ignore it.
-		log.Warnf("no matching route for event in pubsub %s and topic %s; skipping", psName, topic)
-		bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
+		log.Warnf("No matching route for event in pubsub %s and topic %s; skipping", bscData.psName, bscData.topic)
+		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
 		if route.deadLetterTopic != "" {
-			_ = a.sendToDeadLetter(psName, &pubsub.NewMessage{
+			_ = a.sendToDeadLetter(bscData.psName, &pubsub.NewMessage{
 				Data:        message.Event,
-				Topic:       topic,
+				Topic:       bscData.topic,
 				Metadata:    message.Metadata,
 				ContentType: &message.ContentType,
 			}, route.deadLetterTopic)
 		}
-		setBulkResponseEntry(bulkResponses, i, message.EntryId, nil)
+		setBulkResponseEntry(bscData.bulkResponses, i, message.EntryId, nil)
 		return "", nil
 	}
 	return rPath, nil
 }
 
 // createEnvelopeAndInvokeSubscriber creates the envelope and invokes the subscriber.
-func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm pubsubBulkSubscribedMessage, topic string, psName string,
-	msg *pubsub.BulkMessage, route TopicRouteElem, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
-	entryIdIndexMap *map[string]int, path string, policy resiliency.Runner, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm pubsubBulkSubscribedMessage,
+	msg *pubsub.BulkMessage, route TopicRouteElem, path string, policyDef *resiliency.PolicyDefinition,
+	rawPayload bool,
 ) error {
+	bscData := *bulkSubCallData
 	var id string
 	idObj, err := uuid.NewRandom()
 	if err != nil {
 		id = idObj.String()
 	}
-	psm.cloudEvents = psm.cloudEvents[:psm.length]
-	psm.rawData = psm.rawData[:psm.length]
-	psm.entries = psm.entries[:psm.length]
+	psm.pubSubMessages = psm.pubSubMessages[:psm.length]
+	psm.path = path
 	envelope := runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
 		ID:       id,
-		Topic:    topic,
-		Entries:  psm.rawData,
-		Pubsub:   psName,
+		Topic:    bscData.topic,
+		Pubsub:   bscData.psName,
 		Metadata: msg.Metadata,
 	})
+	_, e := a.ApplyBulkSubscribeResiliency(ctx, bulkSubCallData, psm, route.deadLetterTopic,
+		path, policyDef, rawPayload, envelope)
+	return e
+}
+
+// publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding responses.
+func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *pubsubBulkSubscribedMessage,
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, envelope map[string]any, deadLetterTopic string,
+) error {
+	bscData := *bulkSubCallData
+	rawMsgEntries := make([]*runtimePubsub.BulkSubscribeMessageItem, len(psm.pubSubMessages))
+	entryRespReceived := make(map[string]bool, len(psm.pubSubMessages))
+	for i, pubSubMsg := range psm.pubSubMessages {
+		rawMsgEntries[i] = pubSubMsg.rawData
+	}
+
+	a.bulkSubLock.Lock()
+	envelope[runtimePubsub.Entries] = rawMsgEntries
 	da, marshalErr := json.Marshal(&envelope)
+	a.bulkSubLock.Unlock()
+
 	if marshalErr != nil {
-		log.Errorf("error serializing bulk cloud event in pubsub %s and topic %s: %s", psName, msg.Topic, marshalErr)
-		if route.deadLetterTopic != "" {
-			entries := make([]pubsub.BulkMessageEntry, len(psm.entries))
-			for i, entry := range psm.entries {
-				entries[i] = *entry
+		log.Errorf("Error serializing bulk cloud event in pubsub %s and topic %s: %s", psm.pubsub, psm.topic, marshalErr)
+		if deadLetterTopic != "" {
+			entries := make([]pubsub.BulkMessageEntry, len(psm.pubSubMessages))
+			for i, pubsubMsg := range psm.pubSubMessages {
+				entries[i] = *pubsubMsg.entry
 			}
 			bulkMsg := pubsub.BulkMessage{
 				Entries:  entries,
-				Topic:    msg.Topic,
-				Metadata: msg.Metadata,
+				Topic:    psm.topic,
+				Metadata: psm.metadata,
 			}
-			if dlqErr := a.sendBulkToDeadLetter(ctx, psName, &bulkMsg, route.deadLetterTopic, entryIdIndexMap, nil, bulkSubDiag); dlqErr == nil {
+			if dlqErr := a.sendBulkToDeadLetter(bulkSubCallData, &bulkMsg, deadLetterTopic, true); dlqErr == nil {
 				// dlq has been configured and message is successfully sent to dlq.
-				for _, item := range psm.entries {
-					ind := (*entryIdIndexMap)[item.EntryId]
-					setBulkResponseEntry(bulkResponses, ind, item.EntryId, nil)
+				for _, item := range rawMsgEntries {
+					addBulkResponseEntry(bulkResponses, item.EntryId, nil)
 				}
 				return nil
 			}
 		}
-		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(psm.entries))
+		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 
-		for _, item := range psm.entries {
-			ind := (*entryIdIndexMap)[item.EntryId]
-			setBulkResponseEntry(bulkResponses, ind, item.EntryId, marshalErr)
+		for _, item := range rawMsgEntries {
+			addBulkResponseEntry(bulkResponses, item.EntryId, marshalErr)
 		}
 		return marshalErr
 	}
-	psm.data = da
-	psm.path = path
-	return policy(func(ctx context.Context) error {
-		switch a.runtimeConfig.ApplicationProtocol {
-		case HTTPProtocol:
-			return a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
-		case GRPCProtocol:
-			return a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIdIndexMap, bulkSubDiag)
-		default:
-			return backoff.Permanent(errors.New("invalid application protocol"))
-		}
-	})
-}
 
-// publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding responses.
-func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBulkSubscribedMessage,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIdIndexMap map[string]int, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
-) error {
-	spans := make([]trace.Span, len(msg.entries))
+	spans := make([]trace.Span, len(rawMsgEntries))
 
-	req := invokev1.NewInvokeMethodRequest(msg.path)
-	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.data, contenttype.CloudEventContentType)
-	req.WithCustomHTTPMetadata(msg.metadata)
+	req := invokev1.NewInvokeMethodRequest(psm.path).
+		WithHTTPExtension(nethttp.MethodPost, "").
+		WithRawDataBytes(da).
+		WithContentType(contenttype.JSONContentType).
+		WithCustomHTTPMetadata(psm.metadata)
+	defer req.Close()
 
 	n := 0
-	for _, cloudEvent := range msg.cloudEvents {
+	for _, pubsubMsg := range psm.pubSubMessages {
+		cloudEvent := pubsubMsg.cloudEvent
 		if cloudEvent[pubsub.TraceIDField] != nil {
 			traceID := cloudEvent[pubsub.TraceIDField].(string)
 			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 			var span trace.Span
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, a.globalConfig.Spec.TracingSpec)
 			spans[n] = span
 			n++
 		}
@@ -341,61 +372,71 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 	start := time.Now()
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	elapsed := diag.ElapsedSince(start)
-
 	if err != nil {
-		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.entries))
-		bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIdIndexMap, err)
-		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
+		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
+		bscData.bulkSubDiag.elapsed = elapsed
+		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
 	}
+	defer resp.Close()
 
 	statusCode := int(resp.Status().Code)
 
 	for _, span := range spans {
 		if span != nil {
-			m := diag.ConstructSubscriptionSpanAttributes(msg.topic)
+			m := diag.ConstructSubscriptionSpanAttributes(psm.topic)
 			diag.AddAttributesToSpan(span, m)
 			diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
 		}
 	}
 
-	_, body := resp.RawData()
-
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
 		var appBulkResponse pubsub.AppBulkResponse
-		err := json.Unmarshal(body, &appBulkResponse)
+		err := json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
-			bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += int64(len(msg.entries))
-			bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIdIndexMap, err)
-			return errors.Wrap(err, "failed unmarshalling app response for bulk subscribe")
+			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
+			bscData.bulkSubDiag.elapsed = elapsed
+			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+			return fmt.Errorf("failed unmarshalling app response for bulk subscribe: %w", err)
 		}
 
 		var hasAnyError bool
 		for _, response := range appBulkResponse.AppResponses {
-			if entryId, ok := entryIdIndexMap[response.EntryId]; ok { //nolint:stylecheck
+			if _, ok := (*bscData.entryIdIndexMap)[response.EntryId]; ok {
 				switch response.Status {
 				case "":
 					// When statusCode 2xx, Consider empty status field OR not receiving status for an item as retry
 					fallthrough
 				case pubsub.Retry:
-					bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
-					setBulkResponseEntry(bulkResponses, entryId, response.EntryId,
-						errors.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
+					a.bulkSubLock.Lock()
+					bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
+					a.bulkSubLock.Unlock()
+					entryRespReceived[response.EntryId] = true
+					addBulkResponseEntry(bulkResponses, response.EntryId,
+						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 					hasAnyError = true
 				case pubsub.Success:
-					bulkSubDiag.statusWiseDiag[string(pubsub.Success)]++
-					setBulkResponseEntry(bulkResponses, entryId, response.EntryId, nil)
+					a.bulkSubLock.Lock()
+					bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Success)]++
+					a.bulkSubLock.Unlock()
+					entryRespReceived[response.EntryId] = true
+					addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 				case pubsub.Drop:
-					bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
+					a.bulkSubLock.Lock()
+					bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
+					a.bulkSubLock.Unlock()
+					entryRespReceived[response.EntryId] = true
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
-					setBulkResponseEntry(bulkResponses, entryId, response.EntryId, nil)
+					addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 				default:
 					// Consider unknown status field as error and retry
-					bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
-					setBulkResponseEntry(bulkResponses, entryId, response.EntryId,
-						errors.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))
+					a.bulkSubLock.Lock()
+					bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
+					a.bulkSubLock.Unlock()
+					entryRespReceived[response.EntryId] = true
+					addBulkResponseEntry(bulkResponses, response.EntryId,
+						fmt.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))
 					hasAnyError = true
 				}
 			} else {
@@ -403,17 +444,18 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 				continue
 			}
 		}
-		for _, item := range msg.entries {
-			ind := entryIdIndexMap[item.EntryId]
-			if (*bulkResponses)[ind].EntryId == "" {
-				setBulkResponseEntry(bulkResponses, ind, item.EntryId,
-					errors.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId))
+		for _, item := range rawMsgEntries {
+			if !entryRespReceived[item.EntryId] {
+				addBulkResponseEntry(bulkResponses, item.EntryId,
+					fmt.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId), //nolint:stylecheck
+				)
 				hasAnyError = true
-				bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
+				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
 			}
 		}
-		bulkSubDiag.elapsed = elapsed
+		bscData.bulkSubDiag.elapsed = elapsed
 		if hasAnyError {
+			//nolint:stylecheck
 			return errors.New("Few message(s) have failed during bulk subscribe operation")
 		} else {
 			return nil
@@ -424,56 +466,117 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
 		// https://cloud.google.com/apis/design/errors#handling_errors
-		log.Errorf("non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
-		bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(msg.entries))
-		bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIdIndexMap, nil)
+		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
+		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(rawMsgEntries))
+		bscData.bulkSubDiag.elapsed = elapsed
+		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, nil)
 		return nil
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", msg.topic, statusCode)
-	bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.entries))
-	bulkSubDiag.elapsed = elapsed
-	populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIdIndexMap, errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", msg.topic, statusCode))
-	return errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", msg.topic, statusCode)
+	retriableErrorStr := fmt.Sprintf("Retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", psm.topic, statusCode)
+	retriableError := errors.New(retriableErrorStr)
+	log.Warn(retriableErrorStr)
+	bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
+	bscData.bulkSubDiag.elapsed = elapsed
+	populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, retriableError)
+	return retriableError
+}
+
+func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
+	envelope := &runtimev1pb.TopicEventCERequest{
+		Id:              extractCloudEventProperty(event, pubsub.IDField),
+		Source:          extractCloudEventProperty(event, pubsub.SourceField),
+		DataContentType: extractCloudEventProperty(event, pubsub.DataContentTypeField),
+		Type:            extractCloudEventProperty(event, pubsub.TypeField),
+		SpecVersion:     extractCloudEventProperty(event, pubsub.SpecVersionField),
+	}
+
+	if data, ok := event[pubsub.DataField]; ok && data != nil {
+		envelope.Data = nil
+
+		if contenttype.IsStringContentType(envelope.DataContentType) {
+			switch v := data.(type) {
+			case string:
+				envelope.Data = []byte(v)
+			case []byte:
+				envelope.Data = v
+			default:
+				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, ErrUnexpectedEnvelopeData //nolint:nosnakecase
+			}
+		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
+			envelope.Data, _ = json.Marshal(data)
+		}
+	}
+	extensions, extensionsErr := extractCloudEventExtensions(event)
+	if extensionsErr != nil {
+		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
+	}
+	envelope.Extensions = extensions
+	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
+}
+
+func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
+	if rawPayload {
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &runtimev1pb.TopicEventBulkRequestEntry_Bytes{Bytes: entry.Event}, //nolint:nosnakecase
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	} else {
+		eventLocal, err := extractCloudEvent(cloudEvent)
+		if err != nil {
+			return nil, err
+		}
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &eventLocal,
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	}
 }
 
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
-func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBulkSubscribedMessage,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIdIndexMap map[string]int, bulkSubDiag *bulkSubIngressDiagnostics, //nolint:stylecheck
+func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *pubsubBulkSubscribedMessage,
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, rawPayload bool,
 ) error {
-	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(msg.entries))
-	for i, entry := range msg.entries {
-		item := &runtimev1pb.TopicEventBulkRequestEntry{
-			EntryId:     entry.EntryId,
-			Event:       entry.Event,
-			ContentType: entry.ContentType,
-			Metadata:    entry.Metadata,
+	bscData := *bulkSubCallData
+	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(psm.pubSubMessages))
+	entryRespReceived := make(map[string]bool, len(psm.pubSubMessages))
+	for i, pubSubMsg := range psm.pubSubMessages {
+		entry := pubSubMsg.entry
+		item, err := fetchEntry(rawPayload, entry, psm.pubSubMessages[i].cloudEvent)
+		if err != nil {
+			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)]++
+			addBulkResponseEntry(bulkResponses, entry.EntryId, err)
+			continue
 		}
 		items[i] = item
 	}
+
 	envelope := &runtimev1pb.TopicEventBulkRequest{
 		Id:         uuid.New().String(),
 		Entries:    items,
-		Metadata:   msg.metadata,
-		Topic:      msg.topic,
-		PubsubName: msg.pubsub,
+		Metadata:   psm.metadata,
+		Topic:      psm.topic,
+		PubsubName: psm.pubsub,
 		Type:       pubsub.DefaultBulkEventType,
-		Path:       msg.path,
+		Path:       psm.path,
 	}
 
-	spans := make([]trace.Span, len(msg.entries))
+	spans := make([]trace.Span, len(psm.pubSubMessages))
 	n := 0
-	for _, cloudEvent := range msg.cloudEvents {
+	for _, pubSubMsg := range psm.pubSubMessages {
+		cloudEvent := pubSubMsg.cloudEvent
 		if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 			if traceID, ok := iTraceID.(string); ok {
 				sc, _ := diag.SpanContextFromW3CString(traceID)
-				spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
 				// no ops if trace is off
 				var span trace.Span
-				ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, a.globalConfig.Spec.TracingSpec)
 				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 				spans[n] = span
 				n++
@@ -484,7 +587,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 	}
 	spans = spans[:n]
 	defer endSpans(spans)
-	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
+	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
 
 	conn, err := a.grpc.GetAppClient()
 	if err != nil {
@@ -509,44 +612,56 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
-			bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(msg.entries))
-			bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIdIndexMap, nil)
+			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(psm.pubSubMessages))
+			bscData.bulkSubDiag.elapsed = elapsed
+			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, nil)
 			return nil
 		}
 
-		err = errors.Errorf("error returned from app while processing bulk pub/sub event: %s", err)
+		err = fmt.Errorf("error returned from app while processing bulk pub/sub event: %w", err)
 		log.Debug(err)
-		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.entries))
-		bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIdIndexMap, err)
+		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(psm.pubSubMessages))
+		bscData.bulkSubDiag.elapsed = elapsed
+		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
 		// on error from application, return error for redelivery of event
 		return nil
 	}
 
 	hasAnyError := false
 	for _, response := range res.GetStatuses() {
-		if entryId, ok := entryIdIndexMap[response.EntryId]; ok { //nolint:stylecheck
+		if _, ok := (*bscData.entryIdIndexMap)[response.EntryId]; ok {
 			switch response.GetStatus() {
 			case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 				// success from protobuf definition
-				bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += 1
-				setBulkResponseEntry(bulkResponses, entryId, response.EntryId, nil)
+				a.bulkSubLock.Lock()
+				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += 1
+				a.bulkSubLock.Unlock()
+				entryRespReceived[response.EntryId] = true
+				addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 			case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
-				bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
-				setBulkResponseEntry(bulkResponses, entryId, response.EntryId,
-					errors.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", response.EntryId))
+				a.bulkSubLock.Lock()
+				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
+				a.bulkSubLock.Unlock()
+				entryRespReceived[response.EntryId] = true
+				addBulkResponseEntry(bulkResponses, response.EntryId,
+					fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", response.EntryId))
 				hasAnyError = true
 			case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", response.EntryId)
-				bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += 1
-				setBulkResponseEntry(bulkResponses, entryId, response.EntryId, nil)
+				a.bulkSubLock.Lock()
+				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += 1
+				a.bulkSubLock.Unlock()
+				entryRespReceived[response.EntryId] = true
+				addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 			default:
 				// Consider unknown status field as error and retry
-				bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
-				setBulkResponseEntry(bulkResponses, entryId, response.EntryId,
-					errors.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", response.EntryId, response.GetStatus()))
+				a.bulkSubLock.Lock()
+				bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
+				a.bulkSubLock.Unlock()
+				entryRespReceived[response.EntryId] = true
+				addBulkResponseEntry(bulkResponses, response.EntryId,
+					fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", response.EntryId, response.GetStatus()))
 				hasAnyError = true
 			}
 		} else {
@@ -554,17 +669,18 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 			continue
 		}
 	}
-	for _, item := range msg.entries {
-		ind := entryIdIndexMap[item.EntryId]
-		if (*bulkResponses)[ind].EntryId == "" {
-			setBulkResponseEntry(bulkResponses, ind, item.EntryId,
-				errors.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId))
+	for _, item := range psm.pubSubMessages {
+		if !entryRespReceived[item.entry.EntryId] {
+			addBulkResponseEntry(bulkResponses, item.entry.EntryId,
+				fmt.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.entry.EntryId), //nolint:stylecheck
+			)
 			hasAnyError = true
-			bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
+			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
 		}
 	}
-	bulkSubDiag.elapsed = elapsed
+	bscData.bulkSubDiag.elapsed = elapsed
 	if hasAnyError {
+		//nolint:stylecheck
 		return errors.New("Few message(s) have failed during bulk subscribe operation")
 	} else {
 		return nil
@@ -581,32 +697,32 @@ func endSpans(spans []trace.Span) {
 
 // sendBulkToDeadLetter sends the bulk message to deadletter topic.
 func (a *DaprRuntime) sendBulkToDeadLetter(
-	ctx context.Context, name string, msg *pubsub.BulkMessage, deadLetterTopic string,
-	entryIdIndexMap *map[string]int, bulkResponses *[]pubsub.BulkSubscribeResponseEntry, //nolint:stylecheck
-	bulkSubDiag *bulkSubIngressDiagnostics,
+	bulkSubCallData *bulkSubscribeCallData, msg *pubsub.BulkMessage, deadLetterTopic string,
+	sendAllEntries bool,
 ) error {
+	bscData := *bulkSubCallData
 	data := make([]pubsub.BulkMessageEntry, len(msg.Entries))
 
-	if bulkResponses == nil {
+	if sendAllEntries {
 		data = msg.Entries
 	} else {
 		n := 0
 		for _, message := range msg.Entries {
-			entryId := (*entryIdIndexMap)[message.EntryId] //nolint:stylecheck
-			if (*bulkResponses)[entryId].Error != nil {
+			entryId := (*bscData.entryIdIndexMap)[message.EntryId] //nolint:stylecheck
+			if (*bscData.bulkResponses)[entryId].Error != nil {
 				data[n] = message
 				n++
 			}
 		}
 		data = data[:n]
 	}
-	bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(data))
-	if bulkSubDiag.retryReported {
-		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] -= int64(len(data))
+	bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(data))
+	if bscData.bulkSubDiag.retryReported {
+		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] -= int64(len(data))
 	}
 	req := &pubsub.BulkPublishRequest{
 		Entries:    data,
-		PubsubName: name,
+		PubsubName: bscData.psName,
 		Topic:      deadLetterTopic,
 		Metadata:   msg.Metadata,
 	}
@@ -621,6 +737,7 @@ func (a *DaprRuntime) sendBulkToDeadLetter(
 func validateEntryId(entryId string, i int) error { //nolint:stylecheck
 	if entryId == "" {
 		log.Warn("Invalid blank entry id received while processing bulk pub/sub event, won't be able to process it")
+		//nolint:stylecheck
 		return errors.New("Blank entryId supplied - won't be able to process it")
 	}
 	return nil
@@ -643,20 +760,18 @@ func populateBulkSubcribedMessage(message *pubsub.BulkMessageEntry, event interf
 	}
 	if val, ok := (*routePathBulkMessageMap)[rPath]; ok {
 		if isCloudEvent {
-			val.cloudEvents[val.length] = mapTypeEvent
+			val.pubSubMessages[val.length].cloudEvent = mapTypeEvent
 		}
-		val.rawData[val.length] = childMessage
-		val.entries[val.length] = &msg.Entries[i]
+		val.pubSubMessages[val.length].rawData = &childMessage
+		val.pubSubMessages[val.length].entry = &msg.Entries[i]
 		val.length++
 		(*routePathBulkMessageMap)[rPath] = val
 	} else {
-		cloudEvents := make([]map[string]interface{}, len(msg.Entries))
-		rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, len(msg.Entries))
-		rawDataItems[0] = childMessage
-		entries := make([]*pubsub.BulkMessageEntry, len(msg.Entries))
-		entries[0] = &msg.Entries[i]
+		pubSubMessages := make([]pubSubMessage, len(msg.Entries))
+		pubSubMessages[0].rawData = &childMessage
+		pubSubMessages[0].entry = &msg.Entries[i]
 		if isCloudEvent {
-			cloudEvents[0] = cloudEvent
+			pubSubMessages[0].cloudEvent = cloudEvent
 		}
 
 		msgTopic := msg.Topic
@@ -665,26 +780,21 @@ func populateBulkSubcribedMessage(message *pubsub.BulkMessageEntry, event interf
 		}
 
 		psm := pubsubBulkSubscribedMessage{
-			cloudEvents: cloudEvents,
-			rawData:     rawDataItems,
-			entries:     entries,
-			topic:       msgTopic,
-			metadata:    msg.Metadata,
-			pubsub:      psName,
-			length:      1,
+			pubSubMessages: pubSubMessages,
+			topic:          msgTopic,
+			metadata:       msg.Metadata,
+			pubsub:         psName,
+			length:         1,
 		}
 		(*routePathBulkMessageMap)[rPath] = psm
 	}
 }
 
-func populateBulkSubscribeResponsesWithError(entries []*pubsub.BulkMessageEntry,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIdIndexMap *map[string]int, err error, //nolint:stylecheck
+func populateBulkSubscribeResponsesWithError(psm *pubsubBulkSubscribedMessage,
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, err error,
 ) {
-	for _, item := range entries {
-		ind := (*entryIdIndexMap)[item.EntryId]
-		if (*bulkResponses)[ind].EntryId == "" {
-			setBulkResponseEntry(bulkResponses, ind, item.EntryId, err)
-		}
+	for _, message := range psm.pubSubMessages {
+		addBulkResponseEntry(bulkResponses, message.entry.EntryId, err)
 	}
 }
 
@@ -701,6 +811,14 @@ func populateAllBulkResponsesWithError(bulkMsg *pubsub.BulkMessage,
 func setBulkResponseEntry(bulkResponses *[]pubsub.BulkSubscribeResponseEntry, i int, entryId string, err error) { //nolint:stylecheck
 	(*bulkResponses)[i].EntryId = entryId
 	(*bulkResponses)[i].Error = err
+}
+
+func addBulkResponseEntry(bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryId string, err error) { //nolint:stylecheck
+	resp := pubsub.BulkSubscribeResponseEntry{
+		EntryId: entryId,
+		Error:   err,
+	}
+	*bulkResponses = append(*bulkResponses, resp)
 }
 
 func newBulkSubIngressDiagnostics() bulkSubIngressDiagnostics {
