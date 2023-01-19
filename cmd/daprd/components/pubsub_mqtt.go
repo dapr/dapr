@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/pubsub/mqtt"
+	mqtt "github.com/dapr/components-contrib/pubsub/mqtt3"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(mqtt.NewMQTTPubSub, "mqtt")
+	pubsubLoader.DefaultRegistry.RegisterComponent(mqtt.NewMQTTPubSub, "mqtt3", "mqtt")
 }
