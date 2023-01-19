@@ -160,7 +160,7 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
-      serviceAccountName: dapr-operator
+      serviceAccountName: dapr-sentry
       volumes:
         - name: credentials
           secret:
