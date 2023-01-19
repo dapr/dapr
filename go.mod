@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20230117165952-4ffca2d4ae35
+	github.com/dapr/components-contrib v1.9.1-0.20230118195328-b007728f12f4
 	github.com/dapr/kit v0.0.4-0.20230105202559-fcb09958bfb0
 	github.com/fasthttp/router v1.4.14
 	github.com/ghodss/yaml v1.0.0
@@ -79,7 +79,7 @@ require (
 	cloud.google.com/go/pubsub v1.28.0 // indirect
 	cloud.google.com/go/secretmanager v1.10.0 // indirect
 	cloud.google.com/go/storage v1.28.1 // indirect
-	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537 // indirect
+	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.1 // indirect
 	github.com/AthenZ/athenz v1.10.39 // indirect
@@ -329,7 +329,6 @@ require (
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/rs/zerolog v1.25.0 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414 // indirect
-	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
 	github.com/savsgio/gotils v0.0.0-20220530130905-52f3993e8d6d // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.12.0+incompatible // indirect
@@ -413,7 +412,7 @@ require (
 
 replace (
 	// this is a fork which addresses a performance issues due to go routines
-	dubbo.apache.org/dubbo-go/v3 => dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537
+	dubbo.apache.org/dubbo-go/v3 => dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3
 	// this is necessary for a license issue
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
