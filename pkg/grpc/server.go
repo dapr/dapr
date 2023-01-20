@@ -38,6 +38,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
@@ -73,6 +74,7 @@ type server struct {
 	authToken          string
 	apiSpec            config.APISpec
 	proxy              messaging.Proxy
+	workflowEngine     *wfengine.WorkflowEngine
 }
 
 var (
@@ -82,19 +84,20 @@ var (
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
-		api:         api,
-		config:      config,
-		tracingSpec: tracingSpec,
-		metricSpec:  metricSpec,
-		kind:        apiServer,
-		logger:      apiServerLogger,
-		infoLogger:  apiServerInfoLogger,
-		authToken:   auth.GetAPIToken(),
-		apiSpec:     apiSpec,
-		proxy:       proxy,
+		api:            api,
+		config:         config,
+		tracingSpec:    tracingSpec,
+		metricSpec:     metricSpec,
+		kind:           apiServer,
+		logger:         apiServerLogger,
+		infoLogger:     apiServerInfoLogger,
+		authToken:      auth.GetAPIToken(),
+		apiSpec:        apiSpec,
+		proxy:          proxy,
+		workflowEngine: workflowEngine,
 	}
 }
 
@@ -158,6 +161,9 @@ func (s *server) StartNonBlocking() error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
+			if s.workflowEngine != nil {
+				s.workflowEngine.ConfigureGrpc(server)
+			}
 		}
 
 		go func(server *grpcGo.Server, l net.Listener) {

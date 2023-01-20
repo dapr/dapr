@@ -1074,7 +1074,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrReminderCanceled) {
 		log.Errorf("error executing reminder %s for actor type %s with id %s: %v", reminder.Name, reminder.ActorType, reminder.ActorID, err)
 	}
 	if imr != nil {
