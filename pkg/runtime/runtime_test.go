@@ -5428,8 +5428,13 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	assert.Nil(t, rt.pubsubCtx.Err())
 	rt.running.Store(true)
 	go sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second)
-	assert.Nil(t, rt.pubsubCtx)
+	select {
+	case <-rt.pubsubCtx.Done():
+		assert.NotNil(t, rt.pubsubCtx.Err()) // check that the context is not active
+		assert.True(t, errors.Is(rt.pubsubCtx.Err(), context.Canceled))
+	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
+		assert.Fail(t, "pubsub shutdown timed out")
+	}
 }
 
 func TestGracefulShutdownBindings(t *testing.T) {

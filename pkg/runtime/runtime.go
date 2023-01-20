@@ -3062,7 +3062,7 @@ func componentDependency(compCategory components.Category, name string) string {
 func (a *DaprRuntime) startSubscriptions() {
 	// Clean any previous state
 	if a.pubsubCancel != nil {
-		a.pubsubCancel()
+		a.stopSubscriptions() // Stop all subscriptions
 	}
 
 	// PubSub subscribers are stopped via cancellation of the main runtime's context
@@ -3077,11 +3077,12 @@ func (a *DaprRuntime) startSubscriptions() {
 
 // Stop subscriptions to all topics and cleans the cached topics
 func (a *DaprRuntime) stopSubscriptions() {
-	// Stop all subscriptions by canceling the subscription context
-	if a.pubsubCancel != nil {
-		a.pubsubCancel()
+	if a.pubsubCtx == nil || a.pubsubCtx.Err() != nil { // no pubsub to stop
+		return
 	}
-	a.pubsubCtx = nil
+	if a.pubsubCancel != nil {
+		a.pubsubCancel() // Stop all subscriptions by canceling the subscription context
+	}
 	a.pubsubCancel = nil
 
 	// Remove all contexts that are specific to each component (which have been canceled already by canceling pubsubCtx)
