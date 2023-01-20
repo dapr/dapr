@@ -70,6 +70,13 @@ type subscription struct {
 	Route           string            `json:"route"`
 	DeadLetterTopic string            `json:"deadLetterTopic"`
 	Metadata        map[string]string `json:"metadata"`
+	BulkSubscribe   BulkSubscribe     `json:"bulkSubscribe"`
+}
+
+type BulkSubscribe struct {
+	Enabled            bool  `json:"enabled"`
+	MaxMessagesCount   int32 `json:"maxMessagesCount,omitempty"`
+	MaxAwaitDurationMs int32 `json:"maxAwaitDurationMs,omitempty"`
 }
 
 type BulkRawMessage struct {
@@ -172,21 +179,23 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			PubsubName: pubsubkafkaName,
 			Topic:      pubsubRawBulkSubTopic,
 			Route:      pubsubRawBulkSubTopic,
+			BulkSubscribe: BulkSubscribe{
+				Enabled:            true,
+				MaxMessagesCount:   60,
+				MaxAwaitDurationMs: 1000,
+			},
 			Metadata: map[string]string{
-				"bulkSubscribe":             "true",
-				"rawPayload":                "true",
-				"maxBulkSubCount":           "60",
-				"maxBulkSubAwaitDurationMs": "1000",
+				"rawPayload": "true",
 			},
 		},
 		{
 			PubsubName: pubsubkafkaName,
 			Topic:      pubsubCEBulkSubTopic,
 			Route:      pubsubCEBulkSubTopic,
-			Metadata: map[string]string{
-				"bulkSubscribe":             "true",
-				"maxBulkSubCount":           "60",
-				"maxBulkSubAwaitDurationMs": "1000",
+			BulkSubscribe: BulkSubscribe{
+				Enabled:            true,
+				MaxMessagesCount:   60,
+				MaxAwaitDurationMs: 1000,
 			},
 		},
 	}
