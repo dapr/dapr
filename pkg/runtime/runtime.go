@@ -925,7 +925,7 @@ func (a *DaprRuntime) beginPubSub(name string) error {
 		err = a.subscribeTopic(a.pubsubCtx, name, topic, route)
 		if err != nil {
 			// Log the error only
-			log.Errorf("error occurred while beginning pubsub for component %s: %s", err)
+			log.Errorf("error occurred while beginning pubsub for topic %s on component %s: %v", topic, name, err)
 		}
 	}
 
@@ -3072,7 +3072,7 @@ func (a *DaprRuntime) startSubscriptions() {
 	a.topicCtxCancels = map[string]context.CancelFunc{}
 	for pubsubName := range a.pubSubs {
 		if err := a.beginPubSub(pubsubName); err != nil {
-			log.Errorf("error occurred while beginning pubsub %s: %s", pubsubName, err)
+			log.Errorf("error occurred while beginning pubsub %s: %v", pubsubName, err)
 		}
 	}
 }
