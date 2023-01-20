@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mitchellh/mapstructure"
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -61,7 +62,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
-	"github.com/mitchellh/mapstructure"
 )
 
 const (
@@ -348,7 +348,6 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 
 	if !rawPayload {
-
 		cloudevent := runtimePubsub.CloudEvent{
 			ID:              a.id,
 			Topic:           in.Topic,
