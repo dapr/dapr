@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,6 +62,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	"github.com/mitchellh/mapstructure"
 )
 
 const (
@@ -347,7 +349,8 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 
 	if !rawPayload {
-		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+
+		cloudevent := runtimePubsub.CloudEvent{
 			ID:              a.id,
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
@@ -355,7 +358,19 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
-		})
+		}
+
+		// metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
+		cloudeventOverrides := make(map[string]string)
+		for k, v := range in.Metadata {
+			if strings.HasPrefix(k, "cloudevent-") {
+				cloudeventOverrides[strings.TrimPrefix(k, "cloudevent-")] = v
+			}
+		}
+
+		mapstructure.WeakDecode(cloudeventOverrides, &cloudevent) // allows ignoring of case
+
+		envelope, err := runtimePubsub.NewCloudEvent(&cloudevent)
 		if err != nil {
 			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 			apiServerLogger.Debug(err)
