@@ -249,7 +249,10 @@ func testPublishBulk(t *testing.T, publisherExternalURL string, protocol string)
 	meta := map[string]string{
 		bulkPubsubMetaKey: pubsubKafka,
 	}
-	sentTopicBulkMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-bulk-topic", protocol, meta, "")
+	metadataCloudeventOverride := map[string]string{
+		"cloudevent-source": "e2e-test",
+	}
+	sentTopicBulkMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-bulk-topic", protocol, meta, metadataCloudeventOverride)
 	require.NoError(t, err)
 
 	sentTopicBulkCEMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-ce-bulk-topic", protocol, meta, "myevent.CE")
@@ -283,11 +286,15 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol, nil, "")
+	metadataCloudeventOverride := map[string]string{
+		"cloudevent-source": "e2e-test",
+	}
+
+	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol, nil, metadataCloudeventOverride)
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil, "")
+	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil, metadataCloudeventOverride)
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
