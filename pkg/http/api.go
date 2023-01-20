@@ -2270,14 +2270,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		// metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
-		cloudeventOverrides := make(map[string]string)
-		for k, v := range metadata {
-			if strings.HasPrefix(k, "cloudevent-") {
-				cloudeventOverrides[strings.TrimPrefix(k, "cloudevent-")] = v
-			}
-		}
-
-		mapstructure.WeakDecode(cloudeventOverrides, &cloudevent) // allows ignoring of case
+		mapstructure.WeakDecode(metadata, &cloudevent) // allows ignoring of case
 
 		envelope, err := runtimePubsub.NewCloudEvent(&cloudevent)
 		if err != nil {

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -361,14 +360,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		}
 
 		// metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
-		cloudeventOverrides := make(map[string]string)
-		for k, v := range in.Metadata {
-			if strings.HasPrefix(k, "cloudevent-") {
-				cloudeventOverrides[strings.TrimPrefix(k, "cloudevent-")] = v
-			}
-		}
-
-		mapstructure.WeakDecode(cloudeventOverrides, &cloudevent) // allows ignoring of case
+		mapstructure.WeakDecode(in.Metadata, &cloudevent) // allows ignoring of case
 
 		envelope, err := runtimePubsub.NewCloudEvent(&cloudevent)
 		if err != nil {

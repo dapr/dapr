@@ -21,18 +21,16 @@ import (
 // CloudEvent is a request object to create a Dapr compliant cloudevent.
 // The cloud event properties can manually be overwritten by using metadata beginning with "cloudevent-" as prefix.
 type CloudEvent struct {
-	ID              string `mapstructure:"id"`
-	Data            []byte `mapstructure:"data"`
-	Topic           string `mapstructure:"topic"`
-	Pubsub          string `mapstructure:"pubsub"`
-	DataContentType string `mapstructure:"datacontenttype"`
-	TraceID         string `mapstructure:"traceid"`
-	TraceState      string `mapstructure:"tracestate"`
-	Source          string `mapstructure:"source"`
-	Type            string `mapstructure:"type"`
-	TraceParent     string `mapstructure:"traceparent"`
-	SpecVersion     string `mapstructure:"specversion"`
-	Time            string `mapstructure:"time"`
+	ID              string `mapstructure:"cloudevent-id"`
+	Data            []byte `mapstructure:"cloudevent-data"`
+	Topic           string `mapstructure:"cloudevent-topic"`
+	Pubsub          string `mapstructure:"cloudevent-pubsub"`
+	DataContentType string `mapstructure:"cloudevent-datacontenttype"`
+	TraceID         string `mapstructure:"cloudevent-traceid"`
+	TraceState      string `mapstructure:"cloudevent-tracestate"`
+	Source          string `mapstructure:"cloudevent-source"`
+	Type            string `mapstructure:"cloudevent-type"`
+	TraceParent     string `mapstructure:"cloudevent-traceparent"`
 }
 
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
