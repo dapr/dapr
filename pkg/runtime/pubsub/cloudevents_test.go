@@ -23,35 +23,43 @@ import (
 func TestNewCloudEvent(t *testing.T) {
 	t.Run("raw payload", func(t *testing.T) {
 		ce, err := NewCloudEvent(&CloudEvent{
-			ID:              "a",
+			ID:              "",
+			Source:          "a",
 			Topic:           "b",
 			Data:            []byte("hello"),
 			Pubsub:          "c",
 			DataContentType: "",
 			TraceID:         "d",
+			Type:            "custom-type",
 		})
 		assert.NoError(t, err)
+		assert.NotEmpty(t, ce["id"])
 		assert.Equal(t, "a", ce["source"].(string))
 		assert.Equal(t, "b", ce["topic"].(string))
 		assert.Equal(t, "hello", ce["data"].(string))
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "d", ce["traceid"].(string))
+		assert.Equal(t, "custom-type", ce["type"].(string))
 	})
 
 	t.Run("raw payload no data", func(t *testing.T) {
 		ce, err := NewCloudEvent(&CloudEvent{
-			ID:              "a",
+			ID:              "testid",
+			Source:          "",
 			Topic:           "b",
 			Pubsub:          "c",
 			DataContentType: "",
 			TraceID:         "d",
+			Type:            "",
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, "a", ce["source"].(string))
+		assert.Equal(t, "testid", ce["id"].(string))
+		assert.Equal(t, "Dapr", ce["source"].(string))
 		assert.Equal(t, "b", ce["topic"].(string))
 		assert.Empty(t, ce["data"])
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "d", ce["traceid"].(string))
+		assert.Equal(t, "com.dapr.event.sent", ce["type"].(string))
 	})
 
 	t.Run("custom cloudevent", func(t *testing.T) {
