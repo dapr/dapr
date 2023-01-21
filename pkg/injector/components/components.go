@@ -70,10 +70,10 @@ func SplitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, co
 }
 
 // PatchOps returns the patch operations required to properly bootstrap the pluggable component and the respective volume mount for the sidecar.
-func PatchOps(componentContainers map[int]corev1.Container, injectedContainers []corev1.Container, pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount) {
+func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount) {
 	patches := make([]sidecar.PatchOperation, 0)
 
-	if len(componentContainers) == 0 && len(injectedContainers) == 0 {
+	if len(componentContainers) == 0 {
 		return patches, nil
 	}
 
@@ -95,48 +95,7 @@ func PatchOps(componentContainers map[int]corev1.Container, injectedContainers [
 		patches = append(patches, sidecar.GetVolumeMountPatchOperations(container.VolumeMounts, []corev1.VolumeMount{sharedSocketVolumeMount}, idx)...)
 	}
 
-	podVolumes := make(map[string]bool)
-
-	for _, volume := range pod.Spec.Volumes {
-		podVolumes[volume.Name] = true
-	}
-
-	for _, container := range injectedContainers {
-		container.Env = append(container.Env, componentsEnvVars...)
-		// mount volume as empty dir by default.
-		patches = append(patches, emptyVolumePatches(container, podVolumes, pod)...)
-		container.VolumeMounts = append(container.VolumeMounts, sharedSocketVolumeMount)
-
-		patches = append(patches, sidecar.PatchOperation{
-			Op:    "add",
-			Path:  sidecar.PatchPathContainers + "/-",
-			Value: container,
-		})
-	}
-
 	return patches, &sharedSocketVolumeMount
-}
-
-// emptyVolumePatches return all patches for pod emptyvolumes (the default value for injected pluggable components)
-func emptyVolumePatches(container corev1.Container, podVolumes map[string]bool, pod *corev1.Pod) []sidecar.PatchOperation {
-	volumePatches := make([]sidecar.PatchOperation, 0)
-	for _, volumeMount := range container.VolumeMounts {
-		if !podVolumes[volumeMount.Name] {
-			emptyDirVolume := corev1.Volume{
-				Name: volumeMount.Name,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			}
-			pod.Spec.Volumes = append(pod.Spec.Volumes, emptyDirVolume)
-			volumePatches = append(volumePatches, sidecar.PatchOperation{
-				Op:    "add",
-				Path:  sidecar.PatchPathVolumes + "/-",
-				Value: emptyDirVolume,
-			})
-		}
-	}
-	return volumePatches
 }
 
 // addSharedSocketVolume adds the new volume to the pod and return the patch operation and the mounted volume.
