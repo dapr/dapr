@@ -163,6 +163,10 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
 	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return newRecoverableError(errors.New(
+				"timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running"))
+		}
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 

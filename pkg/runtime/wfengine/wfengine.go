@@ -39,7 +39,8 @@ type WorkflowEngine struct {
 	workflowActor *workflowActor
 	activityActor *activityActor
 
-	started bool
+	actorRuntime actors.Actors
+	started      bool
 }
 
 var (
@@ -77,7 +78,13 @@ func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
 func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
 	wfLogger.Info("configuring workflow engine gRPC endpoint")
 	wfe.ConfigureExecutor(func(be backend.Backend) backend.Executor {
-		return backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger)
+		// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
+		autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) {
+			if err := wfe.Start(ctx); err != nil {
+				wfLogger.Errorf("failed to auto-start the workflow engine: %w", err)
+			}
+		})
+		return backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger, autoStartCallback)
 	})
 }
 
@@ -87,13 +94,7 @@ func (wfe *WorkflowEngine) ConfigureExecutor(factory func(be backend.Backend) ba
 
 func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) error {
 	wfLogger.Info("configuring workflow engine with actors backend")
-	for actorType, actor := range wfe.InternalActors() {
-		if err := actorRuntime.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
-			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
-		}
-	}
-
-	wfLogger.Infof("workflow actors registered, workflow engine is ready")
+	wfe.actorRuntime = actorRuntime
 	wfe.backend.SetActorRuntime(actorRuntime)
 
 	return nil
@@ -131,15 +132,20 @@ func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) error {
-
 	if wfe.started {
 		return nil
 	}
 
-	if wfe.backend.actors == nil {
-		return errors.New("backend actor runtime is not configured")
+	if wfe.actorRuntime == nil {
+		return errors.New("actor runtime is not configured")
 	} else if wfe.executor == nil {
 		return errors.New("grpc executor is not yet configured")
+	}
+
+	for actorType, actor := range wfe.InternalActors() {
+		if err := wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor); err != nil {
+			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
+		}
 	}
 
 	// TODO: Determine whether a more dynamic parallelism configuration is necessary.

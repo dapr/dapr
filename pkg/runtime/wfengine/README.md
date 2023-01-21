@@ -36,10 +36,18 @@ After building, the following bash command can be run from the project root to t
 Here's an example of the log output you'll see from Dapr when the workflow engine is enabled:
 
 ```
-INFO[0000] configuring workflow engine gRPC endpoint         app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-INFO[0000] configuring workflow engine with actors backend   app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-INFO[0000] worker started with backend dapr.actors/v1-alpha  app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-INFO[0000] workflow engine started                           app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0000] configuring workflow engine gRPC endpoint          app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0000] configuring workflow engine with actors backend    app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0000] Registering component for dapr workflow engine...  app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0000] Initializing Dapr workflow engine                  app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+```
+
+Note that the workflow engine doesn't fully start up until an application opens a work-item stream on it, after which you'll see the following logs:
+
+```
+INFO[0146] work item stream established by user-agent: XYZ   app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0146] worker started with backend dapr.actors/v1-alpha  app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0146] workflow engine started                           app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
 ```
 
 If you want to see the full set of logs, run daprd with verbose logging enabled (`--log-level debug`). You'll see a few additional logs in this case, indicating that the workflow engine is waiting for new work items:

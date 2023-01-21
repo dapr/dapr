@@ -282,6 +282,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
 	if err := wf.scheduler.ScheduleWorkflow(ctx, wi); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return newRecoverableError(errors.New(
+				"timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running"))
+		}
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 

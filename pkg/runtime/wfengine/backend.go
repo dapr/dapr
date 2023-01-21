@@ -36,7 +36,6 @@ type actorBackend struct {
 	actors                    actors.Actors
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
-	engine                    *WorkflowEngine
 	started                   bool
 }
 
@@ -44,7 +43,6 @@ func NewActorBackend(engine *WorkflowEngine) *actorBackend {
 	return &actorBackend{
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem),
-		engine:                    engine,
 	}
 }
 
@@ -244,19 +242,11 @@ func (be *actorBackend) Start(ctx context.Context) error {
 	if be.started {
 		return nil
 	}
-
-	be.started = true
-	if err := be.engine.Start(ctx); err != nil {
-		be.started = false
+	if err := be.validateConfiguration(); err != nil {
 		return err
-	} else {
-		if err := be.validateConfiguration(); err != nil {
-			be.started = false
-			return err
-		} else {
-			return nil
-		}
 	}
+	be.started = true
+	return nil
 }
 
 // Stop implements backend.Backend
