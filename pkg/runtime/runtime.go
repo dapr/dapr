@@ -1553,7 +1553,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 		// TODO: Propagate Context
 		resp, err := a.appChannel.InvokeMethod(context.TODO(), req)
 		if err != nil {
-			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %w", path, err)
+			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
 		defer resp.Close()
 		code := resp.Status().Code
