@@ -12,7 +12,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
 * Kubernetes cluster (Minikube and Kind are valid options too).
   - To setup a new Kind cluster and local registry, run `make setup-kind`.
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-  - [Install the latest Helm v3](https://docs.dapr.io/getting-started/install-dapr/#install-with-helm-advanced).
+  - [Install the latest Helm v3](https://helm.sh/docs/intro/install/).
 * Create your DockerHub ID
 * Create dapr-tests namespace
     ```bash
