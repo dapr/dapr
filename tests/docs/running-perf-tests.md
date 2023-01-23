@@ -12,7 +12,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
 * Kubernetes cluster (Minikube and Kind are valid options too).
   - To setup a new Kind cluster and local registry, run `make setup-kind`.
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-  - [Install the latest Helm v3](https://docs.dapr.io/getting-started/install-dapr/#install-with-helm-advanced).
+  - [Install the latest Helm v3](https://helm.sh/docs/intro/install/).
 * Create your DockerHub ID
 * Create dapr-tests namespace
     ```bash
@@ -34,7 +34,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
     # export DARP_TEST_TAG=dev
     # export DAPR_TEST_REGISTRY_SECRET=yourself_private_image_secret
 
-    # Set the below environment variables to configure test specific settings.
+    # Set the below environment variables to configure test specific settings for Fortio based tests.
     # DAPR_PERF_QPS sets the desired number of requests per second. Default is 1.
     # DAPR_PERF_CONNECTIONS sets the number of client connections used to send requests to Dapr. Default is 1.
     # DAPR_TEST_DURATION sets the duration of the test. Default is "1m".
@@ -101,7 +101,7 @@ make setup-test-components
 
 ### Build and push test apps to docker hub
 
-Build docker images from apps and push the images to test docker hub
+Build docker images from apps and push the images to test docker hub.
 
 ```bash
 # build perf apps docker image under apps/
@@ -109,6 +109,28 @@ make build-perf-app-all
 
 # push perf apps docker image to docker hub
 make push-perf-app-all
+```
+
+You can also build and push the test apps individually.
+
+```bash
+# build perf apps docker image under apps/
+make build-perf-app-<app-name>
+
+# push perf apps docker image to docker hub
+make push-perf-app-<app-name>
+```
+
+If you are building test apps individually, you need to build and push the tester app also:
+- tester (`build-perf-app-tester` and `push-perf-app-tester`) for Fortio based tests
+- k6-custom (`build-perf-app-k6-custom` and `push-perf-app-k6-custom`) for k6 based tests
+
+### (k6) Install the k6-operator
+
+If you are running k6 based tests, install the k6-operator.
+
+```bash
+make setup-test-env-k6
 ```
 
 ### Run performance tests
