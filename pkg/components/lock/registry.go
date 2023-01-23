@@ -33,32 +33,38 @@ func (r *Registry) RegisterComponent(componentFactory func(logger.Logger) lock.S
 	}
 }
 
-func (r *Registry) Create(name, version string) (lock.Store, error) {
-	if method, ok := r.getStore(name, version); ok {
+func (r *Registry) Create(name, version, logName string) (lock.Store, error) {
+	if method, ok := r.getStore(name, version, logName); ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find lock store %s/%s", name, version)
 }
 
-func (r *Registry) getStore(name, version string) (func() lock.Store, bool) {
+func (r *Registry) getStore(name, version, logName string) (func() lock.Store, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	factoryMethod, ok := r.stores[nameLower+"/"+versionLower]
 	if ok {
-		return r.wrapFn(factoryMethod), true
+		return r.wrapFn(factoryMethod, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		factoryMethod, ok = r.stores[nameLower]
 		if ok {
-			return r.wrapFn(factoryMethod), true
+			return r.wrapFn(factoryMethod, logName), true
 		}
 	}
 	return nil, false
 }
 
-func (r *Registry) wrapFn(componentFactory func(logger.Logger) lock.Store) func() lock.Store {
+func (r *Registry) wrapFn(componentFactory func(logger.Logger) lock.Store, logName string) func() lock.Store {
 	return func() lock.Store {
-		return componentFactory(r.Logger)
+		l := r.Logger
+		if logName != "" {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 

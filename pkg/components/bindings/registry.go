@@ -55,16 +55,16 @@ func (b *Registry) RegisterOutputBinding(componentFactory func(logger.Logger) bi
 }
 
 // CreateInputBinding Create instantiates an input binding based on `name`.
-func (b *Registry) CreateInputBinding(name, version string) (bindings.InputBinding, error) {
-	if method, ok := b.getInputBinding(name, version); ok {
+func (b *Registry) CreateInputBinding(name, version, logName string) (bindings.InputBinding, error) {
+	if method, ok := b.getInputBinding(name, version, logName); ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find input binding %s/%s", name, version)
 }
 
 // CreateOutputBinding Create instantiates an output binding based on `name`.
-func (b *Registry) CreateOutputBinding(name, version string) (bindings.OutputBinding, error) {
-	if method, ok := b.getOutputBinding(name, version); ok {
+func (b *Registry) CreateOutputBinding(name, version, logName string) (bindings.OutputBinding, error) {
+	if method, ok := b.getOutputBinding(name, version, logName); ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find output binding %s/%s", name, version)
@@ -72,59 +72,71 @@ func (b *Registry) CreateOutputBinding(name, version string) (bindings.OutputBin
 
 // HasInputBinding checks if an input binding based on `name` exists in the registry.
 func (b *Registry) HasInputBinding(name, version string) bool {
-	_, ok := b.getInputBinding(name, version)
+	_, ok := b.getInputBinding(name, version, "")
 	return ok
 }
 
 // HasOutputBinding checks if an output binding based on `name` exists in the registry.
 func (b *Registry) HasOutputBinding(name, version string) bool {
-	_, ok := b.getOutputBinding(name, version)
+	_, ok := b.getOutputBinding(name, version, "")
 	return ok
 }
 
-func (b *Registry) getInputBinding(name, version string) (func() bindings.InputBinding, bool) {
+func (b *Registry) getInputBinding(name, version, logName string) (func() bindings.InputBinding, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	bindingFn, ok := b.inputBindings[nameLower+"/"+versionLower]
 	if ok {
-		return b.wrapInputBindingFn(bindingFn), true
+		return b.wrapInputBindingFn(bindingFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		bindingFn, ok = b.inputBindings[nameLower]
 		if ok {
-			return b.wrapInputBindingFn(bindingFn), true
+			return b.wrapInputBindingFn(bindingFn, logName), true
 		}
 	}
 
 	return nil, false
 }
 
-func (b *Registry) getOutputBinding(name, version string) (func() bindings.OutputBinding, bool) {
+func (b *Registry) getOutputBinding(name, version, logName string) (func() bindings.OutputBinding, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	bindingFn, ok := b.outputBindings[nameLower+"/"+versionLower]
 	if ok {
-		return b.wrapOutputBindingFn(bindingFn), true
+		return b.wrapOutputBindingFn(bindingFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		bindingFn, ok = b.outputBindings[nameLower]
 		if ok {
-			return b.wrapOutputBindingFn(bindingFn), true
+			return b.wrapOutputBindingFn(bindingFn, logName), true
 		}
 	}
 
 	return nil, false
 }
 
-func (b *Registry) wrapInputBindingFn(componentFactory func(logger.Logger) bindings.InputBinding) func() bindings.InputBinding {
+func (b *Registry) wrapInputBindingFn(componentFactory func(logger.Logger) bindings.InputBinding, logName string) func() bindings.InputBinding {
 	return func() bindings.InputBinding {
-		return componentFactory(b.Logger)
+		l := b.Logger
+		if logName != "" {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 
-func (b *Registry) wrapOutputBindingFn(componentFactory func(logger.Logger) bindings.OutputBinding) func() bindings.OutputBinding {
+func (b *Registry) wrapOutputBindingFn(componentFactory func(logger.Logger) bindings.OutputBinding, logName string) func() bindings.OutputBinding {
 	return func() bindings.OutputBinding {
-		return componentFactory(b.Logger)
+		l := b.Logger
+		if logName != "" {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 

@@ -54,14 +54,14 @@ func (s *Registry) RegisterComponent(componentFactory FactoryMethod, names ...st
 }
 
 // Create instantiates a name resolution resolver based on `name`.
-func (s *Registry) Create(name, version string) (nr.Resolver, error) {
-	if method, ok := s.getResolver(createFullName(name), version); ok {
+func (s *Registry) Create(name, version, logName string) (nr.Resolver, error) {
+	if method, ok := s.getResolver(createFullName(name), version, logName); ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find name resolver %s/%s", name, version)
 }
 
-func (s *Registry) getResolver(name, version string) (func() nr.Resolver, bool) {
+func (s *Registry) getResolver(name, version, logName string) (func() nr.Resolver, bool) {
 	if s.resolvers == nil {
 		return nil, false
 	}
@@ -69,20 +69,26 @@ func (s *Registry) getResolver(name, version string) (func() nr.Resolver, bool) 
 	versionLower := strings.ToLower(version)
 	resolverFn, ok := s.resolvers[nameLower+"/"+versionLower]
 	if ok {
-		return s.wrapFn(resolverFn), true
+		return s.wrapFn(resolverFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		resolverFn, ok = s.resolvers[nameLower]
 		if ok {
-			return s.wrapFn(resolverFn), true
+			return s.wrapFn(resolverFn, logName), true
 		}
 	}
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory FactoryMethod) func() nr.Resolver {
+func (s *Registry) wrapFn(componentFactory FactoryMethod, logName string) func() nr.Resolver {
 	return func() nr.Resolver {
-		return componentFactory(s.Logger)
+		l := s.Logger
+		if logName != "" {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 

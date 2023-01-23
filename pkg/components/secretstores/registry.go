@@ -53,33 +53,39 @@ func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) secret
 }
 
 // Create instantiates a secret store based on `name`.
-func (s *Registry) Create(name, version string) (secretstores.SecretStore, error) {
-	if method, ok := s.getSecretStore(name, version); ok {
+func (s *Registry) Create(name, version, logName string) (secretstores.SecretStore, error) {
+	if method, ok := s.getSecretStore(name, version, logName); ok {
 		return method(), nil
 	}
 
 	return nil, fmt.Errorf("couldn't find secret store %s/%s", name, version)
 }
 
-func (s *Registry) getSecretStore(name, version string) (func() secretstores.SecretStore, bool) {
+func (s *Registry) getSecretStore(name, version, logName string) (func() secretstores.SecretStore, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	secretStoreFn, ok := s.secretStores[nameLower+"/"+versionLower]
 	if ok {
-		return s.wrapFn(secretStoreFn), true
+		return s.wrapFn(secretStoreFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		secretStoreFn, ok = s.secretStores[nameLower]
 		if ok {
-			return s.wrapFn(secretStoreFn), true
+			return s.wrapFn(secretStoreFn, logName), true
 		}
 	}
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory func(logger.Logger) secretstores.SecretStore) func() secretstores.SecretStore {
+func (s *Registry) wrapFn(componentFactory func(logger.Logger) secretstores.SecretStore, logName string) func() secretstores.SecretStore {
 	return func() secretstores.SecretStore {
-		return componentFactory(s.Logger)
+		l := s.Logger
+		if logName != "" {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 

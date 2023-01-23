@@ -45,32 +45,38 @@ func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) wfs.Wo
 	}
 }
 
-func (s *Registry) Create(name, version string) (wfs.Workflow, error) {
-	if method, ok := s.getWorkflowComponent(name, version); ok {
+func (s *Registry) Create(name, version, logName string) (wfs.Workflow, error) {
+	if method, ok := s.getWorkflowComponent(name, version, logName); ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find wokflow %s/%s", name, version)
 }
 
-func (s *Registry) getWorkflowComponent(name, version string) (func() wfs.Workflow, bool) {
+func (s *Registry) getWorkflowComponent(name, version, logName string) (func() wfs.Workflow, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	workflowFn, ok := s.workflowComponents[nameLower+"/"+versionLower]
 	if ok {
-		return s.wrapFn(workflowFn), true
+		return s.wrapFn(workflowFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		workflowFn, ok = s.workflowComponents[nameLower]
 		if ok {
-			return s.wrapFn(workflowFn), true
+			return s.wrapFn(workflowFn, logName), true
 		}
 	}
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory func(logger.Logger) wfs.Workflow) func() wfs.Workflow {
+func (s *Registry) wrapFn(componentFactory func(logger.Logger) wfs.Workflow, logName string) func() wfs.Workflow {
 	return func() wfs.Workflow {
-		return componentFactory(s.Logger)
+		l := s.Logger
+		if logName != "" {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 

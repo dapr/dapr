@@ -51,20 +51,20 @@ func TestRegistry(t *testing.T) {
 		}, resolverNameV2)
 
 		// assert v0 and v1
-		p, e := testRegistry.Create(resolverName, "v0")
+		p, e := testRegistry.Create(resolverName, "v0", "")
 		assert.NoError(t, e)
 		assert.Same(t, mock, p)
-		p, e = testRegistry.Create(resolverName, "v1")
+		p, e = testRegistry.Create(resolverName, "v1", "")
 		assert.NoError(t, e)
 		assert.Same(t, mock, p)
 
 		// assert v2
-		pV2, e := testRegistry.Create(resolverName, "v2")
+		pV2, e := testRegistry.Create(resolverName, "v2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 
 		// check case-insensitivity
-		pV2, e = testRegistry.Create(strings.ToUpper(resolverName), "V2")
+		pV2, e = testRegistry.Create(strings.ToUpper(resolverName), "V2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 	})
@@ -75,7 +75,7 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// act
-		p, actualError := testRegistry.Create(resolverName, "v1")
+		p, actualError := testRegistry.Create(resolverName, "v1", "")
 		expectedError := fmt.Errorf("couldn't find name resolver %s/v1", resolverName)
 
 		// assert

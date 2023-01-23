@@ -48,32 +48,38 @@ func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) config
 	}
 }
 
-func (s *Registry) Create(name, version string) (configuration.Store, error) {
-	if method, ok := s.getConfigurationStore(name, version); ok {
+func (s *Registry) Create(name, version, logName string) (configuration.Store, error) {
+	if method, ok := s.getConfigurationStore(name, version, logName); ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find configuration store %s/%s", name, version)
 }
 
-func (s *Registry) getConfigurationStore(name, version string) (func() configuration.Store, bool) {
+func (s *Registry) getConfigurationStore(name, version, logName string) (func() configuration.Store, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	configurationStoreFn, ok := s.configurationStores[nameLower+"/"+versionLower]
 	if ok {
-		return s.wrapFn(configurationStoreFn), true
+		return s.wrapFn(configurationStoreFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		configurationStoreFn, ok = s.configurationStores[nameLower]
 		if ok {
-			return s.wrapFn(configurationStoreFn), true
+			return s.wrapFn(configurationStoreFn, logName), true
 		}
 	}
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory func(logger.Logger) configuration.Store) func() configuration.Store {
+func (s *Registry) wrapFn(componentFactory func(logger.Logger) configuration.Store, logName string) func() configuration.Store {
 	return func() configuration.Store {
-		return componentFactory(s.Logger)
+		l := s.Logger
+		if logName != "" {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 
