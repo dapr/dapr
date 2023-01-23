@@ -142,11 +142,6 @@ type HandlerSpec struct {
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
-const (
-	logNameFmt        = "%s (%s)"
-	logNameVersionFmt = "%s (%s/%s)"
-)
-
 // LogName returns the name of the handler that can be used in logging.
 func (h HandlerSpec) LogName() string {
 	return utils.ComponentLogName(h.Name, h.Type, h.Version)
