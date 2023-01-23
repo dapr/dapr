@@ -83,7 +83,7 @@ func (s *Registry) getResolver(name, version, logName string) (func() nr.Resolve
 func (s *Registry) wrapFn(componentFactory FactoryMethod, logName string) func() nr.Resolver {
 	return func() nr.Resolver {
 		l := s.Logger
-		if logName != "" {
+		if logName != "" && l != nil {
 			l = l.WithFields(map[string]any{
 				"component": logName,
 			})

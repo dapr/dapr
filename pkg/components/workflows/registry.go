@@ -71,7 +71,7 @@ func (s *Registry) getWorkflowComponent(name, version, logName string) (func() w
 func (s *Registry) wrapFn(componentFactory func(logger.Logger) wfs.Workflow, logName string) func() wfs.Workflow {
 	return func() wfs.Workflow {
 		l := s.Logger
-		if logName != "" {
+		if logName != "" && l != nil {
 			l = l.WithFields(map[string]any{
 				"component": logName,
 			})

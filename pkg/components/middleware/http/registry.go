@@ -85,7 +85,7 @@ func (p *Registry) getMiddleware(name, version, logName string) (FactoryMethod, 
 
 func (p *Registry) applyLogger(componentFactory func(logger.Logger) FactoryMethod, logName string) FactoryMethod {
 	l := p.Logger
-	if logName != "" {
+	if logName != "" && l != nil {
 		l = l.WithFields(map[string]any{
 			"component": logName,
 		})

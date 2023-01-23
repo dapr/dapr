@@ -16,6 +16,7 @@ package v1alpha1
 import (
 	"strconv"
 
+	"github.com/dapr/dapr/utils"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -40,6 +41,11 @@ type Component struct {
 // Kind returns the component kind.
 func (Component) Kind() string {
 	return "Component"
+}
+
+// LogName returns the name of the component that can be used in logging.
+func (c Component) LogName() string {
+	return utils.ComponentLogName(c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 }
 
 // ComponentSpec is the spec for a component.

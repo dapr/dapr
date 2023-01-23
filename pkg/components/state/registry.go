@@ -72,7 +72,7 @@ func (s *Registry) getStateStore(name, version, logName string) (func() state.St
 func (s *Registry) wrapFn(componentFactory func(logger.Logger) state.Store, logName string) func() state.Store {
 	return func() state.Store {
 		l := s.Logger
-		if logName != "" {
+		if logName != "" && l != nil {
 			l = l.WithFields(map[string]any{
 				"component": logName,
 			})

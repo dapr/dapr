@@ -119,7 +119,7 @@ func (b *Registry) getOutputBinding(name, version, logName string) (func() bindi
 func (b *Registry) wrapInputBindingFn(componentFactory func(logger.Logger) bindings.InputBinding, logName string) func() bindings.InputBinding {
 	return func() bindings.InputBinding {
 		l := b.Logger
-		if logName != "" {
+		if logName != "" && l != nil {
 			l = l.WithFields(map[string]any{
 				"component": logName,
 			})
@@ -131,7 +131,7 @@ func (b *Registry) wrapInputBindingFn(componentFactory func(logger.Logger) bindi
 func (b *Registry) wrapOutputBindingFn(componentFactory func(logger.Logger) bindings.OutputBinding, logName string) func() bindings.OutputBinding {
 	return func() bindings.OutputBinding {
 		l := b.Logger
-		if logName != "" {
+		if logName != "" && l != nil {
 			l = l.WithFields(map[string]any{
 				"component": logName,
 			})

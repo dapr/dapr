@@ -80,7 +80,7 @@ func (s *Registry) getSecretStore(name, version, logName string) (func() secrets
 func (s *Registry) wrapFn(componentFactory func(logger.Logger) secretstores.SecretStore, logName string) func() secretstores.SecretStore {
 	return func() secretstores.SecretStore {
 		l := s.Logger
-		if logName != "" {
+		if logName != "" && l != nil {
 			l = l.WithFields(map[string]any{
 				"component": logName,
 			})

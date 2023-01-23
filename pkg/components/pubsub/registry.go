@@ -72,7 +72,7 @@ func (p *Registry) getPubSub(name, version, logName string) (func() pubsub.PubSu
 func (p *Registry) wrapFn(componentFactory func(logger.Logger) pubsub.PubSub, logName string) func() pubsub.PubSub {
 	return func() pubsub.PubSub {
 		l := p.Logger
-		if logName != "" {
+		if logName != "" && l != nil {
 			l = l.WithFields(map[string]any{
 				"component": logName,
 			})
