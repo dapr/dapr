@@ -605,7 +605,6 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 					log.Infof("No workflow registry available, not registering Dapr workflow component...")
 				}
 			}
-
 		}
 	}
 
