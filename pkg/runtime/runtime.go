@@ -595,12 +595,17 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 			if wfInitErr := a.workflowEngine.SetActorRuntime(a.actor); wfInitErr != nil {
 				log.Warnf("Failed to set actor runtime for Dapr workflow engine - workflow engine will not start: %w", wfInitErr)
 			} else {
-				log.Infof("Registering component for dapr workflow engine...")
-				a.workflowComponentRegistry.RegisterComponent(wfComponentFactory, "dapr")
-				if componentInitErr := a.initWorkflowComponent(wfengine.ComponentDefinition); componentInitErr != nil {
-					log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
+				if a.workflowComponentRegistry != nil {
+					log.Infof("Registering component for dapr workflow engine...")
+					a.workflowComponentRegistry.RegisterComponent(wfComponentFactory, "dapr")
+					if componentInitErr := a.initWorkflowComponent(wfengine.ComponentDefinition); componentInitErr != nil {
+						log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
+					}
+				} else {
+					log.Infof("No workflow registry available, not registering Dapr workflow component...")
 				}
 			}
+
 		}
 	}
 
