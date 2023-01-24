@@ -10,7 +10,7 @@ metadata:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: dapr-operator
+  name: dapr-operator-admin
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
@@ -41,7 +41,7 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: dapr-operator
+  name: dapr-operator-admin
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
@@ -53,7 +53,7 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: dapr-operator
+  name: dapr-operator-admin
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
