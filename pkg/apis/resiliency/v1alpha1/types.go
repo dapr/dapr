@@ -14,6 +14,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"encoding/json"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,6 +31,12 @@ type Resiliency struct {
 	Spec ResiliencySpec `json:"spec,omitempty"`
 	// +optional
 	Scopes []string `json:"scopes,omitempty"`
+}
+
+// String implements fmt.Stringer and is used for debugging. It returns the policy object encoded as JSON.
+func (r Resiliency) String() string {
+	b, _ := json.Marshal(r)
+	return string(b)
 }
 
 type ResiliencySpec struct {
