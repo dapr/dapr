@@ -50,33 +50,39 @@ func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) crypto
 }
 
 // Create instantiates a crypto provider based on `name`.
-func (s *Registry) Create(name, version string) (crypto.SubtleCrypto, error) {
-	if method, ok := s.getCryptoProvider(name, version); ok {
+func (s *Registry) Create(name, version, logName string) (crypto.SubtleCrypto, error) {
+	if method, ok := s.getCryptoProvider(name, version, logName); ok {
 		return method(), nil
 	}
 
 	return nil, fmt.Errorf("couldn't find crypto provider %s/%s", name, version)
 }
 
-func (s *Registry) getCryptoProvider(name, version string) (func() crypto.SubtleCrypto, bool) {
+func (s *Registry) getCryptoProvider(name, version, logName string) (func() crypto.SubtleCrypto, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	cryptoProviderFn, ok := s.providers[nameLower+"/"+versionLower]
 	if ok {
-		return s.wrapFn(cryptoProviderFn), true
+		return s.wrapFn(cryptoProviderFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		cryptoProviderFn, ok = s.providers[nameLower]
 		if ok {
-			return s.wrapFn(cryptoProviderFn), true
+			return s.wrapFn(cryptoProviderFn, logName), true
 		}
 	}
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory func(logger.Logger) crypto.SubtleCrypto) func() crypto.SubtleCrypto {
+func (s *Registry) wrapFn(componentFactory func(logger.Logger) crypto.SubtleCrypto, logName string) func() crypto.SubtleCrypto {
 	return func() crypto.SubtleCrypto {
-		return componentFactory(s.Logger)
+		l := s.Logger
+		if logName != "" && l != nil {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 
