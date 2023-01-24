@@ -66,21 +66,21 @@ func TestCreatePubSub(t *testing.T) {
 		}, pubSubNameV2)
 
 		// assert v0 and v1
-		p, e := testRegistry.Create(componentName, "v0")
+		p, e := testRegistry.Create(componentName, "v0", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSub, p)
 
-		p, e = testRegistry.Create(componentName, "v1")
+		p, e = testRegistry.Create(componentName, "v1", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSub, p)
 
 		// assert v2
-		pV2, e := testRegistry.Create(componentName, "v2")
+		pV2, e := testRegistry.Create(componentName, "v2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSubV2, pV2)
 
 		// check case-insensitivity
-		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2")
+		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSubV2, pV2)
 	})
@@ -89,7 +89,7 @@ func TestCreatePubSub(t *testing.T) {
 		const PubSubName = "fakePubSub"
 
 		// act
-		p, actualError := testRegistry.Create(createFullName(PubSubName), "v1")
+		p, actualError := testRegistry.Create(createFullName(PubSubName), "v1", "")
 		expectedError := fmt.Errorf("couldn't find message bus %s/v1", createFullName(PubSubName))
 		// assert
 		assert.Nil(t, p)

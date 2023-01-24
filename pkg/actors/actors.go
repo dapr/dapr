@@ -408,7 +408,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	targetAddress, targetID string, req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
+	if !a.resiliency.PolicyDefined(req.Actor().ActorType, resiliency.ActorPolicy{}) {
 		// This policy has built-in retries so enable replay in the request
 		req.WithReplay(true)
 		policyRunner := resiliency.NewRunnerWithOptions(ctx,
@@ -1481,7 +1481,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (re
 	}
 
 	var policyDef *resiliency.PolicyDefinition
-	if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
+	if !a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutboundPolicy) {
 		// If there is no policy defined, wrap the whole logic in the built-in.
 		policyDef = a.resiliency.BuiltInPolicy(resiliency.BuiltInActorReminderRetries)
 	} else {
@@ -1802,7 +1802,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 	}
 
 	var policyDef *resiliency.PolicyDefinition
-	if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
+	if !a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutboundPolicy) {
 		// If there is no policy defined, wrap the whole logic in the built-in.
 		policyDef = a.resiliency.BuiltInPolicy(resiliency.BuiltInActorReminderRetries)
 	} else {
@@ -1924,7 +1924,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 	a.activeReminders.Store(reminderKey, stopChannel)
 
 	var policyDef *resiliency.PolicyDefinition
-	if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
+	if !a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutboundPolicy) {
 		// If there is no policy defined, wrap the whole logic in the built-in.
 		policyDef = a.resiliency.BuiltInPolicy(resiliency.BuiltInActorReminderRetries)
 	} else {

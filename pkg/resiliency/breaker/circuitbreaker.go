@@ -15,6 +15,7 @@ package breaker
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/sony/gobreaker"
@@ -124,4 +125,12 @@ func (c *CircuitBreaker) Execute(oper func() (any, error)) (any, error) {
 		// the cases listed above.
 		return res, err //nolint:wrapcheck
 	}
+}
+
+// String implements fmt.Stringer and is used for debugging.
+func (c CircuitBreaker) String() string {
+	return fmt.Sprintf(
+		"name='%s' namRequests='%d' interval='%v' timeout='%v' trip='%v'",
+		c.Name, c.MaxRequests, c.Interval, c.Timeout, c.Trip,
+	)
 }
