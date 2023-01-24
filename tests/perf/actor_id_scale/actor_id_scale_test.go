@@ -70,7 +70,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorIdStress(t *testing.T) {
-	t.Skip("skipping due to flakiness")
 	// Get the ingress external url of test app
 	testServiceAppURL := tr.Platform.AcquireAppExternalURL(serviceApplicationName)
 	require.NotEmpty(t, testServiceAppURL, "test app external URL must not be empty")
