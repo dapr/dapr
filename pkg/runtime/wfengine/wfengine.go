@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
@@ -40,7 +41,7 @@ type WorkflowEngine struct {
 	activityActor *activityActor
 
 	actorRuntime actors.Actors
-	started      bool
+	startedOnce  sync.Once
 }
 
 var (
@@ -132,34 +133,38 @@ func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) error {
-	if wfe.started {
-		return nil
-	}
-
-	if wfe.actorRuntime == nil {
-		return errors.New("actor runtime is not configured")
-	} else if wfe.executor == nil {
-		return errors.New("grpc executor is not yet configured")
-	}
-
-	for actorType, actor := range wfe.InternalActors() {
-		if err := wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor); err != nil {
-			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
+	var err error
+	wfe.startedOnce.Do(func() {
+		if wfe.actorRuntime == nil {
+			err = errors.New("actor runtime is not configured")
+			return
+		} else if wfe.executor == nil {
+			err = errors.New("grpc executor is not yet configured")
+			return
 		}
-	}
 
-	// TODO: Determine whether a more dynamic parallelism configuration is necessary.
-	parallelismOpts := backend.WithMaxParallelism(100)
+		for actorType, actor := range wfe.InternalActors() {
+			err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor)
+			if err != nil {
+				err = fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
+				return
+			}
+		}
 
-	orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
-	activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
-	taskHubWorker := backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfLogger)
-	if err := taskHubWorker.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start workflow engine: %w", err)
-	}
+		// TODO: Determine whether a more dynamic parallelism configuration is necessary.
+		parallelismOpts := backend.WithMaxParallelism(100)
 
-	wfe.started = true
-	wfLogger.Info("workflow engine started")
+		orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
+		activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
+		taskHubWorker := backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfLogger)
+		err = taskHubWorker.Start(ctx)
+		if err != nil {
+			err = fmt.Errorf("failed to start workflow engine: %w", err)
+			return
+		}
 
-	return nil
+		wfLogger.Info("workflow engine started")
+	})
+
+	return err
 }

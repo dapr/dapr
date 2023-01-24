@@ -590,21 +590,8 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			a.daprGRPCAPI.SetActorRuntime(a.actor)
 
-			wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
-
-			if wfInitErr := a.workflowEngine.SetActorRuntime(a.actor); wfInitErr != nil {
-				log.Warnf("Failed to set actor runtime for Dapr workflow engine - workflow engine will not start: %w", wfInitErr)
-			} else {
-				if a.workflowComponentRegistry != nil {
-					log.Infof("Registering component for dapr workflow engine...")
-					a.workflowComponentRegistry.RegisterComponent(wfComponentFactory, "dapr")
-					if componentInitErr := a.initWorkflowComponent(wfengine.ComponentDefinition); componentInitErr != nil {
-						log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
-					}
-				} else {
-					log.Infof("No workflow registry available, not registering Dapr workflow component...")
-				}
-			}
+			// Workflow engine depends on actor runtime being initialized
+			a.initWorkflowEngine()
 		}
 	}
 
@@ -624,6 +611,24 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 			Workflows:       a.workflowComponents,
 		}); err != nil {
 			log.Fatalf("failed to register components with callback: %s", err)
+		}
+	}
+}
+
+func (a *DaprRuntime) initWorkflowEngine() {
+	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
+
+	if wfInitErr := a.workflowEngine.SetActorRuntime(a.actor); wfInitErr != nil {
+		log.Warnf("Failed to set actor runtime for Dapr workflow engine - workflow engine will not start: %w", wfInitErr)
+	} else {
+		if a.workflowComponentRegistry != nil {
+			log.Infof("Registering component for dapr workflow engine...")
+			a.workflowComponentRegistry.RegisterComponent(wfComponentFactory, "dapr")
+			if componentInitErr := a.initWorkflowComponent(wfengine.ComponentDefinition); componentInitErr != nil {
+				log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
+			}
+		} else {
+			log.Infof("No workflow registry available, not registering Dapr workflow component...")
 		}
 	}
 }

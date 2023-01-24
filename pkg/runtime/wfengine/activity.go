@@ -212,7 +212,7 @@ loop:
 
 // InvokeTimer implements actors.InternalActor
 func (*activityActor) InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error {
-	return nil // timers are not used
+	return errors.New("timers are not implemented")
 }
 
 // DeactivateActor implements actors.InternalActor

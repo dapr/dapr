@@ -149,9 +149,7 @@ type actorReminderReference struct {
 	reminder                  Reminder
 }
 
-const (
-	incompatibleStateStore = "actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
-)
+var ErrIncompatibleStateStore = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
 
@@ -228,7 +226,7 @@ func (a *actorsRuntime) Init() error {
 
 	if len(a.config.HostedActorTypes) > 0 {
 		if !a.haveCompatibleStorage() {
-			return errors.New(incompatibleStateStore)
+			return ErrIncompatibleStateStore
 		}
 	}
 
@@ -2007,7 +2005,7 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 
 func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
 	if !a.haveCompatibleStorage() {
-		return fmt.Errorf("unable to register internal actor '%s': %s", actorType, incompatibleStateStore)
+		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
 
 	if _, exists := a.internalActors[actorType]; exists {

@@ -135,7 +135,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 
 // InvokeTimer implements actors.InternalActor
 func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error {
-	return nil // We don't use timers
+	return errors.New("timers are not implemented")
 }
 
 // DeactivateActor implements actors.InternalActor

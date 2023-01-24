@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
@@ -36,7 +37,7 @@ type actorBackend struct {
 	actors                    actors.Actors
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
-	started                   bool
+	startedOnce               sync.Once
 }
 
 func NewActorBackend(engine *WorkflowEngine) *actorBackend {
@@ -120,23 +121,24 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
-	if res, err := be.actors.Call(ctx, req); err != nil {
+	res, err := be.actors.Call(ctx, req)
+	if err != nil {
 		return nil, err
-	} else {
-		defer res.Close()
-		data, err := res.RawDataFull()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read the internal actor response: %w", err)
-		}
-		if len(data) == 0 {
-			return nil, api.ErrInstanceNotFound
-		}
-		var metadata api.OrchestrationMetadata
-		if err := actors.DecodeInternalActorData(data, &metadata); err != nil {
-			return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
-		}
-		return &metadata, nil
 	}
+
+	defer res.Close()
+	data, err := res.RawDataFull()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the internal actor response: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, api.ErrInstanceNotFound
+	}
+	var metadata api.OrchestrationMetadata
+	if err := actors.DecodeInternalActorData(data, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
+	}
+	return &metadata, nil
 }
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
@@ -239,14 +241,11 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 
 // Start implements backend.Backend
 func (be *actorBackend) Start(ctx context.Context) error {
-	if be.started {
-		return nil
-	}
-	if err := be.validateConfiguration(); err != nil {
-		return err
-	}
-	be.started = true
-	return nil
+	var err error
+	be.startedOnce.Do(func() {
+		err = be.validateConfiguration()
+	})
+	return err
 }
 
 // Stop implements backend.Backend

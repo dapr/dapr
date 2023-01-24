@@ -43,6 +43,18 @@ var ComponentDefinition = componentsV1alpha1.Component{
 	},
 }
 
+// Status values are defined at: https://github.com/microsoft/durabletask-go/blob/119b361079c45e368f83b223888d56a436ac59b9/internal/protos/orchestrator_service.pb.go#L42-L64
+var statusMap = map[int32]string{
+	0: "RUNNING",
+	1: "COMPLETED",
+	2: "CONTINUED_AS_NEW",
+	3: "FAILED",
+	4: "CANCELED",
+	5: "TERMINATED",
+	6: "PENDING",
+	7: "SUSPENDED",
+}
+
 func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflows.Workflow {
 	return func(logger logger.Logger) workflows.Workflow {
 		return &workflowEngineComponent{
@@ -152,26 +164,9 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.Workfl
 	}
 }
 
-// Status values are defined at: https://github.com/microsoft/durabletask-go/blob/119b361079c45e368f83b223888d56a436ac59b9/internal/protos/orchestrator_service.pb.go#L42-L64
 func getStatusString(status int32) string {
-	switch status {
-	case 0:
-		return "RUNNING"
-	case 1:
-		return "COMPLETED"
-	case 2:
-		return "CONTINUED_AS_NEW"
-	case 3:
-		return "FAILED"
-	case 4:
-		return "CANCELED"
-	case 5:
-		return "TERMINATED"
-	case 6:
-		return "PENDING"
-	case 7:
-		return "SUSPENDED"
-	default:
-		return "UNKNOWN"
+	if statusStr, ok := statusMap[status]; ok {
+		return statusStr
 	}
+	return "UNKNOWN"
 }
