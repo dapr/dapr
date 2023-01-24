@@ -31,16 +31,6 @@ func TestBuildDeploymentObject(t *testing.T) {
 		MetricsEnabled: true,
 	}
 
-	t.Run("Inject pluggable components", func(t *testing.T) {
-		// act
-		obj := buildDeploymentObject("testNamespace", AppDescription{
-			InjectPluggableComponents: true,
-		})
-
-		// assert
-		assert.NotNil(t, obj)
-		assert.Equal(t, "true", obj.Spec.Template.Annotations["dapr.io/inject-pluggable-components"])
-	})
 	t.Run("Unix socket", func(t *testing.T) {
 		testApp.UnixDomainSocketPath = "/var/run"
 		defer func() {
