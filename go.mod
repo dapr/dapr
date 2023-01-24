@@ -70,8 +70,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.1
 )
 
-require github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventgrid/armeventgrid/v2 v2.0.0 // indirect
-
 require (
 	cloud.google.com/go v0.107.0 // indirect
 	cloud.google.com/go/compute v1.14.0 // indirect
@@ -98,6 +96,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v0.4.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.1.4 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventgrid/armeventgrid/v2 v2.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventhub/armeventhub v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.6.1 // indirect
 	github.com/Azure/azure-storage-queue-go v0.0.0-20191125232315-636801874cdd // indirect
