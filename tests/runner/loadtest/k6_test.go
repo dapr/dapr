@@ -408,6 +408,13 @@ func TestK6(t *testing.T) {
 		}
 
 		jobs.On("List", mock.Anything, mock.Anything).Return(nil)
+
+		pods := &fakePodClient{
+			listResult: &corev1.PodList{
+				Items: []corev1.Pod{},
+			},
+		}
+		pods.On("List", mock.Anything, mock.Anything).Return(nil)
 		const file = "./file_exists.js"
 		_, err := os.Create(file)
 		require.NoError(t, err)
@@ -420,6 +427,7 @@ func TestK6(t *testing.T) {
 		k6.kubeClient = &fakeK8sClient{
 			corev1: &fakeCoreV1Client{
 				configMaps: configMaps,
+				pods:       pods,
 			},
 			batchv1: &fakeBatchV1Client{
 				jobs: jobs,
@@ -435,5 +443,6 @@ func TestK6(t *testing.T) {
 		k6Client.AssertNumberOfCalls(t, "Create", 1)
 		k6Client.AssertNumberOfCalls(t, "Delete", 1)
 		jobs.AssertNumberOfCalls(t, "List", 2)
+		pods.AssertNumberOfCalls(t, "List", 1)
 	})
 }

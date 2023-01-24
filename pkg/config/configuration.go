@@ -29,6 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/utils"
 )
 
 // Feature Flags section
@@ -141,6 +142,11 @@ type HandlerSpec struct {
 	Type         string       `json:"type" yaml:"type"`
 	Version      string       `json:"version" yaml:"version"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+}
+
+// LogName returns the name of the handler that can be used in logging.
+func (h HandlerSpec) LogName() string {
+	return utils.ComponentLogName(h.Name, h.Type, h.Version)
 }
 
 type SelectorSpec struct {
