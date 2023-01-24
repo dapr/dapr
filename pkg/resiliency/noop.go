@@ -16,44 +16,41 @@ package resiliency
 // NoOp is a true bypass implementation of `Provider`.
 type NoOp struct{}
 
-// Compile-time check to ensure `*NoOp` satisfies the `Provider` interface.
-var _ = (Provider)((*NoOp)(nil))
-
 // RoutePolicy returns a NoOp policy definition for a route.
-func (*NoOp) RoutePolicy(name string) *PolicyDefinition {
+func (NoOp) RoutePolicy(name string) *PolicyDefinition {
 	return nil
 }
 
 // EndpointPolicy returns a NoOp policy definition for a service endpoint.
-func (*NoOp) EndpointPolicy(service string, endpoint string) *PolicyDefinition {
+func (NoOp) EndpointPolicy(service string, endpoint string) *PolicyDefinition {
 	return nil
 }
 
 // ActorPreLockPolicy returns a NoOp policy definition for an actor instance.
-func (*NoOp) ActorPreLockPolicy(actorType string, id string) *PolicyDefinition {
+func (NoOp) ActorPreLockPolicy(actorType string, id string) *PolicyDefinition {
 	return nil
 }
 
 // ActorPostLockPolicy returns a NoOp policy definition for an actor instance.
-func (*NoOp) ActorPostLockPolicy(actorType string, id string) *PolicyDefinition {
+func (NoOp) ActorPostLockPolicy(actorType string, id string) *PolicyDefinition {
 	return nil
 }
 
 // ComponentInboundPolicy returns a NoOp inbound policy definition for a component.
-func (*NoOp) ComponentInboundPolicy(name string, componentName ComponentType) *PolicyDefinition {
+func (NoOp) ComponentInboundPolicy(name string, componentName ComponentType) *PolicyDefinition {
 	return nil
 }
 
 // ComponentOutboundPolicy returns a NoOp outbound policy definition for a component.
-func (*NoOp) ComponentOutboundPolicy(name string, componentName ComponentType) *PolicyDefinition {
+func (NoOp) ComponentOutboundPolicy(name string, componentName ComponentType) *PolicyDefinition {
 	return nil
 }
 
 // BuildInPolicy returns a NoOp policy definition for a built-in policy.
-func (*NoOp) BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition {
+func (NoOp) BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition {
 	return nil
 }
 
-func (*NoOp) GetPolicy(target string, policyType PolicyType) *PolicyDescription {
-	return &PolicyDescription{}
+func (NoOp) PolicyDefined(target string, policyType PolicyType) bool {
+	return true
 }
