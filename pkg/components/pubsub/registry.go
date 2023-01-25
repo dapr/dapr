@@ -45,33 +45,39 @@ func (p *Registry) RegisterComponent(componentFactory func(logger.Logger) pubsub
 }
 
 // Create instantiates a pub/sub based on `name`.
-func (p *Registry) Create(name, version string) (pubsub.PubSub, error) {
-	if method, ok := p.getPubSub(name, version); ok {
+func (p *Registry) Create(name, version, logName string) (pubsub.PubSub, error) {
+	if method, ok := p.getPubSub(name, version, logName); ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find message bus %s/%s", name, version)
 }
 
-func (p *Registry) getPubSub(name, version string) (func() pubsub.PubSub, bool) {
+func (p *Registry) getPubSub(name, version, logName string) (func() pubsub.PubSub, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	pubSubFn, ok := p.messageBuses[nameLower+"/"+versionLower]
 	if ok {
-		return p.wrapFn(pubSubFn), true
+		return p.wrapFn(pubSubFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		pubSubFn, ok = p.messageBuses[nameLower]
 		if ok {
-			return p.wrapFn(pubSubFn), true
+			return p.wrapFn(pubSubFn, logName), true
 		}
 	}
 
 	return nil, false
 }
 
-func (p *Registry) wrapFn(componentFactory func(logger.Logger) pubsub.PubSub) func() pubsub.PubSub {
+func (p *Registry) wrapFn(componentFactory func(logger.Logger) pubsub.PubSub, logName string) func() pubsub.PubSub {
 	return func() pubsub.PubSub {
-		return componentFactory(p.Logger)
+		l := p.Logger
+		if logName != "" && l != nil {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 
