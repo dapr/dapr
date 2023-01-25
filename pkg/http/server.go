@@ -110,7 +110,7 @@ func (s *server) StartNonBlocking() error {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Warnf("Failed to listen on %s with error: %v", addr, err)
+				log.Debugf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				listeners = append(listeners, l)
 			}
@@ -161,7 +161,7 @@ func (s *server) StartNonBlocking() error {
 			log.Infof("starting profiling server on %s", addr)
 			pl, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Warnf("Failed to listen on %s with error: %v", addr, err)
+				log.Debugf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				profilingListeners = append(profilingListeners, pl)
 			}
