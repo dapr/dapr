@@ -19,7 +19,7 @@ rules:
   - apiGroups: [""]
     resources: ["serviceaccounts"]
     verbs: ["get", "list"]
-{{- if eq .Values.global.rbac.namespaced false }}
+{{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations", "components"]
     verbs: [ "get", "list"]

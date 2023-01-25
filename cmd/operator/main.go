@@ -116,7 +116,7 @@ func init() {
 	flag.IntVar(&maxPodRestartsPerMinute, "max-pod-restarts-per-minute", defaultMaxPodRestartsPerMinute, "Maximum number of pods in an invalid state that can be restarted per minute")
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
 
-	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch K8s resources")
+	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
 
 	flag.Parse()
 

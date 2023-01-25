@@ -7,7 +7,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 ---
-{{- if eq .Values.global.rbac.namespaced false }}
+{{- if not .Values.global.rbac.namespaced }}
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -40,7 +40,7 @@ rules:
     verbs: [ "get", "list", "watch"]
 {{- end }}
 ---
-{{- if eq .Values.global.rbac.namespaced false }}
+{{- if not .Values.global.rbac.namespaced }}
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:

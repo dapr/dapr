@@ -19,7 +19,7 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
-{{- if eq .Values.global.rbac.namespaced false }}
+{{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
     verbs: ["list"]

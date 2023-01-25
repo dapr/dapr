@@ -99,7 +99,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
 | `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
 | `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
-| `global.rbac.namespaced`                  | Uses roles and roles bindings in all applicable places other than issuing tokens and listing service accounts for identity verification  | `false` |
+| `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
 
 ### Dapr Dashboard options:
 | Parameter                                 | Description                                                             | Default                 |
