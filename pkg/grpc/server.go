@@ -137,7 +137,7 @@ func (s *server) StartNonBlocking() error {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Warnf("Failed to listen on %s with error: %v", addr, err)
+				s.logger.Debugf("Failed to listen on %s with error: %v", addr, err)
 			} else {
 				listeners = append(listeners, l)
 			}
