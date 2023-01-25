@@ -167,7 +167,7 @@ func Discover(ctx context.Context) error {
 		if err != nil {
 			return nil, nil, err
 		}
-		client := grpcreflect.NewClient(ctx, reflectpb.NewServerReflectionClient(conn))
+		client := grpcreflect.NewClientV1Alpha(ctx, reflectpb.NewServerReflectionClient(conn))
 		return client, reflectServiceConnectionCloser(conn, client), nil
 	})
 	if err != nil {
