@@ -3085,7 +3085,6 @@ func (a *DaprRuntime) stopSubscriptions() {
 	if a.pubsubCancel != nil {
 		a.pubsubCancel() // Stop all subscriptions by canceling the subscription context
 	}
-	a.pubsubCancel = nil
 
 	// Remove all contexts that are specific to each component (which have been canceled already by canceling pubsubCtx)
 	a.topicCtxCancels = nil

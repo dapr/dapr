@@ -5473,13 +5473,12 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.startSubscriptions()
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
-	assert.Nil(t, rt.pubsubCtx.Err())
+	assert.NoError(t, rt.pubsubCtx.Err())
 	rt.running.Store(true)
 	go sendSigterm(rt)
 	select {
 	case <-rt.pubsubCtx.Done():
-		assert.NotNil(t, rt.pubsubCtx.Err()) // check that the context is not active
-		assert.True(t, errors.Is(rt.pubsubCtx.Err(), context.Canceled))
+		assert.Error(t, rt.pubsubCtx.Err(), context.Canceled)
 	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "pubsub shutdown timed out")
 	}
