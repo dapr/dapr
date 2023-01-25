@@ -85,7 +85,7 @@ func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
 	wfe.ConfigureExecutor(func(be backend.Backend) backend.Executor {
 		// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
 		autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) {
-			// NOTE: We don't propogate the context here because that would cause the engine to shut
+			// NOTE: We don't propagate the context here because that would cause the engine to shut
 			//       down when the client disconnects and cancels the passed-in context. Once it starts
 			//       up, we want to keep the engine running until the runtime shuts down.
 			if err := wfe.Start(context.Background()); err != nil {
