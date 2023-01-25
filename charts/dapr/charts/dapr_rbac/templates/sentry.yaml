@@ -19,9 +19,11 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
+{{- if eq .Values.global.rbac.namespaced false }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
     verbs: ["list"]
+{{- end }}
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -53,6 +55,11 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "update"]
     resourceNames: ["dapr-trust-bundle"]
+{{- if eq .Values.global.rbac.namespaced true }}
+  - apiGroups: ["dapr.io"]
+    resources: ["configurations"]
+    verbs: ["list"]
+{{- end }}
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

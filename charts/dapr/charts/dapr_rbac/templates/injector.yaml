@@ -19,9 +19,11 @@ rules:
   - apiGroups: [""]
     resources: ["serviceaccounts"]
     verbs: ["get", "list"]
+{{- if eq .Values.global.rbac.namespaced false }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations", "components"]
     verbs: [ "get", "list"]
+{{- end }}
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -53,6 +55,11 @@ rules:
     resources: ["secrets"]
     verbs: ["get"]
     resourceNames: ["dapr-trust-bundle"]
+{{- if eq .Values.global.rbac.namespaced true }}
+  - apiGroups: ["dapr.io"]
+    resources: ["configurations", "components"]
+    verbs: [ "get", "list"]
+{{- end }}
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

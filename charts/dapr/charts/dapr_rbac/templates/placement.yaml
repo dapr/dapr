@@ -7,7 +7,11 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 ---
+{{- if eq .Values.global.rbac.namespaced true }}
+kind: Role
+{{- else }}
 kind: ClusterRole
+{{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-placement
@@ -17,7 +21,11 @@ metadata:
     {{- end }}
 rules: []
 ---
+{{- if eq .Values.global.rbac.namespaced true }}
+kind: RoleBinding
+{{- else }}
 kind: ClusterRoleBinding
+{{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-placement
@@ -31,5 +39,9 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
+{{- if eq .Values.global.rbac.namespaced true }}
+  kind: Role
+{{- else }}
   kind: ClusterRole
+{{- end }}
   name: dapr-placement
