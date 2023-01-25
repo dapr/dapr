@@ -2624,6 +2624,13 @@ func (a *DaprRuntime) stopActor() {
 	}
 }
 
+func (a *DaprRuntime) stopWorkflow() {
+	if a.workflowEngine != nil && a.workflowEngine.IsRunning {
+		log.Info("Shutting down workflow engine")
+		a.workflowEngine.Stop(context.TODO())
+	}
+}
+
 // shutdownOutputComponents allows for a graceful shutdown of all runtime internal operations of components that are not source of more work.
 // These are all components except input bindings and pubsub.
 func (a *DaprRuntime) shutdownOutputComponents() error {
@@ -2707,6 +2714,9 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	log.Info("Stopping PubSub subscribers and input bindings")
 	a.stopSubscriptions()
 	a.stopReadingFromBindings()
+
+	// shutdown workflow if it's running
+	a.stopWorkflow()
 
 	log.Info("Initiating actor shutdown")
 	a.stopActor()

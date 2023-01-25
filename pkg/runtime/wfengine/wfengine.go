@@ -34,14 +34,18 @@ const (
 )
 
 type WorkflowEngine struct {
+	IsRunning bool
+
 	backend  *actorBackend
 	executor backend.Executor
+	worker   backend.TaskHubWorker
 
 	workflowActor *workflowActor
 	activityActor *activityActor
 
-	actorRuntime actors.Actors
-	startedOnce  sync.Once
+	actorRuntime   actors.Actors
+	startedOnce    sync.Once
+	disconnectChan chan any
 }
 
 var (
@@ -81,11 +85,19 @@ func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
 	wfe.ConfigureExecutor(func(be backend.Backend) backend.Executor {
 		// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
 		autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) {
-			if err := wfe.Start(ctx); err != nil {
+			// NOTE: We don't propogate the context here because that would cause the engine to shut
+			//       down when the client disconnects and cancels the passed-in context. Once it starts
+			//       up, we want to keep the engine running until the runtime shuts down.
+			if err := wfe.Start(context.Background()); err != nil {
 				wfLogger.Errorf("failed to auto-start the workflow engine: %w", err)
 			}
 		})
-		return backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger, autoStartCallback)
+
+		// Create a channel that can be used to disconnect the remote client during shutdown.
+		wfe.disconnectChan = make(chan any, 1)
+		disconnectHelper := backend.WithStreamShutdownChannel(wfe.disconnectChan)
+
+		return backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger, autoStartCallback, disconnectHelper)
 	})
 }
 
@@ -156,15 +168,32 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 
 		orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
 		activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
-		taskHubWorker := backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfLogger)
-		err = taskHubWorker.Start(ctx)
+		wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfLogger)
+		err = wfe.worker.Start(ctx)
 		if err != nil {
 			err = fmt.Errorf("failed to start workflow engine: %w", err)
 			return
 		}
 
+		wfe.IsRunning = true
 		wfLogger.Info("workflow engine started")
 	})
 
 	return err
+}
+
+func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
+	if wfe.worker != nil {
+		if wfe.disconnectChan != nil {
+			// Signals to the durabletask-go gRPC service to disconnect the app client.
+			// This is important to complete the graceful shutdown sequence in a timely manner.
+			close(wfe.disconnectChan)
+		}
+		if err := wfe.worker.Shutdown(ctx); err != nil {
+			return fmt.Errorf("failed to shutdown the workflow worker: %w", err)
+		}
+		wfe.IsRunning = false
+		wfLogger.Info("workflow engine stopped")
+	}
+	return nil
 }
