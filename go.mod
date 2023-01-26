@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.9.1-0.20230126172837-2dccde4df759
+	github.com/dapr/components-contrib v1.9.1-0.20230126213405-b6dcbe8fd463
 	github.com/dapr/kit v0.0.4
 	github.com/fasthttp/router v1.4.15
 	github.com/ghodss/yaml v1.0.0
@@ -70,6 +70,8 @@ require (
 	k8s.io/metrics v0.26.1
 	sigs.k8s.io/controller-runtime v0.14.1
 )
+
+require github.com/hamba/avro/v2 v2.4.0 // indirect
 
 require (
 	cloud.google.com/go v0.107.0 // indirect
