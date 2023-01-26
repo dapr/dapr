@@ -29,6 +29,10 @@ type MockActors struct {
 	mock.Mock
 }
 
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor actors.InternalActor) error {
+	return nil
+}
+
 // Call provides a mock function with given fields: req
 func (_m *MockActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
 	ret := _m.Called(req)

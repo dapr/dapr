@@ -26,6 +26,10 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
+func (_m *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor actors.InternalActor) error {
+	return nil
+}
+
 func (f *FailingActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	proto, err := req.ProtoWithData()
 	if err != nil {
