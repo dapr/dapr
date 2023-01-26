@@ -135,6 +135,9 @@ jobs:
           key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+      - name: Check for disallowed changes in go.mod
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        run: node ./.github/scripts/check_go_mod.mjs
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         uses: golangci/golangci-lint-action@v3.2.0
