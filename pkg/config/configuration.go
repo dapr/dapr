@@ -345,7 +345,7 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 	return conf, nil
 }
 
-// Apply .spec.metrics if set. If not, retain spec.metric.
+// Apply .metrics if set. If not, retain .metric.
 func sortMetricsSpec(conf *Configuration) {
 	if !conf.Spec.MetricsSpec.Enabled {
 		conf.Spec.MetricSpec.Enabled = false
