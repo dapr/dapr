@@ -15,6 +15,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -111,6 +112,19 @@ func NewActorPlacement(
 		appHealthFn:         appHealthFn,
 		afterTableUpdateFn:  afterTableUpdateFn,
 	}
+}
+
+// Register an actor type by adding it to the list of known actor types (if it's not already registered)
+// The placement tables will get updated when the next heartbeat fires
+func (p *ActorPlacement) AddHostedActorType(actorType string) error {
+	for _, t := range p.actorTypes {
+		if t == actorType {
+			return fmt.Errorf("actor type %s already registered", actorType)
+		}
+	}
+
+	p.actorTypes = append(p.actorTypes, actorType)
+	return nil
 }
 
 // Start connects placement service to register to membership and send heartbeat
