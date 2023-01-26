@@ -42,7 +42,7 @@ const (
 )
 
 // ConnCreatorFn is a function that returns a gRPC connection
-type ConnCreatorFn = func() (grpc.ClientConnInterface, error)
+type ConnCreatorFn = func(context.Context) (grpc.ClientConnInterface, error)
 
 // AppChannelConfig contains the configuration for the app channel.
 type AppChannelConfig struct {
@@ -82,11 +82,11 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 
 // GetAppChannel returns a connection to the local channel.
 // If there's no active connection to the app, it creates one.
-func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
+func (g *Manager) GetAppChannel(ctx context.Context) (channel.AppChannel, error) {
 	g.localConnLock.RLock()
 	defer g.localConnLock.RUnlock()
 
-	conn, err := g.GetAppClient()
+	conn, err := g.GetAppClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -104,11 +104,11 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 
 // GetAppClient returns the gRPC connection to the local app.
 // If there's no active connection to the app, it creates one.
-func (g *Manager) GetAppClient() (grpc.ClientConnInterface, error) {
+func (g *Manager) GetAppClient(ctx context.Context) (grpc.ClientConnInterface, error) {
 	if g.localConnCreateFn != nil {
-		return g.localConn.Get(g.localConnCreateFn)
+		return g.localConn.Get(ctx, g.localConnCreateFn)
 	}
-	return g.localConn.Get(g.defaultLocalConnCreateFn)
+	return g.localConn.Get(ctx, g.defaultLocalConnCreateFn)
 }
 
 // CloseAppClient closes the active app client connections.
@@ -127,15 +127,15 @@ func (g *Manager) SetLocalConnCreateFn(fn ConnCreatorFn) {
 	g.localConnCreateFn = fn
 }
 
-func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
-	conn, err := g.createLocalConnection(context.Background(), g.channelConfig.Port, g.channelConfig.SSLEnabled)
+func (g *Manager) defaultLocalConnCreateFn(ctx context.Context) (grpc.ClientConnInterface, error) {
+	conn, err := g.createLocalConnection(ctx, g.channelConfig.Port, g.channelConfig.SSLEnabled)
 	if err != nil {
 		return nil, fmt.Errorf("error establishing a grpc connection to app on port %v: %w", g.channelConfig.Port, err)
 	}
 	return conn, nil
 }
 
-func (g *Manager) createLocalConnection(parentCtx context.Context, port int, sslEnabled bool) (conn *grpc.ClientConn, err error) {
+func (g *Manager) createLocalConnection(ctx context.Context, port int, sslEnabled bool) (conn *grpc.ClientConn, err error) {
 	opts := make([]grpc.DialOption, 0, 2)
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
@@ -156,14 +156,14 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ssl
 	dialPrefix := GetDialAddressPrefix(g.mode)
 	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 
-	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	return grpc.DialContext(ctx, dialPrefix+address, opts...)
 }
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
 func (g *Manager) GetGRPCConnection(
-	parentCtx context.Context,
+	ctx context.Context,
 	address string,
 	id string,
 	namespace string,
@@ -171,8 +171,8 @@ func (g *Manager) GetGRPCConnection(
 ) (conn *grpc.ClientConn, teardown func(destroy bool), err error) {
 	// Load or create a connection
 	var connI grpc.ClientConnInterface
-	connI, err = g.remoteConns.Get(address, func() (grpc.ClientConnInterface, error) {
-		return g.connectRemote(parentCtx, address, id, namespace, customOpts...)
+	connI, err = g.remoteConns.Get(ctx, address, func(context.Context) (grpc.ClientConnInterface, error) {
+		return g.connectRemote(ctx, address, id, namespace, customOpts...)
 	})
 	if err != nil {
 		return nil, nopTeardown, err
@@ -182,7 +182,7 @@ func (g *Manager) GetGRPCConnection(
 }
 
 func (g *Manager) connectRemote(
-	parentCtx context.Context,
+	ctx context.Context,
 	address string,
 	id string,
 	namespace string,
@@ -225,7 +225,7 @@ func (g *Manager) connectRemote(
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
 
-	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	conn, err = grpc.DialContext(ctx, dialPrefix+address, opts...)
 	cancel()
 	if err != nil {

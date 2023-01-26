@@ -72,7 +72,7 @@ func (g *Channel) GetBaseAddress() string {
 }
 
 // GetAppConfig gets application config from user application.
-func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (g *Channel) GetAppConfig(context.Context) (*config.ApplicationConfig, error) {
 	return nil, nil
 }
 
@@ -117,7 +117,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	// Prepare gRPC Metadata
-	ctx = grpcMetadata.NewOutgoingContext(context.Background(), md)
+	ctx = grpcMetadata.NewOutgoingContext(ctx, md)
 
 	var header, trailer grpcMetadata.MD
 

@@ -23,7 +23,6 @@ type resiliencyMetrics struct {
 	executionCount    *stats.Int64Measure
 
 	appID   string
-	ctx     context.Context
 	enabled bool
 }
 
@@ -38,8 +37,6 @@ func newResiliencyMetrics() *resiliencyMetrics {
 			"Number of times a resiliency policyKey has been executed.",
 			stats.UnitDimensionless),
 
-		// TODO: how to use correct context
-		ctx:     context.Background(),
 		enabled: false,
 	}
 }
@@ -55,10 +52,10 @@ func (m *resiliencyMetrics) Init(id string) error {
 }
 
 // PolicyLoaded records metric when policy is loaded.
-func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
+func (m *resiliencyMetrics) PolicyLoaded(ctx context.Context, resiliencyName, namespace string) {
 	if m.enabled {
 		_ = stats.RecordWithTags(
-			m.ctx,
+			ctx,
 			diagUtils.WithTags(m.policiesLoadCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, namespaceKey, namespace),
 			m.policiesLoadCount.M(1),
 		)
@@ -66,10 +63,10 @@ func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
 }
 
 // PolicyExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, policy PolicyType) {
+func (m *resiliencyMetrics) PolicyExecuted(ctx context.Context, resiliencyName, namespace string, policy PolicyType) {
 	if m.enabled {
 		_ = stats.RecordWithTags(
-			m.ctx,
+			ctx,
 			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace),
 			m.executionCount.M(1),
 		)

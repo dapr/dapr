@@ -182,7 +182,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
@@ -214,7 +214,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
@@ -248,7 +248,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
@@ -280,7 +280,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
@@ -316,7 +316,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// timeout will be triggered here
 		// no retries
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
@@ -345,7 +345,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 
@@ -403,7 +403,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// timeout will not be triggered here
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
@@ -460,7 +460,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
@@ -503,7 +503,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
@@ -575,7 +575,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// timeout will be triggered here
 		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
@@ -624,7 +624,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 		// timeout will be triggered here
 		policyProvider := createResPolicyProvider(cb, shortTimeout, longRetry)
-		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
+		policyDef := policyProvider.ComponentOutboundPolicy(ctx, pubsubName, resiliency.Pubsub)
 
 		// Act
 		// Make the request twice to make sure circuitBreaker is exhausted
@@ -651,6 +651,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 }
 
 func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, timeout string, retry resiliencyV1alpha.Retry) *resiliency.Resiliency {
+	ctx := context.Background()
 	r := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
@@ -677,7 +678,7 @@ func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, tim
 			},
 		},
 	}
-	return resiliency.FromConfigurations(testLogger, r)
+	return resiliency.FromConfigurations(ctx, testLogger, r)
 }
 
 func assertRetryCount(t *testing.T, expectedIDRetryCountMap map[string]int, actualRetryCountMap map[string]int) {

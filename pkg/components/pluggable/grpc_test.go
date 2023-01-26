@@ -43,8 +43,10 @@ func (f *fakeClient) Ping(context.Context, *proto.PingRequest, ...grpc.CallOptio
 func TestGRPCConnector(t *testing.T) {
 	// gRPC Pluggable component requires Unix Domain Socket to work, I'm skipping this test when running on windows.
 	if runtime.GOOS == "windows" {
-		return
+		t.Skip("Skipping test on windows")
 	}
+
+	ctx := context.Background()
 
 	t.Run("grpc connection should be idle or ready when the process is listening to the socket due to withblock usage", func(t *testing.T) {
 		fakeFactoryCalled := 0
@@ -69,7 +71,7 @@ func TestGRPCConnector(t *testing.T) {
 			s.Stop()
 		}()
 
-		require.NoError(t, connector.Dial(""))
+		require.NoError(t, connector.Dial(ctx, ""))
 		acceptedStatus := []connectivity.State{
 			connectivity.Ready,
 			connectivity.Idle,
@@ -97,7 +99,7 @@ func TestGRPCConnector(t *testing.T) {
 		require.NoError(t, err)
 		defer listener.Close()
 
-		require.NoError(t, connector.Dial(""))
+		require.NoError(t, connector.Dial(ctx, ""))
 		defer connector.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

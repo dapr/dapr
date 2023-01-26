@@ -53,8 +53,8 @@ func NewKubernetesComponents(configuration config.KubernetesConfig, namespace st
 }
 
 // LoadComponents returns components from a given control plane address.
-func (k *KubernetesComponents) LoadComponents() ([]componentsV1alpha1.Component, error) {
-	resp, err := k.client.ListComponents(context.Background(), &operatorv1pb.ListComponentsRequest{
+func (k *KubernetesComponents) LoadComponents(ctx context.Context) ([]componentsV1alpha1.Component, error) {
+	resp, err := k.client.ListComponents(ctx, &operatorv1pb.ListComponentsRequest{
 		Namespace: k.namespace,
 		PodName:   k.podName,
 	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))

@@ -16,28 +16,30 @@ limitations under the License.
 package testing
 
 import (
+	"context"
+
 	"github.com/dapr/components-contrib/pubsub"
 )
 
 // MockPubSubAdapter is mock for PubSubAdapter
 type MockPubSubAdapter struct {
-	PublishFn     func(req *pubsub.PublishRequest) error
-	BulkPublishFn func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error)
+	PublishFn     func(ctx context.Context, req *pubsub.PublishRequest) error
+	BulkPublishFn func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error)
 	GetPubSubFn   func(pubsubName string) pubsub.PubSub
 }
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
-func (a *MockPubSubAdapter) Publish(req *pubsub.PublishRequest) error {
-	return a.PublishFn(req)
+func (a *MockPubSubAdapter) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
+	return a.PublishFn(ctx, req)
 }
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
-func (a *MockPubSubAdapter) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	return a.BulkPublishFn(req)
+func (a *MockPubSubAdapter) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	return a.BulkPublishFn(ctx, req)
 }
 
 // GetPubSub is an adapter method to fetch a pubsub

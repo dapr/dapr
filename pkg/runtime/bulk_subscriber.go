@@ -171,7 +171,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 					bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
 					if route.deadLetterTopic != "" {
-						_ = a.sendToDeadLetter(psName, &pubsub.NewMessage{
+						_ = a.sendToDeadLetter(ctx, psName, &pubsub.NewMessage{
 							Data:        message.Event,
 							Topic:       topic,
 							Metadata:    message.Metadata,
@@ -238,7 +238,7 @@ func (a *DaprRuntime) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCall
 ) error {
 	bscData := *bulkSubCallData
 	if route.deadLetterTopic != "" {
-		if dlqErr := a.sendBulkToDeadLetter(bulkSubCallData, msg, route.deadLetterTopic, sendAllEntries); dlqErr == nil {
+		if dlqErr := a.sendBulkToDeadLetter(ctx, bulkSubCallData, msg, route.deadLetterTopic, sendAllEntries); dlqErr == nil {
 			// dlq has been configured and whole bulk of messages is successfully sent to dlq.
 			return nil
 		}
@@ -265,7 +265,7 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, bulkSubCallData
 		log.Warnf("No matching route for event in pubsub %s and topic %s; skipping", bscData.psName, bscData.topic)
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
 		if route.deadLetterTopic != "" {
-			_ = a.sendToDeadLetter(bscData.psName, &pubsub.NewMessage{
+			_ = a.sendToDeadLetter(ctx, bscData.psName, &pubsub.NewMessage{
 				Data:        message.Event,
 				Topic:       bscData.topic,
 				Metadata:    message.Metadata,
@@ -330,7 +330,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 				Topic:    psm.topic,
 				Metadata: psm.metadata,
 			}
-			if dlqErr := a.sendBulkToDeadLetter(bulkSubCallData, &bulkMsg, deadLetterTopic, true); dlqErr == nil {
+			if dlqErr := a.sendBulkToDeadLetter(ctx, bulkSubCallData, &bulkMsg, deadLetterTopic, true); dlqErr == nil {
 				// dlq has been configured and message is successfully sent to dlq.
 				for _, item := range rawMsgEntries {
 					addBulkResponseEntry(bulkResponses, item.EntryId, nil)
@@ -589,7 +589,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 	defer endSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
 
-	conn, err := a.grpc.GetAppClient()
+	conn, err := a.grpc.GetAppClient(ctx)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
@@ -696,7 +696,7 @@ func endSpans(spans []trace.Span) {
 }
 
 // sendBulkToDeadLetter sends the bulk message to deadletter topic.
-func (a *DaprRuntime) sendBulkToDeadLetter(
+func (a *DaprRuntime) sendBulkToDeadLetter(ctx context.Context,
 	bulkSubCallData *bulkSubscribeCallData, msg *pubsub.BulkMessage, deadLetterTopic string,
 	sendAllEntries bool,
 ) error {
@@ -727,7 +727,7 @@ func (a *DaprRuntime) sendBulkToDeadLetter(
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := a.BulkPublish(req)
+	_, err := a.BulkPublish(ctx, req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 	}

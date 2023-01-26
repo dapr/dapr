@@ -14,6 +14,7 @@ limitations under the License.
 package components
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -35,6 +36,8 @@ func writeTempConfig(path, content string) (delete func(), error error) {
 }
 
 func TestLoadComponentsFromFile(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("valid yaml content", func(t *testing.T) {
 		request := NewStandaloneComponents(config.StandaloneConfig{
 			ComponentsPath: configPrefix,
@@ -56,7 +59,7 @@ spec:
 		remove, err := writeTempConfig(filename, yaml)
 		assert.Nil(t, err)
 		defer remove()
-		components, err := request.LoadComponents()
+		components, err := request.LoadComponents(ctx)
 		assert.Nil(t, err)
 		assert.Len(t, components, 1)
 	})
@@ -76,7 +79,7 @@ name: statestore`
 		remove, err := writeTempConfig(filename, yaml)
 		assert.Nil(t, err)
 		defer remove()
-		components, err := request.LoadComponents()
+		components, err := request.LoadComponents(ctx)
 		assert.Nil(t, err)
 		assert.Len(t, components, 0)
 	})
@@ -86,7 +89,7 @@ name: statestore`
 			ComponentsPath: "test-path-no-exists",
 		})
 
-		components, err := request.LoadComponents()
+		components, err := request.LoadComponents(ctx)
 		assert.NotNil(t, err)
 		assert.Len(t, components, 0)
 	})

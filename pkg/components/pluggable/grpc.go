@@ -38,10 +38,6 @@ type GRPCConnectionDialer = func(ctx context.Context, name string) (*grpc.Client
 
 // GRPCConnector is a connector that uses underlying gRPC protocol for common operations.
 type GRPCConnector[TClient GRPCClient] struct {
-	// Context is the component shared context
-	Context context.Context
-	// Cancel is used for cancelling inflight requests
-	Cancel context.CancelFunc
 	// Client is the proto client.
 	Client        TClient
 	dialer        GRPCConnectionDialer
@@ -90,8 +86,8 @@ func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialO
 }
 
 // Dial opens a grpcConnection and creates a new client instance.
-func (g *GRPCConnector[TClient]) Dial(name string) error {
-	grpcConn, err := g.dialer(g.Context, name)
+func (g *GRPCConnector[TClient]) Dial(ctx context.Context, name string) error {
+	grpcConn, err := g.dialer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("unable to open GRPC connection using the dialer: %w", err)
 	}
@@ -104,25 +100,19 @@ func (g *GRPCConnector[TClient]) Dial(name string) error {
 
 // Ping pings the grpc component.
 // It uses "WaitForReady" avoiding failing in transient failures.
-func (g *GRPCConnector[TClient]) Ping() error {
-	_, err := g.Client.Ping(g.Context, &proto.PingRequest{}, grpc.WaitForReady(true))
+func (g *GRPCConnector[TClient]) Ping(ctx context.Context) error {
+	_, err := g.Client.Ping(ctx, &proto.PingRequest{}, grpc.WaitForReady(true))
 	return err
 }
 
-// Close closes the underlying gRPC connection and cancel all inflight requests.
+// Close closes the underlying gRPC connection.
 func (g *GRPCConnector[TClient]) Close() error {
-	g.Cancel()
-
 	return g.conn.Close()
 }
 
 // NewGRPCConnectorWithDialer creates a new grpc connector for the given client factory and dialer.
 func NewGRPCConnectorWithDialer[TClient GRPCClient](dialer GRPCConnectionDialer, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &GRPCConnector[TClient]{
-		Context:       ctx,
-		Cancel:        cancel,
 		dialer:        dialer,
 		clientFactory: factory,
 	}

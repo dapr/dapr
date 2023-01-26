@@ -115,11 +115,11 @@ func NewActorPlacement(
 
 // Start connects placement service to register to membership and send heartbeat
 // to report the current member status periodically.
-func (p *ActorPlacement) Start() {
+func (p *ActorPlacement) Start(ctx context.Context) {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 
-	if established := p.establishStreamConn(); !established {
+	if established := p.establishStreamConn(ctx); !established {
 		return
 	}
 
@@ -136,7 +136,7 @@ func (p *ActorPlacement) Start() {
 			if p.shutdown.Load() {
 				break
 			}
-			p.establishStreamConn()
+			p.establishStreamConn(ctx)
 		}
 	}()
 
@@ -161,7 +161,7 @@ func (p *ActorPlacement) Start() {
 					p.onPlacementError(err) // depending on the returned error a new server could be used
 				})
 			} else {
-				p.onPlacementOrder(resp)
+				p.onPlacementOrder(ctx, resp)
 			}
 		}
 	}()
@@ -202,13 +202,13 @@ func (p *ActorPlacement) Start() {
 
 			err := p.client.send(&host)
 			if err != nil {
-				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
+				diag.DefaultMonitoring.ActorStatusReportFailed(ctx, "send", "status")
 				log.Debugf("failed to report status to placement service : %v", err)
 			}
 
 			// No delay if stream connection is not alive.
 			if p.client.isConnected() {
-				diag.DefaultMonitoring.ActorStatusReported("send")
+				diag.DefaultMonitoring.ActorStatusReported(ctx, "send")
 				time.Sleep(statusReportHeartbeatInterval)
 			}
 		}
@@ -258,7 +258,7 @@ func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string)
 }
 
 //nolint:nosnakecase
-func (p *ActorPlacement) establishStreamConn() (established bool) {
+func (p *ActorPlacement) establishStreamConn(ctx context.Context) (established bool) {
 	for !p.shutdown.Load() {
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthFn() {
@@ -270,7 +270,7 @@ func (p *ActorPlacement) establishStreamConn() (established bool) {
 
 		log.Debugf("try to connect to placement service: %s", serverAddr)
 
-		err := p.client.connectToServer(serverAddr)
+		err := p.client.connectToServer(ctx, serverAddr)
 		if err == errEstablishingTLSConn {
 			return false
 		}
@@ -301,9 +301,9 @@ func (p *ActorPlacement) onPlacementError(err error) {
 	}
 }
 
-func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
+func (p *ActorPlacement) onPlacementOrder(ctx context.Context, in *v1pb.PlacementOrder) {
 	log.Debugf("placement order received: %s", in.Operation)
-	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
+	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(ctx, in.Operation)
 
 	// lock all incoming calls when an updated table arrives
 	p.operationUpdateLock.Lock()

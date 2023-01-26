@@ -35,8 +35,8 @@ type grpcPubSub struct {
 
 // Init initializes the grpc pubsub passing out the metadata to the grpc component.
 // It also fetches and set the component features.
-func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
-	if err := p.Dial(metadata.Name); err != nil {
+func (p *grpcPubSub) Init(ctx context.Context, metadata pubsub.Metadata) error {
+	if err := p.Dial(ctx, metadata.Name); err != nil {
 		return err
 	}
 
@@ -44,7 +44,7 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 		Properties: metadata.Properties,
 	}
 
-	_, err := p.Client.Init(p.Context, &proto.PubSubInitRequest{
+	_, err := p.Client.Init(ctx, &proto.PubSubInitRequest{
 		Metadata: protoMetadata,
 	})
 	if err != nil {
@@ -53,7 +53,7 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 
 	// TODO Static data could be retrieved in another way, a necessary discussion should start soon.
 	// we need to call the method here because features could return an error and the features interface doesn't support errors
-	featureResponse, err := p.Client.Features(p.Context, &proto.FeaturesRequest{})
+	featureResponse, err := p.Client.Features(ctx, &proto.FeaturesRequest{})
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"runtime"
 	"testing"
 
@@ -49,16 +50,18 @@ func TestGetTrustAnchors(t *testing.T) {
 func TestGenerateSidecarCSR(t *testing.T) {
 	// can't run this on Windows build agents, GH actions fails with "CryptAcquireContext: Provider DLL failed to initialize correctly."
 	if runtime.GOOS == "windows" {
-		return
+		t.Skip("Skipping test on Windows")
+
 	}
+	ctx := context.Background()
 
 	t.Run("empty id", func(t *testing.T) {
-		_, _, err := generateCSRAndPrivateKey("")
+		_, _, err := generateCSRAndPrivateKey(ctx, "")
 		assert.NotNil(t, err)
 	})
 
 	t.Run("with id", func(t *testing.T) {
-		csr, pk, err := generateCSRAndPrivateKey("test")
+		csr, pk, err := generateCSRAndPrivateKey(ctx, "test")
 		assert.Nil(t, err)
 		assert.True(t, len(csr) > 0)
 		assert.True(t, len(pk) > 0)

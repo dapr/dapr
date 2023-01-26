@@ -66,10 +66,7 @@ func (s *server) Run(ctx context.Context, port int) error {
 		select {
 		case <-ctx.Done():
 			s.log.Info("Healthz server is shutting down")
-			shutdownCtx, cancel := context.WithTimeout(
-				context.Background(),
-				time.Second*5,
-			)
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			defer cancel()
 			err := srv.Shutdown(shutdownCtx)
 			if err != nil {

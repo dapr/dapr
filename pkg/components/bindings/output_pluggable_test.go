@@ -82,7 +82,8 @@ func (b *outputBindingServer) Ping(context.Context, *proto.PingRequest) (*proto.
 }
 
 func TestOutputBindingCalls(t *testing.T) {
-	getOutputBinding := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *outputBindingServer) {
+	ctx := context.Background()
+	getOutputBinding := testingGrpc.TestServerFor(ctx, testLogger, func(s *grpc.Server, svc *outputBindingServer) {
 		proto.RegisterOutputBindingServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcOutputBinding {
 		client := proto.NewOutputBindingClient(cci)
@@ -127,7 +128,7 @@ func TestOutputBindingCalls(t *testing.T) {
 			}()
 
 			conn := outputFromConnector(testLogger, connector)
-			err = conn.Init(bindings.Metadata{
+			err = conn.Init(ctx, bindings.Metadata{
 				Base: contribMetadata.Base{},
 			})
 

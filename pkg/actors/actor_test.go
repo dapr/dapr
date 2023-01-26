@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,18 +25,20 @@ import (
 var reentrancyStackDepth = 32
 
 func TestIsBusy(t *testing.T) {
+	ctx := context.Background()
 	testActor := newActor("testType", "testID", &reentrancyStackDepth)
 
-	testActor.lock(nil)
+	testActor.lock(ctx, nil)
 	assert.Equal(t, true, testActor.isBusy())
-	testActor.unlock()
+	testActor.unlock(ctx)
 }
 
 func TestTurnBasedConcurrencyLocks(t *testing.T) {
+	ctx := context.Background()
 	testActor := newActor("testType", "testID", &reentrancyStackDepth)
 
 	// first lock
-	testActor.lock(nil)
+	testActor.lock(ctx, nil)
 	assert.Equal(t, true, testActor.isBusy())
 	firstLockTime := testActor.lastUsedTime
 
@@ -44,9 +47,9 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 	// second lock
 	go func() {
 		waitCh <- false
-		testActor.lock(nil)
+		testActor.lock(ctx, nil)
 		time.Sleep(100 * time.Millisecond)
-		testActor.unlock()
+		testActor.unlock(ctx)
 		waitCh <- false
 	}()
 
@@ -58,7 +61,7 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 	assert.Equal(t, firstLockTime, testActor.lastUsedTime)
 
 	// unlock the first lock
-	testActor.unlock()
+	testActor.unlock(ctx)
 
 	assert.Equal(t, int32(1), testActor.pendingActorCalls.Load())
 	assert.True(t, testActor.isBusy())
@@ -71,11 +74,13 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 }
 
 func TestDisposedActor(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("not disposed", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth)
 
-		testActor.lock(nil)
-		testActor.unlock()
+		testActor.lock(ctx, nil)
+		testActor.unlock(ctx)
 		testActor.disposeLock.RLock()
 		disposed := testActor.disposed
 		testActor.disposeLock.RUnlock()
@@ -85,12 +90,12 @@ func TestDisposedActor(t *testing.T) {
 	t.Run("disposed", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth)
 
-		testActor.lock(nil)
+		testActor.lock(ctx, nil)
 		ch := testActor.channel()
 		assert.NotNil(t, ch)
-		testActor.unlock()
+		testActor.unlock(ctx)
 
-		err := testActor.lock(nil)
+		err := testActor.lock(ctx, nil)
 
 		assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
 		assert.IsType(t, ErrActorDisposed, err)
@@ -98,6 +103,8 @@ func TestDisposedActor(t *testing.T) {
 }
 
 func TestPendingActorCalls(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("no pending actor call with new actor object", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth)
 		channelClosed := false
@@ -115,7 +122,7 @@ func TestPendingActorCalls(t *testing.T) {
 
 	t.Run("close channel before timeout", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth)
-		testActor.lock(nil)
+		testActor.lock(ctx, nil)
 
 		channelClosed := atomic.Bool{}
 		go func() {
@@ -129,14 +136,14 @@ func TestPendingActorCalls(t *testing.T) {
 		}()
 
 		time.Sleep(10 * time.Millisecond)
-		testActor.unlock()
+		testActor.unlock(ctx)
 		time.Sleep(100 * time.Millisecond)
 		assert.True(t, channelClosed.Load())
 	})
 
 	t.Run("multiple listeners", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth)
-		testActor.lock(nil)
+		testActor.lock(ctx, nil)
 
 		nListeners := 10
 		releaseSignaled := make([]atomic.Bool, nListeners)
@@ -153,7 +160,7 @@ func TestPendingActorCalls(t *testing.T) {
 				}
 			}(i)
 		}
-		testActor.unlock()
+		testActor.unlock(ctx)
 		time.Sleep(100 * time.Millisecond)
 
 		for i := 0; i < nListeners; i++ {

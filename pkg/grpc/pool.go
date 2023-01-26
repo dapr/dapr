@@ -14,6 +14,7 @@ limitations under the License.
 package grpc
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,7 +53,7 @@ func NewConnectionPool(maxConnIdle time.Duration, minActiveConns int) *Connectio
 }
 
 // Get takes a connection from the pool or, if no connection exists, creates a new one using createFn, then stores it and returns it.
-func (p *ConnectionPool) Get(createFn func() (grpc.ClientConnInterface, error)) (conn grpc.ClientConnInterface, err error) {
+func (p *ConnectionPool) Get(ctx context.Context, createFn func(context.Context) (grpc.ClientConnInterface, error)) (conn grpc.ClientConnInterface, err error) {
 	// Try getting an existing connection
 	p.lock.RLock()
 	conn = p.doShare()
@@ -72,7 +73,7 @@ func (p *ConnectionPool) Get(createFn func() (grpc.ClientConnInterface, error)) 
 	}
 
 	// Create a connection using createFn
-	newConn, err := createFn()
+	newConn, err := createFn(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -259,9 +260,9 @@ func NewRemoteConnectionPool() *RemoteConnectionPool {
 }
 
 // Get takes a connection from the pool or, if no connection exists, creates a new one using createFn, then stores it and returns it.
-func (p *RemoteConnectionPool) Get(address string, createFn func() (grpc.ClientConnInterface, error)) (conn grpc.ClientConnInterface, err error) {
+func (p *RemoteConnectionPool) Get(ctx context.Context, address string, createFn func(context.Context) (grpc.ClientConnInterface, error)) (conn grpc.ClientConnInterface, err error) {
 	item := p.loadOrStoreItem(address)
-	return item.Get(createFn)
+	return item.Get(ctx, createFn)
 }
 
 // Register a new connection.

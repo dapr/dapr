@@ -94,7 +94,7 @@ func (ia *mockInternalActor) SetActorRuntime(actorsRuntime Actors) {
 }
 
 // newTestActorsRuntimeWithInternalActors creates and initializes an actors runtime with a specified set of internal actors
-func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalActor) (*actorsRuntime, error) {
+func newTestActorsRuntimeWithInternalActors(ctx context.Context, internalActors map[string]InternalActor) (*actorsRuntime, error) {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	config := NewConfig(ConfigOpts{
@@ -102,7 +102,7 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          config.ApplicationConfig{},
 	})
-	a := NewActors(ActorsOpts{
+	a := NewActors(context.Background(), ActorsOpts{
 		StateStore:     store,
 		Config:         config,
 		TracingSpec:    spec,
@@ -110,7 +110,7 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		StateStoreName: "actorStore",
 		InternalActors: internalActors,
 	})
-	if err := a.Init(); err != nil {
+	if err := a.Init(ctx); err != nil {
 		return nil, err
 	}
 
@@ -118,6 +118,8 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 }
 
 func TestInternalActorCall(t *testing.T) {
+	ctx := context.Background()
+
 	const (
 		testActorType = InternalActorTypePrefix + "pet"
 		testActorID   = "dog"
@@ -128,7 +130,7 @@ func TestInternalActorCall(t *testing.T) {
 
 	internalActors := make(map[string]InternalActor)
 	internalActors[testActorType] = &mockInternalActor{TestOutput: testOutput}
-	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
+	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(ctx, internalActors)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -167,11 +169,12 @@ func TestInternalActorCall(t *testing.T) {
 }
 
 func TestInternalActorReminder(t *testing.T) {
+	ctx := context.Background()
 	const testActorType = InternalActorTypePrefix + "test"
 	ia := &mockInternalActor{}
 	internalActors := make(map[string]InternalActor)
 	internalActors[testActorType] = ia
-	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
+	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(ctx, internalActors)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -188,7 +191,7 @@ func TestInternalActorReminder(t *testing.T) {
 			SomeString: "Hello!",
 		},
 	}
-	if err = testActorRuntime.executeReminder(testReminder); !assert.NoError(t, err) {
+	if err = testActorRuntime.executeReminder(ctx, testReminder); !assert.NoError(t, err) {
 		return
 	}
 	if !assert.Len(t, ia.InvokedReminders, 1) {
@@ -207,6 +210,7 @@ func TestInternalActorReminder(t *testing.T) {
 }
 
 func TestInternalActorDeactivation(t *testing.T) {
+	ctx := context.Background()
 	const (
 		testActorType = InternalActorTypePrefix + "test"
 		testActorID   = "foo"
@@ -214,7 +218,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 	ia := &mockInternalActor{}
 	internalActors := make(map[string]InternalActor)
 	internalActors[testActorType] = ia
-	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
+	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(ctx, internalActors)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -233,7 +237,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.
-	if err = testActorRuntime.deactivateActor(testActorType, testActorID); assert.NoError(t, err) {
+	if err = testActorRuntime.deactivateActor(ctx, testActorType, testActorID); assert.NoError(t, err) {
 		if assert.Len(t, ia.DeactivationCalls, 1) {
 			assert.Equal(t, testActorID, ia.DeactivationCalls[0])
 		}
@@ -251,9 +255,10 @@ func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
 // TestInternalActorsNotCounted verifies that internal actors are not counted in the
 // GetActiveActorsCount API, which should only include counts of user-defined actors.
 func TestInternalActorsNotCounted(t *testing.T) {
+	ctx := context.Background()
 	internalActors := make(map[string]InternalActor)
 	internalActors[InternalActorTypePrefix+"wfengine.workflow"] = &mockInternalActor{}
-	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
+	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(ctx, internalActors)
 	if !assert.NoError(t, err) {
 		return
 	}

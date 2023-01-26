@@ -15,6 +15,7 @@ limitations under the License.
 package runtime
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -46,7 +47,7 @@ import (
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
-func FromFlags() (*DaprRuntime, error) {
+func FromFlags(ctx context.Context) (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", strconv.Itoa(DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
@@ -121,7 +122,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if *waitCommand {
-		waitUntilDaprOutboundReady(*daprHTTPPort)
+		waitUntilDaprOutboundReady(ctx, *daprHTTPPort)
 		os.Exit(0)
 	}
 
@@ -343,7 +344,7 @@ func FromFlags() (*DaprRuntime, error) {
 	var operatorClient operatorV1.OperatorClient
 	if *mode == string(modes.KubernetesMode) {
 		log.Infof("Initializing the operator client (config: %s)", *config)
-		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
+		client, conn, clientErr := client.GetOperatorClient(ctx, *controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
 			return nil, clientErr
 		}
@@ -358,7 +359,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
+			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(ctx, *config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
 		}
@@ -394,12 +395,12 @@ func FromFlags() (*DaprRuntime, error) {
 	var resiliencyConfigs []*resiliencyV1alpha.Resiliency
 	switch modes.DaprMode(*mode) {
 	case modes.KubernetesMode:
-		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(ctx, log, *appID, namespace, operatorClient)
 	case modes.StandaloneMode:
 		resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
 	}
 	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-	resiliencyProvider := resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+	resiliencyProvider := resiliencyConfig.FromConfigurations(ctx, log, resiliencyConfigs...)
 	log.Info("Resiliency configuration loaded.")
 
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
@@ -414,7 +415,7 @@ func FromFlags() (*DaprRuntime, error) {
 		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.Enabled
 	}
 
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
+	return NewDaprRuntime(ctx, runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
 }
 
 func parsePlacementAddr(val string) []string {

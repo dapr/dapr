@@ -15,6 +15,7 @@ limitations under the License.
 package placement
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -46,7 +47,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members()))
 
 		stopCh = make(chan struct{})
-		go testServer.membershipChangeWorker(stopCh)
+		go testServer.membershipChangeWorker(context.Background(), stopCh)
 	}
 
 	arrangeFakeMembers := func(t *testing.T) {

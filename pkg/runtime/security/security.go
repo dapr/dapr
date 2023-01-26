@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -62,20 +63,20 @@ func GetSidecarAuthenticator(sentryAddress string, certChain *credentials.CertCh
 	return newAuthenticator(sentryAddress, trustAnchors, certChain.Cert, certChain.Key, generateCSRAndPrivateKey), nil
 }
 
-func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
+func generateCSRAndPrivateKey(ctx context.Context, id string) ([]byte, []byte, error) {
 	if id == "" {
 		return nil, nil, errors.New("id must not be empty")
 	}
 
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
-		diag.DefaultMonitoring.MTLSInitFailed("prikeygen")
+		diag.DefaultMonitoring.MTLSInitFailed(ctx, "prikeygen")
 		return nil, nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
 	encodedKey, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
-		diag.DefaultMonitoring.MTLSInitFailed("prikeyenc")
+		diag.DefaultMonitoring.MTLSInitFailed(ctx, "prikeyenc")
 		return nil, nil, err
 	}
 	keyPem := pem.EncodeToMemory(&pem.Block{Type: ecPKType, Bytes: encodedKey})
@@ -86,7 +87,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 	}
 	csrb, err := x509.CreateCertificateRequest(rand.Reader, &csr, key)
 	if err != nil {
-		diag.DefaultMonitoring.MTLSInitFailed("csr")
+		diag.DefaultMonitoring.MTLSInitFailed(ctx, "csr")
 		return nil, nil, fmt.Errorf("failed to create sidecar csr: %w", err)
 	}
 	return csrb, keyPem, nil

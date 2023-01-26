@@ -97,6 +97,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
+	ctx := context.Background()
 	t.Run("test close with api logging enabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
@@ -113,7 +114,7 @@ func TestClose(t *testing.T) {
 		}
 		a := &api{}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
-		require.NoError(t, server.StartNonBlocking())
+		require.NoError(t, server.StartNonBlocking(ctx))
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
 	})
@@ -134,7 +135,7 @@ func TestClose(t *testing.T) {
 		}
 		a := &api{}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
-		require.NoError(t, server.StartNonBlocking())
+		require.NoError(t, server.StartNonBlocking(ctx))
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
 	})

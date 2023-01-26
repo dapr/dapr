@@ -51,6 +51,7 @@ func (m *mockComponentUpdateServer) Context() context.Context {
 }
 
 func TestProcessComponentSecrets(t *testing.T) {
+	ctx := context.Background()
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
@@ -69,7 +70,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		}
 
-		err := processComponentSecrets(&c, "default", nil)
+		err := processComponentSecrets(ctx, &c, "default", nil)
 		assert.NoError(t, err)
 	})
 
@@ -111,7 +112,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			}).
 			Build()
 
-		err = processComponentSecrets(&c, "default", client)
+		err = processComponentSecrets(ctx, &c, "default", client)
 		assert.NoError(t, err)
 
 		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
@@ -158,7 +159,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			}).
 			Build()
 
-		err = processComponentSecrets(&c, "default", client)
+		err = processComponentSecrets(ctx, &c, "default", client)
 		assert.NoError(t, err)
 
 		enc := base64.StdEncoding.EncodeToString([]byte("value1"))

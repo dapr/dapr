@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	actorsmocks "github.com/dapr/dapr/pkg/actors/mocks"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
@@ -1890,7 +1891,7 @@ func TestPublishTopic(t *testing.T) {
 
 	srv := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			PublishFn: func(req *pubsub.PublishRequest) error {
+			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
 				if req.Topic == "error-topic" {
 					return errors.New("error when publish")
 				}
@@ -1910,7 +1911,7 @@ func TestPublishTopic(t *testing.T) {
 				mock.On("Features").Return([]pubsub.Feature{})
 				return &mock
 			},
-			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				switch req.Topic {
 				case "error-topic":
 					return pubsub.BulkPublishResponse{}, errors.New("error when publish")
@@ -2078,7 +2079,7 @@ func TestBulkPublish(t *testing.T) {
 				mock.On("Features").Return([]pubsub.Feature{})
 				return &mock
 			},
-			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
 				if req.Topic == "error-topic" {
@@ -2192,7 +2193,7 @@ func TestShutdownEndpoints(t *testing.T) {
 func TestInvokeBinding(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	srv := &api{
-		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "error-binding" {
 				return nil, errors.New("error invoking binding")
 			}
@@ -2374,24 +2375,24 @@ func TestGetMetadata(t *testing.T) {
 	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 
-	mockActors := new(actors.MockActors)
-	mockActors.On("GetActiveActorsCount").Return(actors.ActiveActorsCount{
+	mockActors := new(actorsmocks.Actors)
+	mockActors.On("GetActiveActorsCount", mock.AnythingOfType("*context.valueCtx")).Return([]actors.ActiveActorsCount{{
 		Count: 10,
 		Type:  "abcd",
-	})
+	}})
 
 	fakeAPI := &api{
 		id:    "fakeAPI",
 		actor: mockActors,
-		getComponentsFn: func() []componentsV1alpha.Component {
+		getComponentsFn: func(ctx context.Context) []componentsV1alpha.Component {
 			return []componentsV1alpha.Component{fakeComponent}
 		},
-		getComponentsCapabilitesFn: func() map[string][]string {
+		getComponentsCapabilitesFn: func(ctx context.Context) map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+		getSubscriptionsFn: func(ctx context.Context) ([]runtimePubsub.Subscription, error) {
 			return []runtimePubsub.Subscription{
 				{
 					PubsubName:      "test",
@@ -2858,6 +2859,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 }
 
 func TestStateAPIWithResiliency(t *testing.T) {
+	ctx := context.Background()
 	failingStore := &daprt.FailingStatestore{
 		Failure: daprt.NewFailure(
 			map[string]int{
@@ -2891,7 +2893,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		id:                       "fakeAPI",
 		stateStores:              map[string]state.Store{"failStore": failingStore},
 		transactionalStateStores: map[string]state.TransactionalStore{"failStore": failingStore},
-		resiliency:               resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		resiliency:               resiliency.FromConfigurations(ctx, logger.NewLogger("grpc.api.test"), testResiliency),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -3126,6 +3128,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 }
 
 func TestConfigurationAPIWithResiliency(t *testing.T) {
+	ctx := context.Background()
 	failingConfigStore := daprt.FailingConfigurationStore{
 		Failure: daprt.NewFailure(
 			map[string]int{
@@ -3146,7 +3149,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		id:                     "fakeAPI",
 		configurationStores:    map[string]configuration.Store{"failConfig": &failingConfigStore},
 		configurationSubscribe: map[string]chan struct{}{},
-		resiliency:             resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		resiliency:             resiliency.FromConfigurations(ctx, logger.NewLogger("grpc.api.test"), testResiliency),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -3236,6 +3239,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 }
 
 func TestSecretAPIWithResiliency(t *testing.T) {
+	ctx := context.Background()
 	failingStore := daprt.FailingSecretStore{
 		Failure: daprt.NewFailure(
 			map[string]int{"key": 1, "bulk": 1},
@@ -3248,7 +3252,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 	fakeAPI := &api{
 		id:           "fakeAPI",
 		secretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
-		resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		resiliency:   resiliency.FromConfigurations(ctx, logger.NewLogger("grpc.api.test"), testResiliency),
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -3311,6 +3315,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 }
 
 func TestServiceInvocationWithResiliency(t *testing.T) {
+	ctx := context.Background()
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
 		Failure: daprt.NewFailure(
 			map[string]int{
@@ -3329,7 +3334,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: failingDirectMessaging,
-		resiliency:      resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		resiliency:      resiliency.FromConfigurations(ctx, logger.NewLogger("grpc.api.test"), testResiliency),
 	}
 
 	// Run test server
@@ -3519,7 +3524,7 @@ func TestUnlockResponseToGrpcResponse(t *testing.T) {
 
 func TestTryLock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			TracingSpec: config.TracingSpec{},
 		})
 		req := &runtimev1pb.TryLockRequest{
@@ -3534,7 +3539,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3550,7 +3555,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3567,7 +3572,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3586,7 +3591,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3615,7 +3620,7 @@ func TestTryLock(t *testing.T) {
 				Success: true,
 			}, nil
 		})
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3633,7 +3638,7 @@ func TestTryLock(t *testing.T) {
 
 func TestUnlock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			TracingSpec: config.TracingSpec{},
 		})
 
@@ -3649,7 +3654,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3666,7 +3671,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3683,7 +3688,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3710,7 +3715,7 @@ func TestUnlock(t *testing.T) {
 				Status: lock.Success,
 			}, nil
 		})
-		api := NewAPI(APIOpts{
+		api := NewAPI(context.Background(), APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})

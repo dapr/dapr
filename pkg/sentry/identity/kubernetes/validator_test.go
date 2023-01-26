@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 )
 
 func TestValidate(t *testing.T) {
+	ctx := context.Background()
 	t.Run("invalid token", func(t *testing.T) {
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor(
@@ -26,7 +28,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2", "ns2")
+		err := v.Validate(ctx, "a1:ns1", "a2:ns2", "ns2")
 		assert.Equal(t, fmt.Errorf("%s: invalid token: bad token", errPrefix).Error(), err.Error())
 	})
 
@@ -44,7 +46,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2", "ns")
+		err := v.Validate(ctx, "a1:ns1", "a2:ns2", "ns")
 		expectedErr := fmt.Errorf("%s: authentication failed", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -63,7 +65,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2", "ns2")
+		err := v.Validate(ctx, "a1:ns1", "a2:ns2", "ns2")
 		expectedErr := fmt.Errorf("%s: provided token is not a properly structured service account token", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -82,7 +84,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("ns2:a1", "ns2:a2", "ns1")
+		err := v.Validate(ctx, "ns2:a1", "ns2:a2", "ns1")
 		expectedErr := fmt.Errorf("%s: token/id mismatch. received id: ns2:a1", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -94,7 +96,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "", "ns")
+		err := v.Validate(ctx, "a1:ns1", "", "ns")
 		expectedErr := fmt.Errorf("%s: token field in request must not be empty", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -106,7 +108,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("", "a1:ns1", "ns")
+		err := v.Validate(ctx, "", "a1:ns1", "ns")
 		expectedErr := fmt.Errorf("%s: id field in request must not be empty", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -125,7 +127,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("ns1:a1", "ns1:a1", "ns1")
+		err := v.Validate(ctx, "ns1:a1", "ns1:a1", "ns1")
 		assert.NoError(t, err)
 	})
 }

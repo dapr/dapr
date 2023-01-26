@@ -110,7 +110,8 @@ func (s *server) Ping(context.Context, *proto.PingRequest) (*proto.PingResponse,
 }
 
 func TestPubSubPluggableCalls(t *testing.T) {
-	getPubSub := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *server) {
+	ctx := context.Background()
+	getPubSub := testingGrpc.TestServerFor(ctx, testLogger, func(s *grpc.Server, svc *server) {
 		proto.RegisterPubSubServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcPubSub {
 		client := proto.NewPubSubClient(cci)
@@ -149,7 +150,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			}()
 
 			ps := fromConnector(testLogger, connector)
-			err = ps.Init(pubsub.Metadata{
+			err = ps.Init(ctx, pubsub.Metadata{
 				Base: contribMetadata.Base{},
 			})
 

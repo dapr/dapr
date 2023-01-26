@@ -44,8 +44,8 @@ type grpcStateStore struct {
 
 // Init initializes the grpc state passing out the metadata to the grpc component.
 // It also fetches and set the current components features.
-func (ss *grpcStateStore) Init(metadata state.Metadata) error {
-	if err := ss.Dial(metadata.Name); err != nil {
+func (ss *grpcStateStore) Init(ctx context.Context, metadata state.Metadata) error {
+	if err := ss.Dial(ctx, metadata.Name); err != nil {
 		return err
 	}
 
@@ -53,7 +53,7 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		Properties: metadata.Properties,
 	}
 
-	_, err := ss.Client.Init(ss.Context, &proto.InitRequest{
+	_, err := ss.Client.Init(ctx, &proto.InitRequest{
 		Metadata: protoMetadata,
 	})
 	if err != nil {
@@ -62,7 +62,7 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 
 	// TODO Static data could be retrieved in another way, a necessary discussion should start soon.
 	// we need to call the method here because features could return an error and the features interface doesn't support errors
-	featureResponse, err := ss.Client.Features(ss.Context, &proto.FeaturesRequest{})
+	featureResponse, err := ss.Client.Features(ctx, &proto.FeaturesRequest{})
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 }
 
 // Features list all implemented features.
-func (ss *grpcStateStore) Features() []state.Feature {
+func (ss *grpcStateStore) Features(_ context.Context) []state.Feature {
 	return ss.features
 }
 

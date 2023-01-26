@@ -110,13 +110,13 @@ func (h *Channel) GetBaseAddress() string {
 
 // GetAppConfig gets application config from user application
 // GET http://localhost:<app_port>/dapr/config
-func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (h *Channel) GetAppConfig(ctx context.Context) (*config.ApplicationConfig, error) {
 	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint).
 		WithHTTPExtension(http.MethodGet, "").
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
-	resp, err := h.InvokeMethod(context.TODO(), req)
+	resp, err := h.InvokeMethod(ctx, req)
 	if err != nil {
 		return nil, err
 	}

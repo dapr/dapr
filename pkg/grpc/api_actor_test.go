@@ -19,11 +19,13 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorsmocks "github.com/dapr/dapr/pkg/actors/mocks"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -123,8 +125,8 @@ func TestGetActorState(t *testing.T) {
 
 	t.Run("Get actor state - OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
-		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &actors.GetStateRequest{
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("GetState", mock.AnythingOfType("*context.valueCtx"), &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
@@ -132,7 +134,7 @@ func TestGetActorState(t *testing.T) {
 			Data: data,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*context.valueCtx"), &actors.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -182,8 +184,8 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 
 	t.Run("Save actor state - Upsert and Delete OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
-		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("TransactionalStateOperation", mock.AnythingOfType("*context.valueCtx"), &actors.TransactionalRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Operations: []actors.TransactionalOperation{
@@ -203,7 +205,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 			},
 		}).Return(nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*context.valueCtx"), &actors.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -280,7 +282,8 @@ func TestInvokeActor(t *testing.T) {
 }
 
 func TestInvokeActorWithResiliency(t *testing.T) {
-	failingActors := actors.FailingActors{
+	ctx := context.Background()
+	failingActors := actorsmocks.FailingActors{
 		Failure: daprt.NewFailure(
 			map[string]int{
 				"failingActor": 1,
@@ -294,7 +297,7 @@ func TestInvokeActorWithResiliency(t *testing.T) {
 	server := startDaprAPIServer(port, &api{
 		id:         "fakeAPI",
 		actor:      &failingActors,
-		resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testActorResiliency),
+		resiliency: resiliency.FromConfigurations(ctx, logger.NewLogger("grpc.api.test"), testActorResiliency),
 	}, "")
 	defer server.Stop()
 

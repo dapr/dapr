@@ -51,7 +51,7 @@ type Key struct {
 }
 
 // ComponentEncryptionKey checks if a component definition contains an encryption key and extracts it using the supplied secret store.
-func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstores.SecretStore) (ComponentEncryptionKeys, error) {
+func ComponentEncryptionKey(ctx context.Context, component v1alpha1.Component, secretStore secretstores.SecretStore) (ComponentEncryptionKeys, error) {
 	if secretStore == nil {
 		return ComponentEncryptionKeys{}, nil
 	}
@@ -91,7 +91,7 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 			continue
 		}
 
-		key, err := tryGetEncryptionKeyFromMetadataItem(component.Namespace, m, secretStore)
+		key, err := tryGetEncryptionKeyFromMetadataItem(ctx, component.Namespace, m, secretStore)
 		if err != nil {
 			return ComponentEncryptionKeys{}, fmt.Errorf("%s: %w", errPrefix, err)
 		}
@@ -123,13 +123,12 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 	return cek, nil
 }
 
-func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.MetadataItem, secretStore secretstores.SecretStore) (Key, error) {
+func tryGetEncryptionKeyFromMetadataItem(ctx context.Context, namespace string, item v1alpha1.MetadataItem, secretStore secretstores.SecretStore) (Key, error) {
 	if item.SecretKeyRef.Name == "" {
 		return Key{}, fmt.Errorf("%s: secretKeyRef cannot be empty", errPrefix)
 	}
 
-	// TODO: cascade context.
-	r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
+	r, err := secretStore.GetSecret(ctx, secretstores.GetSecretRequest{
 		Name: item.SecretKeyRef.Name,
 		Metadata: map[string]string{
 			"namespace": namespace,

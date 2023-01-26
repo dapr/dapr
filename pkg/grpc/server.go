@@ -52,7 +52,7 @@ const (
 // Server is an interface for the dapr gRPC server.
 type Server interface {
 	io.Closer
-	StartNonBlocking() error
+	StartNonBlocking(context.Context) error
 }
 
 type server struct {
@@ -120,7 +120,7 @@ func getDefaultMaxAgeDuration() *time.Duration {
 }
 
 // StartNonBlocking starts a new server in a goroutine.
-func (s *server) StartNonBlocking() error {
+func (s *server) StartNonBlocking(ctx context.Context) error {
 	var listeners []net.Listener
 	if s.config.UnixDomainSocket != "" && s.kind == apiServer {
 		socket := fmt.Sprintf("%s/dapr-%s-grpc.socket", s.config.UnixDomainSocket, s.config.AppID)
@@ -148,7 +148,7 @@ func (s *server) StartNonBlocking() error {
 	for _, listener := range listeners {
 		// server is created in a loop because each instance
 		// has a handle on the underlying listener.
-		server, err := s.getGRPCServer()
+		server, err := s.getGRPCServer(ctx)
 		if err != nil {
 			return err
 		}
@@ -184,9 +184,9 @@ func (s *server) Close() error {
 	return nil
 }
 
-func (s *server) generateWorkloadCert() error {
+func (s *server) generateWorkloadCert(ctx context.Context) error {
 	s.logger.Info("sending workload csr request to sentry")
-	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
+	signedCert, err := s.authenticator.CreateSignedWorkloadCert(ctx, s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
 	if err != nil {
 		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %w", err)
 	}
@@ -247,14 +247,14 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	}
 }
 
-func (s *server) getGRPCServer() (*grpcGo.Server, error) {
+func (s *server) getGRPCServer(ctx context.Context) (*grpcGo.Server, error) {
 	opts := s.getMiddlewareOptions()
 	if s.maxConnectionAge != nil {
 		opts = append(opts, grpcGo.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
 	}
 
 	if s.authenticator != nil {
-		err := s.generateWorkloadCert()
+		err := s.generateWorkloadCert(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -270,7 +270,7 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 		ta := credentials.NewTLS(&tlsConfig)
 
 		opts = append(opts, grpcGo.Creds(ta))
-		go s.startWorkloadCertRotation()
+		go s.startWorkloadCertRotation(ctx)
 	}
 
 	opts = append(opts,
@@ -280,13 +280,13 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 	)
 
 	if s.proxy != nil {
-		opts = append(opts, grpcGo.UnknownServiceHandler(s.proxy.Handler()))
+		opts = append(opts, grpcGo.UnknownServiceHandler(s.proxy.Handler(ctx)))
 	}
 
 	return grpcGo.NewServer(opts...), nil
 }
 
-func (s *server) startWorkloadCertRotation() {
+func (s *server) startWorkloadCertRotation(ctx context.Context) {
 	s.logger.Infof("starting workload cert expiry watcher. current cert expires on: %s", s.signedCert.Expiry.String())
 
 	ticker := time.NewTicker(certWatchInterval)
@@ -297,13 +297,13 @@ func (s *server) startWorkloadCertRotation() {
 		if renew {
 			s.logger.Info("renewing certificate: requesting new cert and restarting gRPC server")
 
-			err := s.generateWorkloadCert()
+			err := s.generateWorkloadCert(ctx)
 			if err != nil {
 				s.logger.Errorf("error starting server: %s", err)
 				s.renewMutex.Unlock()
 				continue
 			}
-			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
+			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted(ctx)
 		}
 		s.renewMutex.Unlock()
 	}

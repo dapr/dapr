@@ -211,7 +211,7 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
-	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
+	conn, teardown, err := d.connectionCreatorFn(ctx, appAddress, appID, appNamespace)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -231,12 +231,12 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(ctx, appID, req.Message().Method)
 
 	var resp *internalv1pb.InternalInvokeResponse
 	defer func() {
 		if resp != nil {
-			diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, resp.Status.Code, start)
+			diag.DefaultMonitoring.ServiceInvocationResponseReceived(ctx, appID, req.Message().Method, resp.Status.Code, start)
 		}
 	}()
 

@@ -87,7 +87,9 @@ func (b *inputBindingServer) Ping(context.Context, *proto.PingRequest) (*proto.P
 var testLogger = logger.NewLogger("bindings-test-pluggable-logger")
 
 func TestInputBindingCalls(t *testing.T) {
-	getInputBinding := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *inputBindingServer) {
+	ctx := context.Background()
+
+	getInputBinding := testingGrpc.TestServerFor(ctx, testLogger, func(s *grpc.Server, svc *inputBindingServer) {
 		proto.RegisterInputBindingServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcInputBinding {
 		client := proto.NewInputBindingClient(cci)
@@ -125,7 +127,7 @@ func TestInputBindingCalls(t *testing.T) {
 			}()
 
 			conn := inputFromConnector(testLogger, connector)
-			err = conn.Init(bindings.Metadata{
+			err = conn.Init(ctx, bindings.Metadata{
 				Base: contribMetadata.Base{},
 			})
 

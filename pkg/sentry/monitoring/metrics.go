@@ -44,36 +44,35 @@ var (
 )
 
 // CertSignRequestReceived counts when CSR received.
-func CertSignRequestReceived() {
-	stats.Record(context.Background(), csrReceivedTotal.M(1))
+func CertSignRequestReceived(ctx context.Context) {
+	stats.Record(ctx, csrReceivedTotal.M(1))
 }
 
 // CertSignSucceed counts succeeded cert issuance.
-func CertSignSucceed() {
-	stats.Record(context.Background(), certSignSuccessTotal.M(1))
+func CertSignSucceed(ctx context.Context) {
+	stats.Record(ctx, certSignSuccessTotal.M(1))
 }
 
 // CertSignFailed counts succeeded cert issuance.
-func CertSignFailed(reason string) {
-	stats.RecordWithTags(
-		context.Background(),
+func CertSignFailed(ctx context.Context, reason string) {
+	stats.RecordWithTags(ctx,
 		diagUtils.WithTags(certSignFailedTotal.Name(), failedReasonKey, reason),
 		certSignFailedTotal.M(1))
 }
 
 // IssuerCertExpiry records root cert expiry.
-func IssuerCertExpiry(expiry *time.Time) {
-	stats.Record(context.Background(), issuerCertExpiryTimestamp.M(expiry.Unix()))
+func IssuerCertExpiry(ctx context.Context, expiry *time.Time) {
+	stats.Record(ctx, issuerCertExpiryTimestamp.M(expiry.Unix()))
 }
 
 // ServerCertIssueFailed records server cert issue failure.
-func ServerCertIssueFailed(reason string) {
-	stats.Record(context.Background(), serverTLSCertIssueFailedTotal.M(1))
+func ServerCertIssueFailed(ctx context.Context, reason string) {
+	stats.Record(ctx, serverTLSCertIssueFailedTotal.M(1))
 }
 
 // IssuerCertChanged records issuer credential change.
-func IssuerCertChanged() {
-	stats.Record(context.Background(), issuerCertChangedTotal.M(1))
+func IssuerCertChanged(ctx context.Context) {
+	stats.Record(ctx, issuerCertChangedTotal.M(1))
 }
 
 // InitMetrics initializes metrics.

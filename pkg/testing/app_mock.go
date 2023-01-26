@@ -63,7 +63,7 @@ func NewMockApp(returnBody bool, messageCount int, noprint bool) *MockApp {
 }
 
 // Run opens a test HTTP server and echo endpoint on the mock object.
-func (a *MockApp) Run(port int) {
+func (a *MockApp) Run(ctx context.Context, port int) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/httptest", a.handler)
 	mux.HandleFunc("/echo", a.echoHandler)
@@ -76,7 +76,7 @@ func (a *MockApp) Run(port int) {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	<-stop
-	ctx, cF := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cF := context.WithTimeout(ctx, 5*time.Second)
 	cF()
 	server.Shutdown(ctx)
 }

@@ -14,6 +14,7 @@ limitations under the License.
 package internal
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -23,18 +24,19 @@ import (
 )
 
 func TestConnectToServer(t *testing.T) {
+	ctx := context.Background()
 	t.Run("when grpc get opts return an error connectToServer should return an error", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
 			return nil, errEstablishingTLSConn
 		})
-		assert.Equal(t, client.connectToServer(""), errEstablishingTLSConn)
+		assert.Equal(t, client.connectToServer(ctx, ""), errEstablishingTLSConn)
 	})
 	t.Run("when grpc dial returns an error connectToServer should return an error", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
 			return []grpc.DialOption{}, nil
 		})
 
-		assert.NotNil(t, client.connectToServer(""))
+		assert.NotNil(t, client.connectToServer(ctx, ""))
 	})
 	t.Run("when new placement stream returns an error connectToServer should return an error", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
@@ -42,7 +44,7 @@ func TestConnectToServer(t *testing.T) {
 		})
 		conn, cleanup := newTestServerWithOpts() // do not register the placement stream server
 		defer cleanup()
-		assert.NotNil(t, client.connectToServer(conn))
+		assert.NotNil(t, client.connectToServer(ctx, conn))
 	})
 	t.Run("when connectToServer succeeds it should broadcast that a new connection is alive", func(t *testing.T) {
 		conn, _, cleanup := newTestServer() // do not register the placement stream server
@@ -59,13 +61,14 @@ func TestConnectToServer(t *testing.T) {
 			ready.Done()
 		}()
 
-		assert.Nil(t, client.connectToServer(conn))
+		assert.Nil(t, client.connectToServer(ctx, conn))
 		ready.Wait() // should not timeout
 		assert.True(t, client.streamConnAlive)
 	})
 }
 
 func TestDisconnect(t *testing.T) {
+	ctx := context.Background()
 	t.Run("disconnectFn should return and broadcast when connection is not alive", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
 			return nil, nil
@@ -95,7 +98,7 @@ func TestDisconnect(t *testing.T) {
 		defer cleanup()
 
 		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, nil))
-		assert.Nil(t, client.connectToServer(conn))
+		assert.Nil(t, client.connectToServer(ctx, conn))
 
 		called := false
 		shouldBeCalled := func() {

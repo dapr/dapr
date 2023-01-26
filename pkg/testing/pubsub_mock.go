@@ -15,7 +15,7 @@ type MockPubSub struct {
 }
 
 // Init is a mock initialization method.
-func (m *MockPubSub) Init(metadata pubsub.Metadata) error {
+func (m *MockPubSub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	args := m.Called(metadata)
 	return args.Error(0)
 }
@@ -67,7 +67,7 @@ func (f *FailingPubsub) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
 
-func (f *FailingPubsub) Init(metadata pubsub.Metadata) error {
+func (f *FailingPubsub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	return nil
 }
 
@@ -83,14 +83,14 @@ func (f *FailingPubsub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeR
 	return pubsub.BulkSubscribeResponse{}, f.Failure.PerformFailure(req.Topic)
 }
 
-func (f *FailingPubsub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+func (f *FailingPubsub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	err := f.Failure.PerformFailure(req.Topic)
 	if err != nil {
 		return err
 	}
 
 	// This handler can also be calling into things that'll fail
-	return handler(context.Background(), &pubsub.NewMessage{
+	return handler(ctx, &pubsub.NewMessage{
 		Topic: req.Topic,
 		Metadata: map[string]string{
 			"pubsubName": "failPubsub",
@@ -125,7 +125,7 @@ type subscription struct {
 }
 
 // Init is a mock initialization method.
-func (m *InMemoryPubsub) Init(metadata pubsub.Metadata) error {
+func (m *InMemoryPubsub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	m.lock = &sync.Mutex{}
 	args := m.Called(metadata)
 	return args.Error(0)
@@ -152,7 +152,7 @@ func (m *InMemoryPubsub) Publish(ctx context.Context, req *pubsub.PublishRequest
 	return nil
 }
 
-func (m *InMemoryPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+func (m *InMemoryPubsub) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	var sendBatch chan *pubsub.BulkMessage
 	bulkMessage := pubsub.BulkMessage{}
 	if req != nil {

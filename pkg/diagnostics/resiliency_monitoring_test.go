@@ -1,6 +1,7 @@
 package diagnostics_test
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -27,6 +28,8 @@ const (
 )
 
 func TestResiliencyCountMonitoring(t *testing.T) {
+	ctx := context.Background()
+
 	tests := []struct {
 		name             string
 		unitFn           func()
@@ -40,7 +43,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.EndpointPolicy("fakeApp", "fakeEndpoint")
+				_ = r.EndpointPolicy(ctx, "fakeApp", "fakeEndpoint")
 			},
 			wantNumberOfRows: 3,
 			wantTags: []tag.Tag{
@@ -57,7 +60,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.ActorPreLockPolicy("fakeActor", "fakeActorId")
+				_ = r.ActorPreLockPolicy(ctx, "fakeActor", "fakeActorId")
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -73,7 +76,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				_ = r.ActorPostLockPolicy("fakeActor", "fakeActorId")
+				_ = r.ActorPostLockPolicy(ctx, "fakeActor", "fakeActorId")
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -88,7 +91,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, testStateStoreName)
-				_ = r.ComponentOutboundPolicy(testStateStoreName, resiliency.Statestore)
+				_ = r.ComponentOutboundPolicy(ctx, testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -105,7 +108,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, testStateStoreName)
-				_ = r.ComponentInboundPolicy(testStateStoreName, resiliency.Statestore)
+				_ = r.ComponentInboundPolicy(ctx, testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -140,7 +143,9 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 }
 
 func createTestResiliency(resiliencyName string, resiliencyNamespace string, stateStoreName string) *resiliency.Resiliency {
-	r := resiliency.FromConfigurations(logger.NewLogger("fake-logger"), newTestResiliencyConfig(
+	ctx := context.Background()
+
+	r := resiliency.FromConfigurations(ctx, logger.NewLogger("fake-logger"), newTestResiliencyConfig(
 		resiliencyName,
 		resiliencyNamespace,
 		"fakeApp",

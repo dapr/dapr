@@ -230,6 +230,7 @@ func TestWrapper(t *testing.T) {
 }
 
 func TestInit(t *testing.T) {
+	ctx := context.Background()
 	mgr := dapr_testing.NewMockManager()
 
 	_ = scheme.AddToScheme(mgr.GetScheme())
@@ -239,7 +240,7 @@ func TestInit(t *testing.T) {
 	t.Run("test init dapr handler", func(t *testing.T) {
 		assert.NotNil(t, handler)
 
-		err := handler.Init()
+		err := handler.Init(ctx)
 
 		assert.Nil(t, err)
 

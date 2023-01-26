@@ -13,9 +13,13 @@ limitations under the License.
 
 package components
 
-import componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+import (
+	"context"
+
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+)
 
 // ComponentLoader is an interface for returning Dapr components.
 type ComponentLoader interface {
-	LoadComponents() ([]componentsV1alpha1.Component, error)
+	LoadComponents(context.Context) ([]componentsV1alpha1.Component, error)
 }

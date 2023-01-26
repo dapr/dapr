@@ -48,6 +48,8 @@ const (
 )
 
 func main() {
+	ctx := signals.Context()
+
 	configName := flag.String("config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
 	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
@@ -126,7 +128,7 @@ func main() {
 		for {
 			select {
 			case <-issuerEvent:
-				monitoring.IssuerCertChanged()
+				monitoring.IssuerCertChanged(ctx)
 				log.Debug("received issuer credentials changed signal")
 				// Batch all signals within 2s of each other
 				if restart == nil {

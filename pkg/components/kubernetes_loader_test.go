@@ -90,7 +90,7 @@ func TestLoadComponents(t *testing.T) {
 		podName: "testPodName",
 	}
 
-	response, err := request.LoadComponents()
+	response, err := request.LoadComponents(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, response)
 	assert.Equal(t, "test", response[0].Name)

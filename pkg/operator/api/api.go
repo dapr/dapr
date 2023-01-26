@@ -158,7 +158,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	}
 	for i := range components.Items {
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := processComponentSecrets(&c, in.Namespace, a.Client)
+		err := processComponentSecrets(ctx, &c, in.Namespace, a.Client)
 		if err != nil {
 			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
 			return &operatorv1pb.ListComponentResponse{}, err
@@ -174,12 +174,12 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	return resp, nil
 }
 
-func processComponentSecrets(component *componentsapi.Component, namespace string, kubeClient client.Client) error {
+func processComponentSecrets(ctx context.Context, component *componentsapi.Component, namespace string, kubeClient client.Client) error {
 	for i, m := range component.Spec.Metadata {
 		if m.SecretKeyRef.Name != "" && (component.Auth.SecretStore == kubernetesSecretStore || component.Auth.SecretStore == "") {
 			var secret corev1.Secret
 
-			err := kubeClient.Get(context.TODO(), types.NamespacedName{
+			err := kubeClient.Get(ctx, types.NamespacedName{
 				Name:      m.SecretKeyRef.Name,
 				Namespace: namespace,
 			}, &secret)
@@ -306,7 +306,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			return
 		}
 
-		err := processComponentSecrets(c, in.Namespace, a.Client)
+		err := processComponentSecrets(srv.Context(), c, in.Namespace, a.Client)
 		if err != nil {
 			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
 			return

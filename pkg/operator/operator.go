@@ -85,7 +85,7 @@ func init() {
 }
 
 // NewOperator returns a new Dapr Operator.
-func NewOperator(opts Options) Operator {
+func NewOperator(ctx context.Context, opts Options) Operator {
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		log.Fatalf("Unable to get controller runtime configuration, err: %s", err)
@@ -120,7 +120,7 @@ func NewOperator(opts Options) Operator {
 	}
 
 	daprHandler := handlers.NewDaprHandler(mgr)
-	err = daprHandler.Init()
+	err = daprHandler.Init(ctx)
 	if err != nil {
 		log.Fatalf("Unable to initialize handler, err: %s", err)
 	}
@@ -134,7 +134,7 @@ func NewOperator(opts Options) Operator {
 	}
 	o.apiServer = api.NewAPIServer(o.client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	componentInformer, err := mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
 	cancel()
 	if err != nil {
@@ -151,9 +151,9 @@ func NewOperator(opts Options) Operator {
 	return o
 }
 
-func (o *operator) prepareConfig() {
+func (o *operator) prepareConfig(ctx context.Context) {
 	var err error
-	o.config, err = LoadConfiguration(o.configName, o.client)
+	o.config, err = LoadConfiguration(ctx, o.configName, o.client)
 	if err != nil {
 		log.Fatalf("Unable to load configuration, config: %s, err: %s", o.configName, err)
 	}
@@ -216,7 +216,7 @@ func (o *operator) Run(ctx context.Context) {
 	if !o.mgr.GetCache().WaitForCacheSync(ctx) {
 		log.Fatalf("Failed to wait for cache sync")
 	}
-	o.prepareConfig()
+	o.prepareConfig(ctx)
 
 	// load certs from disk
 	certChain := o.loadCertChain(ctx)

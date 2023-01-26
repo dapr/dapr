@@ -14,6 +14,7 @@ limitations under the License.
 package placement
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -37,7 +38,7 @@ const (
 // expected to do, so we must react to changes
 //
 // reference: https://github.com/hashicorp/consul/blob/master/agent/consul/leader.go
-func (p *Service) MonitorLeadership() {
+func (p *Service) MonitorLeadership(ctx context.Context) {
 	var weAreLeaderCh chan struct{}
 	var leaderLoop sync.WaitGroup
 
@@ -56,7 +57,7 @@ func (p *Service) MonitorLeadership() {
 				leaderLoop.Add(1)
 				go func(ch chan struct{}) {
 					defer leaderLoop.Done()
-					p.leaderLoop(ch)
+					p.leaderLoop(ctx, ch)
 				}(weAreLeaderCh)
 				log.Info("cluster leadership acquired")
 			} else {
@@ -78,7 +79,7 @@ func (p *Service) MonitorLeadership() {
 	}
 }
 
-func (p *Service) leaderLoop(stopCh chan struct{}) {
+func (p *Service) leaderLoop(ctx context.Context, stopCh chan struct{}) {
 	// This loop is to ensure the FSM reflects all queued writes by applying Barrier
 	// and completes leadership establishment before becoming a leader.
 	for !p.hasLeadership.Load() {
@@ -105,7 +106,7 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 		}
 	}
 
-	p.membershipChangeWorker(stopCh)
+	p.membershipChangeWorker(ctx, stopCh)
 }
 
 func (p *Service) establishLeadership() {
@@ -134,13 +135,13 @@ func (p *Service) cleanupHeartbeats() {
 
 // membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
-func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
+func (p *Service) membershipChangeWorker(ctx context.Context, stopCh chan struct{}) {
 	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
 	disseminateTimer := time.NewTicker(disseminateTimerInterval)
 
 	p.memberUpdateCount.Store(0)
 
-	go p.processRaftStateCommand(stopCh)
+	go p.processRaftStateCommand(ctx, stopCh)
 
 	for {
 		select {
@@ -211,7 +212,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 
 // processRaftStateCommand is the worker loop to apply membership change command to raft state
 // and will disseminate the latest hashing table to the connected dapr runtime.
-func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
+func (p *Service) processRaftStateCommand(ctx context.Context, stopCh chan struct{}) {
 	// logApplyConcurrency is the buffered channel to limit the concurrency
 	// of raft apply command.
 	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)
@@ -267,20 +268,20 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 			case raft.TableDisseminate:
 				// TableDisseminate will be triggered by disseminateTimer.
 				// This disseminates the latest consistent hashing tables to Dapr runtime.
-				p.performTableDissemination()
+				p.performTableDissemination(ctx)
 			}
 		}
 	}
 }
 
-func (p *Service) performTableDissemination() {
+func (p *Service) performTableDissemination(ctx context.Context) {
 	p.streamConnPoolLock.RLock()
 	nStreamConnPool := len(p.streamConnPool)
 	p.streamConnPoolLock.RUnlock()
 	nTargetConns := len(p.raftNode.FSM().State().Members())
 
-	monitoring.RecordRuntimesCount(nStreamConnPool)
-	monitoring.RecordActorRuntimesCount(nTargetConns)
+	monitoring.RecordRuntimesCount(ctx, nStreamConnPool)
+	monitoring.RecordActorRuntimesCount(ctx, nTargetConns)
 
 	// ignore dissemination if there is no member update.
 	if cnt := p.memberUpdateCount.Load(); cnt > 0 {

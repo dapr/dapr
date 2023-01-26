@@ -33,7 +33,7 @@ type mockSecretStore struct {
 	secondaryKey string
 }
 
-func (m *mockSecretStore) Init(metadata secretstores.Metadata) error {
+func (m *mockSecretStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
 	if val, ok := metadata.Properties["primaryKey"]; ok {
 		m.primaryKey = val
 	}
@@ -59,6 +59,8 @@ func (m *mockSecretStore) BulkGetSecret(ctx context.Context, req secretstores.Bu
 }
 
 func TestComponentEncryptionKey(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("component has a primary and secondary encryption keys", func(t *testing.T) {
 		component := v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -92,14 +94,14 @@ func TestComponentEncryptionKey(t *testing.T) {
 		secondaryKey := hex.EncodeToString(bytes[:16]) // 128-bit key
 
 		secretStore := &mockSecretStore{}
-		secretStore.Init(secretstores.Metadata{Base: metadata.Base{
+		secretStore.Init(ctx, secretstores.Metadata{Base: metadata.Base{
 			Properties: map[string]string{
 				"primaryKey":   primaryKey,
 				"secondaryKey": secondaryKey,
 			},
 		}})
 
-		keys, err := ComponentEncryptionKey(component, secretStore)
+		keys, err := ComponentEncryptionKey(ctx, component, secretStore)
 		assert.NoError(t, err)
 		assert.Equal(t, primaryKey, keys.Primary.Key)
 		assert.Equal(t, secondaryKey, keys.Secondary.Key)
@@ -128,7 +130,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 			},
 		}
 
-		keys, err := ComponentEncryptionKey(component, nil)
+		keys, err := ComponentEncryptionKey(ctx, component, nil)
 		assert.Empty(t, keys.Primary.Key)
 		assert.Empty(t, keys.Secondary.Key)
 		assert.NoError(t, err)
@@ -148,22 +150,24 @@ func TestComponentEncryptionKey(t *testing.T) {
 			},
 		}
 
-		_, err := ComponentEncryptionKey(component, nil)
+		_, err := ComponentEncryptionKey(ctx, component, nil)
 		assert.NoError(t, err)
 	})
 }
 
 func TestTryGetEncryptionKeyFromMetadataItem(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("no secretRef on valid item", func(t *testing.T) {
 		secretStore := &mockSecretStore{}
-		secretStore.Init(secretstores.Metadata{Base: metadata.Base{
+		secretStore.Init(ctx, secretstores.Metadata{Base: metadata.Base{
 			Properties: map[string]string{
 				"primaryKey":   "123",
 				"secondaryKey": "456",
 			},
 		}})
 
-		_, err := tryGetEncryptionKeyFromMetadataItem("", v1alpha1.MetadataItem{}, secretStore)
+		_, err := tryGetEncryptionKeyFromMetadataItem(ctx, "", v1alpha1.MetadataItem{}, secretStore)
 		assert.Error(t, err)
 	})
 }

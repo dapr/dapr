@@ -37,13 +37,13 @@ var (
 )
 
 // RecordRuntimesCount records the number of connected runtimes.
-func RecordRuntimesCount(count int) {
-	stats.Record(context.Background(), runtimesTotal.M(int64(count)))
+func RecordRuntimesCount(ctx context.Context, count int) {
+	stats.Record(ctx, runtimesTotal.M(int64(count)))
 }
 
 // RecordActorRuntimesCount records the number of valid actor runtimes.
-func RecordActorRuntimesCount(count int) {
-	stats.Record(context.Background(), actorRuntimesTotal.M(int64(count)))
+func RecordActorRuntimesCount(ctx context.Context, count int) {
+	stats.Record(ctx, actorRuntimesTotal.M(int64(count)))
 }
 
 // InitMetrics initialize the placement service metrics.

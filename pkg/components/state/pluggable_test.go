@@ -163,7 +163,8 @@ func wrapString(str string) string {
 }
 
 func TestComponentCalls(t *testing.T) {
-	getStateStore := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *server) {
+	ctx := context.Background()
+	getStateStore := testingGrpc.TestServerFor(ctx, testLogger, func(s *grpc.Server, svc *server) {
 		proto.RegisterStateStoreServer(s, svc)
 		proto.RegisterTransactionalStateStoreServer(s, svc)
 		proto.RegisterQueriableStateStoreServer(s, svc)
@@ -204,7 +205,7 @@ func TestComponentCalls(t *testing.T) {
 			}()
 
 			ps := fromConnector(testLogger, connector)
-			err = ps.Init(state.Metadata{
+			err = ps.Init(ctx, state.Metadata{
 				Base: contribMetadata.Base{},
 			})
 
@@ -220,10 +221,10 @@ func TestComponentCalls(t *testing.T) {
 		stStore, cleanup, err := getStateStore(&server{})
 		require.NoError(t, err)
 		defer cleanup()
-		assert.Empty(t, stStore.Features())
+		assert.Empty(t, stStore.Features(context.Background()))
 		stStore.features = []state.Feature{state.FeatureETag}
-		assert.NotEmpty(t, stStore.Features())
-		assert.Equal(t, stStore.Features()[0], state.FeatureETag)
+		assert.NotEmpty(t, stStore.Features(context.Background()))
+		assert.Equal(t, stStore.Features(context.Background())[0], state.FeatureETag)
 	})
 
 	t.Run("delete should call delete grpc method", func(t *testing.T) {
@@ -385,7 +386,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.Ping()
+		err = stStore.Ping(ctx)
 
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.pingCalled.Load())
@@ -399,7 +400,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.Ping()
+		err = stStore.Ping(ctx)
 
 		assert.NotNil(t, err)
 		assert.Equal(t, int64(1), svc.pingCalled.Load())

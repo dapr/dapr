@@ -54,6 +54,7 @@ func TestAddDNSResolverPrefix(t *testing.T) {
 }
 
 func TestPlacementStream_RoundRobin(t *testing.T) {
+	ctx := context.Background()
 	const testServerCount = 3
 	leaderServer := []int32{1, 2}
 
@@ -79,7 +80,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		testSrv[leaderServer[0]].setLeader(true)
 
 		// act
-		testPlacement.Start()
+		testPlacement.Start(ctx)
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[0], testPlacement.serverIndex.Load())
 		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 2)
@@ -111,6 +112,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 }
 
 func TestAppHealthyStatus(t *testing.T) {
+	ctx := context.Background()
 	// arrange
 	address, testSrv, cleanup := newTestServer()
 
@@ -127,7 +129,7 @@ func TestAppHealthyStatus(t *testing.T) {
 		appHealthFunc, noopTableUpdateFunc)
 
 	// act
-	testPlacement.Start()
+	testPlacement.Start(ctx)
 
 	// wait until client sends heartbeat to the test server
 	time.Sleep(statusReportHeartbeatInterval * 3)
@@ -145,6 +147,7 @@ func TestAppHealthyStatus(t *testing.T) {
 }
 
 func TestOnPlacementOrder(t *testing.T) {
+	ctx := context.Background()
 	tableUpdateCount := 0
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() { tableUpdateCount++ }
@@ -155,7 +158,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		appHealthFunc, tableUpdateFunc)
 
 	t.Run("lock operation", func(t *testing.T) {
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{
 			Operation: "lock",
 		})
 		assert.True(t, testPlacement.tableIsBlocked.Load())
@@ -164,7 +167,7 @@ func TestOnPlacementOrder(t *testing.T) {
 	t.Run("update operation", func(t *testing.T) {
 		tableVersion := "1"
 		tableUpdateCount = 0
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
 				Version: tableVersion,
@@ -175,7 +178,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		assert.Equal(t, 1, tableUpdateCount)
 
 		// no update with the same table version
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
 				Version: tableVersion,
@@ -187,7 +190,7 @@ func TestOnPlacementOrder(t *testing.T) {
 	})
 
 	t.Run("unlock operation", func(t *testing.T) {
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{
 			Operation: "unlock",
 		})
 		assert.False(t, testPlacement.tableIsBlocked.Load())
@@ -195,6 +198,7 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
+	ctx := context.Background()
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
@@ -211,7 +215,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	})
 
 	t.Run("wait until ready", func(t *testing.T) {
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{Operation: "lock"})
 
 		testSuccessCh := make(chan struct{})
 		go func() {
@@ -225,7 +229,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		require.True(t, testPlacement.tableIsBlocked.Load())
 
 		// unlock
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{Operation: "unlock"})
 
 		// ensure that it is unlocked
 		select {
@@ -239,7 +243,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	})
 
 	t.Run("abort on context canceled", func(t *testing.T) {
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{Operation: "lock"})
 
 		testSuccessCh := make(chan struct{})
 		ctx, cancel := context.WithCancel(context.Background())

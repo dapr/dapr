@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -16,10 +17,12 @@ func servicesMetrics() *serviceMetrics {
 }
 
 func TestServiceInvocation(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("record service invocation request sent", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationRequestSent("testAppId2", "testMethod")
+		s.ServiceInvocationRequestSent(ctx, "testAppId2", "testMethod")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 		v := view.Find("runtime/service_invocation/req_sent_total")
@@ -30,7 +33,7 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("record service invoation request received", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationRequestReceived("testAppId", "testMethod")
+		s.ServiceInvocationRequestReceived(ctx, "testAppId", "testMethod")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_recv_total")
 		v := view.Find("runtime/service_invocation/req_recv_total")
@@ -41,7 +44,7 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("record service invocation response sent", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationResponseSent("testAppId2", "testMethod", 200)
+		s.ServiceInvocationResponseSent(ctx, "testAppId2", "testMethod", 200)
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/res_sent_total")
 		v := view.Find("runtime/service_invocation/res_sent_total")
@@ -52,7 +55,7 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("record service invocation response received", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationResponseReceived("testAppId", "testMethod", 200, time.Now())
+		s.ServiceInvocationResponseReceived(ctx, "testAppId", "testMethod", 200, time.Now())
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/res_recv_total")
 		v := view.Find("runtime/service_invocation/res_recv_total")

@@ -55,11 +55,11 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		callerAppID = "unknown"
 	}
 
-	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(ctx, callerAppID, req.Message().Method)
 
 	var statusCode int32
 	defer func() {
-		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(ctx, callerAppID, req.Message().Method, statusCode)
 	}()
 
 	// stausCode will be read by the deferred method above

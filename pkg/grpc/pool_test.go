@@ -165,7 +165,7 @@ func TestConnectionPool(t *testing.T) {
 		// Set connection fn that returns from the pre-created conns
 		n := 0
 		errNoNewConns := errors.New("no new connection available")
-		createFn := func() (grpc.ClientConnInterface, error) {
+		createFn := func(context.Context) (grpc.ClientConnInterface, error) {
 			if n >= len(conns) {
 				return nil, errNoNewConns
 			}
@@ -174,15 +174,17 @@ func TestConnectionPool(t *testing.T) {
 			return c, nil
 		}
 
+		ctx := context.Background()
+
 		// First call should invoke the createFn and return the first function
-		conn, err := cp.Get(createFn)
+		conn, err := cp.Get(ctx, createFn)
 		require.NoError(t, err)
 		require.Equal(t, conns[0], conn)
 		require.Equal(t, 1, n)
 
 		// Next grpcMaxConcurrentStreams-1 calls (99) should still return the first connection
 		for i := 1; i < grpcMaxConcurrentStreams; i++ { // Start from 1
-			conn, err = cp.Get(createFn)
+			conn, err = cp.Get(ctx, createFn)
 			require.NoError(t, err)
 			require.Equal(t, conns[0], conn)
 			require.Equal(t, 1, n) // Should not have called createFn again
@@ -192,7 +194,7 @@ func TestConnectionPool(t *testing.T) {
 		// Next grpcMaxConcurrentStreams calls should return the second connection
 		// After having invoked the method one more time
 		for i := 0; i < grpcMaxConcurrentStreams; i++ {
-			conn, err = cp.Get(createFn)
+			conn, err = cp.Get(ctx, createFn)
 			require.NoError(t, err)
 			require.Equal(t, conns[1], conn)
 			require.Equal(t, 2, n) // Should have called the function 2 times in total
@@ -201,7 +203,7 @@ func TestConnectionPool(t *testing.T) {
 		}
 
 		// Next call should return errNoNewConns (which is just from our mock handler)
-		conn, err = cp.Get(createFn)
+		conn, err = cp.Get(ctx, createFn)
 		require.Equal(t, errNoNewConns, err)
 		require.Nil(t, conn)
 
@@ -212,11 +214,11 @@ func TestConnectionPool(t *testing.T) {
 		require.Equal(t, int32(99), cp.connections[1].referenceCount)
 
 		// Next calls should return conns[0] and conns[1], without calling createFn again
-		conn, err = cp.Get(createFn)
+		conn, err = cp.Get(ctx, createFn)
 		require.NoError(t, err)
 		require.Equal(t, conns[0], conn)
 
-		conn, err = cp.Get(createFn)
+		conn, err = cp.Get(ctx, createFn)
 		require.NoError(t, err)
 		require.Equal(t, conns[1], conn)
 
@@ -231,7 +233,7 @@ func TestConnectionPool(t *testing.T) {
 		require.Equal(t, conns[1], cp.connections[0].conn)
 
 		// Calls to get should return the second connection
-		conn, err = cp.Get(createFn)
+		conn, err = cp.Get(ctx, createFn)
 		require.NoError(t, err)
 		require.Equal(t, conns[1], conn)
 

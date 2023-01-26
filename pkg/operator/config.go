@@ -23,13 +23,13 @@ func GetNamespace() string {
 }
 
 // LoadConfiguration loads the Kubernetes configuration and returns an Operator Config.
-func LoadConfiguration(name string, client client.Client) (*Config, error) {
+func LoadConfiguration(ctx context.Context, name string, client client.Client) (*Config, error) {
 	var conf v1alpha1.Configuration
 	key := types.NamespacedName{
 		Namespace: GetNamespace(),
 		Name:      name,
 	}
-	if err := client.Get(context.Background(), key, &conf); err != nil {
+	if err := client.Get(ctx, key, &conf); err != nil {
 		return nil, err
 	}
 	return &Config{

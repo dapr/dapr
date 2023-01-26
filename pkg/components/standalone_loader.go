@@ -14,6 +14,8 @@ limitations under the License.
 package components
 
 import (
+	"context"
+
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 )
@@ -38,6 +40,6 @@ func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneC
 }
 
 // LoadComponents loads dapr components from a given directory.
-func (s *StandaloneComponents) LoadComponents() ([]componentsV1alpha1.Component, error) {
+func (s *StandaloneComponents) LoadComponents(ctx context.Context) ([]componentsV1alpha1.Component, error) {
 	return s.componentsManifestLoader.Load()
 }

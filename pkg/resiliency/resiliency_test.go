@@ -175,7 +175,7 @@ func TestPoliciesForTargets(t *testing.T) {
 	ctx := context.Background()
 	configs := LoadStandaloneResiliency(log, "default", "./testdata")
 	assert.Len(t, configs, 1)
-	r := FromConfigurations(log, configs...)
+	r := FromConfigurations(ctx, log, configs...)
 
 	tests := []struct {
 		name   string
@@ -184,25 +184,25 @@ func TestPoliciesForTargets(t *testing.T) {
 		{
 			name: "component",
 			create: func(r *Resiliency) Runner[any] {
-				return NewRunner[any](ctx, r.ComponentOutboundPolicy("statestore1", "Statestore"))
+				return NewRunner[any](ctx, r.ComponentOutboundPolicy(ctx, "statestore1", "Statestore"))
 			},
 		},
 		{
 			name: "endpoint",
 			create: func(r *Resiliency) Runner[any] {
-				return NewRunner[any](ctx, r.EndpointPolicy("appB", "127.0.0.1:3500"))
+				return NewRunner[any](ctx, r.EndpointPolicy(ctx, "appB", "127.0.0.1:3500"))
 			},
 		},
 		{
 			name: "actor",
 			create: func(r *Resiliency) Runner[any] {
-				return NewRunner[any](ctx, r.ActorPreLockPolicy("myActorType", "id"))
+				return NewRunner[any](ctx, r.ActorPreLockPolicy(ctx, "myActorType", "id"))
 			},
 		},
 		{
 			name: "actor post lock",
 			create: func(r *Resiliency) Runner[any] {
-				return NewRunner[any](ctx, r.ActorPostLockPolicy("myActorType", "id"))
+				return NewRunner[any](ctx, r.ActorPostLockPolicy(ctx, "myActorType", "id"))
 			},
 		},
 	}
@@ -222,6 +222,7 @@ func TestPoliciesForTargets(t *testing.T) {
 }
 
 func TestLoadKubernetesResiliency(t *testing.T) {
+	ctx := context.Background()
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	assert.NoError(t, err)
@@ -236,7 +237,7 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	resiliency := LoadKubernetesResiliency(log, "default", "default",
+	resiliency := LoadKubernetesResiliency(ctx, log, "default", "default",
 		getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.NotNil(t, resiliency)
 	assert.Len(t, resiliency, 1)
@@ -299,12 +300,13 @@ func TestParseActorCircuitBreakerScope(t *testing.T) {
 }
 
 func TestParseMaxRetries(t *testing.T) {
+	ctx := context.Background()
 	configs := LoadStandaloneResiliency(log, "app1", "./testdata")
 	require.NotNil(t, configs)
 	require.Len(t, configs, 2)
 	require.NotNil(t, configs[0])
 
-	r := FromConfigurations(log, configs[0])
+	r := FromConfigurations(ctx, log, configs[0])
 	require.True(t, len(r.retries) > 0)
 	require.NotNil(t, r.retries["noRetry"])
 	require.NotNil(t, r.retries["retryForever"])
@@ -322,6 +324,7 @@ func TestParseMaxRetries(t *testing.T) {
 }
 
 func TestResiliencyScopeIsRespected(t *testing.T) {
+	ctx := context.Background()
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	assert.NoError(t, err)
@@ -339,7 +342,7 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 	resiliencies := LoadStandaloneResiliency(log, "app1", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadKubernetesResiliency(log, "app2", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)))
+	resiliencies = LoadKubernetesResiliency(ctx, log, "app2", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.Len(t, resiliencies, 2)
 
 	resiliencies = LoadStandaloneResiliency(log, "app2", "./testdata")
@@ -350,7 +353,8 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 }
 
 func TestBuiltInPoliciesAreCreated(t *testing.T) {
-	r := FromConfigurations(log)
+	ctx := context.Background()
+	r := FromConfigurations(ctx, log)
 	assert.NotNil(t, r.retries[string(BuiltInServiceRetries)])
 	retry := r.retries[string(BuiltInServiceRetries)]
 	assert.Equal(t, int64(3), retry.MaxRetries)
@@ -358,6 +362,7 @@ func TestBuiltInPoliciesAreCreated(t *testing.T) {
 }
 
 func TestResiliencyHasTargetDefined(t *testing.T) {
+	ctx := context.Background()
 	r := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
@@ -414,7 +419,7 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 			},
 		},
 	}
-	config := FromConfigurations(log, r)
+	config := FromConfigurations(ctx, log, r)
 
 	assert.False(t, config.PolicyDefined("badApp", EndpointPolicy{}))
 	assert.False(t, config.PolicyDefined("badActor", ActorPolicy{}))
@@ -429,7 +434,8 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 }
 
 func TestResiliencyHasBuiltInPolicy(t *testing.T) {
-	r := FromConfigurations(log)
+	ctx := context.Background()
+	r := FromConfigurations(ctx, log)
 	assert.NotNil(t, r)
 
 	builtins := []BuiltInPolicyName{
@@ -446,6 +452,7 @@ func TestResiliencyHasBuiltInPolicy(t *testing.T) {
 }
 
 func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
+	ctx := context.Background()
 	config := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
@@ -459,12 +466,13 @@ func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
 			},
 		},
 	}
-	r := FromConfigurations(log, config)
+	r := FromConfigurations(ctx, log, config)
 	assert.NotNil(t, r)
 	assert.Equal(t, int64(3), r.retries[string(BuiltInServiceRetries)].MaxRetries)
 }
 
 func TestResiliencyProtectedPolicyCannotBeChanged(t *testing.T) {
+	ctx := context.Background()
 	config := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
@@ -478,13 +486,14 @@ func TestResiliencyProtectedPolicyCannotBeChanged(t *testing.T) {
 			},
 		},
 	}
-	r := FromConfigurations(log, config)
+	r := FromConfigurations(ctx, log, config)
 	assert.NotNil(t, r)
 	assert.Equal(t, int64(5), r.retries[string(BuiltInActorNotFoundRetries)].MaxRetries)
 }
 
 func TestResiliencyIsBuiltInPolicy(t *testing.T) {
-	r := FromConfigurations(log)
+	ctx := context.Background()
+	r := FromConfigurations(ctx, log)
 	assert.NotNil(t, r)
 	assert.True(t, r.isBuiltInPolicy(string(BuiltInServiceRetries)))
 	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorRetries)))
@@ -495,14 +504,16 @@ func TestResiliencyIsBuiltInPolicy(t *testing.T) {
 }
 
 func TestResiliencyIsProtectedPolicy(t *testing.T) {
-	r := FromConfigurations(log)
+	ctx := context.Background()
+	r := FromConfigurations(ctx, log)
 	assert.True(t, r.isProtectedPolicy(string(BuiltInActorNotFoundRetries)))
 	assert.False(t, r.isProtectedPolicy(string(BuiltInActorRetries)))
 	assert.False(t, r.isProtectedPolicy("Random name"))
 }
 
 func TestDefaultPolicyInterpolation(t *testing.T) {
-	r := FromConfigurations(log)
+	ctx := context.Background()
+	r := FromConfigurations(ctx, log)
 
 	// Retry
 	typePolicies, topPolicy := r.expandPolicyTemplate(&EndpointPolicy{}, DefaultRetryTemplate)
@@ -527,6 +538,7 @@ func TestDefaultPolicyInterpolation(t *testing.T) {
 }
 
 func TestGetDefaultPolicy(t *testing.T) {
+	ctx := context.Background()
 	config := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
@@ -565,7 +577,7 @@ func TestGetDefaultPolicy(t *testing.T) {
 		},
 	}
 
-	r := FromConfigurations(log, config)
+	r := FromConfigurations(ctx, log, config)
 
 	retryName := r.getDefaultRetryPolicy(&EndpointPolicy{})
 	assert.Equal(t, "DefaultAppRetryPolicy", retryName)
@@ -596,6 +608,7 @@ func TestGetDefaultPolicy(t *testing.T) {
 }
 
 func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
+	ctx := context.Background()
 	config := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
@@ -638,11 +651,11 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 		},
 	}
 
-	r := FromConfigurations(log, config)
+	r := FromConfigurations(ctx, log, config)
 
 	// Targeted App
 	policy := NewRunner[any](context.Background(),
-		r.EndpointPolicy("testApp", "localhost"),
+		r.EndpointPolicy(ctx, "testApp", "localhost"),
 	)
 	count := atomic.Int64{}
 	policy(func(ctx context.Context) (any, error) {
@@ -653,7 +666,7 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 
 	// Generic App
 	policy = NewRunner[any](context.Background(),
-		r.EndpointPolicy("noMatchingTarget", "localhost"),
+		r.EndpointPolicy(ctx, "noMatchingTarget", "localhost"),
 	)
 	count.Store(0)
 	policy(func(ctx context.Context) (any, error) {
@@ -664,7 +677,7 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 
 	// Not defined
 	policy = NewRunner[any](context.Background(),
-		r.ActorPreLockPolicy("actorType", "actorID"),
+		r.ActorPreLockPolicy(ctx, "actorType", "actorID"),
 	)
 	count.Store(0)
 	policy(func(ctx context.Context) (any, error) {
@@ -675,7 +688,7 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 
 	// One last one for ActorPostLock which just includes timeouts.
 	policy = NewRunner[any](context.Background(),
-		r.ActorPostLockPolicy("actorType", "actorID"),
+		r.ActorPostLockPolicy(ctx, "actorType", "actorID"),
 	)
 	count.Store(0)
 	start := time.Now()

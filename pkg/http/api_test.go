@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	actorsmocks "github.com/dapr/dapr/pkg/actors/mocks"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -140,7 +141,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			PublishFn: func(req *pubsub.PublishRequest) error {
+			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
 				if req.PubsubName == "errorpubsub" {
 					return fmt.Errorf("Error from pubsub %s", req.PubsubName)
 				}
@@ -303,7 +304,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				switch req.PubsubName {
 				case "errorpubsub":
 					err := fmt.Errorf("Error from pubsub %s", req.PubsubName)
@@ -788,7 +789,7 @@ func TestGetMetadataFromRequest(t *testing.T) {
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "testbinding" {
 				return nil, nil
 			}
@@ -850,7 +851,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		}
 		b, _ := json.Marshal(&req)
 
-		testAPI.sendToOutputBindingFn = func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+		testAPI.sendToOutputBindingFn = func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			return nil, errors.New("missing binding name")
 		}
 
@@ -876,8 +877,10 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	createExporters(&buffer)
 
 	testAPI := &api{
-		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
-		tracingSpec:           spec,
+		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+			return nil, nil
+		},
+		tracingSpec: spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
 
@@ -906,7 +909,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		}
 		b, _ := json.Marshal(&req)
 
-		testAPI.sendToOutputBindingFn = func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+		testAPI.sendToOutputBindingFn = func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			return nil, errors.New("missing binding name")
 		}
 
@@ -1324,6 +1327,8 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 }
 
 func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
+	ctx := context.Background()
+
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
 		Failure: daprt.NewFailure(
 			map[string]int{
@@ -1341,7 +1346,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		directMessaging: failingDirectMessaging,
-		resiliency:      resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
+		resiliency:      resiliency.FromConfigurations(ctx, logger.NewLogger("messaging.test"), testResiliency),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
@@ -1401,10 +1406,11 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 }
 
 func TestV1ActorEndpoints(t *testing.T) {
+	ctx := context.Background()
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		actor:      nil,
-		resiliency: resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency),
+		resiliency: resiliency.FromConfigurations(ctx, logger.NewLogger("test.api.http.actors"), testResiliency),
 	}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
@@ -1435,7 +1441,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("All PUT/POST APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.actor = new(actors.MockActors)
+		testAPI.actor = new(actorsmocks.Actors)
 		apiPaths := []string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
 			"v1.0/actors/fakeActorType/fakeActorID/state",
@@ -1458,7 +1464,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("All PATCH APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.actor = new(actors.MockActors)
+		testAPI.actor = new(actorsmocks.Actors)
 		apiPaths := []string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
 		}
@@ -1477,19 +1483,21 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &actors.GetStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-		}).Return(&actors.StateResponse{
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("GetState", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.GetStateRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+				Key:       "key1",
+			}).Return(&actors.StateResponse{
 			Data: fakeData,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -1504,17 +1512,19 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &actors.GetStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-		}).Return(nil, nil)
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("GetState", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.GetStateRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+				Key:       "key1",
+			}).Return(nil, nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -1529,17 +1539,19 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 500 on GetState failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &actors.GetStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-		}).Return(nil, errors.New("UPSTREAM_ERROR"))
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("GetState", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.GetStateRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+				Key:       "key1",
+			}).Return(nil, errors.New("UPSTREAM_ERROR"))
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -1554,19 +1566,21 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 400 for missing actor instace", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &actors.GetStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-		}).Return(&actors.StateResponse{
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("GetState", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.GetStateRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+				Key:       "key1",
+			}).Return(&actors.StateResponse{
 			Data: fakeData,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(func(*actors.ActorHostedRequest) bool { return false })
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(false)
 
 		testAPI.actor = mockActors
 
@@ -1598,17 +1612,19 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
-			ActorID:    "fakeActorID",
-			ActorType:  "fakeActorType",
-			Operations: testTransactionalOperations,
-		}).Return(nil)
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("TransactionalStateOperation", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.TransactionalRequest{
+				ActorID:    "fakeActorID",
+				ActorType:  "fakeActorType",
+				Operations: testTransactionalOperations,
+			}).Return(nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -1644,11 +1660,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actors.MockActors)
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(func(*actors.ActorHostedRequest) bool { return false })
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(false)
 
 		testAPI.actor = mockActors
 
@@ -1683,17 +1700,19 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
-			ActorID:    "fakeActorID",
-			ActorType:  "fakeActorType",
-			Operations: testTransactionalOperations,
-		}).Return(errors.New("UPSTREAM_ERROR"))
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("TransactionalStateOperation", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.TransactionalRequest{
+				ActorID:    "fakeActorID",
+				ActorType:  "fakeActorType",
+				Operations: testTransactionalOperations,
+			}).Return(errors.New("UPSTREAM_ERROR"))
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -1721,9 +1740,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
+		mockActors.On("CreateReminder", mock.AnythingOfType("*fasthttp.RequestCtx"), &reminderRequest).Return(nil)
 
 		testAPI.actor = mockActors
 
@@ -1751,9 +1770,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockActors.On("CreateReminder", mock.AnythingOfType("*fasthttp.RequestCtx"), &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.actor = mockActors
 
@@ -1778,9 +1797,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			NewName:   "reminder2",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
+		mockActors.On("RenameReminder", mock.AnythingOfType("*fasthttp.RequestCtx"), &reminderRequest).Return(nil)
 
 		testAPI.actor = mockActors
 
@@ -1804,9 +1823,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			NewName:   "reminder2",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockActors.On("RenameReminder", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.actor = mockActors
 
@@ -1830,9 +1850,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("DeleteReminder", &reminderRequest).Return(nil)
+		mockActors.On("DeleteReminder", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&reminderRequest).Return(nil)
 
 		testAPI.actor = mockActors
 
@@ -1853,9 +1874,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockActors.On("DeleteReminder", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.actor = mockActors
 
@@ -1876,9 +1898,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("GetReminder", &reminderRequest).Return(nil, nil)
+		mockActors.On("GetReminder", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&reminderRequest).Return(nil, nil)
 
 		testAPI.actor = mockActors
 
@@ -1898,9 +1921,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
+		mockActors.On("GetReminder", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
 
 		testAPI.actor = mockActors
 
@@ -1926,9 +1950,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Data: func() {},
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
+		mockActors.On("GetReminder", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&reminderRequest).Return(&reminderResponse, nil)
 
 		testAPI.actor = mockActors
 
@@ -1953,9 +1978,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Period:    "0h0m7s0ms",
 			Callback:  "",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("CreateTimer", &timerRequest).Return(nil)
+		mockActors.On("CreateTimer", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&timerRequest).Return(nil)
 
 		testAPI.actor = mockActors
 
@@ -1983,9 +2009,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockActors.On("CreateTimer", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.actor = mockActors
 
@@ -2009,9 +2036,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("DeleteTimer", &timerRequest).Return(nil)
+		mockActors.On("DeleteTimer", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&timerRequest).Return(nil)
 
 		testAPI.actor = mockActors
 
@@ -2032,9 +2060,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockActors.On("DeleteTimer", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.actor = mockActors
 
@@ -2049,26 +2078,27 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Direct Message - Forwards downstream status", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 		fakeData := []byte("fakeData")
 
 		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
 		defer response.Close()
-		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
-			m, err := imr.ProtoWithData()
-			if err != nil {
-				return false
-			}
+		mockActors.On("Call", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
+				m, err := imr.ProtoWithData()
+				if err != nil {
+					return false
+				}
 
-			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
-				return false
-			}
+				if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
+					return false
+				}
 
-			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, fakeData) {
-				return false
-			}
-			return true
-		})).Return(response, nil)
+				if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, fakeData) {
+					return false
+				}
+				return true
+			})).Return(response, nil)
 
 		testAPI.actor = mockActors
 
@@ -2082,8 +2112,8 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
-		mockActors := new(actors.MockActors)
-		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("Call", mock.AnythingOfType("*fasthttp.RequestCtx"), mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
 			m, err := imr.ProtoWithData()
 			if err != nil {
 				return false
@@ -2110,7 +2140,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "Call", 1)
 	})
 
-	failingActors := &actors.FailingActors{
+	failingActors := &actorsmocks.FailingActors{
 		Failure: daprt.NewFailure(
 			map[string]int{
 				"failingId": 1,
@@ -2142,7 +2172,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		getComponentsFn: func() []componentsV1alpha1.Component {
+		getComponentsFn: func(ctx context.Context) []componentsV1alpha1.Component {
 			return []componentsV1alpha1.Component{
 				{
 					ObjectMeta: metaV1.ObjectMeta{
@@ -2181,13 +2211,13 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			}
 		},
 		extendedMetadata: sync.Map{},
-		getComponentsCapabilitesFn: func() map[string][]string {
+		getComponentsCapabilitesFn: func(ctx context.Context) map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+		getSubscriptionsFn: func(ctx context.Context) ([]runtimePubsub.Subscription, error) {
 			return []runtimePubsub.Subscription{
 				{
 					PubsubName:      "test",
@@ -2258,9 +2288,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	t.Run("Metadata - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/metadata"
-		mockActors := new(actors.MockActors)
+		mockActors := new(actorsmocks.Actors)
 
-		mockActors.On("GetActiveActorsCount")
+		mockActors.On("GetActiveActorsCount", mock.AnythingOfType("*fasthttp.RequestCtx")).Return(expectedBody.ActiveActorsCount)
 
 		testAPI.id = "xyz"
 		testAPI.actor = mockActors
@@ -2320,19 +2350,21 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &actors.GetStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-		}).Return(&actors.StateResponse{
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("GetState", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.GetStateRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+				Key:       "key1",
+			}).Return(&actors.StateResponse{
 			Data: fakeData,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -2365,17 +2397,19 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
-			ActorID:    "fakeActorID",
-			ActorType:  "fakeActorType",
-			Operations: testTransactionalOperations,
-		}).Return(nil)
+		mockActors := new(actorsmocks.Actors)
+		mockActors.On("TransactionalStateOperation", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.TransactionalRequest{
+				ActorID:    "fakeActorID",
+				ActorType:  "fakeActorType",
+				Operations: testTransactionalOperations,
+			}).Return(nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
+		mockActors.On("IsActorHosted", mock.AnythingOfType("*fasthttp.RequestCtx"),
+			&actors.ActorHostedRequest{
+				ActorID:   "fakeActorID",
+				ActorType: "fakeActorType",
+			}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -2900,13 +2934,13 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
 	registry := httpMiddlewareLoader.NewRegistry()
 	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+		return func(ctx context.Context, metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
 			return utils.UppercaseRequestMiddleware, nil
 		}
 	}, "uppercase")
 	var handlers []httpMiddleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
-		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{}, "")
+		handler, err := registry.Create(context.Background(), spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{}, "")
 		if err != nil {
 			return httpMiddleware.Pipeline{}
 		}
@@ -3215,6 +3249,7 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 }
 
 func TestV1StateEndpoints(t *testing.T) {
+	ctx := context.Background()
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
 	var fakeStore state.Store = fakeStateStoreQuerier{}
@@ -3255,7 +3290,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	testAPI := &api{
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
-		resiliency:               resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency),
+		resiliency:               resiliency.FromConfigurations(ctx, logger.NewLogger("state.test"), testResiliency),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -3912,12 +3947,12 @@ func (c fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bo
 	return false, nil, nil
 }
 
-func (c fakeStateStore) Init(metadata state.Metadata) error {
+func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
-func (c fakeStateStore) Features() []state.Feature {
+func (c fakeStateStore) Features(ctx context.Context) []state.Feature {
 	return []state.Feature{
 		state.FeatureETag,
 		state.FeatureTransactional,
@@ -3966,6 +4001,7 @@ func (c fakeStateStoreQuerier) Query(ctx context.Context, req *state.QueryReques
 }
 
 func TestV1SecretEndpoints(t *testing.T) {
+	ctx := context.Background()
 	fakeServer := newFakeHTTPServer()
 	fakeStore := daprt.FakeSecretStore{}
 	failingStore := daprt.FailingSecretStore{
@@ -4000,7 +4036,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	testAPI := &api{
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeStores,
-		resiliency:           resiliency.FromConfigurations(logger.NewLogger("fakeLogger"), testResiliency),
+		resiliency:           resiliency.FromConfigurations(ctx, logger.NewLogger("fakeLogger"), testResiliency),
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
@@ -4248,7 +4284,7 @@ func (l fakeLockStore) Ping() error {
 	return nil
 }
 
-func (l *fakeLockStore) InitLockStore(metadata lock.Metadata) error {
+func (l *fakeLockStore) InitLockStore(ctx context.Context, metadata lock.Metadata) error {
 	return nil
 }
 

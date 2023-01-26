@@ -38,7 +38,7 @@ const bufSize = 1024 * 1024
 //	 	client, cleanup, err := serverFactory(&your_service{})
 //		require.NoError(t, err)
 //		defer cleanup()
-func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc func(*grpc.Server, TServer), clientFactory func(grpc.ClientConnInterface) TClient) func(svc TServer) (client TClient, cleanup func(), err error) {
+func TestServerFor[TServer any, TClient any](ctx context.Context, logger logger.Logger, registersvc func(*grpc.Server, TServer), clientFactory func(grpc.ClientConnInterface) TClient) func(svc TServer) (client TClient, cleanup func(), err error) {
 	return func(srv TServer) (client TClient, cleanup func(), err error) {
 		lis := bufconn.Listen(bufSize)
 		s := grpc.NewServer()
@@ -48,9 +48,8 @@ func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc f
 				logger.Debugf("Server exited with error: %v", serveErr)
 			}
 		}()
-		ctx := context.Background()
 		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
-			return lis.Dial()
+			return lis.DialContext(ctx)
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			var zero TClient

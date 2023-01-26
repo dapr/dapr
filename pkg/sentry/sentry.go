@@ -30,8 +30,6 @@ type CertificateAuthority interface {
 
 type sentry struct {
 	conf        config.SentryConfig
-	ctx         context.Context
-	cancel      context.CancelFunc
 	server      server.CAServer
 	restartLock sync.Mutex
 	running     chan bool
@@ -56,11 +54,10 @@ func (s *sentry) Start(ctx context.Context, conf config.SentryConfig) error {
 
 	// Create the CA server
 	s.conf = conf
-	certAuth, v := s.createCAServer()
+	certAuth, v := s.createCAServer(ctx)
 
 	// Start the server in background
-	s.ctx, s.cancel = context.WithCancel(ctx)
-	go s.run(certAuth, v)
+	go s.run(ctx, certAuth, v)
 
 	// Wait 100ms to ensure a clean startup
 	time.Sleep(100 * time.Millisecond)
@@ -69,7 +66,7 @@ func (s *sentry) Start(ctx context.Context, conf config.SentryConfig) error {
 }
 
 // Loads the trust anchors and issuer certs, then creates a new CA.
-func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) {
+func (s *sentry) createCAServer(ctx context.Context) (ca.CertificateAuthority, identity.Validator) {
 	// Create CA
 	certAuth, authorityErr := ca.NewCertificateAuthority(s.conf)
 	if authorityErr != nil {
@@ -78,7 +75,7 @@ func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) 
 	log.Info("certificate authority loaded")
 
 	// Load the trust bundle
-	trustStoreErr := certAuth.LoadOrStoreTrustBundle()
+	trustStoreErr := certAuth.LoadOrStoreTrustBundle(ctx)
 	if trustStoreErr != nil {
 		log.Fatalf("error loading trust root bundle: %s", trustStoreErr)
 	}
@@ -89,7 +86,7 @@ func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) 
 		// Need to be in an else block for the linter
 		log.Infof("trust root bundle loaded. issuer cert expiry: %s", certExpiry.String())
 	}
-	monitoring.IssuerCertExpiry(certExpiry)
+	monitoring.IssuerCertExpiry(ctx, certExpiry)
 
 	// Create identity validator
 	v, validatorErr := s.createValidator()
@@ -103,15 +100,15 @@ func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) 
 
 // Runs the CA server.
 // This method blocks until the server is shut down.
-func (s *sentry) run(certAuth ca.CertificateAuthority, v identity.Validator) {
+func (s *sentry) run(ctx context.Context, certAuth ca.CertificateAuthority, v identity.Validator) {
 	s.server = server.NewCAServer(certAuth, v)
 
 	// In background, watch for the root certificate's expiration
-	go watchCertExpiry(s.ctx, certAuth)
+	go watchCertExpiry(ctx, certAuth)
 
 	// Watch for context cancelation to stop the server
 	go func() {
-		<-s.ctx.Done()
+		<-ctx.Done()
 		s.server.Shutdown()
 		close(s.running)
 		s.running = make(chan bool, 1)
@@ -122,7 +119,7 @@ func (s *sentry) run(certAuth ca.CertificateAuthority, v identity.Validator) {
 
 	// Start the server; this is a blocking call
 	log.Infof("sentry certificate authority is running, protecting y'all")
-	serverRunErr := s.server.Run(s.conf.Port, certAuth.GetCACertBundle())
+	serverRunErr := s.server.Run(ctx, s.conf.Port, certAuth.GetCACertBundle())
 	if serverRunErr != nil {
 		log.Fatalf("error starting gRPC server: %s", serverRunErr)
 	}
@@ -131,12 +128,9 @@ func (s *sentry) run(certAuth ca.CertificateAuthority, v identity.Validator) {
 // Stop the server.
 func (s *sentry) Stop() {
 	log.Info("sentry certificate authority is shutting down")
-	if s.cancel != nil {
-		s.stopping = make(chan bool)
-		s.cancel()
-		<-s.stopping
-		s.stopping = nil
-	}
+	s.stopping = make(chan bool)
+	<-s.stopping
+	s.stopping = nil
 }
 
 // Watches certificates' expiry and shows an error message when they're nearing expiration time.

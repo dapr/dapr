@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -88,9 +89,9 @@ func (a *actor) channel() chan struct{} {
 }
 
 // lock holds the lock for turn-based concurrency.
-func (a *actor) lock(reentrancyID *string) error {
+func (a *actor) lock(ctx context.Context, reentrancyID *string) error {
 	pending := a.pendingActorCalls.Add(1)
-	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
+	diag.DefaultMonitoring.ReportActorPendingCalls(ctx, a.actorType, pending)
 
 	err := a.actorLock.Lock(reentrancyID)
 	if err != nil {
@@ -101,7 +102,7 @@ func (a *actor) lock(reentrancyID *string) error {
 	disposed := a.disposed
 	a.disposeLock.RUnlock()
 	if disposed {
-		a.unlock()
+		a.unlock(ctx)
 		return ErrActorDisposed
 	}
 	a.lastUsedTime = time.Now().UTC()
@@ -110,7 +111,7 @@ func (a *actor) lock(reentrancyID *string) error {
 
 // unlock releases the lock for turn-based concurrency. If disposeCh is available,
 // it will close the channel to notify runtime to dispose actor.
-func (a *actor) unlock() {
+func (a *actor) unlock(ctx context.Context) {
 	pending := a.pendingActorCalls.Add(-1)
 	if pending == 0 {
 		func() {
@@ -127,5 +128,5 @@ func (a *actor) unlock() {
 	}
 
 	a.actorLock.Unlock()
-	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
+	diag.DefaultMonitoring.ReportActorPendingCalls(ctx, a.actorType, pending)
 }

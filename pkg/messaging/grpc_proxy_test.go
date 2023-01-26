@@ -45,8 +45,8 @@ func connectionFn(ctx context.Context, address, id string, namespace string, cus
 	return conn, teardown, err
 }
 
-func appClientFn() (grpc.ClientConnInterface, error) {
-	appClient, _, err := connectionFn(context.Background(), "a:123", "a", "")
+func appClientFn(ctx context.Context) (grpc.ClientConnInterface, error) {
+	appClient, _, err := connectionFn(ctx, "a:123", "a", "")
 	return appClient, err
 }
 
@@ -107,13 +107,14 @@ func TestSetTelemetryFn(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
+	ctx := context.Background()
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
 		AppClientFn:       appClientFn,
 		AppID:             "a",
 		Resiliency:        resiliency.New(nil),
 	})
-	h := p.Handler()
+	h := p.Handler(ctx)
 
 	assert.NotNil(t, h)
 }

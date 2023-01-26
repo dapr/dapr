@@ -37,7 +37,7 @@ type validator struct {
 	noDefaultTokenAudience bool
 }
 
-func (v *validator) Validate(id, token, namespace string) error {
+func (v *validator) Validate(ctx context.Context, id, token, namespace string) error {
 	if id == "" {
 		return fmt.Errorf("%s: id field in request must not be empty", errPrefix)
 	}
@@ -65,7 +65,7 @@ func (v *validator) Validate(id, token, namespace string) error {
 
 tr: // TODO: Remove once the NoDefaultTokenAudience feature is finalized
 
-	prts, err := v.executeTokenReview(tokenReview)
+	prts, err := v.executeTokenReview(ctx, tokenReview)
 	if err != nil {
 		// TODO: Remove once the NoDefaultTokenAudience feature is finalized
 		if canTryWithNilAudience {
@@ -104,8 +104,8 @@ tr: // TODO: Remove once the NoDefaultTokenAudience feature is finalized
 }
 
 // Executes a tokenReview, returning an error if the token is invalid or if there's a failure
-func (v *validator) executeTokenReview(tokenReview *kauthapi.TokenReview) ([]string, error) {
-	review, err := v.auth.TokenReviews().Create(context.TODO(), tokenReview, v1.CreateOptions{})
+func (v *validator) executeTokenReview(ctx context.Context, tokenReview *kauthapi.TokenReview) ([]string, error) {
+	review, err := v.auth.TokenReviews().Create(ctx, tokenReview, v1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("%s: token review failed: %w", errPrefix, err)
 	}

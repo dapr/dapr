@@ -14,6 +14,7 @@ limitations under the License.
 package http_test
 
 import (
+	"context"
 	"fmt"
 	nethttp "net/http"
 	"reflect"
@@ -49,12 +50,12 @@ func TestRegistry(t *testing.T) {
 
 		// act
 		testRegistry.RegisterComponent(func(_ logger.Logger) http.FactoryMethod {
-			return func(h.Metadata) (httpMiddleware.Middleware, error) {
+			return func(context.Context, h.Metadata) (httpMiddleware.Middleware, error) {
 				return mock, nil
 			}
 		}, middlewareName)
 		testRegistry.RegisterComponent(func(_ logger.Logger) http.FactoryMethod {
-			return func(h.Metadata) (httpMiddleware.Middleware, error) {
+			return func(context.Context, h.Metadata) (httpMiddleware.Middleware, error) {
 				return mockV2, nil
 			}
 		}, middlewareNameV2)
@@ -65,20 +66,20 @@ func TestRegistry(t *testing.T) {
 		// to get the address of a function value.
 
 		// assert v0 and v1
-		p, e := testRegistry.Create(componentName, "v0", metadata, "")
+		p, e := testRegistry.Create(context.Background(), componentName, "v0", metadata, "")
 		assert.NoError(t, e)
 		assert.True(t, reflect.ValueOf(mock) == reflect.ValueOf(p))
-		p, e = testRegistry.Create(componentName, "v1", metadata, "")
+		p, e = testRegistry.Create(context.Background(), componentName, "v1", metadata, "")
 		assert.NoError(t, e)
 		assert.True(t, reflect.ValueOf(mock) == reflect.ValueOf(p))
 
 		// assert v2
-		pV2, e := testRegistry.Create(componentName, "v2", metadata, "")
+		pV2, e := testRegistry.Create(context.Background(), componentName, "v2", metadata, "")
 		assert.NoError(t, e)
 		assert.True(t, reflect.ValueOf(mockV2) == reflect.ValueOf(pV2))
 
 		// check case-insensitivity
-		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", metadata, "")
+		pV2, e = testRegistry.Create(context.Background(), strings.ToUpper(componentName), "V2", metadata, "")
 		assert.NoError(t, e)
 		assert.True(t, reflect.ValueOf(mockV2) == reflect.ValueOf(pV2))
 	})
@@ -92,7 +93,7 @@ func TestRegistry(t *testing.T) {
 		metadata := h.Metadata{}
 
 		// act
-		p, actualError := testRegistry.Create(componentName, "v1", metadata, "")
+		p, actualError := testRegistry.Create(context.Background(), componentName, "v1", metadata, "")
 		expectedError := fmt.Errorf("HTTP middleware %s/v1 has not been registered", componentName)
 
 		// assert

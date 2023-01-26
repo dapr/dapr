@@ -28,6 +28,7 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
+	"github.com/dapr/dapr/pkg/signals"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -41,8 +42,9 @@ var (
 func main() {
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
+	ctx := signals.Context()
 
-	rt, err := runtime.FromFlags()
+	rt, err := runtime.FromFlags(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -57,9 +59,7 @@ func main() {
 	workflowsLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
-	stopCh := runtime.ShutdownSignal()
-
-	err = rt.Run(
+	err = rt.Run(ctx,
 		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),
 		runtime.WithStates(stateLoader.DefaultRegistry),
 		runtime.WithConfigurations(configurationLoader.DefaultRegistry),
@@ -74,6 +74,5 @@ func main() {
 		log.Fatalf("fatal error from runtime: %s", err)
 	}
 
-	<-stopCh
 	rt.ShutdownWithWait()
 }

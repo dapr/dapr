@@ -1,6 +1,10 @@
 package selfhosted
 
-import "github.com/dapr/dapr/pkg/sentry/identity"
+import (
+	"context"
+
+	"github.com/dapr/dapr/pkg/sentry/identity"
+)
 
 func NewValidator() identity.Validator {
 	return &validator{}
@@ -8,7 +12,7 @@ func NewValidator() identity.Validator {
 
 type validator struct{}
 
-func (v *validator) Validate(id, token, namespace string) error {
+func (v *validator) Validate(_ context.Context, id, token, namespace string) error {
 	// no validation for self hosted.
 	return nil
 }

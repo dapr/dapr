@@ -98,15 +98,15 @@ type api struct {
 	lockStores                 map[string]lock.Store
 	pubsubAdapter              runtimePubsub.Adapter
 	id                         string
-	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	sendToOutputBindingFn      func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec                config.TracingSpec
 	accessControlList          *config.AccessControlList
 	appProtocol                string
 	extendedMetadata           sync.Map
 	shutdown                   func()
-	getComponentsFn            func() []componentsV1alpha.Component
-	getComponentsCapabilitesFn func() map[string][]string
-	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
+	getComponentsFn            func(context.Context) []componentsV1alpha.Component
+	getComponentsCapabilitesFn func(context.Context) map[string][]string
+	getSubscriptionsFn         func(context.Context) ([]runtimePubsub.Subscription, error)
 	daprRunTimeVersion         string
 }
 
@@ -253,21 +253,21 @@ type APIOpts struct {
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
 	Actor                       actors.Actors
-	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	SendToOutputBindingFn       func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	AccessControlList           *config.AccessControlList
 	AppProtocol                 string
 	Shutdown                    func()
-	GetComponentsFn             func() []componentsV1alpha.Component
-	GetComponentsCapabilitiesFn func() map[string][]string
-	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	GetComponentsFn             func(context.Context) []componentsV1alpha.Component
+	GetComponentsCapabilitiesFn func(context.Context) map[string][]string
+	GetSubscriptionsFn          func(context.Context) ([]runtimePubsub.Subscription, error)
 }
 
 // NewAPI returns a new gRPC API.
-func NewAPI(opts APIOpts) API {
+func NewAPI(ctx context.Context, opts APIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range opts.StateStores {
-		if state.FeatureTransactional.IsPresent(store.Features()) {
+		if state.FeatureTransactional.IsPresent(store.Features(ctx)) {
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
@@ -381,10 +381,10 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(&req)
+	err := a.pubsubAdapter.Publish(ctx, &req)
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.PubsubEgressEvent(ctx, pubsubName, topic, err == nil, elapsed)
 
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
@@ -426,7 +426,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
 		apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
 	}
-	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
+	policyDef := a.resiliency.EndpointPolicy(ctx, in.Id, in.Id+":"+in.Message.Method)
 
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
 	if policyDef != nil {
@@ -595,7 +595,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	start := time.Now()
 	// err is only nil if all entries are successfully published.
 	// For partial success, err is not nil and res contains the failed entries.
-	res, err := a.pubsubAdapter.BulkPublish(&req)
+	res, err := a.pubsubAdapter.BulkPublish(ctx, &req)
 
 	elapsed := diag.ElapsedSince(start)
 	eventsPublished := int64(len(req.Entries))
@@ -603,7 +603,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	if len(res.FailedEntries) != 0 {
 		eventsPublished -= int64(len(res.FailedEntries))
 	}
-	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
+	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(ctx, pubsubName, topic, err == nil, eventsPublished, elapsed)
 
 	// BulkPublishResponse contains all failed entries from the request.
 	// If there are no failed entries, then the failedEntries array will be empty.
@@ -658,10 +658,10 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 	r := &runtimev1pb.InvokeBindingResponse{}
 	start := time.Now()
-	resp, err := a.sendToOutputBindingFn(in.Name, req)
+	resp, err := a.sendToOutputBindingFn(ctx, in.Name, req)
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), in.Name, in.Operation, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.OutputBindingEvent(ctx, in.Name, in.Operation, err == nil, elapsed)
 
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.Name, err.Error())
@@ -708,7 +708,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	start := time.Now()
-	policyDef := a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
+	policyDef := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	bgrPolicyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
 	bgr, err := bgrPolicyRunner(func(ctx context.Context) (*bulkGetRes, error) {
 		rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, reqs)
@@ -823,7 +823,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(ctx, req)
@@ -913,7 +913,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.BulkSet(ctx, reqs)
@@ -962,7 +962,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*state.QueryResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
 		return querier.Query(ctx, &req)
@@ -1040,7 +1040,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Delete(ctx, &req)
@@ -1090,7 +1090,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.BulkDelete(ctx, reqs)
@@ -1136,7 +1136,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*secretstores.GetSecretResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
+		a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.GetSecretResponse, error) {
 		rResp, rErr := a.secretStores[secretStoreName].GetSecret(ctx, req)
@@ -1181,7 +1181,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*secretstores.BulkGetSecretResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
+		a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.BulkGetSecretResponse, error) {
 		rResp, rErr := a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
@@ -1328,7 +1328,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore),
 	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,
@@ -1569,7 +1569,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+	policyDef := a.resiliency.ActorPreLockPolicy(ctx, in.ActorType, in.ActorId)
 
 	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
@@ -1656,9 +1656,9 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		}
 	}
 
-	components := a.getComponentsFn()
+	components := a.getComponentsFn(ctx)
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
-	componentsCapabilities := a.getComponentsCapabilitesFn()
+	componentsCapabilities := a.getComponentsCapabilitesFn(ctx)
 	for _, comp := range components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
@@ -1669,7 +1669,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions, err := a.getSubscriptionsFn()
+	subscriptions, err := a.getSubscriptionsFn(ctx)
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
 		apiServerLogger.Debug(err)
@@ -1894,7 +1894,7 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*configuration.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Configuration),
+		a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Configuration),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, &req)
@@ -1982,14 +1982,14 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[string](configurationServer.Context(),
-		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+		a.resiliency.ComponentOutboundPolicy(configurationServer.Context(), request.StoreName, resiliency.Configuration),
 	)
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, req, handler.updateEventHandler)
 	})
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(configurationServer.Context(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
@@ -2037,7 +2037,7 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	close(stop)
 
 	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+		a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName, resiliency.Configuration),
 	)
 
 	start := time.Now()
@@ -2049,7 +2049,7 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	})
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(ctx, request.StoreName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
 
 	if err != nil {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{

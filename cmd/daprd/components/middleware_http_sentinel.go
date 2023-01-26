@@ -14,6 +14,8 @@ limitations under the License.
 package components
 
 import (
+	"context"
+
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -23,8 +25,8 @@ import (
 
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return sentinel.NewMiddleware(log).GetHandler(metadata)
+		return func(ctx context.Context, metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+			return sentinel.NewMiddleware(log).GetHandler(context.Background(), metadata)
 		}
 	}, "sentinel")
 }

@@ -66,9 +66,9 @@ func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 }
 
 // Init allows for various startup tasks.
-func (h *DaprHandler) Init() error {
+func (h *DaprHandler) Init(ctx context.Context) error {
 	if err := h.mgr.GetFieldIndexer().IndexField(
-		context.TODO(),
+		ctx,
 		&corev1.Service{},
 		daprServiceOwnerField,
 		func(rawObj client.Object) []string {
@@ -187,7 +187,7 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 		return err
 	}
 
-	monitoring.RecordServiceUpdatedCount(appID)
+	monitoring.RecordServiceUpdatedCount(ctx, appID)
 	return nil
 }
 
@@ -203,7 +203,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 		return err
 	}
 	log.Debugf("created service: %s", expectedService)
-	monitoring.RecordServiceCreatedCount(appID)
+	monitoring.RecordServiceCreatedCount(ctx, appID)
 	return nil
 }
 

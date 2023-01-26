@@ -29,7 +29,7 @@ var log = logger.NewLogger("dapr.sentry.server")
 
 // CAServer is an interface for the Certificate Authority server.
 type CAServer interface {
-	Run(port int, trustBundle ca.TrustRootBundler) error
+	Run(ctx context.Context, port int, trustBundle ca.TrustRootBundler) error
 	Shutdown()
 }
 
@@ -50,14 +50,14 @@ func NewCAServer(ca ca.CertificateAuthority, validator identity.Validator) CASer
 
 // Run starts a secured gRPC server for the Sentry Certificate Authority.
 // It enforces client side cert validation using the trust root cert.
-func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
+func (s *server) Run(ctx context.Context, port int, trustBundler ca.TrustRootBundler) error {
 	addr := fmt.Sprintf(":%d", port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("could not listen on %s: %w", addr, err)
 	}
 
-	tlsOpt := s.tlsServerOption(trustBundler)
+	tlsOpt := s.tlsServerOption(ctx, trustBundler)
 	s.srv = grpc.NewServer(tlsOpt)
 	sentryv1pb.RegisterCAServer(s.srv, s)
 
@@ -67,7 +67,7 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 	return nil
 }
 
-func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOption {
+func (s *server) tlsServerOption(ctx context.Context, trustBundler ca.TrustRootBundler) grpc.ServerOption {
 	cp := trustBundler.GetTrustAnchors()
 
 	//nolint:gosec
@@ -79,7 +79,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 			if s.certificate == nil || needsRefresh(s.certificate, serverCertExpiryBuffer) {
 				cert, err := s.getServerCertificate()
 				if err != nil {
-					monitoring.ServerCertIssueFailed("server_cert")
+					monitoring.ServerCertIssueFailed(ctx, "server_cert")
 					log.Error(err)
 					return nil, fmt.Errorf("failed to get TLS server certificate: %w", err)
 				}
@@ -127,7 +127,7 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 // The method receives a request with an identity and initial cert and returns
 // A signed certificate including the trust chain to the caller along with an expiry date.
 func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
-	monitoring.CertSignRequestReceived()
+	monitoring.CertSignRequestReceived(ctx)
 
 	csrPem := req.GetCertificateSigningRequest()
 
@@ -135,7 +135,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if err != nil {
 		err = fmt.Errorf("cannot parse certificate signing request pem: %w", err)
 		log.Error(err)
-		monitoring.CertSignFailed("cert_parse")
+		monitoring.CertSignFailed(ctx, "cert_parse")
 		return nil, err
 	}
 
@@ -143,15 +143,15 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if err != nil {
 		err = fmt.Errorf("error validating csr: %w", err)
 		log.Error(err)
-		monitoring.CertSignFailed("cert_validation")
+		monitoring.CertSignFailed(ctx, "cert_validation")
 		return nil, err
 	}
 
-	err = s.validator.Validate(req.GetId(), req.GetToken(), req.GetNamespace())
+	err = s.validator.Validate(ctx, req.GetId(), req.GetToken(), req.GetNamespace())
 	if err != nil {
 		err = fmt.Errorf("error validating requester identity: %w", err)
 		log.Error(err)
-		monitoring.CertSignFailed("req_id_validation")
+		monitoring.CertSignFailed(ctx, "req_id_validation")
 		return nil, err
 	}
 
@@ -160,7 +160,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if err != nil {
 		err = fmt.Errorf("error signing csr: %w", err)
 		log.Error(err)
-		monitoring.CertSignFailed("cert_sign")
+		monitoring.CertSignFailed(ctx, "cert_sign")
 		return nil, err
 	}
 
@@ -176,7 +176,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if len(certPem) == 0 {
 		err = errors.New("insufficient data in certificate signing request, no certs signed")
 		log.Error(err)
-		monitoring.CertSignFailed("insufficient_data")
+		monitoring.CertSignFailed(ctx, "insufficient_data")
 		return nil, err
 	}
 
@@ -191,7 +191,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		ValidUntil:             expiry,
 	}
 
-	monitoring.CertSignSucceed()
+	monitoring.CertSignSucceed(ctx)
 
 	return resp, nil
 }

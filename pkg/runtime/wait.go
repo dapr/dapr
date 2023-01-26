@@ -15,6 +15,7 @@ limitations under the License.
 package runtime
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,7 +29,7 @@ var (
 	urlFormat            = "http://localhost:%s/v1.0/healthz/outbound"
 )
 
-func waitUntilDaprOutboundReady(daprHTTPPort string) {
+func waitUntilDaprOutboundReady(ctx context.Context, daprHTTPPort string) {
 	outboundReadyHealthURL := fmt.Sprintf(urlFormat, daprHTTPPort)
 	client := &http.Client{
 		Timeout: time.Duration(requestTimeoutMillis) * time.Millisecond,
@@ -39,7 +40,7 @@ func waitUntilDaprOutboundReady(daprHTTPPort string) {
 	timeoutAt := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
 	lastPrintErrorTime := time.Now()
 	for time.Now().Before(timeoutAt) {
-		err = checkIfOutboundReady(client, outboundReadyHealthURL)
+		err = checkIfOutboundReady(ctx, client, outboundReadyHealthURL)
 		if err == nil {
 			println("Dapr is outbound ready!")
 			return
@@ -57,8 +58,8 @@ func waitUntilDaprOutboundReady(daprHTTPPort string) {
 	println(fmt.Sprintf("timeout waiting for Dapr to become outbound ready. Last error: %v", err))
 }
 
-func checkIfOutboundReady(client *http.Client, outboundReadyHealthURL string) error {
-	req, err := http.NewRequest(http.MethodGet, outboundReadyHealthURL, nil)
+func checkIfOutboundReady(ctx context.Context, client *http.Client, outboundReadyHealthURL string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, outboundReadyHealthURL, nil)
 	if err != nil {
 		return err
 	}

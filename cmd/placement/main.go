@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
@@ -39,6 +40,7 @@ const gracefulTimeout = 10 * time.Second
 
 func main() {
 	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	ctx := signals.Context()
 
 	cfg := newConfig()
 
@@ -72,15 +74,15 @@ func main() {
 	apiServer := placement.NewPlacementService(raftServer)
 	var certChain *credentials.CertChain
 	if cfg.tlsEnabled {
-		certChain = loadCertChains(cfg.certChainPath)
+		certChain = loadCertChains(ctx, cfg.certChainPath)
 	}
 
-	go apiServer.MonitorLeadership()
+	go apiServer.MonitorLeadership(ctx)
 	go apiServer.Run(strconv.Itoa(cfg.placementPort), certChain)
 	log.Infof("placement service started on port %d", cfg.placementPort)
 
 	// Start Healthz endpoint.
-	go startHealthzServer(cfg.healthzPort)
+	go startHealthzServer(ctx, cfg.healthzPort)
 
 	// Relay incoming process signal to exit placement gracefully
 	signalCh := make(chan os.Signal, 10)
@@ -108,21 +110,19 @@ func main() {
 	}
 }
 
-func startHealthzServer(healthzPort int) {
+func startHealthzServer(ctx context.Context, healthzPort int) {
 	healthzServer := health.NewServer(log)
 	healthzServer.Ready()
 
-	if err := healthzServer.Run(context.Background(), healthzPort); err != nil {
+	if err := healthzServer.Run(ctx, healthzPort); err != nil {
 		log.Fatalf("failed to start healthz server: %s", err)
 	}
 }
 
-func loadCertChains(certChainPath string) *credentials.CertChain {
+func loadCertChains(ctx context.Context, certChainPath string) *credentials.CertChain {
 	tlsCreds := credentials.NewTLSCredentials(certChainPath)
 
 	log.Info("mTLS enabled, getting tls certificates")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
 	fsevent := make(chan struct{})
 	go func() {
 		log.Infof("starting watch for certs on filesystem: %s", certChainPath)

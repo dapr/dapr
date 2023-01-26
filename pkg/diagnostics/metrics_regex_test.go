@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,8 @@ import (
 )
 
 func TestRegexRulesSingle(t *testing.T) {
+	ctx := context.Background()
+
 	InitMetrics("testAppId2", "", []config.MetricsRule{
 		{
 			Name: "dapr_runtime_service_invocation_req_sent_total",
@@ -32,7 +35,7 @@ func TestRegexRulesSingle(t *testing.T) {
 
 		s := servicesMetrics()
 
-		s.ServiceInvocationRequestSent("testAppId2", "/orders/123")
+		s.ServiceInvocationRequestSent(ctx, "testAppId2", "/orders/123")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 		v := view.Find("runtime/service_invocation/req_sent_total")
@@ -49,7 +52,7 @@ func TestRegexRulesSingle(t *testing.T) {
 
 		s := servicesMetrics()
 
-		s.ServiceInvocationRequestSent("testAppId2", "/siths/123")
+		s.ServiceInvocationRequestSent(ctx, "testAppId2", "/siths/123")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 		v := view.Find("runtime/service_invocation/req_sent_total")
@@ -66,8 +69,8 @@ func TestRegexRulesSingle(t *testing.T) {
 
 		s := servicesMetrics()
 
-		s.ServiceInvocationRequestSent("testAppId2", "/orders/123")
-		s.ServiceInvocationRequestSent("testAppId3", "/lightsabers/123")
+		s.ServiceInvocationRequestSent(ctx, "testAppId2", "/orders/123")
+		s.ServiceInvocationRequestSent(ctx, "testAppId3", "/lightsabers/123")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 

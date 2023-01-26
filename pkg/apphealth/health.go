@@ -50,7 +50,7 @@ type AppHealth struct {
 type ProbeFunction func(context.Context) (bool, error)
 
 // ChangeCallback is the signature of the callback that is invoked when the app's health status changes.
-type ChangeCallback func(status uint8)
+type ChangeCallback func(ctx context.Context, status uint8)
 
 // NewAppHealth creates a new AppHealth object.
 func NewAppHealth(config *Config, probeFn ProbeFunction) *AppHealth {
@@ -100,7 +100,7 @@ func (h *AppHealth) StartProbes(ctx context.Context) {
 			case status := <-h.report:
 				log.Debug("Received health status report")
 				ticker.Reset(h.config.ProbeInterval)
-				h.setResult(status == AppStatusHealthy)
+				h.setResult(ctx, status == AppStatusHealthy)
 			case <-h.queue:
 				// Run synchronously so the loop is blocked
 				h.doProbe(ctx)
@@ -166,7 +166,7 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 	}
 
 	log.Debug("App health probe successful: " + strconv.FormatBool(successful))
-	h.setResult(successful)
+	h.setResult(ctx, successful)
 }
 
 // Returns true if the health report can be saved. Only 1 report per second at most is allowed.
@@ -195,7 +195,7 @@ func (h *AppHealth) ratelimitReports() bool {
 	return swapped
 }
 
-func (h *AppHealth) setResult(successful bool) {
+func (h *AppHealth) setResult(ctx context.Context, successful bool) {
 	h.lastReport.Store(time.Now().UnixMicro())
 
 	if successful {
@@ -205,7 +205,7 @@ func (h *AppHealth) setResult(successful bool) {
 		if prev >= h.config.Threshold {
 			log.Info("App entered healthy status")
 			if h.changeCb != nil {
-				go h.changeCb(AppStatusHealthy)
+				go h.changeCb(ctx, AppStatusHealthy)
 			}
 		}
 		return
@@ -222,7 +222,7 @@ func (h *AppHealth) setResult(successful bool) {
 		// If we're here, we just passed the threshold right now
 		log.Warnf("App entered un-healthy status")
 		if h.changeCb != nil {
-			go h.changeCb(AppStatusUnhealthy)
+			go h.changeCb(ctx, AppStatusUnhealthy)
 		}
 	}
 }
