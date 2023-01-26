@@ -1798,11 +1798,14 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	wf := workflows.WorkflowReference{
 		InstanceID: in.InstanceId,
 	}
+
+	var inputMap map[string]interface{}
+	json.Unmarshal(in.Input, &inputMap)
 	req := workflows.StartRequest{
 		WorkflowReference: wf,
 		Options:           in.Options,
 		WorkflowName:      in.WorkflowName,
-		Input:             in.Input,
+		Input:             inputMap,
 	}
 
 	resp, err := workflowRun.Start(ctx, &req)
