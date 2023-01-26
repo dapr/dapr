@@ -196,7 +196,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		log.Debugf("Taking a pod restart token")
 		before := time.Now()
 		_ = dw.restartLimiter.Take()
-		log.Debugf("Resumed after pausing for %v", time.Now().Sub(before))
+		log.Debugf("Resumed after pausing for %v", time.Since(before))
 	}
 
 	log.Infof("DaprWatchdog completed checking pods")
