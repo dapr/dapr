@@ -336,7 +336,7 @@ $(foreach ITEM,$(PERF_TESTS),$(eval $(call genPerfTestRun,$(ITEM))))
 TEST_PERF_TARGETS:=$(foreach ITEM,$(PERF_TESTS),test-perf-$(ITEM))
 
 # start all perf tests
-test-perf-all: test-perf-actor_reminder
+test-perf-all: test-perf-actor_double_activation actor_type_scale test-perf-actor_timer test-perf-actor_reminder
 	# Note: use env variable DAPR_PERF_TEST to pick one e2e test to run.
 
 # add required helm repo
