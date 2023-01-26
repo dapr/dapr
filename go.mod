@@ -71,8 +71,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.1
 )
 
-require github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
-
 require (
 	cloud.google.com/go v0.107.0 // indirect
 	cloud.google.com/go/compute v1.14.0 // indirect
@@ -242,6 +240,7 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
 	github.com/hazelcast/hazelcast-go-client v0.0.0-20190530123621-6cf767c2f31a // indirect
 	github.com/http-wasm/http-wasm-host-go v0.3.1 // indirect
