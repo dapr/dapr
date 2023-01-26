@@ -184,6 +184,10 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
+{{- if .Values.watchNamespace }}
+        - "--watch-namespace"
+        - "{{ .Values.watchNamespace }}"
+{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: credentials

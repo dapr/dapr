@@ -24,7 +24,7 @@ import (
 
 func TestNoOp(t *testing.T) {
 	ctx := context.Background()
-	policy := &NoOp{}
+	policy := NoOp{}
 
 	tests := []struct {
 		name string

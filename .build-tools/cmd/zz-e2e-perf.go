@@ -280,11 +280,10 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 			ext = ".exe"
 		}
 
-		fmt.Printf("Building Go app: %s\n", filepath.Join(appDir, c.flags.Name, "app.go"))
 		e := exec.Command("go",
 			"build",
 			"-o", "app"+ext,
-			"app.go",
+			".",
 		)
 		e.Env = os.Environ()
 		e.Env = append(
@@ -303,7 +302,11 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 		}
 
 		// Use the "shared" Dockerfile
-		dockerfile = filepath.Join(appDir, c.flags.Dockerfile)
+		if c.cmdType == "perf" {
+			dockerfile = filepath.Join(appDir, "..", "Dockerfile")
+		} else {
+			dockerfile = filepath.Join(appDir, c.flags.Dockerfile)
+		}
 	}
 
 	// Build the Docker image
@@ -322,6 +325,8 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 	default:
 		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
 	}
+
+	fmt.Printf("Running 'docker %s'\n", strings.Join(args, " "))
 	e := exec.Command("docker", args...)
 
 	e.Stdout = os.Stdout

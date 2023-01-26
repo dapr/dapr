@@ -7,6 +7,8 @@ global:
   imagePullSecrets: ""
   nodeSelector: {}
   tolerations: []
+  rbac:
+    namespaced: false
   ha:
     enabled: false
     replicaCount: 3
