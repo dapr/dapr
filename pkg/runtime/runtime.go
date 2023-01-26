@@ -75,6 +75,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -228,6 +229,8 @@ type DaprRuntime struct {
 	resiliency resiliency.Provider
 
 	tracerProvider *sdktrace.TracerProvider
+
+	workflowEngine *wfengine.WorkflowEngine
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -294,6 +297,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
+		workflowEngine:             wfengine.NewWorkflowEngine(),
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
 		bulkSubLock:                &sync.Mutex{},
@@ -583,6 +587,9 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			a.daprGRPCAPI.SetActorRuntime(a.actor)
+
+			// Workflow engine depends on actor runtime being initialized
+			a.initWorkflowEngine()
 		}
 	}
 
@@ -602,6 +609,24 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 			Workflows:       a.workflowComponents,
 		}); err != nil {
 			log.Fatalf("failed to register components with callback: %s", err)
+		}
+	}
+}
+
+func (a *DaprRuntime) initWorkflowEngine() {
+	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
+
+	if wfInitErr := a.workflowEngine.SetActorRuntime(a.actor); wfInitErr != nil {
+		log.Warnf("Failed to set actor runtime for Dapr workflow engine - workflow engine will not start: %w", wfInitErr)
+	} else {
+		if a.workflowComponentRegistry != nil {
+			log.Infof("Registering component for dapr workflow engine...")
+			a.workflowComponentRegistry.RegisterComponent(wfComponentFactory, "dapr")
+			if componentInitErr := a.initWorkflowComponent(wfengine.ComponentDefinition); componentInitErr != nil {
+				log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
+			}
+		} else {
+			log.Infof("No workflow registry available, not registering Dapr workflow component...")
 		}
 	}
 }
@@ -1449,7 +1474,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.APIListenAddresses, port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy, a.workflowEngine)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -2362,6 +2387,7 @@ func (a *DaprRuntime) initActors() error {
 		Namespace:          a.namespace,
 		AppConfig:          a.appConfig,
 	})
+
 	act := actors.NewActors(actors.ActorsOpts{
 		StateStore:       a.stateStores[a.actorStateStoreName],
 		AppChannel:       a.appChannel,
@@ -2436,6 +2462,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	if err != nil {
 		return err
 	}
+
 	for _, comp := range comps {
 		log.Debugf("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
 	}
@@ -2598,6 +2625,13 @@ func (a *DaprRuntime) stopActor() {
 	}
 }
 
+func (a *DaprRuntime) stopWorkflow() {
+	if a.workflowEngine != nil && a.workflowEngine.IsRunning {
+		log.Info("Shutting down workflow engine")
+		a.workflowEngine.Stop(context.TODO())
+	}
+}
+
 // shutdownOutputComponents allows for a graceful shutdown of all runtime internal operations of components that are not source of more work.
 // These are all components except input bindings and pubsub.
 func (a *DaprRuntime) shutdownOutputComponents() error {
@@ -2681,6 +2715,9 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	log.Info("Stopping PubSub subscribers and input bindings")
 	a.stopSubscriptions()
 	a.stopReadingFromBindings()
+
+	// shutdown workflow if it's running
+	a.stopWorkflow()
 
 	log.Info("Initiating actor shutdown")
 	a.stopActor()
