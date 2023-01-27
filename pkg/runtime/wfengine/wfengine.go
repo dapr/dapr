@@ -44,7 +44,7 @@ type WorkflowEngine struct {
 	activityActor *activityActor
 
 	actorRuntime   actors.Actors
-	startedOnce    sync.Once
+	startMutex     sync.Mutex
 	disconnectChan chan any
 }
 
@@ -84,13 +84,16 @@ func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
 	wfLogger.Info("configuring workflow engine gRPC endpoint")
 	wfe.ConfigureExecutor(func(be backend.Backend) backend.Executor {
 		// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
-		autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) {
+		autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
 			// NOTE: We don't propagate the context here because that would cause the engine to shut
 			//       down when the client disconnects and cancels the passed-in context. Once it starts
 			//       up, we want to keep the engine running until the runtime shuts down.
 			if err := wfe.Start(context.Background()); err != nil {
-				wfLogger.Errorf("failed to auto-start the workflow engine: %w", err)
+				// This can happen if the workflow app connects before the sidecar has finished initializing.
+				// The client app is expected to continuously retry until successful.
+				return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
 			}
+			return nil
 		})
 
 		// Create a channel that can be used to disconnect the remote client during shutdown.
@@ -145,44 +148,47 @@ func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) error {
-	var err error
-	wfe.startedOnce.Do(func() {
-		if wfe.actorRuntime == nil {
-			err = errors.New("actor runtime is not configured")
-			return
-		} else if wfe.executor == nil {
-			err = errors.New("grpc executor is not yet configured")
-			return
+	// Start could theoretically get called by multiple goroutines concurrently
+	wfe.startMutex.Lock()
+	defer wfe.startMutex.Unlock()
+
+	if wfe.IsRunning {
+		return nil
+	}
+
+	if wfe.actorRuntime == nil {
+		return errors.New("actor runtime is not configured")
+	}
+	if wfe.executor == nil {
+		return errors.New("grpc executor is not yet configured")
+	}
+
+	for actorType, actor := range wfe.InternalActors() {
+		if err := wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor); err != nil {
+			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
 		}
+	}
 
-		for actorType, actor := range wfe.InternalActors() {
-			err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor)
-			if err != nil {
-				err = fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
-				return
-			}
-		}
+	// TODO: Determine whether a more dynamic parallelism configuration is necessary.
+	parallelismOpts := backend.WithMaxParallelism(100)
 
-		// TODO: Determine whether a more dynamic parallelism configuration is necessary.
-		parallelismOpts := backend.WithMaxParallelism(100)
+	orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
+	activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
+	wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfLogger)
+	if err := wfe.worker.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start workflow engine: %w", err)
+	}
 
-		orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
-		activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
-		wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfLogger)
-		err = wfe.worker.Start(ctx)
-		if err != nil {
-			err = fmt.Errorf("failed to start workflow engine: %w", err)
-			return
-		}
+	wfe.IsRunning = true
+	wfLogger.Info("workflow engine started")
 
-		wfe.IsRunning = true
-		wfLogger.Info("workflow engine started")
-	})
-
-	return err
+	return nil
 }
 
 func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
+	wfe.startMutex.Lock()
+	defer wfe.startMutex.Unlock()
+
 	if wfe.worker != nil {
 		if wfe.disconnectChan != nil {
 			// Signals to the durabletask-go gRPC service to disconnect the app client.
