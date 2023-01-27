@@ -158,7 +158,8 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 
 	if wfe.actorRuntime == nil {
 		return errors.New("actor runtime is not configured")
-	} else if wfe.executor == nil {
+	}
+	if wfe.executor == nil {
 		return errors.New("grpc executor is not yet configured")
 	}
 
@@ -185,6 +186,9 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 }
 
 func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
+	wfe.startMutex.Lock()
+	defer wfe.startMutex.Unlock()
+
 	if wfe.worker != nil {
 		if wfe.disconnectChan != nil {
 			// Signals to the durabletask-go gRPC service to disconnect the app client.
