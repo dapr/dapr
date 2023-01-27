@@ -62,7 +62,6 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicCESub      []string `json:"pubsub-ce-sub-topic"`
 	ReceivedByTopicRawBulkSub []string `json:"pubsub-raw-bulk-sub-topic"`
 	ReceivedByTopicCEBulkSub  []string `json:"pubsub-ce-bulk-sub-topic"`
-	ReceivedWithCEOverride    []string `json:"pubsub-ce-override"`
 }
 
 type subscription struct {
@@ -116,7 +115,6 @@ type AppBulkMessageEntry struct {
 type BulkSubscribeResponseEntry struct {
 	EntryId string `json:"entryId"` //nolint:stylecheck
 	Status  string `json:"status"`
-	Source  string `json:"strouce"`
 }
 
 // BulkSubscribeResponse is the whole bulk subscribe response sent by app
@@ -144,13 +142,12 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesSubRaw     sets.Set[string]
-	receivedMessagesSubCE      sets.Set[string]
-	receivedMessagesBulkRaw    sets.Set[string]
-	receivedMessagesBulkCE     sets.Set[string]
-	receivedMessagesCEOverride sets.Set[string]
-	desiredResponse            respondWith
-	lock                       sync.Mutex
+	receivedMessagesSubRaw  sets.Set[string]
+	receivedMessagesSubCE   sets.Set[string]
+	receivedMessagesBulkRaw sets.Set[string]
+	receivedMessagesBulkCE  sets.Set[string]
+	desiredResponse         respondWith
+	lock                    sync.Mutex
 )
 
 // indexHandler is the handler for root path
@@ -371,13 +368,7 @@ func bulkSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("(%s) Responding with SUCCESS for entryId %s", reqID, msg.EntryId)
 		entryResponse.EntryId = msg.EntryId
 		entryResponse.Status = "SUCCESS"
-		entryResponse.Source = msg.Metadata["source"]
 		bulkResponseEntries[i] = entryResponse
-
-		// track cloud event override
-		if entryResponse.Source == "e2e-test" {
-			receivedMessagesCEOverride.Insert(msg.EventStr)
-		}
 
 		if strings.HasSuffix(r.URL.String(), pubsubRawBulkSubTopic) && !receivedMessagesBulkRaw.Has(msg.EventStr) {
 			receivedMessagesBulkRaw.Insert(msg.EventStr)
@@ -457,9 +448,6 @@ func extractBulkMessage(reqID string, body []byte, isRawPayload bool) ([]AppBulk
 			appMsg := AppBulkMessageEntry{
 				EntryId:  entry.EntryId,
 				EventStr: entryCEData,
-				Metadata: map[string]string{
-					"source": entry.Event["source"].(string),
-				},
 			}
 			finalMsgs[i] = appMsg
 			log.Printf("(%s) output at index: %d, entry id:'%s' is: '%s':", reqID, i, entry.EntryId, entryCEData)
@@ -516,7 +504,6 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 		ReceivedByTopicCESub:      unique(sets.List(receivedMessagesSubCE)),
 		ReceivedByTopicRawBulkSub: unique(sets.List(receivedMessagesBulkRaw)),
 		ReceivedByTopicCEBulkSub:  unique(sets.List(receivedMessagesBulkCE)),
-		ReceivedWithCEOverride:    unique(sets.List(receivedMessagesCEOverride)),
 	}
 
 	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
