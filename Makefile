@@ -416,6 +416,7 @@ gen-proto: check-proto-version $(GEN_PROTOS) modtidy
 .PHONY: get-components-contrib
 get-components-contrib:
 	go get github.com/dapr/components-contrib@master
+	make modtidy-all
 
 ################################################################################
 # Target: check-diff                                                           #
