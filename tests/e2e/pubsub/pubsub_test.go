@@ -101,6 +101,7 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
 	ReceivedByTopicDead       []string `json:"pubsub-dead-topic"`
 	ReceivedByTopicDeadLetter []string `json:"pubsub-deadletter-topic"`
+	ReceivedWithCEOverride    []string `json:"pubsub-ce-override"`
 }
 
 type cloudEvent struct {
@@ -277,6 +278,7 @@ func testPublishBulk(t *testing.T, publisherExternalURL string, protocol string)
 		ReceivedByTopicRawBulk: sentTopicBulkRawMessages,
 		ReceivedByTopicCEBulk:  sentTopicBulkCEMessages,
 		ReceivedByTopicDefBulk: sentTopicBulkDefMessages,
+		ReceivedWithCEOverride: sentTopicBulkMessages,
 	}
 }
 
@@ -297,7 +299,7 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, metadataCloudeventOverride, "")
+	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
@@ -315,6 +317,7 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 		ReceivedByTopicRaw:        sentTopicRawMessages,
 		ReceivedByTopicDead:       sentTopicDeadMessages,
 		ReceivedByTopicDeadLetter: sentTopicDeadMessages,
+		ReceivedWithCEOverride:    sentTopicBMessages,
 	}
 }
 
@@ -503,7 +506,8 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 		if len(appResp.ReceivedByTopicBulk) != len(sentMessages.ReceivedByTopicBulk) ||
 			len(appResp.ReceivedByTopicRawBulk) != len(sentMessages.ReceivedByTopicRawBulk) ||
 			len(appResp.ReceivedByTopicCEBulk) != len(sentMessages.ReceivedByTopicCEBulk) ||
-			len(appResp.ReceivedByTopicDefBulk) != len(sentMessages.ReceivedByTopicDefBulk) {
+			len(appResp.ReceivedByTopicDefBulk) != len(sentMessages.ReceivedByTopicDefBulk) ||
+			len(appResp.ReceivedWithCEOverride) != len(sentMessages.ReceivedWithCEOverride) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(10 * time.Second)
 		} else {
@@ -521,11 +525,14 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 	sort.Strings(appResp.ReceivedByTopicCEBulk)
 	sort.Strings(sentMessages.ReceivedByTopicDefBulk)
 	sort.Strings(appResp.ReceivedByTopicDefBulk)
+	sort.Strings(sentMessages.ReceivedWithCEOverride)
+	sort.Strings(appResp.ReceivedWithCEOverride)
 
 	assert.Equal(t, sentMessages.ReceivedByTopicBulk, appResp.ReceivedByTopicBulk, "different messages received in Topic Bulk")
 	assert.Equal(t, sentMessages.ReceivedByTopicRawBulk, appResp.ReceivedByTopicRawBulk, "different messages received in Topic Raw Bulk")
 	assert.Equal(t, sentMessages.ReceivedByTopicCEBulk, appResp.ReceivedByTopicCEBulk, "different messages received in Topic CE Bulk")
 	assert.Equal(t, sentMessages.ReceivedByTopicDefBulk, appResp.ReceivedByTopicDefBulk, "different messages received in Topic Def Bulk impl redis")
+	assert.Equal(t, sentMessages.ReceivedWithCEOverride, appResp.ReceivedWithCEOverride, "different messages received with CE override")
 }
 
 func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, validateDeadLetter bool, sentMessages receivedMessagesResponse) {
@@ -575,6 +582,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
 			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
 			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
+			len(appResp.ReceivedWithCEOverride) != len(sentMessages.ReceivedWithCEOverride) ||
 			(validateDeadLetter && len(appResp.ReceivedByTopicDeadLetter) != len(sentMessages.ReceivedByTopicDeadLetter)) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(10 * time.Second)
@@ -593,11 +601,14 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	sort.Strings(appResp.ReceivedByTopicC)
 	sort.Strings(sentMessages.ReceivedByTopicRaw)
 	sort.Strings(appResp.ReceivedByTopicRaw)
+	sort.Strings(sentMessages.ReceivedWithCEOverride)
+	sort.Strings(appResp.ReceivedWithCEOverride)
 
 	assert.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "different messages received in Topic A")
 	assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "different messages received in Topic B")
 	assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "different messages received in Topic C")
 	assert.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "different messages received in Topic Raw")
+	assert.Equal(t, sentMessages.ReceivedWithCEOverride, appResp.ReceivedWithCEOverride, "different messages received with CE override")
 	if validateDeadLetter {
 		// only error response is expected to validate dead letter
 		sort.Strings(sentMessages.ReceivedByTopicDeadLetter)

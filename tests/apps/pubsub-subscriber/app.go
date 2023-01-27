@@ -79,6 +79,7 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicRawBulk    []string `json:"pubsub-raw-bulk-topic"`
 	ReceivedByTopicCEBulk     []string `json:"pubsub-ce-bulk-topic"`
 	ReceivedByTopicDefBulk    []string `json:"pubsub-def-bulk-topic"`
+	ReceivedWithCEOverride    []string `json:"pubsub-ce-override"`
 }
 
 type subscription struct {
@@ -118,6 +119,7 @@ var (
 	receivedMessagesRawBulkTopic sets.Set[string]
 	receivedMessagesCEBulkTopic  sets.Set[string]
 	receivedMessagesDefBulkTopic sets.Set[string]
+	receivedMessagesCEOverride   sets.Set[string]
 	desiredResponse              respondWith
 	lock                         sync.Mutex
 )
@@ -205,7 +207,7 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(t)
 }
 
-func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
+func readMessageBody(reqID string, r *http.Request) (msg string, source string, err error) {
 	defer r.Body.Close()
 
 	var body []byte
@@ -221,12 +223,17 @@ func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
 	}
 
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	msg, err = extractMessage(reqID, body)
 	if err != nil {
-		return "", fmt.Errorf("error from extractMessage: %w", err)
+		return "", "", fmt.Errorf("error from extractMessage: %w", err)
+	}
+
+	source, err = extractCloudEventSource(reqID, body)
+	if err != nil {
+		return "", "", fmt.Errorf("error from extractSource: %w", err)
 	}
 
 	// Raw data does not have content-type, so it is handled as-is.
@@ -242,7 +249,7 @@ func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
 		}
 	}
 
-	return msg, nil
+	return msg, source, nil
 }
 
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
@@ -251,11 +258,11 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		reqID = uuid.New().String()
 	}
 
-	msg, err := readMessageBody(reqID, r)
+	msg, source, err := readMessageBody(reqID, r)
 
 	// Before we handle the error, see if we need to respond in another way
 	// We still want the message so we can log it
-	log.Printf("(%s) subscribeHandler called %s. Message: %s", reqID, r.URL, msg)
+	log.Printf("(%s) subscribeHandler called %s. Message: %s, Source: %s", reqID, r.URL, msg, source)
 	switch desiredResponse {
 	case respondWithRetry:
 		log.Printf("(%s) Responding with RETRY", reqID)
@@ -295,6 +302,12 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 	lock.Lock()
 	defer lock.Unlock()
+
+	// used to verifying cloud event override
+	if source == "e2e-test" {
+		receivedMessagesCEOverride.Insert(msg)
+	}
+
 	if strings.HasSuffix(r.URL.String(), pubsubA) && !receivedMessagesA.Has(msg) {
 		receivedMessagesA.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubB) && !receivedMessagesB.Has(msg) {
@@ -374,6 +387,23 @@ func extractMessage(reqID string, body []byte) (string, error) {
 	return msg, nil
 }
 
+func extractCloudEventSource(reqID string, body []byte) (string, error) {
+	log.Printf("(%s) extractCloudEventSource() called with body=%s", reqID, string(body))
+
+	m := make(map[string]interface{})
+	err := json.Unmarshal(body, &m)
+	if err != nil {
+		log.Printf("(%s) Could not unmarshal: %v", reqID, err)
+		return "", err
+	}
+
+	if source, ok := m["source"]; ok {
+		return source.(string), nil
+	} else {
+		return "", fmt.Errorf("source not found")
+	}
+}
+
 func unique(slice []string) []string {
 	keys := make(map[string]bool)
 	list := []string{}
@@ -405,6 +435,7 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 		ReceivedByTopicRawBulk:    unique(sets.List(receivedMessagesRawBulkTopic)),
 		ReceivedByTopicCEBulk:     unique(sets.List(receivedMessagesCEBulkTopic)),
 		ReceivedByTopicDefBulk:    unique(sets.List(receivedMessagesDefBulkTopic)),
+		ReceivedWithCEOverride:    unique(sets.List(receivedMessagesCEOverride)),
 	}
 
 	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
