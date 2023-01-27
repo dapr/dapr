@@ -2476,12 +2476,12 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	// First, we look for secret stores and load those, then all other components
 	// Sure, we could sort the list of authorizedComps... but this is simpler and most certainly faster
 	for _, comp := range authorizedComps {
-		if strings.HasPrefix(comp.Spec.Type, "secretstores.") {
+		if strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
 			a.pendingComponents <- comp
 		}
 	}
 	for _, comp := range authorizedComps {
-		if !strings.HasPrefix(comp.Spec.Type, "secretstores.") {
+		if !strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
 			a.pendingComponents <- comp
 		}
 	}
