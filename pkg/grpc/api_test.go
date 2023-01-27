@@ -1954,6 +1954,19 @@ func TestPublishTopic(t *testing.T) {
 		assert.Nil(t, err)
 	})
 
+	t.Run("no err: publish event request with topic, pubsub and ce metadata override", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Metadata: map[string]string{
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+			},
+		})
+		assert.Nil(t, err)
+	})
+
 	t.Run("err: publish event request with error-topic and pubsub", func(t *testing.T) {
 		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
 			PubsubName: "pubsub",
@@ -2131,6 +2144,22 @@ func TestBulkPublish(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Empty(t, res.FailedEntries)
 	})
+
+	t.Run("no failures with ce metadata override", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries:    sampleEntries,
+			Metadata: map[string]string{
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+			},
+		})
+		assert.Nil(t, err)
+		assert.Empty(t, res.FailedEntries)
+	})
+
 	t.Run("all failures from component", func(t *testing.T) {
 		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",

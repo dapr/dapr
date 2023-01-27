@@ -53,12 +53,6 @@ RUN apt-get update \
     # Install tools for Dapr.
     && bash /tmp/staging/install-dapr-tools.sh "${USERNAME}" "/usr/local/go" "/go" "${DAPR_CLI_VERSION}" "${PROTOC_VERSION}" "${PROTOC_GEN_GO_VERSION}" "${PROTOC_GEN_GO_GRPC_VERSION}" "${GOLANGCI_LINT_VERSION}" \
     #
-    # Install the GitHub CLI.
-    && bash /tmp/staging/github-debian.sh "latest" \
-    #
-    # Install the Azure CLI.
-    && bash /tmp/staging/azcli-debian.sh "latest" \
-    #
     # Copy our init scripts to /usr/local/share.
     && mv -f -t /usr/local/share/ /tmp/staging/docker-bind-mount.sh /tmp/staging/devcontainer-init.sh /tmp/staging/setup-docker-multiarch.sh \
     && chmod +x /usr/local/share/docker-bind-mount.sh /usr/local/share/devcontainer-init.sh  /usr/local/share/setup-docker-multiarch.sh \
