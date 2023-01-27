@@ -164,7 +164,7 @@ func (s *server) StartNonBlocking() error {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.ProfilePort)
 			pl, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Debugf("Failed to listen HTTP for Profiling at %s with error: %v", addr, err)
+				log.Debugf("Failed to listen for profiling server on TCP address %s with error: %v", addr, err)
 			} else {
 				log.Infof("Starting listening HTTP for Profiling at %s", addr)
 				profilingListeners = append(profilingListeners, pl)
