@@ -14,16 +14,16 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
-	"os"
-	"os/signal"
+	"fmt"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -96,14 +96,11 @@ func main() {
 	issuerKeyPath := filepath.Join(*credsPath, credentials.IssuerKeyFilename)
 	rootCertPath := filepath.Join(*credsPath, credentials.RootCertFilename)
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	runCtx := signals.Context()
 	config, err := config.FromConfigName(*configName)
 	if err != nil {
-		log.Warn(err)
+		log.Fatal(err)
 	}
+
 	config.IssuerCertPath = issuerCertPath
 	config.IssuerKeyPath = issuerKeyPath
 	config.RootCertPath = rootCertPath
@@ -112,58 +109,77 @@ func main() {
 		config.TokenAudience = tokenAudience
 	}
 
-	watchDir := filepath.Dir(config.IssuerCertPath)
+	var (
+		watchDir    = filepath.Dir(config.IssuerCertPath)
+		issuerEvent = make(chan struct{})
+		mngr        = concurrency.NewRunnerManager()
+	)
 
-	ca := sentry.NewSentryCA()
+	// We use runner manager inception here since we want the inner manager to be
+	// restarted when the CA server needs to be restarted because of file events.
+	// We don't want to restart the healthz server and file watcher on file
+	// events (as well as wanting to terminate the program on signals).
+	caMngrFactory := func() *concurrency.RunnerManager {
+		return concurrency.NewRunnerManager(
+			func(ctx context.Context) error {
+				return sentry.NewSentryCA().Start(ctx, config)
+			},
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return nil
 
-	log.Infof("starting watch on filesystem directory: %s", watchDir)
+				case <-issuerEvent:
+					monitoring.IssuerCertChanged()
+					log.Debug("received issuer credentials changed signal")
 
-	issuerEvent := make(chan struct{})
-
-	go func() {
-		// Restart the server when the issuer credentials change
-		var restart <-chan time.Time
-		for {
-			select {
-			case <-issuerEvent:
-				monitoring.IssuerCertChanged()
-				log.Debug("received issuer credentials changed signal")
-				// Batch all signals within 2s of each other
-				if restart == nil {
-					restart = time.After(2 * time.Second)
+					select {
+					case <-ctx.Done():
+						return nil
+					// Batch all signals within 2s of each other
+					case <-time.After(2 * time.Second):
+						log.Warn("issuer credentials changed; reloading")
+						return nil
+					}
 				}
-			case <-restart:
-				log.Warn("issuer credentials changed; reloading")
-				innerErr := ca.Restart(runCtx, config)
-				if innerErr != nil {
-					log.Fatalf("failed to restart sentry server: %s", innerErr)
-				}
-				restart = nil
-			}
-		}
-	}()
-
-	// Start the health server in background
-	go func() {
-		healthzServer := health.NewServer(log)
-		healthzServer.Ready()
-
-		if innerErr := healthzServer.Run(runCtx, healthzPort); innerErr != nil {
-			log.Fatalf("failed to start healthz server: %s", innerErr)
-		}
-	}()
-
-	// Start the server in background
-	err = ca.Start(runCtx, config)
-	if err != nil {
-		log.Fatalf("failed to restart sentry server: %s", err)
+			},
+		)
 	}
 
-	// Watch for changes in the watchDir
-	// This also blocks until runCtx is canceled
-	fswatcher.Watch(runCtx, watchDir, issuerEvent)
+	// CA Server
+	mngr.Add(func(ctx context.Context) error {
+		for {
+			if err := caMngrFactory().Run(ctx); err != nil {
+				return err
+			}
+			// Catch outer context cancellation to exit.
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+			}
+		}
+	})
 
-	shutdownDuration := 5 * time.Second
-	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
-	<-time.After(shutdownDuration)
+	// Watch for changes in the watchDir
+	mngr.Add(func(ctx context.Context) error {
+		log.Infof("starting watch on filesystem directory: %s", watchDir)
+		return fswatcher.Watch(ctx, watchDir, issuerEvent)
+	})
+
+	// Healthz server
+	mngr.Add(func(ctx context.Context) error {
+		healthzServer := health.NewServer(log)
+		healthzServer.Ready()
+		if err := healthzServer.Run(ctx, healthzPort); err != nil {
+			return fmt.Errorf("failed to start healthz server: %s", err)
+		}
+		return nil
+	})
+
+	// Run the runner manager.
+	if err := mngr.Run(signals.Context()); err != nil {
+		log.Fatal(err)
+	}
+	log.Info("sentry shut down gracefully")
 }
