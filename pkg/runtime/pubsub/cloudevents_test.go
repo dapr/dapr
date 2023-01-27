@@ -70,16 +70,16 @@ func TestNewCloudEvent(t *testing.T) {
 			Data:            []byte("originaldata"),
 		}, map[string]string{
 			// these properties should not actually override anything
-			"cloudevent-topic":           "overridetopic",
-			"cldouevent-pubsub":          "overridepubsub",
-			"cloudevent-data":            "overridedata",
-			"cloudevent-datacontenttype": "overridedatacontenttype",
+			"cloudevent.topic":           "overridetopic",
+			"cloudevent.pubsub":          "overridepubsub",
+			"cloudevent.data":            "overridedata",
+			"cloudevent.datacontenttype": "overridedatacontenttype",
 			// these properties should override
-			"cloudevent-source":      "overridesource",
-			"cloudevent-id":          "overrideid",
-			"cloudevent-type":        "overridetype",
-			"cloudevent-traceparent": "overridetraceparent",
-			"cloudevent-tracestate":  "overridetracestate",
+			"cloudevent.source":      "overridesource",
+			"cloudevent.id":          "overrideid",
+			"cloudevent.type":        "overridetype",
+			"cloudevent.traceparent": "overridetraceparent",
+			"cloudevent.tracestate":  "overridetracestate",
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "originalpubsub", ce["pubsubname"].(string))
