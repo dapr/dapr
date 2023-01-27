@@ -131,7 +131,7 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
-		s.logger.Infof("gRPC listening on UNIX socket at %s", socket)
+		s.logger.Infof("gRPC server listening on UNIX socket: %s", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
