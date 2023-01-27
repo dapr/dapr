@@ -93,10 +93,6 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "overrideid", ce["id"].(string))
 		assert.Equal(t, "overridetraceparent", ce["traceparent"].(string))
 		assert.Equal(t, "overridetracestate", ce["tracestate"].(string))
-
-		// assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
-		// assert.Equal(t, "d", ce["traceid"].(string))
-		// assert.Equal(t, "com.dapr.event.sent", ce["type"].(string))
 	})
 
 	t.Run("custom cloudevent", func(t *testing.T) {
