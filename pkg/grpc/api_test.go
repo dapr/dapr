@@ -1953,6 +1953,17 @@ func TestPublishTopic(t *testing.T) {
 		assert.Nil(t, err)
 	})
 
+	t.Run("no err: publish event request with topic, pubsub and ce metadata override", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Metadata: map[string]string{
+				"cloudevent-source": "unit-test",
+			},
+		})
+		assert.Nil(t, err)
+	})
+
 	t.Run("err: publish event request with error-topic and pubsub", func(t *testing.T) {
 		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
 			PubsubName: "pubsub",

@@ -363,6 +363,9 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				"value": "third value",
 			},
 			ContentType: "application/json",
+			Metadata: map[string]string{
+				"cloudevent-source": "unit-test",
+			},
 		},
 	}
 
