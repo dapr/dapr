@@ -364,9 +364,9 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			},
 			ContentType: "application/json",
 			Metadata: map[string]string{
-				"cloudevent-source": "unit-test",
-				"cloudevent-topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
-				"cloudevent-pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
 			},
 		},
 	}
