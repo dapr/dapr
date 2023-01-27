@@ -428,7 +428,6 @@ setup-test-env-temporal:
 					--set temporalio/server=1.15.1 \
 					--set temporalio/web=1.14.0 \
 					--set cassandra.tag=3.11.3 \
-					--set temporalio/admin-tools=1.15.1 \
 					dapr-temporal wener/temporal -f ./tests/config/temporal_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 15m0s
 
 # delete temporal from cluster

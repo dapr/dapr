@@ -38,6 +38,8 @@ import (
 
 const (
 	workflowURLTemplate = "http://localhost:%d/v1.0-alpha1/workflows/%s"
+	workerRetyCount     = 5
+	workerSleepCount    = 2
 )
 
 var (
@@ -212,13 +214,13 @@ func main() {
 	w.RegisterWorkflow(HelloTemporalWF)
 	w.RegisterActivity(HelloTemporalAct)
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < workerRetyCount; i++ {
 		err = w.Start()
 
 		if err == nil {
 			break
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(workerSleepCount * time.Second)
 	}
 
 	if err != nil {
