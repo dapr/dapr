@@ -113,7 +113,7 @@ func (s *server) StartNonBlocking() error {
 			if err != nil {
 				log.Debugf("Failed to listen for HTTP server on TCP address %s with error: %v", addr, err)
 			} else {
-				log.Infof("HTTP server Listening on TCP at %s", addr)
+				log.Infof("HTTP server listening on TCP address: %s", addr)
 				listeners = append(listeners, l)
 			}
 		}
