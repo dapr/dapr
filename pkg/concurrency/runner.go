@@ -57,7 +57,6 @@ func (r *RunnerManager) Run(ctx context.Context) error {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
 	r.wg.Add(len(r.runners))
 	for _, runner := range r.runners {
 		go func(runner Runner) {
