@@ -16,6 +16,7 @@ package components
 import (
 	"testing"
 
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
@@ -31,13 +32,17 @@ func TestComponentsPatch(t *testing.T) {
 		Name: "app",
 	}
 	testCases := []struct {
-		name     string
-		pod      *corev1.Pod
-		expPatch []sidecar.PatchOperation
-		expMount *corev1.VolumeMount
+		name           string
+		appID          string
+		componentsList []componentsapi.Component
+		pod            *corev1.Pod
+		expPatch       []sidecar.PatchOperation
+		expMount       *corev1.VolumeMount
 	}{
 		{
-			"patch should return pod containers and empty patch operations when none pluggable components are specified",
+			"patch should return empty patch operations when none pluggable components are specified",
+			"",
+			[]componentsapi.Component{},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{},
@@ -51,6 +56,8 @@ func TestComponentsPatch(t *testing.T) {
 		},
 		{
 			"patch should create pluggable component unix socket volume",
+			"",
+			[]componentsapi.Component{},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -87,6 +94,8 @@ func TestComponentsPatch(t *testing.T) {
 		},
 		{
 			"patch should add pluggable component unix socket volume when pod already has volumes",
+			"",
+			[]componentsapi.Component{},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{

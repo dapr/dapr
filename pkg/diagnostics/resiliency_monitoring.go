@@ -59,7 +59,7 @@ func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(appIDKey, m.appID, resiliencyNameKey, resiliencyName, namespaceKey, namespace),
+			diagUtils.WithTags(m.policiesLoadCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, namespaceKey, namespace),
 			m.policiesLoadCount.M(1),
 		)
 	}
@@ -70,7 +70,7 @@ func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, pol
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace),
+			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace),
 			m.executionCount.M(1),
 		)
 	}

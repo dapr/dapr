@@ -92,10 +92,14 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
-| `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector | `{}`                 |
-| `global.tolerations`                      | Pods will be allowed to schedule onto a node whose taints match the tolerations | `{}`                 |
-| `global.labels`                           | Custom pod labels                                                       | `{}`                 |
-| `global.k8sLabels`                        | Custom metadata labels                                                  | `{}`                 |
+| `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector        | `{}`         |
+| `global.tolerations`                      | Pods will be allowed to schedule onto a node whose taints match the tolerations    | `{}`         |
+| `global.labels`                           | Custom pod labels                                                                  | `{}`         |
+| `global.k8sLabels`                        | Custom metadata labels                                                             | `{}`         |
+| `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
+| `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
+| `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
+| `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
 
 ### Dapr Dashboard options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -122,6 +126,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.runAsNonRoot`              | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_operator.debug.enabled`             | Boolean value for enabling debug mode | `{}` |
+| `dapr_operator.watchNamespace`            | The namespace to watch for annoated Dapr resources in | `""` |
 
 ### Dapr Placement options:
 | Parameter                                 | Description                                                             | Default                 |

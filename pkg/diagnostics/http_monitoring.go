@@ -121,10 +121,10 @@ func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path st
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
+			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
 			h.serverRequestCount.M(1))
 		stats.RecordWithTags(
-			ctx, diagUtils.WithTags(appIDKey, h.appID),
+			ctx, diagUtils.WithTags(h.serverRequestBytes.Name(), appIDKey, h.appID),
 			h.serverRequestBytes.M(contentSize))
 	}
 }
@@ -133,14 +133,14 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverResponseCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.serverResponseCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.serverLatency.M(elapsed))
 		stats.RecordWithTags(
-			ctx, diagUtils.WithTags(appIDKey, h.appID),
+			ctx, diagUtils.WithTags(h.serverResponseBytes.Name(), appIDKey, h.appID),
 			h.serverResponseBytes.M(contentSize))
 	}
 }
@@ -149,7 +149,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
+			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
 			h.clientSentBytes.M(contentSize))
 	}
 }
@@ -158,21 +158,21 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientCompletedCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
-			ctx, diagUtils.WithTags(appIDKey, h.appID),
+			ctx, diagUtils.WithTags(h.clientReceivedBytes.Name(), appIDKey, h.appID),
 			h.clientReceivedBytes.M(contentSize))
 	}
 }
 
 func (h *httpMetrics) AppHealthProbeStarted(ctx context.Context) {
 	if h.enabled {
-		stats.RecordWithTags(ctx, diagUtils.WithTags(appIDKey, h.appID))
+		stats.RecordWithTags(ctx, diagUtils.WithTags("", appIDKey, h.appID))
 	}
 }
 
@@ -180,11 +180,11 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, h.appID, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.healthProbeCompletedCount.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
 			h.healthProbeCompletedCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(appIDKey, h.appID, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.healthProbeRoundripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
 			h.healthProbeRoundripLatency.M(elapsed))
 	}
 }

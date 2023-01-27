@@ -16,8 +16,8 @@ package injector
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,8 +42,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	var pod corev1.Pod
 	err = json.Unmarshal(req.Object.Raw, &pod)
 	if err != nil {
-		errors.Wrap(err, "could not unmarshal raw object")
-		return nil, err
+		return nil, fmt.Errorf("could not unmarshal raw object: %w", err)
 	}
 
 	log.Infof(
@@ -122,23 +121,23 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	// Create the list of patch operations
 	patchOps = []sidecar.PatchOperation{}
-	if len(pod.Spec.Containers) == 0 {
+	if len(pod.Spec.Containers) == 0 { // set to empty to support add operations individually
 		patchOps = append(patchOps, sidecar.PatchOperation{
 			Op:    "add",
 			Path:  sidecar.PatchPathContainers,
-			Value: []corev1.Container{*sidecarContainer},
+			Value: []corev1.Container{},
 		})
-	} else {
-		patchOps = append(patchOps, sidecar.PatchOperation{
-			Op:    "add",
-			Path:  sidecar.PatchPathContainers + "/-",
-			Value: sidecarContainer,
-		})
-		patchOps = append(patchOps,
-			sidecar.AddDaprEnvVarsToContainers(appContainers)...)
-		patchOps = append(patchOps,
-			sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
 	}
+
+	patchOps = append(patchOps, sidecar.PatchOperation{
+		Op:    "add",
+		Path:  sidecar.PatchPathContainers + "/-",
+		Value: sidecarContainer,
+	})
+	patchOps = append(patchOps,
+		sidecar.AddDaprEnvVarsToContainers(appContainers)...)
+	patchOps = append(patchOps,
+		sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
 	volumePatchOps := sidecar.GetVolumesPatchOperations(
 		pod.Spec.Volumes,
 		[]corev1.Volume{tokenVolume},

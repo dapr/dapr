@@ -24,7 +24,6 @@ const (
 // This controller only runs on the cluster's leader.
 // Currently, this ensures that the sidecar is injected in each pod, otherwise it kills the pod so it can be restarted.
 type DaprWatchdog struct {
-	enabled           bool
 	interval          time.Duration
 	maxRestartsPerMin int
 
@@ -41,11 +40,6 @@ func (dw *DaprWatchdog) NeedLeaderElection() bool {
 // Start the controller. This method blocks until the context is canceled.
 // Implements sigs.k8s.io/controller-runtime/pkg/manager.Runnable .
 func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
-	if !dw.enabled {
-		log.Infof("DaprWatchdog is not enabled")
-		return nil
-	}
-
 	log.Infof("DaprWatchdog worker starting")
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -202,7 +196,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		log.Debugf("Taking a pod restart token")
 		before := time.Now()
 		_ = dw.restartLimiter.Take()
-		log.Debugf("Resumed after pausing for %v", time.Now().Sub(before))
+		log.Debugf("Resumed after pausing for %v", time.Since(before))
 	}
 
 	log.Infof("DaprWatchdog completed checking pods")

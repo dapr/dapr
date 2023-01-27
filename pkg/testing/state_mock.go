@@ -16,6 +16,8 @@ limitations under the License.
 package testing
 
 import (
+	"context"
+
 	mock "github.com/stretchr/testify/mock"
 
 	state "github.com/dapr/components-contrib/state"
@@ -27,12 +29,12 @@ type MockStateStore struct {
 }
 
 // BulkDelete provides a mock function with given fields: req
-func (_m *MockStateStore) BulkDelete(req []state.DeleteRequest) error {
-	ret := _m.Called(req)
+func (_m *MockStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
+	ret := _m.Called(ctx, req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]state.DeleteRequest) error); ok {
-		r0 = rf(req)
+	if rf, ok := ret.Get(0).(func(context.Context, []state.DeleteRequest) error); ok {
+		r0 = rf(ctx, req)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -41,12 +43,12 @@ func (_m *MockStateStore) BulkDelete(req []state.DeleteRequest) error {
 }
 
 // BulkSet provides a mock function with given fields: req
-func (_m *MockStateStore) BulkSet(req []state.SetRequest) error {
-	ret := _m.Called(req)
+func (_m *MockStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
+	ret := _m.Called(ctx, req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]state.SetRequest) error); ok {
-		r0 = rf(req)
+	if rf, ok := ret.Get(0).(func(context.Context, []state.SetRequest) error); ok {
+		r0 = rf(ctx, req)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -55,12 +57,12 @@ func (_m *MockStateStore) BulkSet(req []state.SetRequest) error {
 }
 
 // Delete provides a mock function with given fields: req
-func (_m *MockStateStore) Delete(req *state.DeleteRequest) error {
-	ret := _m.Called(req)
+func (_m *MockStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
+	ret := _m.Called(ctx, req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*state.DeleteRequest) error); ok {
-		r0 = rf(req)
+	if rf, ok := ret.Get(0).(func(context.Context, *state.DeleteRequest) error); ok {
+		r0 = rf(ctx, req)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -69,12 +71,12 @@ func (_m *MockStateStore) Delete(req *state.DeleteRequest) error {
 }
 
 // Get provides a mock function with given fields: req
-func (_m *MockStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
-	ret := _m.Called(req)
+func (_m *MockStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
+	ret := _m.Called(ctx, req)
 
 	var r0 *state.GetResponse
-	if rf, ok := ret.Get(0).(func(*state.GetRequest) *state.GetResponse); ok {
-		r0 = rf(req)
+	if rf, ok := ret.Get(0).(func(context.Context, *state.GetRequest) *state.GetResponse); ok {
+		r0 = rf(ctx, req)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*state.GetResponse)
@@ -82,8 +84,8 @@ func (_m *MockStateStore) Get(req *state.GetRequest) (*state.GetResponse, error)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*state.GetRequest) error); ok {
-		r1 = rf(req)
+	if rf, ok := ret.Get(1).(func(context.Context, *state.GetRequest) error); ok {
+		r1 = rf(ctx, req)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -91,7 +93,7 @@ func (_m *MockStateStore) Get(req *state.GetRequest) (*state.GetResponse, error)
 	return r0, r1
 }
 
-func (_m *MockStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (_m *MockStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	return false, nil, nil
 }
 
@@ -119,12 +121,12 @@ func (f *MockStateStore) GetComponentMetadata() map[string]string {
 }
 
 // Set provides a mock function with given fields: req
-func (_m *MockStateStore) Set(req *state.SetRequest) error {
-	ret := _m.Called(req)
+func (_m *MockStateStore) Set(ctx context.Context, req *state.SetRequest) error {
+	ret := _m.Called(ctx, req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*state.SetRequest) error); ok {
-		r0 = rf(req)
+	if rf, ok := ret.Get(0).(func(context.Context, *state.SetRequest) error); ok {
+		r0 = rf(ctx, req)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -142,14 +144,15 @@ func (_m *MockStateStore) Close() error {
 }
 
 type FailingStatestore struct {
-	Failure Failure
+	Failure     Failure
+	BulkFailKey string
 }
 
 func (f *FailingStatestore) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
 
-func (f *FailingStatestore) BulkDelete(req []state.DeleteRequest) error {
+func (f *FailingStatestore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
 	for _, val := range req {
 		err := f.Failure.PerformFailure(val.Key)
 		if err != nil {
@@ -159,7 +162,7 @@ func (f *FailingStatestore) BulkDelete(req []state.DeleteRequest) error {
 	return nil
 }
 
-func (f *FailingStatestore) BulkSet(req []state.SetRequest) error {
+func (f *FailingStatestore) BulkSet(ctx context.Context, req []state.SetRequest) error {
 	for _, val := range req {
 		err := f.Failure.PerformFailure(val.Key)
 		if err != nil {
@@ -169,19 +172,32 @@ func (f *FailingStatestore) BulkSet(req []state.SetRequest) error {
 	return nil
 }
 
-func (f *FailingStatestore) Delete(req *state.DeleteRequest) error {
+func (f *FailingStatestore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	return f.Failure.PerformFailure(req.Key)
 }
 
-func (f *FailingStatestore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+func (f *FailingStatestore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	err := f.Failure.PerformFailure(req.Key)
 	if err != nil {
 		return nil, err
 	}
-	return &state.GetResponse{}, nil
+
+	var res *state.GetResponse
+	if req.Key != "nilGetKey" {
+		res = &state.GetResponse{}
+	}
+
+	return res, nil
 }
 
-func (f *FailingStatestore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (f *FailingStatestore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+	if f.BulkFailKey != "" {
+		err := f.Failure.PerformFailure(f.BulkFailKey)
+		if err != nil {
+			return true, nil, err
+		}
+	}
+
 	// This makes the code fall back to individual gets, which is basically what we'd mimic here anyway.
 	return false, nil, nil
 }
@@ -194,7 +210,7 @@ func (f *FailingStatestore) Ping() error {
 	return nil
 }
 
-func (f *FailingStatestore) Set(req *state.SetRequest) error {
+func (f *FailingStatestore) Set(ctx context.Context, req *state.SetRequest) error {
 	return f.Failure.PerformFailure(req.Key)
 }
 

@@ -14,16 +14,15 @@ limitations under the License.
 package bindings_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	b "github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/bindings"
+	"github.com/dapr/kit/logger"
 )
 
 type (
@@ -60,21 +59,21 @@ func TestRegistry(t *testing.T) {
 
 		// assert v0 and v1
 		assert.True(t, testRegistry.HasInputBinding(componentName, "v0"))
-		p, e := testRegistry.CreateInputBinding(componentName, "v0")
+		p, e := testRegistry.CreateInputBinding(componentName, "v0", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockInput, p)
-		p, e = testRegistry.CreateInputBinding(componentName, "v1")
+		p, e = testRegistry.CreateInputBinding(componentName, "v1", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockInput, p)
 
 		// assert v2
 		assert.True(t, testRegistry.HasInputBinding(componentName, "v2"))
-		pV2, e := testRegistry.CreateInputBinding(componentName, "v2")
+		pV2, e := testRegistry.CreateInputBinding(componentName, "v2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockInputV2, pV2)
 
 		// check case-insensitivity
-		pV2, e = testRegistry.CreateInputBinding(strings.ToUpper(componentName), "V2")
+		pV2, e = testRegistry.CreateInputBinding(strings.ToUpper(componentName), "V2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockInputV2, pV2)
 	})
@@ -89,8 +88,8 @@ func TestRegistry(t *testing.T) {
 		assert.False(t, testRegistry.HasInputBinding(componentName, "v0"))
 		assert.False(t, testRegistry.HasInputBinding(componentName, "v1"))
 		assert.False(t, testRegistry.HasInputBinding(componentName, "v2"))
-		p, actualError := testRegistry.CreateInputBinding(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find input binding %s/v1", componentName)
+		p, actualError := testRegistry.CreateInputBinding(componentName, "v1", "")
+		expectedError := fmt.Errorf("couldn't find input binding %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)
@@ -118,17 +117,17 @@ func TestRegistry(t *testing.T) {
 
 		// assert v0 and v1
 		assert.True(t, testRegistry.HasOutputBinding(componentName, "v0"))
-		p, e := testRegistry.CreateOutputBinding(componentName, "v0")
+		p, e := testRegistry.CreateOutputBinding(componentName, "v0", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockOutput, p)
 		assert.True(t, testRegistry.HasOutputBinding(componentName, "v1"))
-		p, e = testRegistry.CreateOutputBinding(componentName, "v1")
+		p, e = testRegistry.CreateOutputBinding(componentName, "v1", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockOutput, p)
 
 		// assert v2
 		assert.True(t, testRegistry.HasOutputBinding(componentName, "v2"))
-		pV2, e := testRegistry.CreateOutputBinding(componentName, "v2")
+		pV2, e := testRegistry.CreateOutputBinding(componentName, "v2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockOutputV2, pV2)
 	})
@@ -143,8 +142,8 @@ func TestRegistry(t *testing.T) {
 		assert.False(t, testRegistry.HasOutputBinding(componentName, "v0"))
 		assert.False(t, testRegistry.HasOutputBinding(componentName, "v1"))
 		assert.False(t, testRegistry.HasOutputBinding(componentName, "v2"))
-		p, actualError := testRegistry.CreateOutputBinding(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find output binding %s/v1", componentName)
+		p, actualError := testRegistry.CreateOutputBinding(componentName, "v1", "")
+		expectedError := fmt.Errorf("couldn't find output binding %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)

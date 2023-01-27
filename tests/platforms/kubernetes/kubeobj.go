@@ -144,6 +144,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
+
 	return annotationObject
 }
 
@@ -325,18 +326,20 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 }
 
 // buildDaprComponentObject creates dapr component object.
-func buildDaprComponentObject(componentName string, typeName string, metaData []v1alpha1.MetadataItem) *v1alpha1.Component {
+func buildDaprComponentObject(componentName string, typeName string, scopes []string, annotations map[string]string, metaData []v1alpha1.MetadataItem) *v1alpha1.Component {
 	return &v1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind: DaprComponentsKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: componentName,
+			Name:        componentName,
+			Annotations: annotations,
 		},
 		Spec: v1alpha1.ComponentSpec{
 			Type:     typeName,
 			Metadata: metaData,
 		},
+		Scopes: scopes,
 	}
 }
 

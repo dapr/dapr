@@ -137,6 +137,14 @@ spec:
         - "--enable-metrics=false"
 {{- end }}
         - "--tls-enabled"
+{{- with .Values.global.issuerFilenames }}
+        - "--issuer-ca-filename"
+        - "{{ .ca }}"
+        - "--issuer-certificate-filename"
+        - "{{ .cert }}"
+        - "--issuer-key-filename"
+        - "{{ .key }}"
+{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}
@@ -159,7 +167,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
-      serviceAccountName: dapr-operator
+      serviceAccountName: dapr-placement
       volumes:
         - name: credentials
           secret:

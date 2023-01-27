@@ -19,16 +19,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"sync"
 	"time"
+
+	guuid "github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	testplatform "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 
 	k6api "github.com/grafana/k6-operator/api/v1alpha1"
-	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,8 +41,9 @@ import (
 )
 
 const (
-	k6ConfigMapPrefix = "k6-tests"
-	scriptName        = "test.js"
+	k6ConfigMapPrefix       = "k6-tests"
+	scriptName              = "test.js"
+	defaultK6ServiceAccount = "k6-sa"
 	// pollInterval is how frequently will poll for updates.
 	pollInterval = 5 * time.Second
 	// pollTimeout is how long the test should took.
@@ -95,9 +98,9 @@ type K6RateMetric struct {
 	Type     string `json:"type"`
 	Contains string `json:"contains"`
 	Values   struct {
-		Rate   int `json:"rate"`
-		Passes int `json:"passes"`
-		Fails  int `json:"fails"`
+		Rate   float64 `json:"rate"`
+		Passes int     `json:"passes"`
+		Fails  int     `json:"fails"`
 	} `json:"values"`
 }
 
@@ -138,6 +141,7 @@ type K6 struct {
 	name              string
 	configName        string
 	script            string
+	appID             string
 	parallelism       int
 	runnerEnv         []corev1.EnvVar
 	addDapr           bool
@@ -152,10 +156,14 @@ type K6 struct {
 	testMemoryRequest string
 	daprMemoryLimit   string
 	daprMemoryRequest string
+	logEnabled        bool
 }
 
 // collectResult read the pod logs and transform into json output.
 func collectResult[T any](k6 *K6, podName string) (*T, error) {
+	if k6.logEnabled {
+		return nil, nil
+	}
 	req := k6.kubeClient.CoreV1().Pods(k6.namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: "k6",
 	})
@@ -169,7 +177,7 @@ func collectResult[T any](k6 *K6, podName string) (*T, error) {
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, podLogs)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to copy logs from the pod")
+		return nil, fmt.Errorf("unable to copy logs from the pod: %w", err)
 	}
 
 	bts := buf.Bytes()
@@ -181,7 +189,7 @@ func collectResult[T any](k6 *K6, podName string) (*T, error) {
 	var k6Result K6RunnerSummary[T]
 	if err := json.Unmarshal(bts, &k6Result); err != nil {
 		// this shouldn't normally happen but if it does, let's log output by default
-		return nil, errors.Wrap(err, fmt.Sprintf("unable to marshal: `%s`", string(bts)))
+		return nil, fmt.Errorf("unable to marshal `%s`: %w", string(bts), err)
 	}
 
 	return &k6Result.Metrics, nil
@@ -238,9 +246,17 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	runnerAnnotations := make(map[string]string)
 	if k6.addDapr {
 		runnerAnnotations[annotations.KeyEnabled] = "true"
-		runnerAnnotations[annotations.KeyAppID] = "tester-app"
+		runnerAnnotations[annotations.KeyAppID] = k6.appID
 		runnerAnnotations[annotations.KeyMemoryLimit] = k6.daprMemoryLimit
 		runnerAnnotations[annotations.KeyMemoryRequest] = k6.daprMemoryRequest
+	}
+
+	args := "--include-system-env-vars"
+	if !k6.logEnabled {
+		args += " --log-output=none"
+	}
+	labels := map[string]string{
+		testplatform.TestAppLabelKey: k6.name,
 	}
 	k6Test := k6api.K6{
 		TypeMeta: v1.TypeMeta{
@@ -259,8 +275,14 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 				},
 			},
 			Parallelism: int32(k6.parallelism),
-			Arguments:   "--include-system-env-vars --log-output=none",
+			Arguments:   args,
+			Starter: k6api.Pod{
+				Metadata: k6api.PodMetadata{
+					Labels: labels,
+				},
+			},
 			Runner: k6api.Pod{
+				ServiceAccountName: defaultK6ServiceAccount,
 				Env: append(k6.runnerEnv, corev1.EnvVar{
 					Name:  "TEST_NAMESPACE",
 					Value: k6.namespace,
@@ -268,6 +290,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 				Image: runner.BuildTestImageName(k6.runnerImage),
 				Metadata: k6api.PodMetadata{
 					Annotations: runnerAnnotations,
+					Labels:      labels,
 				},
 				Resources: corev1.ResourceRequirements{
 					Limits: map[corev1.ResourceName]resource.Quantity{
@@ -289,7 +312,15 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	if err != nil {
 		return err
 	}
-	return k6.waitForCompletion()
+
+	if err = k6.waitForCompletion(); err != nil {
+		return err
+	}
+	return k6.streamLogs()
+}
+
+func (k6 *K6) streamLogs() error {
+	return testplatform.StreamContainerLogsToDisk(k6.ctx, k6.name, k6.kubeClient.CoreV1().Pods(k6.namespace))
 }
 
 // selector return the label selector for the k6 running pods and jobs.
@@ -448,6 +479,13 @@ func WithName(name string) K6Opt {
 	}
 }
 
+// WithAppID sets the appID when dapr is enabled.
+func WithAppID(appID string) K6Opt {
+	return func(k *K6) {
+		k.appID = appID
+	}
+}
+
 // WithScript set the test script.
 func WithScript(script string) K6Opt {
 	return func(k *K6) {
@@ -502,11 +540,23 @@ func WithCtx(ctx context.Context) K6Opt {
 	}
 }
 
+// EnableLog enables the console output debugging. This should be deactivated when running in production
+// to avoid errors when parsing the test result.
+func EnableLog() K6Opt {
+	return func(k *K6) {
+		k.logEnabled = true
+	}
+}
+
 // NewK6 creates a new k6 load testing with the given options.
 func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 	ctx, cancel := context.WithCancel(context.Background())
+	uniqueTestID := guuid.New().String()[:6] // to avoid name clash when a clean up is happening
+	log.Printf("starting %s k6 test", uniqueTestID)
+
 	k6Tester := &K6{
-		name:              "k6-test",
+		name:              fmt.Sprintf("k6-test-%s", uniqueTestID),
+		appID:             "k6-tester",
 		script:            scriptPath,
 		parallelism:       1,
 		addDapr:           true,

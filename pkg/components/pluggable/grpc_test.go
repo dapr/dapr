@@ -16,6 +16,7 @@ package pluggable
 import (
 	"context"
 	"net"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -45,24 +46,38 @@ func TestGRPCConnector(t *testing.T) {
 		return
 	}
 
-	t.Run("grpc connection should be idle or transient-failure when the process is listening to the socket", func(t *testing.T) {
+	t.Run("grpc connection should be idle or ready when the process is listening to the socket due to withblock usage", func(t *testing.T) {
 		fakeFactoryCalled := 0
 		clientFake := &fakeClient{}
 		fakeFactory := func(grpc.ClientConnInterface) *fakeClient {
 			fakeFactoryCalled++
 			return clientFake
 		}
-		connector := NewGRPCConnector("/tmp/socket.sock", fakeFactory)
+		const fakeSocketPath = "/tmp/socket.sock"
+		os.RemoveAll(fakeSocketPath) // guarantee that is not being used.
+		defer os.RemoveAll(fakeSocketPath)
+		listener, err := net.Listen("unix", fakeSocketPath)
+		require.NoError(t, err)
+		defer listener.Close()
+
+		connector := NewGRPCConnectorWithDialer(socketDialer(fakeSocketPath, grpc.WithBlock(), grpc.FailOnNonTempDialError(true)), fakeFactory)
+		defer connector.Close()
+
+		go func() {
+			s := grpc.NewServer()
+			s.Serve(listener)
+			s.Stop()
+		}()
+
 		require.NoError(t, connector.Dial(""))
 		acceptedStatus := []connectivity.State{
-			connectivity.TransientFailure,
+			connectivity.Ready,
 			connectivity.Idle,
 		}
 
 		assert.Contains(t, acceptedStatus, connector.conn.GetState())
 		assert.Equal(t, 1, fakeFactoryCalled)
-		assert.Equal(t, int64(1), clientFake.pingCalled.Load())
-		connector.Close()
+		assert.Equal(t, int64(0), clientFake.pingCalled.Load())
 	})
 
 	t.Run("grpc connection should be ready when socket is listening", func(t *testing.T) {
@@ -74,13 +89,15 @@ func TestGRPCConnector(t *testing.T) {
 		}
 
 		const fakeSocketPath = "/tmp/socket.sock"
+		os.RemoveAll(fakeSocketPath) // guarantee that is not being used.
+		defer os.RemoveAll(fakeSocketPath)
 		connector := NewGRPCConnector(fakeSocketPath, fakeFactory)
 
 		listener, err := net.Listen("unix", fakeSocketPath)
 		require.NoError(t, err)
 		defer listener.Close()
 
-		require.NoError(t, connector.Dial(""), grpc.WithBlock())
+		require.NoError(t, connector.Dial(""))
 		defer connector.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

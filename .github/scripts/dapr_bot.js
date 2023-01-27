@@ -5,21 +5,56 @@ const owners = [
     'artursouza',
     'berndverst',
     'daixiang0',
+    'DeepanshuA',
     'halspang',
     'ItalyPaleAle',
     'johnewart',
+    'joshvanl',
     'mcandeia',
     'msfussell',
     'mukundansundar',
     'pkedy',
     'pruthvidhodda',
+    'ryanlettieri',
     'shubham1172',
     'skyao',
     'tanvigour',
     'yaron2'
 ];
 
+const SDKs = [
+    "dotnet-sdk",
+    "go-sdk",
+    "java-sdk",
+    "js-sdk",
+    "python-sdk",
+    "php-sdk",
+];
+
+const docsIssueBodyTpl = (issueNumber) => `This issue was automatically created by \
+[Dapr Bot](https://github.com/dapr/dapr/blob/master/.github/workflows/dapr-bot.yml) because a \"docs-needed\" label \
+was added to dapr/dapr#${issueNumber}. \n\n\
+TODO: Add more details as per [this template](.github/ISSUE_TEMPLATE/new-content-needed.md).`;
+
+const sdkIssueBodyTpl = (issueNumber) => `This issue was automatically created by \
+[Dapr Bot](https://github.com/dapr/dapr/blob/master/.github/workflows/dapr-bot.yml) because a \"sdk-needed\" label \
+was added to dapr/dapr#${issueNumber}. \n\n\
+TODO: Add more details.`;
+
 module.exports = async ({ github, context }) => {
+    if (context.eventName == "issue_comment" && context.payload.action == "created") {
+        await handleIssueCommentCreate({ github, context });
+    } else if (context.eventName == "issues" && context.payload.action == "labeled") {
+        await handleIssueLabeled({ github, context });
+    } else {
+        console.log(`[main] event ${context.eventName} not supported, exiting.`);
+    }
+}
+
+/**
+ * Handle issue comment create event.
+ */
+async function handleIssueCommentCreate({ github, context }) {
     const payload = context.payload;
     const issue = context.issue;
     const username = context.actor;
@@ -27,7 +62,7 @@ module.exports = async ({ github, context }) => {
     const commentBody = payload.comment.body;
 
     if (!commentBody) {
-        console.log("[main] comment body not found, exiting.");
+        console.log("[handleIssueCommentCreate] comment body not found, exiting.");
         return;
     }
     const command = commentBody.split(" ")[0];
@@ -40,7 +75,7 @@ module.exports = async ({ github, context }) => {
 
     // Commands that can only be executed by owners.
     if (owners.indexOf(username) < 0) {
-        console.log(`[main] user ${username} is not an owner, exiting.`);
+        console.log(`[handleIssueCommentCreate] user ${username} is not an owner, exiting.`);
         return;
     }
 
@@ -55,8 +90,49 @@ module.exports = async ({ github, context }) => {
             await cmdOkToPerf(github, issue, isFromPulls);
             break;
         default:
-            console.log(`[main] command ${command} not found, exiting.`);
+            console.log(`[handleIssueCommentCreate] command ${command} not found, exiting.`);
             break;
+    }
+}
+
+/**
+ * Handle issue labeled event.
+ */
+async function handleIssueLabeled({ github, context }) {
+    const payload = context.payload;
+    const label = payload.label.name;
+    const issueNumber = payload.issue.number;
+
+    // This should not run in forks.
+    if (context.repo.owner !== "dapr") {
+        console.log("[handleIssueLabeled] not running in dapr repo, exiting.");
+        return;
+    }
+
+    // Authorization is not required here because it's triggered by an issue label event.
+    // Only authorized users can add labels to issues.
+    if (label == "docs-needed") {
+        // Open a new issue
+        await github.issues.create({
+            owner: "dapr",
+            repo: "docs",
+            title: `New content needed for dapr/dapr#${issueNumber}`,
+            labels: ["content/missing-information", "created-by/dapr-bot"],
+            body: docsIssueBodyTpl(issueNumber),
+        })
+    } else if (label == "sdk-needed") {
+        // Open an issue in all SDK repos.
+        for (const sdk of SDKs) {
+            await github.issues.create({
+                owner: "dapr",
+                repo: sdk,
+                title: `Add support for dapr/dapr#${issueNumber}`,
+                labels: ["enhancement", "created-by/dapr-bot"],
+                body: sdkIssueBodyTpl(issueNumber),
+            })
+        }
+    } else {
+        console.log(`[handleIssueLabeled] label ${label} not supported, exiting.`);
     }
 }
 

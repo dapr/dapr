@@ -11,16 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package components
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	cfkv "github.com/dapr/components-contrib/state/cloudflare/workerskv"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
-func TestGetFreePort(t *testing.T) {
-	p, err := GetFreePort()
-	assert.NoError(t, err)
-	assert.NotZero(t, p)
+func init() {
+	stateLoader.DefaultRegistry.RegisterComponent(cfkv.NewCFWorkersKV, "cloudflare.workerskv")
 }

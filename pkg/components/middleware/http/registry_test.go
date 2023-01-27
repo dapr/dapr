@@ -14,19 +14,18 @@ limitations under the License.
 package http_test
 
 import (
+	"fmt"
 	nethttp "net/http"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	h "github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/kit/logger"
 )
 
 func TestRegistry(t *testing.T) {
@@ -66,20 +65,20 @@ func TestRegistry(t *testing.T) {
 		// to get the address of a function value.
 
 		// assert v0 and v1
-		p, e := testRegistry.Create(componentName, "v0", metadata)
+		p, e := testRegistry.Create(componentName, "v0", metadata, "")
 		assert.NoError(t, e)
 		assert.True(t, reflect.ValueOf(mock) == reflect.ValueOf(p))
-		p, e = testRegistry.Create(componentName, "v1", metadata)
+		p, e = testRegistry.Create(componentName, "v1", metadata, "")
 		assert.NoError(t, e)
 		assert.True(t, reflect.ValueOf(mock) == reflect.ValueOf(p))
 
 		// assert v2
-		pV2, e := testRegistry.Create(componentName, "v2", metadata)
+		pV2, e := testRegistry.Create(componentName, "v2", metadata, "")
 		assert.NoError(t, e)
 		assert.True(t, reflect.ValueOf(mockV2) == reflect.ValueOf(pV2))
 
 		// check case-insensitivity
-		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", metadata)
+		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", metadata, "")
 		assert.NoError(t, e)
 		assert.True(t, reflect.ValueOf(mockV2) == reflect.ValueOf(pV2))
 	})
@@ -93,8 +92,8 @@ func TestRegistry(t *testing.T) {
 		metadata := h.Metadata{}
 
 		// act
-		p, actualError := testRegistry.Create(componentName, "v1", metadata)
-		expectedError := errors.Errorf("HTTP middleware %s/v1 has not been registered", componentName)
+		p, actualError := testRegistry.Create(componentName, "v1", metadata, "")
+		expectedError := fmt.Errorf("HTTP middleware %s/v1 has not been registered", componentName)
 
 		// assert
 		assert.Nil(t, p)

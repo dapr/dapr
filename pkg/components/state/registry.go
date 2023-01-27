@@ -14,9 +14,8 @@ limitations under the License.
 package state
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/components"
@@ -46,33 +45,39 @@ func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) state.
 	}
 }
 
-func (s *Registry) Create(name, version string) (state.Store, error) {
-	if method, ok := s.getStateStore(name, version); ok {
+func (s *Registry) Create(name, version, logName string) (state.Store, error) {
+	if method, ok := s.getStateStore(name, version, logName); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find state store %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find state store %s/%s", name, version)
 }
 
-func (s *Registry) getStateStore(name, version string) (func() state.Store, bool) {
+func (s *Registry) getStateStore(name, version, logName string) (func() state.Store, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	stateStoreFn, ok := s.stateStores[nameLower+"/"+versionLower]
 	if ok {
-		return s.wrapFn(stateStoreFn), true
+		return s.wrapFn(stateStoreFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		stateStoreFn, ok = s.stateStores[nameLower]
 		if ok {
-			return s.wrapFn(stateStoreFn), true
+			return s.wrapFn(stateStoreFn, logName), true
 		}
 	}
 
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory func(logger.Logger) state.Store) func() state.Store {
+func (s *Registry) wrapFn(componentFactory func(logger.Logger) state.Store, logName string) func() state.Store {
 	return func() state.Store {
-		return componentFactory(s.Logger)
+		l := s.Logger
+		if logName != "" && l != nil {
+			l = l.WithFields(map[string]any{
+				"component": logName,
+			})
+		}
+		return componentFactory(l)
 	}
 }
 

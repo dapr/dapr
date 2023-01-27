@@ -36,13 +36,14 @@ jobs:
     env:
       GOVER: "^1.19.2"
       GOLANGCILINT_VER: v1.50.1
-      PROTOC_VERSION: "21.1"
+      PROTOC_VERSION: "21.12"
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
       ARCHIVE_OUTDIR: dist/archives
       TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-2019, macOS-latest]
         target_arch: [arm, arm64, amd64]
@@ -134,6 +135,9 @@ jobs:
           key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+      - name: Check for disallowed changes in go.mod
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        run: node ./.github/scripts/check_go_mod.mjs
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         uses: golangci/golangci-lint-action@v3.2.0

@@ -66,5 +66,8 @@ spec:
             runAsGroup: 1000
           resources:
             limits:
-              cpu: "800m"
+              cpu: "1000m"
+              memory: "256Mi"
+            requests:
+              cpu: "700m"
               memory: "128Mi"

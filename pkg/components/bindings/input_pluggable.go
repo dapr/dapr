@@ -15,17 +15,14 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
+	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
-
-	"github.com/dapr/components-contrib/bindings"
-
 	"github.com/dapr/kit/logger"
-
-	"github.com/pkg/errors"
 )
 
 // grpcInputBinding is a implementation of a inputbinding over a gRPC Protocol.
@@ -101,7 +98,7 @@ func (b *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto
 func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) error {
 	readStream, err := b.Client.Read(ctx)
 	if err != nil {
-		return errors.Wrapf(err, "unable to read from binding")
+		return fmt.Errorf("unable to read from binding: %w", err)
 	}
 
 	streamCtx, cancel := context.WithCancel(readStream.Context())

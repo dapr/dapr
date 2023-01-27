@@ -13,6 +13,18 @@ limitations under the License.
 
 package kubernetes
 
+// SecretRef is a reference to a secret
+type SecretRef struct {
+	Name string
+	Key  string
+}
+
+// MetadataValue is either a raw string value or a secret ref
+type MetadataValue struct {
+	Raw           string
+	FromSecretRef *SecretRef
+}
+
 // ComponentDescription holds dapr component description.
 type ComponentDescription struct {
 	// Name is the name of dapr component
@@ -22,5 +34,7 @@ type ComponentDescription struct {
 	// Type contains component types (<type>.<component_name>)
 	TypeName string
 	// MetaData contains the metadata for dapr component
-	MetaData map[string]string
+	MetaData map[string]MetadataValue
+	// Scopes is the list of target apps that should use this component
+	Scopes []string
 }

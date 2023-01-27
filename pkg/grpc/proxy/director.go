@@ -4,7 +4,8 @@
 package proxy
 
 import (
-	"golang.org/x/net/context"
+	"context"
+
 	"google.golang.org/grpc"
 )
 
@@ -21,7 +22,7 @@ import (
 // are invoked. So decisions around authorization, monitoring etc. are better to be handled there.
 //
 // See the rather rich example.
-type StreamDirector func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, *ProxyTarget, func(), error)
+type StreamDirector func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, *ProxyTarget, func(destroy bool), error)
 
 // ProxyTarget is an object that describes the network and service identification of a remote Dapr process
 type ProxyTarget struct {
@@ -31,4 +32,4 @@ type ProxyTarget struct {
 }
 
 // DirectorConnectionFactory is a method signature for a gRPC connection establisher method used for client/server streams
-type DirectorConnectionFactory func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+type DirectorConnectionFactory func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)

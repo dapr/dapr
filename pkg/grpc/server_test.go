@@ -14,9 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	grpcGo "google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	grpcMetadata "google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -53,7 +54,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 2, len(serverOption))
+		assert.Equal(t, 3, len(serverOption))
 	})
 
 	t.Run("should not disable middleware even when SamplingRate is 0", func(t *testing.T) {
@@ -68,7 +69,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 2, len(serverOption))
+		assert.Equal(t, 3, len(serverOption))
 	})
 
 	t.Run("should have api access rules middleware", func(t *testing.T) {
@@ -91,7 +92,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 2, len(serverOption))
+		assert.Equal(t, 3, len(serverOption))
 	})
 }
 
@@ -111,7 +112,7 @@ func TestClose(t *testing.T) {
 			EnableAPILogging:     true,
 		}
 		a := &api{}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
@@ -132,7 +133,7 @@ func TestClose(t *testing.T) {
 			EnableAPILogging:     false,
 		}
 		a := &api{}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
@@ -159,16 +160,19 @@ func Test_server_getGRPCAPILoggingInfo(t *testing.T) {
 	logInterceptor := s.getGRPCAPILoggingInfo()
 
 	runTest := func(userAgent string) func(t *testing.T) {
-		md := metadata.MD{}
+		md := grpcMetadata.MD{}
 		if userAgent != "" {
 			md["user-agent"] = []string{userAgent}
 		}
-		ctx := metadata.NewIncomingContext(context.Background(), md)
+		ctx := grpcMetadata.NewIncomingContext(context.Background(), md)
 
+		info := &grpcGo.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+		}
 		return func(t *testing.T) {
-			logInterceptor(ctx, nil, &grpcGo.UnaryServerInfo{
-				FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
-			}, handler)
+			metadata.SetMetadataInContextUnary(ctx, nil, info, func(ctx context.Context, req any) (any, error) {
+				return logInterceptor(ctx, req, info, handler)
+			})
 
 			logData := map[string]string{}
 			err := dec.Decode(&logData)

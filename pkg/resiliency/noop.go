@@ -13,64 +13,44 @@ limitations under the License.
 
 package resiliency
 
-import (
-	"context"
-)
-
 // NoOp is a true bypass implementation of `Provider`.
 type NoOp struct{}
 
-// Ensure `*NoOp` satisfies the `Provider` interface.
-var _ = (Provider)((*NoOp)(nil))
-
-// RoutePolicy returns a NoOp policy runner for a route.
-func (*NoOp) RoutePolicy(ctx context.Context, name string) Runner {
-	return func(oper Operation) error {
-		return oper(ctx)
-	}
+// RoutePolicy returns a NoOp policy definition for a route.
+func (NoOp) RoutePolicy(name string) *PolicyDefinition {
+	return nil
 }
 
-// EndpointPolicy returns a NoOp policy runner for a service endpoint.
-func (*NoOp) EndpointPolicy(ctx context.Context, service string, endpoint string) Runner {
-	return func(oper Operation) error {
-		return oper(ctx)
-	}
+// EndpointPolicy returns a NoOp policy definition for a service endpoint.
+func (NoOp) EndpointPolicy(service string, endpoint string) *PolicyDefinition {
+	return nil
 }
 
-// ActorPreLockPolicy returns a NoOp policy runner for an actor instance.
-func (*NoOp) ActorPreLockPolicy(ctx context.Context, actorType string, id string) Runner {
-	return func(oper Operation) error {
-		return oper(ctx)
-	}
+// ActorPreLockPolicy returns a NoOp policy definition for an actor instance.
+func (NoOp) ActorPreLockPolicy(actorType string, id string) *PolicyDefinition {
+	return nil
 }
 
-// ActorPostLockPolicy returns a NoOp policy runner for an actor instance.
-func (*NoOp) ActorPostLockPolicy(ctx context.Context, actorType string, id string) Runner {
-	return func(oper Operation) error {
-		return oper(ctx)
-	}
+// ActorPostLockPolicy returns a NoOp policy definition for an actor instance.
+func (NoOp) ActorPostLockPolicy(actorType string, id string) *PolicyDefinition {
+	return nil
 }
 
-// ComponentInboundPolicy returns a NoOp inbound policy runner for a component.
-func (*NoOp) ComponentInboundPolicy(ctx context.Context, name string, componentName ComponentType) Runner {
-	return func(oper Operation) error {
-		return oper(ctx)
-	}
+// ComponentInboundPolicy returns a NoOp inbound policy definition for a component.
+func (NoOp) ComponentInboundPolicy(name string, componentName ComponentType) *PolicyDefinition {
+	return nil
 }
 
-// ComponentOutboundPolicy returns a NoOp outbound policy runner for a component.
-func (*NoOp) ComponentOutboundPolicy(ctx context.Context, name string, componentName ComponentType) Runner {
-	return func(oper Operation) error {
-		return oper(ctx)
-	}
+// ComponentOutboundPolicy returns a NoOp outbound policy definition for a component.
+func (NoOp) ComponentOutboundPolicy(name string, componentName ComponentType) *PolicyDefinition {
+	return nil
 }
 
-func (*NoOp) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner {
-	return func(oper Operation) error {
-		return oper(ctx)
-	}
+// BuildInPolicy returns a NoOp policy definition for a built-in policy.
+func (NoOp) BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition {
+	return nil
 }
 
-func (*NoOp) GetPolicy(target string, policyType PolicyType) *PolicyDescription {
-	return &PolicyDescription{}
+func (NoOp) PolicyDefined(target string, policyType PolicyType) bool {
+	return true
 }

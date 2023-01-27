@@ -72,33 +72,19 @@ func SplitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, co
 // PatchOps returns the patch operations required to properly bootstrap the pluggable component and the respective volume mount for the sidecar.
 func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount) {
 	patches := make([]sidecar.PatchOperation, 0)
+
 	if len(componentContainers) == 0 {
 		return patches, nil
 	}
+
 	podAnnotations := sidecar.Annotations(pod.Annotations)
 	mountPath := podAnnotations.GetString(annotations.KeyPluggableComponentsSocketsFolder)
 	if mountPath == "" {
 		mountPath = pluggable.GetSocketFolderPath()
 	}
 
-	sharedSocketVolume := sharedComponentsSocketVolume()
-	sharedSocketVolumeMount := sharedComponentsUnixSocketVolumeMount(mountPath)
-
-	if len(pod.Spec.Volumes) == 0 {
-		patches = append(patches, sidecar.PatchOperation{
-			Op:    "add",
-			Path:  sidecar.PatchPathVolumes,
-			Value: []corev1.Volume{sharedSocketVolume},
-		})
-	} else {
-		patches = append(patches, sidecar.PatchOperation{
-			Op:    "add",
-			Path:  sidecar.PatchPathVolumes + "/-",
-			Value: sharedSocketVolume,
-		})
-	}
-
-	pod.Spec.Volumes = append(pod.Spec.Volumes, sharedSocketVolume)
+	volumePatch, sharedSocketVolumeMount := addSharedSocketVolume(mountPath, pod)
+	patches = append(patches, volumePatch)
 	componentsEnvVars := []corev1.EnvVar{{
 		Name:  componentsUnixDomainSocketMountPathEnvVar,
 		Value: sharedSocketVolumeMount.MountPath,
@@ -110,4 +96,29 @@ func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]
 	}
 
 	return patches, &sharedSocketVolumeMount
+}
+
+// addSharedSocketVolume adds the new volume to the pod and return the patch operation and the mounted volume.
+func addSharedSocketVolume(mountPath string, pod *corev1.Pod) (sidecar.PatchOperation, corev1.VolumeMount) {
+	sharedSocketVolume := sharedComponentsSocketVolume()
+	sharedSocketVolumeMount := sharedComponentsUnixSocketVolumeMount(mountPath)
+
+	var volumePatch sidecar.PatchOperation
+
+	if len(pod.Spec.Volumes) == 0 {
+		volumePatch = sidecar.PatchOperation{
+			Op:    "add",
+			Path:  sidecar.PatchPathVolumes,
+			Value: []corev1.Volume{sharedSocketVolume},
+		}
+	} else {
+		volumePatch = sidecar.PatchOperation{
+			Op:    "add",
+			Path:  sidecar.PatchPathVolumes + "/-",
+			Value: sharedSocketVolume,
+		}
+	}
+
+	pod.Spec.Volumes = append(pod.Spec.Volumes, sharedSocketVolume)
+	return volumePatch, sharedSocketVolumeMount
 }
