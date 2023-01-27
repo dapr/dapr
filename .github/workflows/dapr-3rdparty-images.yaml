@@ -67,3 +67,31 @@ jobs:
           src: openzipkin/zipkin:latest
           dst: |
             ghcr.io/${{ github.repository_owner }}/3rdparty/zipkin:latest
+      - # copy 3rd party temporal admin-tools image from dockerhub to ghcr
+        name: Push Image (temporal admin-tools) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: temporalio/admin-tools:1.15.1
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/temporalio/admin-tools:1.15.1
+      - # copy 3rd party cassandra image from dockerhub to ghcr
+        name: Push Image (cassandra) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: cassandra:3.11.3
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/cassandra:3.11.3
+      - # copy 3rd party temporal server image from dockerhub to ghcr
+        name: Push Image (temporal server) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: temporalio/server:1.15.1
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/temporalio/server:1.15.1
+      - # copy 3rd party temporal web image from dockerhub to ghcr
+        name: Push Image (temporal web) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: temporalio/web:1.14.1
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/temporalio/web:1.14.1
