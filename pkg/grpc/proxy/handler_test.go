@@ -145,7 +145,11 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 			if s.expectPingStreamError.Load() {
 				require.Error(s.t, err, "should have failed reading stream - test name: "+testName)
 			} else {
-				require.NoError(s.t, err, "can't fail reading stream - test name: "+testName)
+				// Do not fail in the case where error is context.Canceled which signifies the end of a test
+				grpcStatus, ok := status.FromError(err)
+				if !errors.Is(err, context.Canceled) && (!ok || grpcStatus.Code() != codes.Canceled || grpcStatus.Message() != "context canceled") {
+					require.NoError(s.t, err, "can't fail reading stream - test name: "+testName)
+				}
 			}
 			return err
 		}

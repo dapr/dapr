@@ -26,7 +26,7 @@ import (
 
 	"github.com/ghodss/yaml"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	lru "github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -114,8 +114,8 @@ type (
 		retries         map[string]*retry.Config
 		circuitBreakers map[string]*breaker.CircuitBreaker
 
-		actorCBCaches map[string]*lru.Cache
-		serviceCBs    map[string]*lru.Cache
+		actorCBCaches map[string]*lru.Cache[string, *breaker.CircuitBreaker]
+		serviceCBs    map[string]*lru.Cache[string, *breaker.CircuitBreaker]
 		componentCBs  *circuitBreakerInstances
 
 		apps       map[string]PolicyNames
@@ -293,8 +293,8 @@ func New(log logger.Logger) *Resiliency {
 		timeouts:        make(map[string]time.Duration),
 		retries:         make(map[string]*retry.Config),
 		circuitBreakers: make(map[string]*breaker.CircuitBreaker),
-		actorCBCaches:   make(map[string]*lru.Cache),
-		serviceCBs:      make(map[string]*lru.Cache),
+		actorCBCaches:   make(map[string]*lru.Cache[string, *breaker.CircuitBreaker]),
+		serviceCBs:      make(map[string]*lru.Cache[string, *breaker.CircuitBreaker]),
 		componentCBs: &circuitBreakerInstances{
 			cbs: make(map[string]*breaker.CircuitBreaker, 10),
 		},
@@ -434,7 +434,7 @@ func (r *Resiliency) decodeTargets(c *resiliencyV1alpha.Resiliency) (err error) 
 		if t.CircuitBreakerCacheSize == 0 {
 			t.CircuitBreakerCacheSize = defaultEndpointCacheSize
 		}
-		r.serviceCBs[name], err = lru.New(t.CircuitBreakerCacheSize)
+		r.serviceCBs[name], err = lru.New[string, *breaker.CircuitBreaker](t.CircuitBreakerCacheSize)
 		if err != nil {
 			return err
 		}
@@ -476,7 +476,7 @@ func (r *Resiliency) decodeTargets(c *resiliencyV1alpha.Resiliency) (err error) 
 		if t.CircuitBreakerCacheSize == 0 {
 			t.CircuitBreakerCacheSize = defaultActorCacheSize
 		}
-		r.actorCBCaches[name], err = lru.New(t.CircuitBreakerCacheSize)
+		r.actorCBCaches[name], err = lru.New[string, *breaker.CircuitBreaker](t.CircuitBreakerCacheSize)
 		if err != nil {
 			return err
 		}
@@ -548,10 +548,8 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 			if ok {
 				cache, ok := r.serviceCBs[app]
 				if ok {
-					cbi, ok := cache.Get(endpoint)
-					if ok {
-						policyDef.cb, _ = cbi.(*breaker.CircuitBreaker)
-					} else {
+					policyDef.cb, ok = cache.Get(endpoint)
+					if !ok || policyDef.cb == nil {
 						policyDef.cb = &breaker.CircuitBreaker{
 							Name:        endpoint,
 							MaxRequests: template.MaxRequests,
@@ -581,10 +579,8 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 				if ok {
 					cache, ok := r.serviceCBs[app]
 					if ok {
-						cbi, ok := cache.Get(endpoint)
-						if ok {
-							policyDef.cb, _ = cbi.(*breaker.CircuitBreaker)
-						} else {
+						policyDef.cb, ok = cache.Get(endpoint)
+						if !ok || policyDef.cb == nil {
 							policyDef.cb = &breaker.CircuitBreaker{
 								Name:        endpoint,
 								MaxRequests: template.MaxRequests,
@@ -630,10 +626,8 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 						key = actorType + "-" + id
 					}
 
-					cbi, ok := cache.Get(key)
-					if ok {
-						policyDef.cb, _ = cbi.(*breaker.CircuitBreaker)
-					} else {
+					policyDef.cb, ok = cache.Get(key)
+					if !ok || policyDef.cb == nil {
 						policyDef.cb = &breaker.CircuitBreaker{
 							Name:        key,
 							MaxRequests: template.MaxRequests,
@@ -667,10 +661,8 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 							key = actorType + "-" + id
 						}
 
-						cbi, ok := cache.Get(key)
-						if ok {
-							policyDef.cb, _ = cbi.(*breaker.CircuitBreaker)
-						} else {
+						policyDef.cb, ok = cache.Get(key)
+						if !ok || policyDef.cb == nil {
 							policyDef.cb = &breaker.CircuitBreaker{
 								Name:        key,
 								MaxRequests: template.MaxRequests,
