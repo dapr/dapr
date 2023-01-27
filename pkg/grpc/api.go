@@ -563,7 +563,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 			var envelope map[string]interface{}
 
-			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+			cloudevent := runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
@@ -571,7 +571,12 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				TraceID:         corID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
-			})
+			}
+
+			// metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
+			mapstructure.WeakDecode(entries[i].Metadata, &cloudevent) // allows ignoring of case
+
+			envelope, err := runtimePubsub.NewCloudEvent(&cloudevent)
 			if err != nil {
 				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 				apiServerLogger.Debug(err)

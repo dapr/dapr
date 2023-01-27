@@ -2141,6 +2141,20 @@ func TestBulkPublish(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Empty(t, res.FailedEntries)
 	})
+
+	t.Run("no failures with ce metadata override", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries:    sampleEntries,
+			Metadata: map[string]string{
+				"cloudevent-source": "unit-test",
+			},
+		})
+		assert.Nil(t, err)
+		assert.Empty(t, res.FailedEntries)
+	})
+
 	t.Run("all failures from component", func(t *testing.T) {
 		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
