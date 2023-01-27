@@ -2420,7 +2420,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
-			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+			envelope, envelopeErr := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
@@ -2429,7 +2429,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
-			if err != nil {
+			if envelopeErr != nil {
 				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
 					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
 				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)

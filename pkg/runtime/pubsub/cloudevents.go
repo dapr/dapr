@@ -24,10 +24,10 @@ import (
 // The cloud event properties can manually be overwritten by using metadata beginning with "cloudevent-" as prefix.
 type CloudEvent struct {
 	ID              string `mapstructure:"cloudevent-id"`
-	Data            []byte `mapstructure:"-"` // cannot be overriden
-	Topic           string `mapstructure:"-"` // cannot be overriden
-	Pubsub          string `mapstructure:"-"` // cannot be overriden
-	DataContentType string `mapstructure:"-"` // cannot be overriden
+	Data            []byte `mapstructure:"-"` // cannot be overridden
+	Topic           string `mapstructure:"-"` // cannot be overridden
+	Pubsub          string `mapstructure:"-"` // cannot be overridden
+	DataContentType string `mapstructure:"-"` // cannot be overridden
 	TraceID         string `mapstructure:"cloudevent-traceid"`
 	TraceState      string `mapstructure:"cloudevent-tracestate"`
 	Source          string `mapstructure:"cloudevent-source"`
