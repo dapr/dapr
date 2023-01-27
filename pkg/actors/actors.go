@@ -174,7 +174,7 @@ type ActorsOpts struct {
 func NewActors(opts ActorsOpts) Actors {
 	var transactionalStore state.TransactionalStore
 	if opts.StateStore != nil {
-		features := opts.StateStore.Features()
+		features := opts.StateStore.Features(context.TODO())
 		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
 			transactionalStore = opts.StateStore.(state.TransactionalStore)
 		}
@@ -215,7 +215,7 @@ func (a *actorsRuntime) haveCompatibleStorage() bool {
 		return false
 	}
 
-	features := a.store.Features()
+	features := a.store.Features(context.TODO())
 	return state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features)
 }
 

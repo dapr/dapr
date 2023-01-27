@@ -3912,12 +3912,12 @@ func (c fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bo
 	return false, nil, nil
 }
 
-func (c fakeStateStore) Init(metadata state.Metadata) error {
+func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
-func (c fakeStateStore) Features() []state.Feature {
+func (c fakeStateStore) Features(ctx context.Context) []state.Feature {
 	return []state.Feature{
 		state.FeatureETag,
 		state.FeatureTransactional,
@@ -4248,7 +4248,7 @@ func (l fakeLockStore) Ping() error {
 	return nil
 }
 
-func (l *fakeLockStore) InitLockStore(metadata lock.Metadata) error {
+func (l *fakeLockStore) InitLockStore(ctx context.Context, metadata lock.Metadata) error {
 	return nil
 }
 

@@ -267,7 +267,7 @@ type APIOpts struct {
 func NewAPI(opts APIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range opts.StateStores {
-		if state.FeatureTransactional.IsPresent(store.Features()) {
+		if state.FeatureTransactional.IsPresent(store.Features(context.TODO())) {
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}

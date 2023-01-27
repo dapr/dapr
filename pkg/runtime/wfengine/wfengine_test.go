@@ -72,7 +72,7 @@ func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
 	}
 }
 
-func (f *fakeStateStore) Init(metadata state.Metadata) error {
+func (f *fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	return nil
 }
 
@@ -80,7 +80,7 @@ func (f *fakeStateStore) Ping() error {
 	return nil
 }
 
-func (f *fakeStateStore) Features() []state.Feature {
+func (f *fakeStateStore) Features(ctx context.Context) []state.Feature {
 	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
 }
 
