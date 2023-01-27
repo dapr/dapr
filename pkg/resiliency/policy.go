@@ -16,6 +16,7 @@ package resiliency
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"sync/atomic"
@@ -48,6 +49,25 @@ type PolicyDefinition struct {
 	t    time.Duration
 	r    *retry.Config
 	cb   *breaker.CircuitBreaker
+}
+
+// NewPolicyDefinition returns a PolicyDefinition object with the given parameters.
+func NewPolicyDefinition(log logger.Logger, name string, t time.Duration, r *retry.Config, cb *breaker.CircuitBreaker) *PolicyDefinition {
+	return &PolicyDefinition{
+		log:  log,
+		name: name,
+		t:    t,
+		r:    r,
+		cb:   cb,
+	}
+}
+
+// String implements fmt.Stringer and is used for debugging.
+func (p PolicyDefinition) String() string {
+	return fmt.Sprintf(
+		"Policy: name='%s' timeout='%v' retry=(%v) circuitBreaker=(%v)",
+		p.name, p.t, p.r, p.cb,
+	)
 }
 
 // HasRetries returns true if the policy is configured to have more than 1 retry.
