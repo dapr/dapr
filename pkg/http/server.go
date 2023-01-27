@@ -166,7 +166,7 @@ func (s *server) StartNonBlocking() error {
 			if err != nil {
 				log.Debugf("Failed to listen for profiling server on TCP address %s with error: %v", addr, err)
 			} else {
-				log.Infof("Starting listening HTTP for Profiling at %s", addr)
+				log.Infof("Starting HTTP profiling server listening on: %s", addr)
 				profilingListeners = append(profilingListeners, pl)
 			}
 		}
