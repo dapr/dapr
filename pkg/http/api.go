@@ -2267,7 +2267,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
-		})
+		}, metadata)
 		if err != nil {
 			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
 				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
@@ -2420,9 +2420,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
-			var envelope map[string]interface{}
-
-			envelope, err = runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+			envelope, envelopeErr := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
@@ -2430,8 +2428,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				TraceID:         corID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
-			})
-			if err != nil {
+			}, entries[i].Metadata)
+			if envelopeErr != nil {
 				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
 					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
 				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)
