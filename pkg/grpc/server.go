@@ -140,7 +140,7 @@ func (s *server) StartNonBlocking() error {
 			if err != nil {
 				s.logger.Debugf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
 			} else {
-				s.logger.Infof("gRPC listening on TCP socket at %s", addr)
+				s.logger.Infof("gRPC server listening on TCP address: %s", addr)
 				listeners = append(listeners, l)
 			}
 		}
