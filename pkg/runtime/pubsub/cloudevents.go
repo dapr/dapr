@@ -43,7 +43,7 @@ func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]inte
 
 	// certain metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
 	// we ignore any error here as the original cloud event envelope is still valid
-	_ = mapstructure.WeakDecode(metadata, &req) // allows ignoring of case
+	_ = mapstructure.WeakDecode(metadata, req) // allows ignoring of case
 
 	// the final cloud event envelope contains both "traceid" and "traceparent" set to the same value (req.TraceID)
 	// eventually "traceid" will be deprecated as it was superseded by "traceparent"
