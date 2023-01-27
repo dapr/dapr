@@ -104,14 +104,16 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
+		log.Infof("HTTP server Listening on UNIX socket at %s", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Debugf("Failed to listen on %s with error: %v", addr, err)
+				log.Debugf("Failed to listen HTTP on TCP at %s with error: %v", addr, err)
 			} else {
+				log.Infof("HTTP server Listening on TCP at %s", addr)
 				listeners = append(listeners, l)
 			}
 		}
@@ -160,11 +162,11 @@ func (s *server) StartNonBlocking() error {
 	if s.config.EnableProfiling {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.ProfilePort)
-			log.Infof("starting profiling server on %s", addr)
 			pl, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Debugf("Failed to listen on %s with error: %v", addr, err)
+				log.Debugf("Failed to listen HTTP for Profiling at %s with error: %v", addr, err)
 			} else {
+				log.Infof("Starting listening HTTP for Profiling at %s", addr)
 				profilingListeners = append(profilingListeners, pl)
 			}
 		}

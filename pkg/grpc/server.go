@@ -131,14 +131,16 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
+		s.logger.Infof("gRPC listening on UNIX socket at %s", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Debugf("Failed to listen on %s with error: %v", addr, err)
+				s.logger.Debugf("Failed to listen gRPC on TCP at %s with error: %v", addr, err)
 			} else {
+				s.logger.Infof("gRPC listening on TCP socket at %s", addr)
 				listeners = append(listeners, l)
 			}
 		}
