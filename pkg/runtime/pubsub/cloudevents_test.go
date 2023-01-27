@@ -71,7 +71,7 @@ func TestNewCloudEvent(t *testing.T) {
 		}, map[string]string{
 			// these properties should not actually override anything
 			"cloudevent.topic":           "overridetopic",
-			"cldouevent-pubsub":          "overridepubsub",
+			"cloudevent.pubsub":          "overridepubsub",
 			"cloudevent.data":            "overridedata",
 			"cloudevent.datacontenttype": "overridedatacontenttype",
 			// these properties should override
