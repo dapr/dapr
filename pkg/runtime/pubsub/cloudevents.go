@@ -14,6 +14,8 @@ limitations under the License.
 package pubsub
 
 import (
+	"github.com/mitchellh/mapstructure"
+
 	contribContenttype "github.com/dapr/components-contrib/contenttype"
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 )
@@ -22,10 +24,10 @@ import (
 // The cloud event properties can manually be overwritten by using metadata beginning with "cloudevent-" as prefix.
 type CloudEvent struct {
 	ID              string `mapstructure:"cloudevent-id"`
-	Data            []byte `mapstructure:"cloudevent-data"`
-	Topic           string `mapstructure:"cloudevent-topic"`
-	Pubsub          string `mapstructure:"cloudevent-pubsub"`
-	DataContentType string `mapstructure:"cloudevent-datacontenttype"`
+	Data            []byte `mapstructure:"-"` // cannot be overriden
+	Topic           string `mapstructure:"-"` // cannot be overriden
+	Pubsub          string `mapstructure:"-"` // cannot be overriden
+	DataContentType string `mapstructure:"-"` // cannot be overriden
 	TraceID         string `mapstructure:"cloudevent-traceid"`
 	TraceState      string `mapstructure:"cloudevent-tracestate"`
 	Source          string `mapstructure:"cloudevent-source"`
@@ -34,10 +36,14 @@ type CloudEvent struct {
 }
 
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
-func NewCloudEvent(req *CloudEvent) (map[string]interface{}, error) {
+func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]interface{}, error) {
 	if contribContenttype.IsCloudEventContentType(req.DataContentType) {
 		return contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
 	}
+
+	// metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
+	mapstructure.WeakDecode(metadata, &req) // allows ignoring of case
+
 	// ensures the trace ID data is overwritten correctly if desired
 	if req.TraceID == "" && req.TraceParent != "" {
 		req.TraceID = req.TraceParent

@@ -31,9 +31,9 @@ func TestNewCloudEvent(t *testing.T) {
 			DataContentType: "",
 			TraceID:         "d",
 			Type:            "custom-type",
-		})
+		}, map[string]string{})
 		assert.NoError(t, err)
-		assert.NotEmpty(t, ce["id"])
+		assert.NotEmpty(t, ce["id"]) // validates that the ID is generated
 		assert.Equal(t, "a", ce["source"].(string))
 		assert.Equal(t, "b", ce["topic"].(string))
 		assert.Equal(t, "hello", ce["data"].(string))
@@ -45,13 +45,13 @@ func TestNewCloudEvent(t *testing.T) {
 	t.Run("raw payload no data", func(t *testing.T) {
 		ce, err := NewCloudEvent(&CloudEvent{
 			ID:              "testid",
-			Source:          "",
+			Source:          "", // defaults to "Dapr"
 			Topic:           "b",
 			Pubsub:          "c",
-			DataContentType: "",
+			DataContentType: "", // defaults to "text/plain"
 			TraceID:         "d",
-			Type:            "",
-		})
+			Type:            "", // defaults to "com.dapr.event.sent"
+		}, map[string]string{})
 		assert.NoError(t, err)
 		assert.Equal(t, "testid", ce["id"].(string))
 		assert.Equal(t, "Dapr", ce["source"].(string))
@@ -60,6 +60,43 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "d", ce["traceid"].(string))
 		assert.Equal(t, "com.dapr.event.sent", ce["type"].(string))
+	})
+
+	t.Run("cloud event metadata override", func(t *testing.T) {
+		ce, err := NewCloudEvent(&CloudEvent{
+			Topic:           "originaltopic",
+			Pubsub:          "originalpubsub",
+			DataContentType: "originaldatacontenttype",
+			Data:            []byte("originaldata"),
+		}, map[string]string{
+			// these properties should not actually override anything
+			"cloudevent-topic":           "overridetopic",
+			"cldouevent-pubsub":          "overridepubsub",
+			"cloudevent-data":            "overridedata",
+			"cloudevent-datacontenttype": "overridedatacontenttype",
+			// these properties should override
+			"cloudevent-source":      "overridesource",
+			"cloudevent-id":          "overrideid",
+			"cloudevent-type":        "overridetype",
+			"cloudevent-traceparent": "overridetraceparent",
+			"cloudevent-tracestate":  "overridetracestate",
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "originalpubsub", ce["pubsubname"].(string))
+		assert.Equal(t, "originaltopic", ce["topic"].(string))
+		assert.Equal(t, "originaldata", ce["data"].(string))
+		assert.Equal(t, "originaldatacontenttype", ce["datacontenttype"].(string))
+		assert.Equal(t, "overridetraceparent", ce["traceid"].(string))
+		assert.Equal(t, "overridetracestate", ce["tracestate"].(string))
+		assert.Equal(t, "overridetype", ce["type"].(string))
+		assert.Equal(t, "overridesource", ce["source"].(string))
+		assert.Equal(t, "overrideid", ce["id"].(string))
+		assert.Equal(t, "overridetraceparent", ce["traceparent"].(string))
+		assert.Equal(t, "overridetracestate", ce["tracestate"].(string))
+
+		// assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
+		// assert.Equal(t, "d", ce["traceid"].(string))
+		// assert.Equal(t, "com.dapr.event.sent", ce["type"].(string))
 	})
 
 	t.Run("custom cloudevent", func(t *testing.T) {
@@ -77,7 +114,7 @@ func TestNewCloudEvent(t *testing.T) {
 			Topic:           "topic1",
 			TraceID:         "trace1",
 			Pubsub:          "pubsub",
-		})
+		}, map[string]string{})
 		assert.NoError(t, err)
 		assert.Equal(t, "world", ce["data"].(string))
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))

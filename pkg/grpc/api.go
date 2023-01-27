@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mitchellh/mapstructure"
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -348,7 +347,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 
 	if !rawPayload {
-		cloudevent := runtimePubsub.CloudEvent{
+		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			ID:              a.id,
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
@@ -356,12 +355,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
-		}
-
-		// metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
-		mapstructure.WeakDecode(in.Metadata, &cloudevent) // allows ignoring of case
-
-		envelope, err := runtimePubsub.NewCloudEvent(&cloudevent)
+		}, in.Metadata)
 		if err != nil {
 			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 			apiServerLogger.Debug(err)
@@ -561,9 +555,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
-			var envelope map[string]interface{}
-
-			cloudevent := runtimePubsub.CloudEvent{
+			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
@@ -571,12 +563,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				TraceID:         corID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
-			}
-
-			// metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
-			mapstructure.WeakDecode(entries[i].Metadata, &cloudevent) // allows ignoring of case
-
-			envelope, err := runtimePubsub.NewCloudEvent(&cloudevent)
+			}, entries[i].Metadata)
 			if err != nil {
 				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 				apiServerLogger.Debug(err)
