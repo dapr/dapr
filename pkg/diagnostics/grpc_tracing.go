@@ -38,6 +38,7 @@ const (
 	daprInternalPrefix      = "/dapr.proto.internals."
 	daprRuntimePrefix       = "/dapr.proto.runtime."
 	daprInvokeServiceMethod = "/dapr.proto.runtime.v1.Dapr/InvokeService"
+	daprWorkflowPrefix      = "/TaskHubSidecarService"
 )
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
@@ -123,6 +124,10 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		// For gRPC API, this generates ClientSpan
 		case strings.HasPrefix(info.FullMethod, daprRuntimePrefix):
 			spanKind = trace.WithSpanKind(trace.SpanKindClient)
+
+		// For Dapr Workflow APIs, this generates ServerSpan
+		case strings.HasPrefix(info.FullMethod, daprWorkflowPrefix):
+			spanKind = trace.WithSpanKind(trace.SpanKindServer)
 
 		// For proxied requests, this generates a span depending on whether this is the server (target) or client
 		default:

@@ -391,3 +391,27 @@ func TestMTLSSpecForStandAlone(t *testing.T) {
 		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
 	})
 }
+
+func TestSortMetrics(t *testing.T) {
+	t.Run("metrics overrides metric", func(t *testing.T) {
+		config := &Configuration{
+			Spec: ConfigurationSpec{
+				MetricSpec: MetricSpec{
+					Enabled: true,
+					Rules: []MetricsRule{
+						{
+							Name: "rule",
+						},
+					},
+				},
+				MetricsSpec: MetricSpec{
+					Enabled: false,
+				},
+			},
+		}
+
+		sortMetricsSpec(config)
+		assert.False(t, config.Spec.MetricSpec.Enabled)
+		assert.Equal(t, "rule", config.Spec.MetricSpec.Rules[0].Name)
+	})
+}

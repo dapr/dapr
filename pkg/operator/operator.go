@@ -57,6 +57,7 @@ type Options struct {
 	WatchdogEnabled           bool
 	WatchdogInterval          time.Duration
 	WatchdogMaxRestartsPerMin int
+	WatchNamespace            string
 }
 
 type operator struct {
@@ -94,6 +95,7 @@ func NewOperator(opts Options) Operator {
 		MetricsBindAddress: "0",
 		LeaderElection:     opts.LeaderElection,
 		LeaderElectionID:   "operator.dapr.io",
+		Namespace:          opts.WatchNamespace,
 	})
 	if err != nil {
 		log.Fatalf("Unable to start manager, err: %s", err)
