@@ -14,6 +14,7 @@ limitations under the License.
 package utils
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -161,4 +162,18 @@ func Filter[T any](items []T, test func(item T) bool) []T {
 		}
 	}
 	return slices.Clip(filteredItems)
+}
+
+const (
+	logNameFmt        = "%s (%s)"
+	logNameVersionFmt = "%s (%s/%s)"
+)
+
+// ComponentLogName returns the name of a component that can be used in logging.
+func ComponentLogName(name, typ, version string) string {
+	if version == "" {
+		return fmt.Sprintf(logNameFmt, name, typ)
+	}
+
+	return fmt.Sprintf(logNameVersionFmt, name, typ, version)
 }

@@ -60,6 +60,12 @@ func (f *Frame) ProtoMessage() {
 	// nop
 }
 
+// Raw returns the raw message.
+// This is primarily useful for debugging.
+func (f Frame) Raw() []byte {
+	return f.payload
+}
+
 // Marshal implements the encoding.Codec interface method.
 func (p *Proxy) Marshal(v any) ([]byte, error) {
 	out, ok := v.(*Frame)

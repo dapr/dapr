@@ -81,6 +81,16 @@ type Actors interface {
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
+	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
+}
+
+// PlacementService allows for interacting with the actor placement service.
+type PlacementService interface {
+	Start()
+	Stop()
+	WaitUntilPlacementTableIsReady(ctx context.Context) error
+	LookupActor(actorType, actorID string) (host string, appID string)
+	AddHostedActorType(actorType string) error
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
@@ -90,7 +100,7 @@ type actorsRuntime struct {
 	appChannel             channel.AppChannel
 	store                  state.Store
 	transactionalStore     state.TransactionalStore
-	placement              *internal.ActorPlacement
+	placement              PlacementService
 	grpcConnectionFn       GRPCConnectionFn
 	config                 Config
 	actorsTable            *sync.Map
@@ -111,6 +121,8 @@ type actorsRuntime struct {
 	ctx                    context.Context
 	cancel                 context.CancelFunc
 	clock                  clocklib.Clock
+	internalActors         map[string]InternalActor
+	internalActorChannel   *internalActorChannel
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -138,11 +150,11 @@ type actorReminderReference struct {
 	reminder                  Reminder
 }
 
-const (
-	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
-)
+var ErrIncompatibleStateStore = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
+
+var ErrReminderCanceled = errors.New("reminder has been canceled")
 
 // ActorsOpts contains options for NewActors.
 type ActorsOpts struct {
@@ -154,6 +166,9 @@ type ActorsOpts struct {
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
+
+	// MockPlacement is a placement service implementation used for testing
+	MockPlacement PlacementService
 }
 
 // NewActors create a new actors runtime with given config.
@@ -182,6 +197,7 @@ func newActorsWithClock(opts ActorsOpts, clock clocklib.Clock) Actors {
 		tracingSpec:            opts.TracingSpec,
 		resiliency:             opts.Resiliency,
 		storeName:              opts.StateStoreName,
+		placement:              opts.MockPlacement,
 		transactionalStore:     transactionalStore,
 		actorsTable:            &sync.Map{},
 		activeTimers:           &sync.Map{},
@@ -197,7 +213,19 @@ func newActorsWithClock(opts ActorsOpts, clock clocklib.Clock) Actors {
 		ctx:                    ctx,
 		cancel:                 cancel,
 		clock:                  clock,
+		internalActors:         map[string]InternalActor{},
+		internalActorChannel:   newInternalActorChannel(),
 	}
+}
+
+func (a *actorsRuntime) haveCompatibleStorage() bool {
+	if a.store == nil {
+		// If we have hosted actors and no store, we can't initialize the actor runtime
+		return false
+	}
+
+	features := a.store.Features()
+	return state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features)
 }
 
 func (a *actorsRuntime) Init() error {
@@ -206,14 +234,8 @@ func (a *actorsRuntime) Init() error {
 	}
 
 	if len(a.config.HostedActorTypes) > 0 {
-		if a.store == nil {
-			// If we have hosted actors and no store, we can't initialize the actor runtime
-			return fmt.Errorf("hosted actors: state store must be present to initialize the actor runtime")
-		}
-
-		features := a.store.Features()
-		if !state.FeatureETag.IsPresent(features) || !state.FeatureTransactional.IsPresent(features) {
-			return errors.New(incompatibleStateStore)
+		if !a.haveCompatibleStorage() {
+			return ErrIncompatibleStateStore
 		}
 	}
 
@@ -225,11 +247,13 @@ func (a *actorsRuntime) Init() error {
 	}
 	appHealthFn := func() bool { return a.appHealthy.Load() }
 
-	a.placement = internal.NewActorPlacement(
-		a.config.PlacementAddresses, a.certChain,
-		a.config.AppID, hostname, a.config.HostedActorTypes,
-		appHealthFn,
-		afterTableUpdateFn)
+	if a.placement == nil {
+		a.placement = internal.NewActorPlacement(
+			a.config.PlacementAddresses, a.certChain,
+			a.config.AppID, hostname, a.config.HostedActorTypes,
+			appHealthFn,
+			afterTableUpdateFn)
+	}
 
 	go a.placement.Start()
 	go a.deactivationTicker(a.config, a.deactivateActor)
@@ -250,7 +274,7 @@ func (a *actorsRuntime) Init() error {
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
-	if len(a.config.HostedActorTypes) == 0 {
+	if len(a.config.HostedActorTypes) == 0 || a.appChannel == nil {
 		return
 	}
 
@@ -271,13 +295,15 @@ func constructCompositeKey(keys ...string) string {
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	req := invokev1.NewInvokeMethodRequest("actors/"+actorType+"/"+actorID).
+		WithActor(actorType, actorID).
 		WithHTTPExtension(nethttp.MethodDelete, "").
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
 	// TODO Propagate context.
 	ctx := context.TODO()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+
+	resp, err := a.getAppChannel(actorType).InvokeMethod(ctx, req)
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
@@ -401,7 +427,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	targetAddress, targetID string, req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
+	if !a.resiliency.PolicyDefined(req.Actor().ActorType, resiliency.ActorPolicy{}) {
 		// This policy has built-in retries so enable replay in the request
 		req.WithReplay(true)
 		policyRunner := resiliency.NewRunnerWithOptions(ctx,
@@ -509,7 +535,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return a.appChannel.InvokeMethod(ctx, req)
+		return a.getAppChannel(act.actorType).InvokeMethod(ctx, req)
 	})
 	if err != nil {
 		return nil, err
@@ -530,6 +556,13 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	}
 
 	return resp, nil
+}
+
+func (a *actorsRuntime) getAppChannel(actorType string) channel.AppChannel {
+	if a.internalActorChannel.Contains(actorType) {
+		return a.internalActorChannel
+	}
+	return a.appChannel
 }
 
 func (a *actorsRuntime) callRemoteActor(
@@ -969,8 +1002,14 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				break L
 			}
 			if err = a.executeReminder(reminder); err != nil {
-				log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
-					reminder.Name, reminder.ActorType, reminder.ActorID, err)
+				if errors.Is(err, ErrReminderCanceled) {
+					// The handler is explicitly canceling the timer
+					log.Infof("reminder %q was canceled by the actor", reminder.Name)
+					break L
+				} else {
+					log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
+						reminder.Name, reminder.ActorType, reminder.ActorID, err)
+				}
 			}
 			if repetitionsLeft > 0 {
 				repetitionsLeft--
@@ -1046,7 +1085,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrReminderCanceled) {
 		log.Errorf("error executing reminder %s for actor type %s with id %s: %v", reminder.Name, reminder.ActorType, reminder.ActorID, err)
 	}
 	if imr != nil {
@@ -1464,7 +1503,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (re
 	}
 
 	var policyDef *resiliency.PolicyDefinition
-	if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
+	if !a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutboundPolicy) {
 		// If there is no policy defined, wrap the whole logic in the built-in.
 		policyDef = a.resiliency.BuiltInPolicy(resiliency.BuiltInActorReminderRetries)
 	} else {
@@ -1785,7 +1824,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 	}
 
 	var policyDef *resiliency.PolicyDefinition
-	if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
+	if !a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutboundPolicy) {
 		// If there is no policy defined, wrap the whole logic in the built-in.
 		policyDef = a.resiliency.BuiltInPolicy(resiliency.BuiltInActorReminderRetries)
 	} else {
@@ -1907,7 +1946,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 	a.activeReminders.Store(reminderKey, stopChannel)
 
 	var policyDef *resiliency.PolicyDefinition
-	if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
+	if !a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutboundPolicy) {
 		// If there is no policy defined, wrap the whole logic in the built-in.
 		policyDef = a.resiliency.BuiltInPolicy(resiliency.BuiltInActorReminderRetries)
 	} else {
@@ -1986,14 +2025,43 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 	return nil
 }
 
+func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+	if !a.haveCompatibleStorage() {
+		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
+	}
+
+	if _, exists := a.internalActors[actorType]; exists {
+		return fmt.Errorf("actor type %s already registered", actorType)
+	} else {
+		if err := a.internalActorChannel.AddInternalActor(actorType, actor); err != nil {
+			return err
+		}
+		a.internalActors[actorType] = actor
+
+		log.Debugf("registering internal actor type: %s", actorType)
+		actor.SetActorRuntime(a)
+		a.config.HostedActorTypes = append(a.config.HostedActorTypes, actorType)
+		if a.placement != nil {
+			if err := a.placement.AddHostedActorType(actorType); err != nil {
+				return fmt.Errorf("error updating hosted actor types: %s", err)
+			}
+		}
+	}
+	return nil
+}
+
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
 	actorCountMap := make(map[string]int, len(a.config.HostedActorTypes))
 	for _, actorType := range a.config.HostedActorTypes {
-		actorCountMap[actorType] = 0
+		if !isInternalActor(actorType) {
+			actorCountMap[actorType] = 0
+		}
 	}
 	a.actorsTable.Range(func(key, value interface{}) bool {
 		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))
-		actorCountMap[actorType]++
+		if !isInternalActor(actorType) {
+			actorCountMap[actorType]++
+		}
 		return true
 	})
 
@@ -2005,6 +2073,10 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 	}
 
 	return activeActorsCount
+}
+
+func isInternalActor(actorType string) bool {
+	return strings.HasPrefix(actorType, InternalActorTypePrefix)
 }
 
 // Stop closes all network connections and resources used in actor runtime.
