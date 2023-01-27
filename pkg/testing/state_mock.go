@@ -135,7 +135,7 @@ func (_m *MockStateStore) Set(ctx context.Context, req *state.SetRequest) error 
 }
 
 // Features returns the features for this state store.
-func (_m *MockStateStore) Features() []state.Feature {
+func (_m *MockStateStore) Features(ctx context.Context) []state.Feature {
 	return nil
 }
 
