@@ -21,18 +21,18 @@ import (
 )
 
 // CloudEvent is a request object to create a Dapr compliant cloudevent.
-// The cloud event properties can manually be overwritten by using metadata beginning with "cloudevent-" as prefix.
+// The cloud event properties can manually be overwritten by using metadata beginning with "cloudevent." as prefix.
 type CloudEvent struct {
-	ID              string `mapstructure:"cloudevent-id"`
+	ID              string `mapstructure:"cloudevent.id"`
 	Data            []byte `mapstructure:"-"` // cannot be overridden
 	Topic           string `mapstructure:"-"` // cannot be overridden
 	Pubsub          string `mapstructure:"-"` // cannot be overridden
 	DataContentType string `mapstructure:"-"` // cannot be overridden
-	TraceID         string `mapstructure:"cloudevent-traceid"`
-	TraceState      string `mapstructure:"cloudevent-tracestate"`
-	Source          string `mapstructure:"cloudevent-source"`
-	Type            string `mapstructure:"cloudevent-type"`
-	TraceParent     string `mapstructure:"cloudevent-traceparent"`
+	TraceID         string `mapstructure:"cloudevent.traceid"`
+	TraceState      string `mapstructure:"cloudevent.tracestate"`
+	Source          string `mapstructure:"cloudevent.source"`
+	Type            string `mapstructure:"cloudevent.type"`
+	TraceParent     string `mapstructure:"cloudevent.traceparent"`
 }
 
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
@@ -41,7 +41,7 @@ func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]inte
 		return contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
 	}
 
-	// certain metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
+	// certain metadata beginning with "cloudevent." are considered overrides to the cloudevent envelope
 	// we ignore any error here as the original cloud event envelope is still valid
 	_ = mapstructure.WeakDecode(metadata, req) // allows ignoring of case
 

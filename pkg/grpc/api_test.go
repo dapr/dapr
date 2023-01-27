@@ -1958,9 +1958,9 @@ func TestPublishTopic(t *testing.T) {
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Metadata: map[string]string{
-				"cloudevent-source": "unit-test",
-				"cloudevent-topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
-				"cloudevent-pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
 			},
 		})
 		assert.Nil(t, err)
@@ -2150,9 +2150,9 @@ func TestBulkPublish(t *testing.T) {
 			Topic:      "topic",
 			Entries:    sampleEntries,
 			Metadata: map[string]string{
-				"cloudevent-source": "unit-test",
-				"cloudevent-topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
-				"cloudevent-pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
 			},
 		})
 		assert.Nil(t, err)
