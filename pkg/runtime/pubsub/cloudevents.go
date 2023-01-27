@@ -41,11 +41,15 @@ func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]inte
 		return contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
 	}
 
-	// metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
-	mapstructure.WeakDecode(metadata, &req) // allows ignoring of case
+	// certain metadata beginning with "cloudevent-" are considered overrides to the cloudevent envelope
+	// we ignore any error here as the original cloud event envelope is still valid
+	_ = mapstructure.WeakDecode(metadata, &req) // allows ignoring of case
 
-	// ensures the trace ID data is overwritten correctly if desired
-	if req.TraceID == "" && req.TraceParent != "" {
+	// the final cloud event envelope contains both "traceid" and "traceparent" set to the same value (req.TraceID)
+	// eventually "traceid" will be deprecated as it was superseded by "traceparent"
+	// currently "traceparent" is not set by the pubsub component and can only set by the user via metadata override
+	// therefore, if an override is set for "traceparent", we use it, otherwise we use the original or overridden "traceid" value
+	if req.TraceParent != "" {
 		req.TraceID = req.TraceParent
 	}
 	return contribPubsub.NewCloudEventsEnvelope(req.ID, req.Source, req.Type,
