@@ -73,7 +73,7 @@ jobs:
           image: tonistiigi/binfmt:latest
           platforms: arm64
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
         with:
           version: v0.9.1 # Don't use latest since it broke our workflow once
