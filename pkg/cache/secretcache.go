@@ -9,13 +9,13 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/dapr/components-contrib/secretstores"
 
 	"github.com/dgraph-io/ristretto"
-	"github.com/pkg/errors"
 )
 
 const (

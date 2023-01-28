@@ -6,13 +6,13 @@
 package cache
 
 import (
+	"errors"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/dapr/components-contrib/secretstores"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
