@@ -468,9 +468,9 @@ jobs:
         with:
           paths: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.xml
       - name: Add job test outputs
+        if: always()
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const script = require('./.github/scripts/dapr_tests_summary.js')
             await script({core, glob})
