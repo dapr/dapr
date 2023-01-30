@@ -24,6 +24,13 @@ DOCKERFILE_DIR?=./docker
 # and placement will be built and pushed to the registry.
 ONLY_DAPR_IMAGE?=false
 
+# If set to true, respective images will not be built and pushed to the registry.
+NO_DAPR_RUNTIME_IMAGE?=false
+NO_DAPR_PLACEMENT_IMAGE?=false
+NO_DAPR_SENTRY_IMAGE?=false
+NO_DAPR_OPERATOR_IMAGE?=false
+NO_DAPR_INJECTOR_IMAGE?=false
+
 DAPR_SYSTEM_IMAGE_NAME?=$(RELEASE_NAME)
 DAPR_RUNTIME_IMAGE_NAME?=daprd
 DAPR_PLACEMENT_IMAGE_NAME?=placement
@@ -109,19 +116,19 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 else
 	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
-	if [ -f "$(BIN_PATH)/daprd" ]; then \
+	if [ -f "$(BIN_PATH)/daprd" ] && [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
 		$(DOCKER) build --build-arg PKG_FILES=daprd -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/placement" ]; then \
+	if [ -f "$(BIN_PATH)/placement" ] && [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
 		$(DOCKER) build --build-arg PKG_FILES=placement -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/sentry" ]; then \
+	if [ -f "$(BIN_PATH)/sentry" ] && [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
 		$(DOCKER) build --build-arg PKG_FILES=sentry -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/operator" ]; then \
+	if [ -f "$(BIN_PATH)/operator" ] && [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
 		$(DOCKER) build --build-arg PKG_FILES=operator -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/injector" ]; then \
+	if [ -f "$(BIN_PATH)/injector" ] && [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
 		$(DOCKER) build --build-arg PKG_FILES=injector -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
 endif
@@ -132,19 +139,19 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 else
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
-	if [ -f "$(BIN_PATH)/daprd" ]; then \
+	if [ -f "$(BIN_PATH)/daprd" ] && [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/placement" ]; then \
+	if [ -f "$(BIN_PATH)/placement" ] && [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/sentry" ]; then \
+	if [ -f "$(BIN_PATH)/sentry" ] && [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/operator" ]; then \
+	if [ -f "$(BIN_PATH)/operator" ] && [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=operator --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/injector" ]; then \
+	if [ -f "$(BIN_PATH)/injector" ] && [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=injector --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
 endif
@@ -158,19 +165,19 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) push $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 else
 	$(DOCKER) push $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
-	if [ -f "$(BIN_PATH)/daprd" ]; then \
+	if [ -f "$(BIN_PATH)/daprd" ] && [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
 		$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/placement" ]; then \
+	if [ -f "$(BIN_PATH)/placement" ] && [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
 		$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/sentry" ]; then \
+	if [ -f "$(BIN_PATH)/sentry" ] && [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
 		$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/operator" ]; then \
+	if [ -f "$(BIN_PATH)/operator" ] && [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
 		$(DOCKER) push $(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/injector" ]; then \
+	if [ -f "$(BIN_PATH)/injector" ] && [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
 		$(DOCKER) push $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
 endif
@@ -181,19 +188,19 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
 else
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
-	if [ -f "$(BIN_PATH)/daprd" ]; then \
+	if [ -f "$(BIN_PATH)/daprd" ] && [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push; \
 	fi
-	if [ -f "$(BIN_PATH)/placement" ]; then \
+	if [ -f "$(BIN_PATH)/placement" ] && [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push; \
 	fi
-	if [ -f "$(BIN_PATH)/sentry" ]; then \
+	if [ -f "$(BIN_PATH)/sentry" ] && [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push; \
 	fi
-	if [ -f "$(BIN_PATH)/operator" ]; then \
+	if [ -f "$(BIN_PATH)/operator" ] && [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=operator --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push; \
 	fi
-	if [ -f "$(BIN_PATH)/injector" ]; then \
+	if [ -f "$(BIN_PATH)/injector" ] && [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=injector --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push; \
 	fi
 endif
@@ -206,19 +213,19 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 	kind load docker-image $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 else
 	kind load docker-image $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
-	if [ -f "$(BIN_PATH)/daprd" ]; then \
+	if [ -f "$(BIN_PATH)/daprd" ] && [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
 		kind load docker-image $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/placement" ]; then \
+	if [ -f "$(BIN_PATH)/placement" ] && [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
 		kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/sentry" ]; then \
+	if [ -f "$(BIN_PATH)/sentry" ] && [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
 		kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/operator" ]; then \
+	if [ -f "$(BIN_PATH)/operator" ] && [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
 		kind load docker-image $(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
-	if [ -f "$(BIN_PATH)/injector" ]; then \
+	if [ -f "$(BIN_PATH)/injector" ] && [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
 		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH); \
 	fi
 endif
@@ -229,22 +236,42 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
 else
 	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_OPERATOR_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-%)
+	if [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%); \
+	fi
+	if [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%); \
+	fi
+	if [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%); \
+	fi
+	if [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_OPERATOR_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-%); \
+	fi
+	if [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-%); \
+	fi
 endif
 ifeq ($(LATEST_RELEASE),true)
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
 else
 	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_OPERATOR_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-%)
+	if [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%); \
+	fi
+	if [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%); \
+	fi
+	if [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%); \
+	fi
+	if [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_OPERATOR_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-%); \
+	fi
+	if [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-%); \
+	fi
 endif
 endif
 
@@ -253,22 +280,42 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) manifest push $(DOCKER_IMAGE_TAG)
 else
 	$(DOCKER) manifest push $(DOCKER_IMAGE_TAG)
-	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)
-	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)
-	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)
-	$(DOCKER) manifest push $(DAPR_OPERATOR_DOCKER_IMAGE_TAG)
-	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)
+	if [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG); \
+	fi
+	if [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG); \
+	fi
+	if [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_TAG); \
+	fi
+	if [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_OPERATOR_DOCKER_IMAGE_TAG); \
+	fi
+	if [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE_TAG); \
+	fi
 endif
 ifeq ($(LATEST_RELEASE),true)
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) manifest push $(DOCKER_IMAGE_LATEST_TAG)
 else
 	$(DOCKER) manifest push $(DOCKER_IMAGE_LATEST_TAG)
-	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG)
-	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)
-	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)
-	$(DOCKER) manifest push $(DAPR_OPERATOR_DOCKER_IMAGE_LATEST_TAG)
-	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE_LATEST_TAG)
+	if [ "$(NO_DAPR_RUNTIME_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG); \
+	fi
+	if [ "$(NO_DAPR_PLACEMENT_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG); \
+	fi
+	if [ "$(NO_DAPR_SENTRY_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG); \
+	fi
+	if [ "$(NO_DAPR_OPERATOR_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_OPERATOR_DOCKER_IMAGE_LATEST_TAG); \
+	fi
+	if [ "$(NO_DAPR_INJECTOR_IMAGE)" = "false" ]; then \
+	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE_LATEST_TAG); \
+	fi
 endif
 endif
 
