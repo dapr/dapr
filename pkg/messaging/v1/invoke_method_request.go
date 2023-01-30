@@ -158,6 +158,14 @@ func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
 	return imr
 }
 
+// CanReplay returns true if the data stream can be replayed.
+func (imr *InvokeMethodRequest) CanReplay() bool {
+	// We can replay if:
+	// - The object has data in-memory
+	// - The request is replayable
+	return imr.HasMessageData() || imr.replayableRequest.CanReplay()
+}
+
 // EncodeHTTPQueryString generates querystring for http using http extension object.
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	m := imr.r.Message
