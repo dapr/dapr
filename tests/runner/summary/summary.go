@@ -28,6 +28,10 @@ func filePath(prefix, testName string) string {
 	return fmt.Sprintf("%s_summary_table_%s.json", prefix, strings.ReplaceAll(testName, string(os.PathSeparator), ""))
 }
 
+// Table is primarily used as a source of arbitrary test output. Tests can send output to the summary table and later flush them.
+// when flush is called so the table is serialized into a file that contains the test name on it, so you should use one table per test.
+// the table output is typically used as a github enhanced job summary.
+// see more: https://github.blog/2022-05-09-supercharging-github-actions-with-job-summaries/
 type Table struct {
 	Test string      `json:"test"`
 	Data [][2]string `json:"data"`
