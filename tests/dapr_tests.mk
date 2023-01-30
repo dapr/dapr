@@ -55,7 +55,7 @@ pluggable_kafka-bindings \
 tracingapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http pubsub_subscribe_rabbitmq_http
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -78,6 +78,7 @@ pubsub_bulk_subscribe_http \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
+pubsub_subscribe_rabbitmq_http \
 
 KUBECTL=kubectl
 
@@ -235,7 +236,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal setup-test-env-rabbitmq
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -414,13 +415,17 @@ delete-test-env-redis:
 setup-test-env-kafka:
 	$(HELM) upgrade --install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
+# install rabbitmq to the cluster
+setup-test-env-rabbitmq:
+	$(HELM) install rabbitmq stable/rabbitmq --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+
 # delete kafka from cluster
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
 
 # install temporal to the cluster
 setup-test-env-temporal:
-	$(HELM) install --set server.replicaCount=1 \
+	$(HELM) upgrade --install --set server.replicaCount=1 \
 					--set cassandra.config.cluster_size=1 \
 					--set prometheus.enabled=false \
 					--set grafana.enabled=false \
@@ -447,7 +452,7 @@ delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin setup-test-env-rabbitmq
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -509,6 +514,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	# TODO: Remove once AppHealthCheck feature is finalized
 	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/rabbitmq_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
