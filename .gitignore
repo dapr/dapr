@@ -14,7 +14,6 @@ github.com/
 **/.factorypath
 google
 
-test_report*
 coverage.txt
 
 # Go Workspaces (introduced in Go 1.18+)
