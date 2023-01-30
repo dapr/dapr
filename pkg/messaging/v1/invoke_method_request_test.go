@@ -464,6 +464,8 @@ func TestRequestReplayable(t *testing.T) {
 		req := newReplayable()
 		defer req.Close()
 
+		require.True(t, req.CanReplay())
+
 		t.Run("first read in full", func(t *testing.T) {
 			read, err := io.ReadAll(req.RawData())
 			assert.NoError(t, err)
