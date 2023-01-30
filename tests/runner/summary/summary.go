@@ -18,33 +18,42 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/labstack/gommon/log"
 )
 
-type Table struct {
-	Heading string      `json:"heading"`
-	Data    [][2]string `json:"data"`
+func filePath(prefix, testName string) string {
+	return fmt.Sprintf("%s_summary_table_%s.json", prefix, strings.ReplaceAll(testName, string(os.PathSeparator), ""))
 }
 
+type Table struct {
+	Test string      `json:"test"`
+	Data [][2]string `json:"data"`
+}
+
+// Output adds a pair to the table data pairs.
 func (t *Table) Output(header, value string) *Table {
 	t.Data = append(t.Data, [2]string{header, value})
 	return t
 }
 
+// OutputInt same as output but converts from int to string.
 func (t *Table) OutputInt(header string, value int) *Table {
 	return t.Output(header, strconv.Itoa(value))
 }
 
+// Outputf same as output but uses a formatter.
 func (t *Table) Outputf(header, format string, params ...any) *Table {
 	return t.Output(header, fmt.Sprintf(format, params...))
 }
 
+// Flush saves the summary into the disk using the desired format.
 func (t *Table) Flush() error {
 	bts, err := json.Marshal(t)
 	if err != nil {
-		log.Errorf("error when marshalling table %s %v", t.Heading, err)
+		log.Errorf("error when marshalling table %s %v", t.Test, err)
 		return err
 	}
 
@@ -53,9 +62,9 @@ func (t *Table) Flush() error {
 		filePrefixOutput = "./test_report"
 	}
 
-	err = os.WriteFile(fmt.Sprintf("%s_summary_table_%s.json", filePrefixOutput, t.Heading), bts, os.ModePerm)
+	err = os.WriteFile(filePath(filePrefixOutput, t.Test), bts, os.ModePerm)
 	if err != nil {
-		log.Errorf("error when saving table %s %v", t.Heading, err)
+		log.Errorf("error when saving table %s %v", t.Test, err)
 		return err
 	}
 	return nil
@@ -64,7 +73,7 @@ func (t *Table) Flush() error {
 // ForTest returns a table ready to be written for the given test..
 func ForTest(tst *testing.T) *Table {
 	return &Table{
-		Heading: tst.Name(),
-		Data:    [][2]string{},
+		Test: tst.Name(),
+		Data: [][2]string{},
 	}
 }
