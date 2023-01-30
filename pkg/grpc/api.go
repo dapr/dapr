@@ -355,7 +355,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
-		})
+		}, in.Metadata)
 		if err != nil {
 			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 			apiServerLogger.Debug(err)
@@ -555,8 +555,6 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
-			var envelope map[string]interface{}
-
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
@@ -565,7 +563,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				TraceID:         corID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
-			})
+			}, entries[i].Metadata)
 			if err != nil {
 				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 				apiServerLogger.Debug(err)
@@ -1798,11 +1796,14 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	wf := workflows.WorkflowReference{
 		InstanceID: in.InstanceId,
 	}
+
+	var inputMap map[string]interface{}
+	json.Unmarshal(in.Input, &inputMap)
 	req := workflows.StartRequest{
 		WorkflowReference: wf,
 		Options:           in.Options,
 		WorkflowName:      in.WorkflowName,
-		Input:             in.Input,
+		Input:             inputMap,
 	}
 
 	resp, err := workflowRun.Start(ctx, &req)

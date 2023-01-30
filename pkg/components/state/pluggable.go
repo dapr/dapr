@@ -17,6 +17,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
@@ -25,7 +27,10 @@ import (
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/kit/logger"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -33,6 +38,106 @@ var (
 	ErrNilSetValue                   = errors.New("an attempt to set a nil value was received, try to use Delete instead")
 	ErrRespNil                       = errors.New("the response for GetRequest is nil")
 	ErrTransactOperationNotSupported = errors.New("transact operation not supported")
+)
+
+// errors code
+var (
+	GRPCCodeETagMismatch          = codes.FailedPrecondition
+	GRPCCodeETagInvalid           = codes.InvalidArgument
+	GRPCCodeBulkDeleteRowMismatch = codes.Internal
+)
+
+const (
+	// etagField is the field that should be specified on gRPC error response.
+	etagField = "etag"
+	// affectedRowsMetadataKey is the metadata key used to return bulkdelete mismatch errors affected rows.
+	affectedRowsMetadataKey = "affected"
+	// expectedRowsMetadataKey is the metadata key used to return bulkdelete mismatch errors expected rows.
+	expectedRowsMetadataKey = "expected"
+)
+
+// etagErrFromStatus get the etag error from the given gRPC status, if the error is not an etag kind error the return is the original error.
+func etagErrFromStatus(s status.Status) (error, bool) {
+	details := s.Details()
+	if len(details) != 1 {
+		return s.Err(), false
+	}
+	badRequestDetail, ok := details[0].(*errdetails.BadRequest)
+	if !ok {
+		return s.Err(), false
+	}
+	violations := badRequestDetail.GetFieldViolations()
+	if len(violations) != 1 {
+		return s.Err(), false
+	}
+
+	maybeETagViolation := violations[0]
+
+	if maybeETagViolation.GetField() != etagField {
+		return s.Err(), false
+	}
+	return errors.New(maybeETagViolation.GetDescription()), true
+}
+
+var etagErrorsConverters = pluggable.MethodErrorConverter{
+	GRPCCodeETagInvalid: func(s status.Status) error {
+		sourceErr, ok := etagErrFromStatus(s)
+		if !ok {
+			return sourceErr
+		}
+		return state.NewETagError(state.ETagInvalid, sourceErr)
+	},
+	GRPCCodeETagMismatch: func(s status.Status) error {
+		sourceErr, ok := etagErrFromStatus(s)
+		if !ok {
+			return sourceErr
+		}
+		return state.NewETagError(state.ETagMismatch, sourceErr)
+	},
+}
+
+var bulkDeleteErrors = pluggable.MethodErrorConverter{
+	GRPCCodeBulkDeleteRowMismatch: func(s status.Status) error {
+		details := s.Details()
+		if len(details) != 1 {
+			return s.Err()
+		}
+		errorInfoDetail, ok := details[0].(*errdetails.ErrorInfo)
+		if !ok {
+			return s.Err()
+		}
+		metadata := errorInfoDetail.GetMetadata()
+
+		expectedStr, ok := metadata[expectedRowsMetadataKey]
+		if !ok {
+			return s.Err()
+		}
+
+		expected, err := strconv.Atoi(expectedStr)
+		if err != nil {
+			return fmt.Errorf("%w; cannot convert 'expected' rows to integer: %s", s.Err(), err)
+		}
+
+		affectedStr, ok := metadata[affectedRowsMetadataKey]
+		if !ok {
+			return s.Err()
+		}
+
+		affected, err := strconv.Atoi(affectedStr)
+		if err != nil {
+			return fmt.Errorf("%w; cannot convert 'affected' rows to integer: %s", s.Err(), err)
+		}
+
+		return state.NewBulkDeleteRowMismatchError(uint64(expected), uint64(affected))
+	},
+}
+
+var (
+	mapETagErrs       = pluggable.NewConverterFunc(etagErrorsConverters)
+	mapSetErrs        = mapETagErrs
+	mapDeleteErrs     = mapETagErrs
+	mapBulkSetErrs    = mapETagErrs
+	mapBulkDeleteErrs = pluggable.NewConverterFunc(etagErrorsConverters.Merge(bulkDeleteErrors))
 )
 
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
@@ -90,7 +195,7 @@ func (ss *grpcStateStore) GetComponentMetadata() map[string]string {
 func (ss *grpcStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	_, err := ss.Client.Delete(ctx, toDeleteRequest(req))
 
-	return err
+	return mapDeleteErrs(err)
 }
 
 // Get performs a get on the state store.
@@ -114,7 +219,7 @@ func (ss *grpcStateStore) Set(ctx context.Context, req *state.SetRequest) error 
 		return err
 	}
 	_, err = ss.Client.Set(ctx, protoRequest)
-	return err
+	return mapSetErrs(err)
 }
 
 // BulkDelete performs a delete operation for many keys at once.
@@ -130,7 +235,7 @@ func (ss *grpcStateStore) BulkDelete(ctx context.Context, reqs []state.DeleteReq
 	}
 
 	_, err := ss.Client.BulkDelete(ctx, bulkDeleteRequest)
-	return err
+	return mapBulkDeleteErrs(err)
 }
 
 // BulkGet performs a get operation for many keys at once.
@@ -176,7 +281,7 @@ func (ss *grpcStateStore) BulkSet(ctx context.Context, req []state.SetRequest) e
 	_, err := ss.Client.BulkSet(ctx, &proto.BulkSetRequest{
 		Items: requests,
 	})
-	return err
+	return mapBulkSetErrs(err)
 }
 
 // Query performsn a query in the state store
