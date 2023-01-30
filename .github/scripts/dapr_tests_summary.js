@@ -1,7 +1,5 @@
-import * as core from '@actions/core'
-import * as glob from '@actions/glob'
 
-module.exports = async (_) => {
+module.exports = async ({ glob, core }) => {
     const jsonFile = require(process.env["TEST_OUTPUT_FILE_PREFIX"] + "_summary_table_TestSummary.json")
     console.log(jsonFile)
     const globber = await glob.create(process.env["TEST_OUTPUT_FILE_PREFIX"] + "_summary_table_*.json")
