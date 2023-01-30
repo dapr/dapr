@@ -14,6 +14,8 @@ limitations under the License.
 package placement
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -45,7 +47,7 @@ const (
 	// faultyHostDetectDuration is the maximum duration when existing host is marked as faulty.
 	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
 	// it updates the last heartbeat time in UpdateAt of the FSM state. If Now - UpdatedAt exceeds
-	// faultyHostDetectDuration, membershipChangeWorker() tries to remove faulty Dapr runtime from
+	// faultyHostDetectDuration, membershipChangeWorker() tries to remove faulty Dapr runtim/ from
 	// membership.
 	// When placement gets the leadership, faultyHostDetectionDuration will be faultyHostDetectInitialDuration.
 	// This duration will give more time to let each runtime find the leader of placement nodes.
@@ -77,24 +79,25 @@ type hostMemberChange struct {
 type Service struct {
 	// serverListener is the TCP listener for placement gRPC server.
 	serverListener net.Listener
-	// grpcServerLock is the lock fro grpcServer
-	grpcServerLock *sync.Mutex
+
 	// grpcServer is the gRPC server for placement service.
 	grpcServer *grpc.Server
+
 	// streamConnPool has the stream connections established between placement gRPC server and Dapr runtime.
 	streamConnPool []placementGRPCStream
+
 	// streamConnPoolLock is the lock for streamConnPool change.
-	streamConnPoolLock *sync.RWMutex
+	streamConnPoolLock sync.RWMutex
 
 	// raftNode is the raft server instance.
 	raftNode *raft.Server
 
 	// lastHeartBeat represents the last time stamp when runtime sent heartbeat.
-	lastHeartBeat *sync.Map
+	lastHeartBeat sync.Map
 	// membershipCh is the channel to maintain Dapr runtime host membership update.
 	membershipCh chan hostMemberChange
 	// disseminateLock is the lock for hashing table dissemination.
-	disseminateLock *sync.Mutex
+	disseminateLock sync.Mutex
 	// disseminateNextTime is the time when the hashing tables are disseminated.
 	disseminateNextTime atomic.Int64
 	// memberUpdateCount represents how many dapr runtimes needs to change.
@@ -110,11 +113,6 @@ type Service struct {
 	// streamConnGroup represents the number of stream connections.
 	// This waits until all stream connections are drained when revoking leadership.
 	streamConnGroup sync.WaitGroup
-
-	// shutdownLock is the mutex to lock shutdown
-	shutdownLock *sync.Mutex
-	// shutdownCh is the channel to be used for the graceful shutdown.
-	shutdownCh chan struct{}
 }
 
 // NewPlacementService returns a new placement service.
@@ -123,67 +121,47 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
 
 	return &Service{
-		disseminateLock:          &sync.Mutex{},
 		streamConnPool:           []placementGRPCStream{},
-		streamConnPoolLock:       &sync.RWMutex{},
 		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
 		faultyHostDetectDuration: fhdd,
 		raftNode:                 raftNode,
-		shutdownCh:               make(chan struct{}),
-		grpcServerLock:           &sync.Mutex{},
-		shutdownLock:             &sync.Mutex{},
-		lastHeartBeat:            &sync.Map{},
 	}
 }
 
 // Run starts the placement service gRPC server.
-func (p *Service) Run(port string, certChain *daprCredentials.CertChain) {
+func (p *Service) Run(ctx context.Context, port string, certChain *daprCredentials.CertChain) error {
 	var err error
 	p.serverListener, err = net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		return fmt.Errorf("failed to listen: %v", err)
 	}
 
 	opts, err := daprCredentials.GetServerOptions(certChain)
 	if err != nil {
-		log.Fatalf("error creating gRPC options: %s", err)
+		return fmt.Errorf("error creating gRPC options: %s", err)
 	}
-	grpcServer := grpc.NewServer(opts...)
-	placementv1pb.RegisterPlacementServer(grpcServer, p)
-	p.grpcServerLock.Lock()
-	p.grpcServer = grpcServer
-	p.grpcServerLock.Unlock()
+	p.grpcServer = grpc.NewServer(opts...)
+	placementv1pb.RegisterPlacementServer(p.grpcServer, p)
 
-	if err := grpcServer.Serve(p.serverListener); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
-}
+	log.Infof("starting placement service started on port %d", p.serverListener.Addr().(*net.TCPAddr).Port)
 
-// Shutdown close all server connections.
-func (p *Service) Shutdown() {
-	p.shutdownLock.Lock()
-	defer p.shutdownLock.Unlock()
-
-	close(p.shutdownCh)
-
-	// wait until hasLeadership is false by revokeLeadership()
-	for p.hasLeadership.Load() {
-		select {
-		case <-time.After(5 * time.Second):
-			goto TIMEOUT
-		default:
-			time.Sleep(500 * time.Millisecond)
+	stopErr := make(chan error, 1)
+	go func() {
+		if err := p.grpcServer.Serve(p.serverListener); err != nil &&
+			!errors.Is(err, grpc.ErrServerStopped) {
+			stopErr <- fmt.Errorf("failed to serve: %v", err)
+			return
 		}
-	}
+		stopErr <- nil
+	}()
 
-TIMEOUT:
-	p.grpcServerLock.Lock()
-	if p.grpcServer != nil {
-		p.grpcServer.Stop()
-		p.grpcServer = nil
+	select {
+	case <-ctx.Done():
+		p.grpcServer.GracefulStop()
+		err = <-stopErr
+	case err = <-stopErr:
 	}
-	p.grpcServerLock.Unlock()
-	p.serverListener.Close()
+	return err
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
@@ -206,7 +184,9 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				p.addStreamConn(stream)
 				// TODO: If each sidecar can report table version, then placement
 				// doesn't need to disseminate tables to each sidecar.
-				p.performTablesUpdate([]placementGRPCStream{stream}, p.raftNode.FSM().PlacementState())
+				if err := p.performTablesUpdate(stream.Context(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState()); err != nil {
+					return err
+				}
 				log.Debugf("Stream connection is established from %s", registeredMemberID)
 			}
 

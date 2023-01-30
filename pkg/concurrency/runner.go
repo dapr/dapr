@@ -31,7 +31,7 @@ func NewRunnerManager(runners ...Runner) *RunnerManager {
 }
 
 // Add adds a new runner to the RunnerManager.
-func (r *RunnerManager) Add(runner Runner) error {
+func (r *RunnerManager) Add(runner ...Runner) error {
 	select {
 	case <-r.running:
 		return errors.New("manager already started")
@@ -40,7 +40,7 @@ func (r *RunnerManager) Add(runner Runner) error {
 
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.runners = append(r.runners, runner)
+	r.runners = append(r.runners, runner...)
 	return nil
 }
 
@@ -56,6 +56,7 @@ func (r *RunnerManager) Run(ctx context.Context) error {
 	close(r.running)
 
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	r.wg.Add(len(r.runners))
 	for _, runner := range r.runners {
 		go func(runner Runner) {
