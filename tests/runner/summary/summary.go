@@ -74,7 +74,7 @@ func (t *Table) Flush() error {
 	return nil
 }
 
-// ForTest returns a table ready to be written for the given test..
+// ForTest returns a table ready to be written for the given test.
 func ForTest(tst *testing.T) *Table {
 	return &Table{
 		Test: tst.Name(),
