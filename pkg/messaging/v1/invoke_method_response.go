@@ -125,6 +125,14 @@ func (imr *InvokeMethodResponse) WithReplay(enabled bool) *InvokeMethodResponse 
 	return imr
 }
 
+// CanReplay returns true if the data stream can be replayed.
+func (imr *InvokeMethodResponse) CanReplay() bool {
+	// We can replay if:
+	// - The object has data in-memory
+	// - The request is replayable
+	return imr.HasMessageData() || imr.replayableRequest.CanReplay()
+}
+
 // Status gets Response status.
 func (imr *InvokeMethodResponse) Status() *internalv1pb.Status {
 	if imr.r == nil {
