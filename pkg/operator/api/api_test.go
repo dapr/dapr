@@ -69,7 +69,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		}
 
-		err := processComponentSecrets(&c, "default", nil)
+		err := processComponentSecrets(context.Background(), &c, "default", nil)
 		assert.NoError(t, err)
 	})
 
@@ -111,7 +111,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			}).
 			Build()
 
-		err = processComponentSecrets(&c, "default", client)
+		err = processComponentSecrets(context.Background(), &c, "default", client)
 		assert.NoError(t, err)
 
 		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
@@ -158,22 +158,13 @@ func TestProcessComponentSecrets(t *testing.T) {
 			}).
 			Build()
 
-		err = processComponentSecrets(&c, "default", client)
+		err = processComponentSecrets(context.Background(), &c, "default", client)
 		assert.NoError(t, err)
 
 		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
 		jsonEnc, _ := json.Marshal(enc)
 
 		assert.Equal(t, jsonEnc, c.Spec.Metadata[0].Value.Raw)
-	})
-}
-
-func TestChanGracefullyClose(t *testing.T) {
-	t.Run("close updateChan", func(t *testing.T) {
-		ch := make(chan *componentsapi.Component)
-		instance := initChanGracefully(ch)
-		instance.Close()
-		assert.Equal(t, true, instance.isClosed)
 	})
 }
 
@@ -200,25 +191,24 @@ func TestComponentUpdate(t *testing.T) {
 		api := NewAPIServer(client).(*apiServer)
 
 		go func() {
-			// Send a component update, give sidecar time to register
-			time.Sleep(time.Millisecond * 500)
+			assert.Eventually(t, func() bool {
+				api.connLock.Lock()
+				defer api.connLock.Unlock()
+				return len(api.allConnUpdateChan) == 1
+			}, time.Second, 10*time.Millisecond)
 
 			api.connLock.Lock()
 			defer api.connLock.Unlock()
-
-			for _, connUpdateChan := range api.allConnUpdateChan {
-				connUpdateChan <- &c
-
-				// Give sidecar time to register update
-				time.Sleep(time.Millisecond * 500)
-				close(connUpdateChan)
+			for key := range api.allConnUpdateChan {
+				api.allConnUpdateChan[key] <- &c
+				close(api.allConnUpdateChan[key])
 			}
 		}()
 
 		// Start sidecar update loop
-		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
+		assert.NoError(t, api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
 			Namespace: "ns2",
-		}, mockSidecar)
+		}, mockSidecar))
 
 		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
 	})
@@ -245,18 +235,17 @@ func TestComponentUpdate(t *testing.T) {
 		api := NewAPIServer(client).(*apiServer)
 
 		go func() {
-			// Send a component update, give sidecar time to register
-			time.Sleep(time.Millisecond * 500)
+			assert.Eventually(t, func() bool {
+				api.connLock.Lock()
+				defer api.connLock.Unlock()
+				return len(api.allConnUpdateChan) == 1
+			}, time.Second, 10*time.Millisecond)
 
 			api.connLock.Lock()
 			defer api.connLock.Unlock()
-
-			for _, connUpdateChan := range api.allConnUpdateChan {
-				connUpdateChan <- &c
-
-				// Give sidecar time to register update
-				time.Sleep(time.Millisecond * 500)
-				close(connUpdateChan)
+			for key := range api.allConnUpdateChan {
+				api.allConnUpdateChan[key] <- &c
+				close(api.allConnUpdateChan[key])
 			}
 		}()
 
@@ -306,13 +295,11 @@ func TestListsNamespaced(t *testing.T) {
 			PodName:   "foo",
 			Namespace: "namespace-a",
 		})
-
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(res.GetComponents()))
 
 		var sub resiliencyapi.Resiliency
-		err = yaml.Unmarshal(res.GetComponents()[0], &sub)
-		assert.Nil(t, err)
+		assert.NoError(t, yaml.Unmarshal(res.GetComponents()[0], &sub))
 
 		assert.Equal(t, "obj1", sub.Name)
 		assert.Equal(t, "namespace-a", sub.Namespace)

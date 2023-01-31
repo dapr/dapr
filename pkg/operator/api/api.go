@@ -17,15 +17,13 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -53,8 +51,9 @@ var log = logger.NewLogger("dapr.operator.api")
 
 // Server runs the Dapr API server for components and configurations.
 type Server interface {
-	Run(ctx context.Context, certChain *daprCredentials.CertChain, onReady func())
-	OnComponentUpdated(component *componentsapi.Component)
+	Run(ctx context.Context, certChain *daprCredentials.CertChain) error
+	Ready(context.Context) error
+	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
 }
 
 type apiServer struct {
@@ -63,6 +62,7 @@ type apiServer struct {
 	// notify all dapr runtime
 	connLock          sync.Mutex
 	allConnUpdateChan map[string]chan *componentsapi.Component
+	ready             chan struct{}
 }
 
 // NewAPIServer returns a new API server.
@@ -70,63 +70,71 @@ func NewAPIServer(client client.Client) Server {
 	return &apiServer{
 		Client:            client,
 		allConnUpdateChan: make(map[string]chan *componentsapi.Component),
+		ready:             make(chan struct{}),
 	}
 }
 
 // Run starts a new gRPC server.
-func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChain, onReady func()) {
+func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChain) error {
+	select {
+	case <-a.ready:
+		return errors.New("api server already running")
+	default:
+	}
+
 	log.Infof("starting gRPC server on port %d", serverPort)
 
 	opts, err := daprCredentials.GetServerOptions(certChain)
 	if err != nil {
-		log.Fatalf("error creating gRPC options: %v", err)
+		return fmt.Errorf("error creating gRPC options: %v", err)
 	}
 	s := grpc.NewServer(opts...)
 	operatorv1pb.RegisterOperatorServer(s, a)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
 	if err != nil {
-		log.Fatalf("error starting tcp listener: %v", err)
+		return fmt.Errorf("error starting tcp listener: %v", err)
 	}
 
-	if onReady != nil {
-		onReady()
-	}
+	close(a.ready)
 
+	errCh := make(chan error)
 	go func() {
-		if shutdownErr := s.Serve(lis); shutdownErr != nil {
-			log.Fatalf("gRPC server error: %v", shutdownErr)
+		if err := s.Serve(lis); err != nil {
+			errCh <- fmt.Errorf("gRPC server error: %w", err)
+			return
 		}
+		errCh <- nil
 	}()
 
 	// Block until context is done
 	<-ctx.Done()
 
-	// Graceful shutdown
-	stopCh := make(chan struct{})
-	go func() {
-		s.GracefulStop()
-		close(stopCh)
-	}()
-	select {
-	case <-time.After(5 * time.Second):
-		// Forceful shutdown after 5 seconds
-		s.Stop()
-	case <-stopCh:
+	s.GracefulStop()
+	if err := <-errCh; err != nil {
+		return err
 	}
-
-	err = lis.Close()
-	if err != nil {
-		log.Errorf("failed to close tcp listener: %v", err)
+	if err := lis.Close(); err != nil {
+		return fmt.Errorf("error closing listener: %v", err)
 	}
+	return nil
 }
 
-func (a *apiServer) OnComponentUpdated(component *componentsapi.Component) {
+func (a *apiServer) OnComponentUpdated(ctx context.Context, component *componentsapi.Component) {
 	a.connLock.Lock()
 	for _, connUpdateChan := range a.allConnUpdateChan {
 		connUpdateChan <- component
 	}
 	a.connLock.Unlock()
+}
+
+func (a *apiServer) Ready(ctx context.Context) error {
+	select {
+	case <-a.ready:
+		return nil
+	case <-ctx.Done():
+		return errors.New("timeout waiting for api server to be ready")
+	}
 }
 
 // GetConfiguration returns a Dapr configuration.
@@ -158,7 +166,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	}
 	for i := range components.Items {
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := processComponentSecrets(&c, in.Namespace, a.Client)
+		err := processComponentSecrets(ctx, &c, in.Namespace, a.Client)
 		if err != nil {
 			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
 			return &operatorv1pb.ListComponentResponse{}, err
@@ -174,12 +182,12 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	return resp, nil
 }
 
-func processComponentSecrets(component *componentsapi.Component, namespace string, kubeClient client.Client) error {
+func processComponentSecrets(ctx context.Context, component *componentsapi.Component, namespace string, kubeClient client.Client) error {
 	for i, m := range component.Spec.Metadata {
 		if m.SecretKeyRef.Name != "" && (component.Auth.SecretStore == kubernetesSecretStore || component.Auth.SecretStore == "") {
 			var secret corev1.Secret
 
-			err := kubeClient.Get(context.TODO(), types.NamespacedName{
+			err := kubeClient.Get(ctx, types.NamespacedName{
 				Name:      m.SecretKeyRef.Name,
 				Namespace: namespace,
 			}, &secret)
@@ -291,22 +299,24 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
 	log.Info("sidecar connected for component updates")
 	key := uuid.New().String()
+
 	a.connLock.Lock()
 	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
 	updateChan := a.allConnUpdateChan[key]
 	a.connLock.Unlock()
+
 	defer func() {
 		a.connLock.Lock()
+		defer a.connLock.Unlock()
 		delete(a.allConnUpdateChan, key)
-		a.connLock.Unlock()
 	}()
-	chWrapper := initChanGracefully(updateChan)
-	updateComponentFunc := func(c *componentsapi.Component) {
+
+	updateComponentFunc := func(ctx context.Context, c *componentsapi.Component) {
 		if c.Namespace != in.Namespace {
 			return
 		}
 
-		err := processComponentSecrets(c, in.Namespace, a.Client)
+		err := processComponentSecrets(ctx, c, in.Namespace, a.Client)
 		if err != nil {
 			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
 			return
@@ -317,18 +327,20 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			log.Warnf("error serializing component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
 			return
 		}
+
 		err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
 			Component: b,
 		})
 		if err != nil {
 			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
-			if status.Code(err) == codes.Unavailable {
-				chWrapper.Close()
-			}
 			return
 		}
+
 		log.Infof("updated sidecar with component %s (%s) from pod %s/%s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName)
 	}
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	for {
 		select {
 		case <-srv.Context().Done():
@@ -337,33 +349,11 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			if !ok {
 				return nil
 			}
-			go updateComponentFunc(c)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				updateComponentFunc(srv.Context(), c)
+			}()
 		}
 	}
-}
-
-// chanGracefully control channel to close gracefully in multi-goroutines.
-type chanGracefully struct {
-	ch       chan *componentsapi.Component
-	isClosed bool
-	sync.Mutex
-}
-
-func initChanGracefully(ch chan *componentsapi.Component) (
-	c *chanGracefully,
-) {
-	return &chanGracefully{
-		ch:       ch,
-		isClosed: false,
-	}
-}
-
-// Close chan be closed non-reentrantly.
-func (c *chanGracefully) Close() {
-	c.Lock()
-	if !c.isClosed {
-		c.isClosed = true
-		close(c.ch)
-	}
-	c.Unlock()
 }

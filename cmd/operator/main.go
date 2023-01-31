@@ -92,10 +92,15 @@ func main() {
 
 	ctx := signals.Context()
 
-	go operator.NewOperator(operatorOpts).Run(ctx)
-	go operator.RunWebhooks(ctx, !disableLeaderElection)
+	op, err := operator.NewOperator(ctx, operatorOpts)
+	if err != nil {
+		log.Fatalf("error creating operator: %s", err)
+	}
 
-	<-ctx.Done() // Wait for SIGTERM and SIGINT.
+	if err := op.Run(ctx); err != nil {
+		log.Fatalf("error running operator: %s", err)
+	}
+	log.Info("operator shut down gracefully")
 }
 
 func init() {
