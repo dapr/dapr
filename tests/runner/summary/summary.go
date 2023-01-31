@@ -25,7 +25,7 @@ import (
 )
 
 func filePath(prefix, testName string) string {
-	return fmt.Sprintf("%s_summary_table_%s.json", prefix, strings.ReplaceAll(testName, string(os.PathSeparator), ""))
+	return fmt.Sprintf("%s_summary_table_%s.json", prefix, strings.ReplaceAll(testName, string(os.PathSeparator), "_"))
 }
 
 // Table is primarily used as a source of arbitrary test output. Tests can send output to the summary table and later flush them.
