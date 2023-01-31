@@ -1707,8 +1707,10 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			} else {
 				resStatus.Code = statusCode
 			}
-		} else if resStatus.Code != fasthttp.StatusOK {
-			return rResp, fmt.Errorf("Received non-successful status code: %d", resStatus.Code) //nolint:stylecheck
+		} else if resStatus.Code < 200 || resStatus.Code > 299 {
+			// We are not returning an `invokeError` here on purpose.
+			// Returning an error that is not an `invokeError` will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned so the "received non-successful status code" is "swallowed" (will appear in logs but won't be returned to the app).
+			return rResp, fmt.Errorf("received non-successful status code: %d", resStatus.Code)
 		}
 		return rResp, nil
 	})

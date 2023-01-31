@@ -15,6 +15,7 @@ package testing
 
 import (
 	"context"
+	"net/http"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -57,7 +58,8 @@ func (_m *MockDirectMessaging) Close() error {
 }
 
 type FailingDirectMessaging struct {
-	Failure Failure
+	Failure           Failure
+	SuccessStatusCode int
 }
 
 func (f *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
@@ -69,7 +71,12 @@ func (f *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string,
 	if err != nil {
 		return &invokev1.InvokeMethodResponse{}, err
 	}
-	resp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+	statusCode := f.SuccessStatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+	resp := invokev1.
+		NewInvokeMethodResponse(int32(statusCode), http.StatusText(statusCode), nil).
 		WithRawDataBytes(r.Message.Data.Value)
 	return resp, nil
 }
