@@ -25,9 +25,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	"github.com/dapr/components-contrib/lock"
-
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +43,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
