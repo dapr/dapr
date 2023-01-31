@@ -298,17 +298,20 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
 	log.Info("sidecar connected for component updates")
-	key := uuid.New().String()
+	key, err := uuid.NewRandom()
+	if err != nil {
+		return err
+	}
 
 	a.connLock.Lock()
-	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
-	updateChan := a.allConnUpdateChan[key]
+	a.allConnUpdateChan[key.String()] = make(chan *componentsapi.Component, 1)
+	updateChan := a.allConnUpdateChan[key.String()]
 	a.connLock.Unlock()
 
 	defer func() {
 		a.connLock.Lock()
 		defer a.connLock.Unlock()
-		delete(a.allConnUpdateChan, key)
+		delete(a.allConnUpdateChan, key.String())
 	}()
 
 	updateComponentFunc := func(ctx context.Context, c *componentsapi.Component) {
