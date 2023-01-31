@@ -154,9 +154,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(label_replace(rate(container_cpu_usage_seconds_total{pod=~\"(feed-generator|hashtag-actor|hashtag-counter|pubsub-workflow|validation-worker|message-analyzer).*\", namespace=\"longhaul-test\"}[5m]), \"app_name\", \"$1\", \"pod\", \"(.*-app)-.*\")) by (app_name)",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{pod=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement-server|dapr-operator).*\"}[5m])) by (pod)",
           "interval": "",
-          "legendFormat": "{{app_name}}",
+          "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ],

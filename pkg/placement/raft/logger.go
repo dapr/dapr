@@ -86,6 +86,10 @@ func (l *loggerAdapter) ResetNamed(name string) hclog.Logger { return l }
 
 func (l *loggerAdapter) SetLevel(level hclog.Level) {}
 
+func (l *loggerAdapter) GetLevel() hclog.Level {
+	return hclog.Info
+}
+
 func (l *loggerAdapter) StandardLogger(opts *hclog.StandardLoggerOptions) *log.Logger {
 	return log.New(l.StandardWriter(opts), "placement-raft", log.LstdFlags)
 }
