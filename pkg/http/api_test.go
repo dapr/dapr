@@ -364,6 +364,11 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				"value": "third value",
 			},
 			ContentType: "application/json",
+			Metadata: map[string]string{
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+			},
 		},
 	}
 
@@ -951,16 +956,19 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On(
-			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			}),
-		).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -980,14 +988,19 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "dapr-app-id", "fakeAppID")
@@ -1007,14 +1020,19 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
 
 		// act
 		resp := fakeServer.doRequest("dapr-app-id:fakeAppID", "POST", apiPath, fakeData, nil)
@@ -1034,18 +1052,23 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(
 			int32(codes.InvalidArgument),
 			"InvalidArgument",
-			[]*anypb.Any{details})
+			[]*anypb.Any{details},
+		)
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 		defer fakeInternalErrorResponse.Close()
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On(
-			"Invoke",
-			mock.AnythingOfType("*fasthttp.RequestCtx"),
-			"fakeAppID",
-			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeInternalErrorResponse, nil).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				"fakeAppID",
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
+			).
+			Return(fakeInternalErrorResponse, nil).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1056,9 +1079,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		// protojson produces different indentation space based on OS
 		// For linux
-		comp1 := string(resp.RawBody) == "{\"code\":3,\"message\":\"InvalidArgument\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"reason\":\"fakeReason\"}]}"
+		comp1 := string(resp.RawBody) == `{"code":3,"message":"InvalidArgument","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"fakeReason"}]}`
 		// For mac and windows
-		comp2 := string(resp.RawBody) == "{\"code\":3, \"message\":\"InvalidArgument\", \"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\", \"reason\":\"fakeReason\"}]}"
+		comp2 := string(resp.RawBody) == `{"code":3, "message":"InvalidArgument", "details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo", "reason":"fakeReason"}]}`
 		assert.True(t, comp1 || comp2)
 	})
 
@@ -1071,11 +1094,15 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On(
-			"Invoke",
-			mock.AnythingOfType("*fasthttp.RequestCtx"),
-			"fakeAppID",
-			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeInternalErrorResponse, nil).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				"fakeAppID",
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
+			).
+			Return(fakeInternalErrorResponse, nil).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1095,16 +1122,19 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On(
-			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			}),
-		).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1123,16 +1153,19 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On(
-			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			}),
-		).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("HEAD", apiPath, nil, nil)
@@ -1151,14 +1184,19 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1175,14 +1213,19 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(nil, errors.New("UPSTREAM_ERROR")).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(nil, errors.New("UPSTREAM_ERROR")).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1199,14 +1242,19 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(nil, status.Errorf(codes.PermissionDenied, "Permission Denied")).Once()
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(nil, status.Errorf(codes.PermissionDenied, "Permission Denied")).
+			Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1248,9 +1296,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -1276,9 +1322,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -1304,9 +1348,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -2422,9 +2464,7 @@ func TestAPIToken(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -2447,9 +2487,7 @@ func TestAPIToken(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -2472,9 +2510,7 @@ func TestAPIToken(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -2497,9 +2533,7 @@ func TestAPIToken(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -2545,9 +2579,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -2954,9 +2986,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -3010,9 +3040,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
 			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
@@ -4625,4 +4653,9 @@ func TestExtractEtag(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, "a", etag)
 	})
+}
+
+func matchContextInterface(v any) bool {
+	_, ok := v.(context.Context)
+	return ok
 }

@@ -697,7 +697,7 @@ message StartWorkflowRequest {
   string workflow_component = 2;
   string workflow_name = 3;
   map<string, string> options = 4;
-  google.protobuf.Any input = 5;
+  bytes input = 5;
 }
 
 message TerminateWorkflowRequest {
