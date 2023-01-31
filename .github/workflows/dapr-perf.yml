@@ -462,11 +462,18 @@ jobs:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: test_perf.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.*
-      - name: Show test summary
+      - name: Add job test summary
         if: always()
         uses: test-summary/action@v2
         with:
           paths: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.xml
+      - name: Add job test outputs
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const script = require('./.github/scripts/dapr_tests_summary.js')
+            await script({core, glob})
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
