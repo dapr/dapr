@@ -77,7 +77,11 @@ func (s *server) Run(ctx context.Context, port int) error {
 		serveErr <- nil
 	}()
 
-	<-ctx.Done()
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+	}
 	s.log.Info("Healthz server is shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
