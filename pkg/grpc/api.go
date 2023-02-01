@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
@@ -354,7 +355,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
-		})
+		}, in.Metadata)
 		if err != nil {
 			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 			apiServerLogger.Debug(err)
@@ -407,17 +408,30 @@ type invokeServiceResp struct {
 	trailers metadata.MD
 }
 
+// These flags are used to make sure that we are printing the deprecation warning log messages in "InvokeService" just once.
+// By using "CompareAndSwap(false, true)" we replace the value "false" with "true" only if it's not already "true".
+// "CompareAndSwap" returns true if the swap happened (i.e. if the value was not already "true"), so we can use that as a flag to make sure we only run the code once.
+// Why not using "sync.Once"? In our tests (https://github.com/dapr/dapr/pull/5740), that seems to be causing a regression in the perf tests. This is probably because when using "sync.Once" and the callback needs to be executed for the first time, all concurrent requests are blocked too. Additionally, the use of closures in this case _could_ have an impact on the GC as well.
+var (
+	invokeServiceDeprecationNoticeShown     = atomic.Bool{}
+	invokeServiceHTTPDeprecationNoticeShown = atomic.Bool{}
+)
+
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
+	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
+		apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
+	}
 	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
-	req := invokev1.FromInvokeRequestMessage(in.GetMessage()).
-		WithReplay(policyDef.HasRetries())
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
 	defer req.Close()
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
@@ -448,7 +462,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
-			apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
+			if invokeServiceHTTPDeprecationNoticeShown.CompareAndSwap(false, true) {
+				apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
+			}
 			var errorMessage string
 			if rResp.message != nil && rResp.message.Data != nil {
 				errorMessage = string(rResp.message.Data.Value)
@@ -539,8 +555,6 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
-			var envelope map[string]interface{}
-
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
@@ -549,7 +563,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				TraceID:         corID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
-			})
+			}, entries[i].Metadata)
 			if err != nil {
 				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 				apiServerLogger.Debug(err)
@@ -1562,8 +1576,10 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req := invokev1.NewInvokeMethodRequest(in.Method).
 		WithActor(in.ActorType, in.ActorId).
 		WithRawDataBytes(in.Data).
-		WithMetadata(reqMetadata).
-		WithReplay(policyDef.HasRetries())
+		WithMetadata(reqMetadata)
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
 	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
@@ -1780,11 +1796,14 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	wf := workflows.WorkflowReference{
 		InstanceID: in.InstanceId,
 	}
+
+	var inputMap map[string]interface{}
+	json.Unmarshal(in.Input, &inputMap)
 	req := workflows.StartRequest{
 		WorkflowReference: wf,
 		Options:           in.Options,
 		WorkflowName:      in.WorkflowName,
-		Input:             in.Input,
+		Input:             inputMap,
 	}
 
 	resp, err := workflowRun.Start(ctx, &req)

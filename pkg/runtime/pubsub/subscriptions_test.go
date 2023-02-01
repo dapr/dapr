@@ -441,7 +441,7 @@ func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.
 func TestHTTPSubscriptions(t *testing.T) {
 	t.Run("topics received, no errors", func(t *testing.T) {
 		m := mockHTTPSubscriptions{}
-		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), false)
+		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log))
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -460,7 +460,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			successThreshold: 3,
 		}
 
-		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), false)
+		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log))
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -480,7 +480,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			alwaysError: true,
 		}
 
-		_, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), false)
+		_, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log))
 		require.Error(t, err)
 	})
 
@@ -489,7 +489,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			successThreshold: 3,
 		}
 
-		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), true)
+		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log))
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -509,7 +509,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			alwaysError: true,
 		}
 
-		_, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), true)
+		_, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log))
 		require.Error(t, err)
 	})
 }
@@ -592,7 +592,7 @@ func (m *mockGRPCSubscriptions) ListTopicSubscriptions(ctx context.Context, in *
 func TestGRPCSubscriptions(t *testing.T) {
 	t.Run("topics received, no errors", func(t *testing.T) {
 		m := mockGRPCSubscriptions{}
-		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log))
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -611,7 +611,7 @@ func TestGRPCSubscriptions(t *testing.T) {
 			successThreshold: 3,
 		}
 
-		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log))
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -632,7 +632,7 @@ func TestGRPCSubscriptions(t *testing.T) {
 			unimplemented:    true,
 		}
 
-		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log))
 		// not implemented error is not retried and is returned as "zero" subscriptions
 		require.NoError(t, err)
 		assert.Equal(t, 1, m.callCount)
@@ -644,7 +644,7 @@ func TestGRPCSubscriptions(t *testing.T) {
 			successThreshold: 3,
 		}
 
-		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log))
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -665,7 +665,7 @@ func TestGRPCSubscriptions(t *testing.T) {
 			unimplemented:    true,
 		}
 
-		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log))
 		// not implemented error is not retried and is returned as "zero" subscriptions
 		require.NoError(t, err)
 		assert.Equal(t, 1, m.callCount)

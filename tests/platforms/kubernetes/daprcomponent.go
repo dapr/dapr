@@ -67,10 +67,6 @@ func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 	}
 
 	annotations := make(map[string]string)
-	if do.component.ContainerImage != "" {
-		annotations["dapr.io/component-container-image"] = do.component.ContainerImage
-	}
-
 	return buildDaprComponentObject(do.component.Name, do.component.TypeName, do.component.Scopes, annotations, metadata)
 }
 

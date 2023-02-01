@@ -55,7 +55,7 @@ pluggable_kafka-bindings \
 tracingapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -74,6 +74,7 @@ state_get_http \
 pubsub_publish_grpc \
 pubsub_publish_http \
 pubsub_bulk_publish_grpc \
+pubsub_bulk_subscribe_http \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
@@ -351,7 +352,7 @@ ifeq ($(DAPR_PERF_TEST),)
 		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 		--format standard-quiet \
 		-- \
-			-p 1 -count=1 -v -tags=perf ./tests/perf/...
+			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
 	for app in $(DAPR_PERF_TEST); do \
@@ -392,8 +393,14 @@ endif
 
 # install k6 loadtesting to the cluster
 setup-test-env-k6:
+	$(KUBECTL) apply -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
 	export IMG=ghcr.io/grafana/operator:controller-v0.0.8 && rm -rf /tmp/.k6-operator >/dev/null && git clone --depth 1 --branch v0.0.8 https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
 delete-test-env-k6:
+	$(KUBECTL) delete -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) delete -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) delete -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
 	rm -rf /tmp/.k6-operator >/dev/null && git clone https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make delete && cd - && rm -rf /tmp/.k6-operator
 
 # install redis to the cluster without password

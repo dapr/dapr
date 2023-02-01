@@ -1144,6 +1144,54 @@ func TestMetadataNamespace(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestMetadataAppID(t *testing.T) {
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	pubsubComponent.Spec.Metadata = append(
+		pubsubComponent.Spec.Metadata,
+		componentsV1alpha1.MetadataItem{
+			Name: "clientID",
+			Value: componentsV1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{appID} {appID}"),
+				},
+			},
+		})
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
+	rt.runtimeConfig.ID = TestRuntimeConfigID
+	defer stopRuntime(t, rt)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
+			return mockPubSub
+		},
+		"mockPubSub",
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		clientID := metadata.Properties["clientID"]
+		appIds := strings.Split(clientID, " ")
+		assert.Equal(t, 2, len(appIds))
+		for _, appID := range appIds {
+			assert.Equal(t, TestRuntimeConfigID, appID)
+		}
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
 func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
@@ -5421,21 +5469,16 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel := new(channelt.MockAppChannel)
 	rt.appChannel = mockAppChannel
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
-
 	require.NoError(t, rt.initPubSub(cPubSub))
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.startSubscriptions()
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
-	assert.NotNil(t, rt.pubsubCtx)
-	assert.NotNil(t, rt.topicCtxCancels)
-	assert.NotNil(t, rt.topicRoutes)
+	assert.NoError(t, rt.pubsubCtx.Err())
 	rt.running.Store(true)
 	go sendSigterm(rt)
 	select {
 	case <-rt.pubsubCtx.Done():
-		assert.Nil(t, rt.pubsubCtx)
-		assert.Nil(t, rt.topicCtxCancels)
-		assert.Nil(t, rt.topicRoutes)
+		assert.Error(t, rt.pubsubCtx.Err(), context.Canceled)
 	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "pubsub shutdown timed out")
 	}
@@ -5443,8 +5486,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 
 func TestGracefulShutdownBindings(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
-
+	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
 	rt.bindingsRegistry.RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
 			return &daprt.MockBinding{}
@@ -5466,15 +5508,17 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cout.Spec.Type = "bindings.testOutputBinding"
 	require.NoError(t, rt.initInputBinding(cin))
 	require.NoError(t, rt.initOutputBinding(cout))
-
 	assert.Equal(t, len(rt.inputBindings), 1)
 	assert.Equal(t, len(rt.outputBindings), 1)
-
 	rt.running.Store(true)
+	rt.inputBindingsCtx, rt.inputBindingsCancel = context.WithCancel(rt.ctx)
 	go sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
-	assert.Nil(t, rt.inputBindingsCancel)
-	assert.Nil(t, rt.inputBindingsCtx)
+	select {
+	case <-rt.inputBindingsCtx.Done():
+		return
+	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
+		assert.Fail(t, "input bindings shutdown timed out")
+	}
 }
 
 func TestGracefulShutdownActors(t *testing.T) {

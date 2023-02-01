@@ -132,8 +132,7 @@ BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 # Comma-separated list of features to enable
-# TODO: @ItalyPaleAle remove when Resiliency is finalized
-ENABLED_FEATURES ?= Resiliency
+ENABLED_FEATURES ?= 
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \
@@ -417,6 +416,7 @@ gen-proto: check-proto-version $(GEN_PROTOS) modtidy
 .PHONY: get-components-contrib
 get-components-contrib:
 	go get github.com/dapr/components-contrib@master
+	make modtidy-all
 
 ################################################################################
 # Target: check-diff                                                           #
