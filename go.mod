@@ -388,7 +388,7 @@ require (
 )
 
 replace (
-	github.com/dapr/components-contrib v1.7.0-rc.4 => github.com/Meland-Inc/components-contrib v0.0.0-20230201042142-f675a24d3fc5
+	github.com/dapr/components-contrib v1.9.6 => github.com/Meland-Inc/components-contrib v0.0.0-20230201070841-f3e48ac2a07f
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36

@@ -181,6 +181,8 @@ github.com/HdrHistogram/hdrhistogram-go v1.1.2/go.mod h1:yDgFjdqOqDEKOvasDdhWNXY
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Masterminds/semver/v3 v3.1.1 h1:hLg3sBzpNErnxhQtUy/mmLR2I9foDujNK030IGemrRc=
 github.com/Masterminds/semver/v3 v3.1.1/go.mod h1:VPu/7SZ7ePZ3QOrcuXROw5FAcLl4a0cBrbBpGY/8hQs=
+github.com/Meland-Inc/components-contrib v0.0.0-20230201070841-f3e48ac2a07f h1:A+ADyUzTC1ZrEWmx3IJSG93OOXgGPMqRGBLWjs1eq6A=
+github.com/Meland-Inc/components-contrib v0.0.0-20230201070841-f3e48ac2a07f/go.mod h1:U0cjxEEbZR7sNN9i1ZdWnkIOZP8iRSvoyF2gRhBaHfc=
 github.com/Microsoft/go-winio v0.4.11/go.mod h1:VhR8bwka0BXejwEJY73c50VrPtXAaKcyvVC4A4RozmA=
 github.com/Microsoft/go-winio v0.4.14/go.mod h1:qXqCSQ3Xa7+6tgxaGTIe4Kpcdsi+P8jBhyzoq1bpyYA=
 github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5/go.mod h1:tTuCMEN+UleMWgg9dVx4Hu52b1bJo+59jBh3ajtinzw=
@@ -593,8 +595,6 @@ github.com/danieljoos/wincred v1.0.2/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3E
 github.com/danieljoos/wincred v1.1.0/go.mod h1:XYlo+eRTsVA9aHGp7NGjFkPla4m+DCL7hqDjlFjiygg=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.9.6 h1:C12fnZhNim8AsOzTCsWZDZ0MXqsaG161fStVuVAQgN4=
-github.com/dapr/components-contrib v1.9.6/go.mod h1:U0cjxEEbZR7sNN9i1ZdWnkIOZP8iRSvoyF2gRhBaHfc=
 github.com/dapr/kit v0.0.3-0.20220930182601-272e358ba6a7 h1:XDb+PwAOxbVNvLxkmwPgKlH5ltYlDdz/GcEDMe8RJxE=
 github.com/dapr/kit v0.0.3-0.20220930182601-272e358ba6a7/go.mod h1:FR+yc0R0szlKnJooVqJvl7FhWf21wzY4/EzmyFQrESw=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
