@@ -140,13 +140,13 @@ func (t *Table) Params(p perf.TestParameters) *Table {
 }
 
 // OutputK6Trend outputs the given k6trend using the given prefix.
-func (t *Table) OutputK6Trend(prefix string, trend loadtest.K6TrendMetric) *Table {
-	t.OutputFloat64(fmt.Sprintf("%s MAX", prefix), trend.Values.Max)
-	t.OutputFloat64(fmt.Sprintf("%s MIN", prefix), trend.Values.Min)
-	t.OutputFloat64(fmt.Sprintf("%s AVG", prefix), trend.Values.Avg)
-	t.OutputFloat64(fmt.Sprintf("%s MED", prefix), trend.Values.Med)
-	t.OutputFloat64(fmt.Sprintf("%s P90", prefix), trend.Values.P90)
-	t.OutputFloat64(fmt.Sprintf("%s P95", prefix), trend.Values.P95)
+func (t *Table) OutputK6Trend(prefix string, unit string, trend loadtest.K6TrendMetric) *Table {
+	t.Outputf(fmt.Sprintf("%s MAX", prefix), "%f%s", trend.Values.Max, unit)
+	t.Outputf(fmt.Sprintf("%s MIN", prefix), "%f%s", trend.Values.Min, unit)
+	t.Outputf(fmt.Sprintf("%s AVG", prefix), "%f%s", trend.Values.Avg, unit)
+	t.Outputf(fmt.Sprintf("%s MED", prefix), "%f%s", trend.Values.Med, unit)
+	t.Outputf(fmt.Sprintf("%s P90", prefix), "%f%s", trend.Values.P90, unit)
+	t.Outputf(fmt.Sprintf("%s P95", prefix), "%f%s", trend.Values.P95, unit)
 	return t
 }
 
@@ -155,8 +155,8 @@ func (t *Table) OutputK6(k6results []*loadtest.K6RunnerMetricsSummary) *Table {
 	for i, result := range k6results {
 		t.OutputInt(fmt.Sprintf("[Runner %d]: VUs Max", i), result.Vus.Values.Max)
 		t.OutputFloat64(fmt.Sprintf("[Runner %d]: Iterations Count", i), result.Iterations.Values.Count)
-		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req duration", i), result.HTTPReqDuration)
-		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req Waiting", i), result.HTTPReqWaiting)
+		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req duration", i), "ms", result.HTTPReqDuration)
+		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req Waiting", i), "ms", result.HTTPReqWaiting)
 	}
 	return t
 }
