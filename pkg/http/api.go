@@ -2198,7 +2198,13 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
-		respond(reqCtx, withEmpty())
+		matchAppID := string(reqCtx.QueryArgs().Peek("app-id"))
+		if matchAppID != "" && matchAppID != a.id {
+			msg := NewErrorResponse("ERR_HEALTH_APPID_NOT_MATCH", messages.ErrHealthAppIDNotMatch)
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		} else {
+			respond(reqCtx, withEmpty())
+		}
 	}
 }
 

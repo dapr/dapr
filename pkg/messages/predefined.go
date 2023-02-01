@@ -84,6 +84,7 @@ const (
 	// Healthz.
 	ErrHealthNotReady         = "dapr is not ready"
 	ErrOutboundHealthNotReady = "dapr outbound is not ready"
+	ErrHealthAppIDNotMatch    = "dapr appId is not match"
 
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
