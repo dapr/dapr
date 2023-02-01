@@ -187,6 +187,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 		Restarts(restarts).
 		ActualQPS(daprResult.ActualQPS).
 		Params(p).
+		OutputFortio(daprResult).
 		Flush()
 
 	require.Equal(t, 0, daprResult.RetCodes.Num400)

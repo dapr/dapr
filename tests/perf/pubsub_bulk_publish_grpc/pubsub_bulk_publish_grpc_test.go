@@ -201,6 +201,7 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 				OutputFloat64("Increase in QPS", increaseQPS).
 				ActualQPS(bulkResult.ActualQPS).
 				Params(p).
+				OutputFortio(bulkResult).
 				Flush()
 
 			report := perf.NewTestReport(

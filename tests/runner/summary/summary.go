@@ -130,6 +130,16 @@ func (t *Table) QPS(qps int) *Table {
 	return t.OutputInt("QPS", qps)
 }
 
+// P90 is a short for .Outputf("P90", "%2.fms")
+func (t *Table) P90(p90 float64) *Table {
+	return t.Outputf("P90", "%.2fms", p90)
+}
+
+// P90 is a short for .Outputf("P90", "%2.fms")
+func (t *Table) P99(p99 float64) *Table {
+	return t.Outputf("P99", "%.2fms", p99)
+}
+
 // QPS is a short for .OutputInt("QPS")
 func (t *Table) Params(p perf.TestParameters) *Table {
 	return t.QPS(p.QPS).
@@ -148,6 +158,21 @@ func (t *Table) OutputK6Trend(prefix string, unit string, trend loadtest.K6Trend
 	t.Outputf(fmt.Sprintf("%s P90", prefix), "%f%s", trend.Values.P90, unit)
 	t.Outputf(fmt.Sprintf("%s P95", prefix), "%f%s", trend.Values.P95, unit)
 	return t
+}
+
+const (
+	p90Index = 2
+	p99Index = 3
+)
+
+// OutputFortio summarize the fortio results.
+func (t *Table) OutputFortio(result perf.TestResult) *Table {
+	return t.
+		P90(result.DurationHistogram.Percentiles[p90Index].Value).
+		P99(result.DurationHistogram.Percentiles[p99Index].Value).
+		OutputInt("2xx", result.RetCodes.Num200).
+		OutputInt("4xx", result.RetCodes.Num400).
+		OutputInt("5xx", result.RetCodes.Num500)
 }
 
 // OutputK6 summarize the K6 results for each runner.

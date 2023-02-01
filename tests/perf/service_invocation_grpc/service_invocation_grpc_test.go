@@ -199,6 +199,7 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 		AddedLatency(avg).
 		ActualQPS(daprResult.ActualQPS).
 		Params(p).
+		OutputFortio(daprResult).
 		Flush()
 
 	report := perf.NewTestReport(
