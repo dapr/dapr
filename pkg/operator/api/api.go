@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -62,7 +63,8 @@ type apiServer struct {
 	// notify all dapr runtime
 	connLock          sync.Mutex
 	allConnUpdateChan map[string]chan *componentsapi.Component
-	ready             chan struct{}
+	readyCh           chan struct{}
+	running           atomic.Bool
 }
 
 // NewAPIServer returns a new API server.
@@ -70,16 +72,14 @@ func NewAPIServer(client client.Client) Server {
 	return &apiServer{
 		Client:            client,
 		allConnUpdateChan: make(map[string]chan *componentsapi.Component),
-		ready:             make(chan struct{}),
+		readyCh:           make(chan struct{}),
 	}
 }
 
 // Run starts a new gRPC server.
 func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChain) error {
-	select {
-	case <-a.ready:
+	if a.running.CompareAndSwap(false, true) {
 		return errors.New("api server already running")
-	default:
 	}
 
 	log.Infof("starting gRPC server on port %d", serverPort)
@@ -95,8 +95,7 @@ func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChai
 	if err != nil {
 		return fmt.Errorf("error starting tcp listener: %v", err)
 	}
-
-	close(a.ready)
+	close(a.readyCh)
 
 	errCh := make(chan error)
 	go func() {
@@ -130,7 +129,7 @@ func (a *apiServer) OnComponentUpdated(ctx context.Context, component *component
 
 func (a *apiServer) Ready(ctx context.Context) error {
 	select {
-	case <-a.ready:
+	case <-a.readyCh:
 		return nil
 	case <-ctx.Done():
 		return errors.New("timeout waiting for api server to be ready")
