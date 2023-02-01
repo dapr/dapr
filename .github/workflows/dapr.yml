@@ -35,8 +35,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       GOVER: 1.19
-      GOLANGCILINT_VER: v1.31
-      PROTOC_VERSION: "21.12"
+      GOLANGCILINT_VER: v1.48.0
+      PROTOC_VERSION: "21.1"
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
