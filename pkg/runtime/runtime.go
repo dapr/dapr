@@ -1429,19 +1429,20 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	})
 
 	serverConf := http.ServerConfig{
-		AppID:              a.runtimeConfig.ID,
-		HostAddress:        a.hostAddress,
-		Port:               port,
-		APIListenAddresses: a.runtimeConfig.APIListenAddresses,
-		PublicPort:         publicPort,
-		ProfilePort:        profilePort,
-		AllowedOrigins:     allowedOrigins,
-		EnableProfiling:    a.runtimeConfig.EnableProfiling,
-		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
-		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
-		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
-		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
-		APILogHealthChecks: !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
+		AppID:                   a.runtimeConfig.ID,
+		HostAddress:             a.hostAddress,
+		Port:                    port,
+		APIListenAddresses:      a.runtimeConfig.APIListenAddresses,
+		PublicPort:              publicPort,
+		ProfilePort:             profilePort,
+		AllowedOrigins:          allowedOrigins,
+		EnableProfiling:         a.runtimeConfig.EnableProfiling,
+		MaxRequestBodySize:      a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:        a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSize:          a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:        a.runtimeConfig.EnableAPILogging,
+		APILoggingObfuscateURLs: a.globalConfig.Spec.LoggingSpec.APILogging.ObfuscateURLs,
+		APILogHealthChecks:      !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
 	}
 
 	server := http.NewServer(http.NewServerOpts{
