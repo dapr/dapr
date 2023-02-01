@@ -27,8 +27,17 @@ import (
 	"github.com/labstack/gommon/log"
 )
 
+const (
+	// testNameSeparator is the default character used by go test to separate between suitecases under the same test func.
+	testNameSeparator = "/"
+)
+
+func sanitizeTestName(testName string) string {
+	return strings.ReplaceAll(testName, testNameSeparator, "_")
+}
+
 func filePath(prefix, testName string) string {
-	return fmt.Sprintf("%s_summary_table_%s.json", prefix, strings.ReplaceAll(testName, string(os.PathSeparator), "_"))
+	return fmt.Sprintf("%s_summary_table_%s.json", prefix, sanitizeTestName(testName))
 }
 
 // Table is primarily used as a source of arbitrary test output. Tests can send output to the summary table and later flush them.
