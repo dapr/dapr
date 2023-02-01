@@ -231,7 +231,11 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 func (s *server) apiLoggingInfo(route string, next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		fields := make(map[string]any, 2)
-		fields["method"] = string(ctx.Method()) + " " + route
+		if s.config.APILoggingObfuscateURLs {
+			fields["method"] = string(ctx.Method()) + " " + route
+		} else {
+			fields["method"] = string(ctx.Method()) + " " + string(ctx.Path())
+		}
 		if userAgent := string(ctx.Request.Header.Peek("User-Agent")); userAgent != "" {
 			fields["useragent"] = userAgent
 		}
