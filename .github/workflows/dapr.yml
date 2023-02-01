@@ -14,9 +14,8 @@
 name: dapr
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '00 22 * * *'
+      - cron: '00 22 * * *'
   push:
     branches:
       - master
@@ -24,6 +23,7 @@ on:
       - feature/*
     tags:
       - v*
+      - x*
   pull_request:
     branches:
       - master
@@ -34,9 +34,8 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: "1.19"
-      GOLANGCILINT_VER: v1.48.0
-      PROTOC_VERSION: "21.1"
+      GOVER: 1.19
+      GOLANGCILINT_VER: v1.31
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
@@ -65,26 +64,20 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ env.GOVER }}
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+      - name: Install Docker CE for buildx
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
-        with:
-          image: tonistiigi/binfmt:latest
-          platforms: arm64
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        run: |
+          sudo apt update
+          sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+          sudo apt update
+          sudo apt install docker-ce
+          docker -v
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
-      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+      - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
-      - name: Set REPO_OWNER
-        if: matrix.target_os != 'darwin'
-        run: |
-          REPO_OWNER=${{ github.repository_owner }}
-          # Lowercase the value
-          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
-        shell: bash
       - name: Check white space in .md files
         if: matrix.target_os == 'linux' && github.event_name == 'pull_request'
         run: |
@@ -104,65 +97,21 @@ jobs:
             echo >&2
             exit 1
           fi
-      - name: Cache Go modules (Linux)
-        if: matrix.target_os == 'linux'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
-      - name: Cache Go modules (Windows)
-        if: matrix.target_os == 'windows'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~\AppData\Local\go-build
-            ~\go\pkg\mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
-      - name: Cache Go modules (macOS)
-        if: matrix.target_os == 'darwin'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/Library/Caches/go-build
-            ~/go/pkg/mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
-      - name: golangci-lint
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        uses: golangci/golangci-lint-action@v3.2.0
-        with:
-          version: ${{ env.GOLANGCILINT_VER }}
-          skip-cache: true
       - name: Run go mod tidy check diff
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: make modtidy check-diff
       - name: Run gen-proto check diff
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: |
-          wget https://github.com/protocolbuffers/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
-          unzip protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip -d protoc
+          wget https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/protoc-3.14.0-linux-x86_64.zip
+          unzip protoc-3.14.0-linux-x86_64.zip -d protoc
           sudo cp -r protoc/include/google/ /usr/local/include/
           sudo chmod -R 755 /usr/local/include/google
           sudo cp protoc/bin/protoc /usr/local/bin/
           sudo chmod +x /usr/local/bin/protoc
-          rm -r protoc protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
+          rm -r protoc protoc-3.14.0-linux-x86_64.zip
           make init-proto
           make gen-proto check-proto-diff
-      - name: Run make test
-        if: matrix.target_arch == 'amd64'
-        env:
-          COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
-        run: make test
-      - name: Codecov
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        uses: codecov/codecov-action@v1
       - name: Run make release to build and archive binaries
         env:
           GOOS: ${{ matrix.target_os }}
@@ -183,292 +132,20 @@ jobs:
         with:
           name: dapr_grafana_dashboards
           path: ./grafana/*.json
-      - name: Docker Hub Login
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
-        uses: docker/login-action@v1
-        env:
-          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          username: ${{ secrets.DOCKER_REGISTRY_ID }}
-          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: GitHub Container Registry login
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
+
+      - name: Login to Amazon ECR
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push Docker images to Docker Hub
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
-        env:
-          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-          TARGET_OS: ${{ matrix.target_os }}
-          TARGET_ARCH: ${{ matrix.target_arch }}
-        run: |
-          echo "Build Docker images and push to Docker Hub..."
-          DAPR_TAG=${{ env.REL_VERSION }} make docker-push
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
 
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
-            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
-          fi
-        shell: bash
-      - name: Build and push Docker images to GHCR
+      - name: Build and push docker images to GitHub container registry
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
-        env:
-          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
-          TARGET_OS: ${{ matrix.target_os }}
-          TARGET_ARCH: ${{ matrix.target_arch }}
         run: |
-          echo "Build Docker images and push to GHCR..."
-          DAPR_TAG=${{ env.REL_VERSION }} make docker-push
-
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
-            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
-          fi
-        shell: bash
-      - name: Upload test results
-        if: always() && matrix.target_arch == 'amd64'
-        uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
-          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
-  publish:
-    name: Publish docker image and binaries
-    needs: build
-    if: github.event_name != 'pull_request'
-    env:
-      ARTIFACT_DIR: ./release
-      HELM_PACKAGE_DIR: helm
-      DAPR_VERSION_ARTIFACT: dapr_version
-      DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-      HELMVER: v3.7.2
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Helm ${{ env.HELMVER }}
-        uses: azure/setup-helm@v1
-        with:
-          version: ${{ env.HELMVER }}
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
-      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
-        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
-      - name: Set REPO_OWNER
-        if: matrix.target_os != 'darwin'
-        shell: bash
-        run: |
-          REPO_OWNER=${{ github.repository_owner }}
-          # Lowercase the value
-          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
-      - name: Update Helm chart files for release version ${{ env.REL_VERSION }}
-        run: bash ./.github/scripts/set_helm_dapr_version.sh
-      - name: Generate Helm chart manifest
-        if: env.DOCKER_REGISTRY != ''
-        env:
-          DAPR_REGISTRY: ${{ env.DOCKER_REGISTRY }}
-          DAPR_TAG: ${{ env.REL_VERSION }}
-        run: |
-          make manifest-gen
-        shell: bash
-      - name: Move Helm chart manifest to artifact
-        if: env.DOCKER_REGISTRY != ''
-        run: |
-          mkdir -p ${{ env.ARTIFACT_DIR }}
-          mv ./dist/install/dapr.yaml ${{ env.ARTIFACT_DIR }}/dapr-operator.yaml
-      - name: "download artifact: dapr_linux_amd64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_linux_amd64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_linux_arm
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_linux_arm64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_windows_amd64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_windows_amd64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_darwin_amd64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_darwin_amd64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_darwin_arm64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_darwin_arm64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_grafana_dashboards"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_grafana_dashboards
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: tar release binaries
-        run: |
-          IMAGE_ARCHS=(amd64 arm arm64)
-          for img_arch in "${IMAGE_ARCHS[@]}"; do
-            echo "Preparing linux_${img_arch} image..."
-            RELEASE_DIR=dist/linux_${img_arch}/release/
-            mkdir -p $RELEASE_DIR
-            for tgzfile in $ARTIFACT_DIR/*linux_${img_arch}.tar.gz; do
-              echo "Extracting $tgzfile ..."
-              tar xzvf $tgzfile -C $RELEASE_DIR
-            done
-          done
-      - name: generate checksum files
-        run: cd ${ARTIFACT_DIR} && for i in *; do sha256sum -b $i > "$i.sha256"; done && cd -
-      - name: lists artifacts
-        run: ls -l ${{ env.ARTIFACT_DIR }}
-      - name: publish binaries to github
-        if: startswith(github.ref, 'refs/tags/v')
-        run: |
-          echo "installing github-release-cli..."
-          sudo npm install --silent --no-progress -g github-release-cli@2.1.0
-          if [ "$LATEST_RELEASE" = "true" ]; then
-            export RELEASE_BODY=`cat ./docs/release_notes/v${REL_VERSION}.md`
-          else
-            export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
-          fi
-          # Get the list of files
-          RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
-          # Parse repository to get owner and repo names
-          OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
-          REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          export GITHUB_TOKEN=${{ secrets.DAPR_BOT_TOKEN }}
-          echo "Uploading Dapr Runtime Binaries to GitHub Release"
-          github-release upload \
-            --owner $OWNER_NAME \
-            --repo $REPO_NAME \
-            --tag "v${REL_VERSION}" \
-            --release-name "Dapr Runtime v${REL_VERSION}" \
-            --body "${RELEASE_BODY}" \
-            --prerelease true \
-            ${RELEASE_ARTIFACT[*]}
-        shell: bash
-      - name: Docker Hub Login
-        uses: docker/login-action@v1
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
-        with:
-          username: ${{ secrets.DOCKER_REGISTRY_ID }}
-          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: GitHub Container Registry login
-        uses: docker/login-action@v1
-        if: matrix.target_os != 'darwin'
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push Docker multiarch manifest to Docker Hub
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != ''
-        env:
-          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-        run: |
-          echo "Build Docker multiarch manifest and push to GHCR"
-          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
-
-          # Publish the `-mariner` tag
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          # Also, these use the "latest-mariner" tag if it's the latest
-          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
-          LATEST_TAG=latest-mariner \
-            make docker-publish
-        shell: bash
-      - name: Build and push Docker multiarch manifest to GHCR
-        if: matrix.target_os != 'darwin'
-        env:
-           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
-        run: |
-          echo "Build Docker multiarch manifest and push to GHCR"
-          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
-
-          # Publish the `-mariner` tag
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          # Also, these use the "latest-mariner" tag if it's the latest
-          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
-          LATEST_TAG=latest-mariner \
-            make docker-publish
-        shell: bash
-      - name: Save release version
-        run: |
-          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-          echo ${REL_VERSION} > ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
-      - name: Package Helm chart
-        if: ${{ env.LATEST_RELEASE }} == "true" && env.DOCKER_REGISTRY != ''
-        env:
-              HELM_CHARTS_DIR: charts/dapr
-        run: |
-          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-          helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-      - name: Upload Helm charts package to artifacts
-        if: ${{ env.LATEST_RELEASE }} == "true" && env.DOCKER_REGISTRY != ''
-        uses: actions/upload-artifact@master
-        with:
-          name: dapr_helm_charts_package
-          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-  # This job downloads the helm charts package artifact uploaded by the publish job,
-  # checks out the helm charts git hub pages repo and commits the latest version of
-  # helm charts package.
-  # This does not run on forks
-  helmpublish:
-    name: Publish helm charts to Helm github pages repo
-    needs: publish
-    if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
-    env:
-      ARTIFACT_DIR: ./release
-      DAPR_VERSION_ARTIFACT: dapr_version
-      HELM_PACKAGE_DIR: helm
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create Helm charts directory
-        run: |
-          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-      - name: download artifacts - dapr_helm_charts_package
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_helm_charts_package
-          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-      - name: Checkout Helm Charts Repo
-        uses: actions/checkout@v2
-        env:
-              DAPR_HELM_REPO: dapr/helm-charts
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
-        with:
-          repository: ${{ env.DAPR_HELM_REPO }}
-          ref: refs/heads/master
-          token: ${{ secrets.DAPR_BOT_TOKEN }}
-          path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
-      - name: Upload helm charts to Helm Repo
-        env:
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
-              DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
-        run: |
-            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
-            cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-            cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
-            git config --global user.email "daprweb@microsoft.com"
-            git config --global user.name "dapr-bot"
-            git add --all
-            # Check if the dapr-${daprVersion}.tgz file is modified.
-            if git diff --name-only --staged | grep -q ${daprVersion}; then
-              # If it is, we update the Helm chart, since this is an intentional update.
-              git commit -m "Release - $daprVersion"
-              git push
-            else
-              # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
-              echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
-              exit -1
-            fi
+          echo "Build docker image and push image..."
+          make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=798321202204.dkr.ecr.ap-southeast-1.amazonaws.com DAPR_TAG=${{ env.REL_VERSION }}
