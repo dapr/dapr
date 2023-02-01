@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/perf/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/dapr/dapr/tests/runner/summary"
 	"github.com/stretchr/testify/require"
 )
 
@@ -176,9 +177,25 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
 	avg := (daprResult.DurationHistogram.Avg - baselineResult.DurationHistogram.Avg) * 1000
-	t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineResult.DurationHistogram.Avg*1000))
-	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprResult.DurationHistogram.Avg*1000))
+	baselineLatency := baselineResult.DurationHistogram.Avg * 1000
+	daprLatency := daprResult.DurationHistogram.Avg * 1000
+	t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineLatency))
+	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprLatency))
 	t.Logf("added latency avg: %sms", fmt.Sprintf("%.2f", avg))
+
+	summary.ForTest(t).
+		Service("testapp").
+		CPU(appUsage.CPUm).
+		Memory(appUsage.MemoryMb).
+		SidecarCPU(sidecarUsage.CPUm).
+		SidecarMemory(sidecarUsage.MemoryMb).
+		Restarts(restarts).
+		BaselineLatency(baselineLatency).
+		DaprLatency(daprLatency).
+		AddedLatency(avg).
+		ActualQPS(daprResult.ActualQPS).
+		Params(p).
+		Flush()
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{baselineResult, daprResult},

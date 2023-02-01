@@ -96,9 +96,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorReminderRegistrationPerformance(t *testing.T) {
-	table := summary.ForTest(t)
-	defer table.Flush()
-
 	p := perf.Params(
 		perf.WithQPS(500),
 		perf.WithConnections(8),
@@ -180,15 +177,17 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 		t.Error(err)
 	}
 
-	table.Output("Service", serviceApplicationName).
-		Output("Client", clientApplicationName).
-		Outputf("CPU", "%vm", appUsage.CPUm).
-		Outputf("Memory", "%vMb", appUsage.MemoryMb).
-		Outputf("Sidecar CPU", "%vm", sidecarUsage.CPUm).
-		Outputf("Sidecar Memory", "%vMb", sidecarUsage.MemoryMb).
-		OutputInt("Restarts", restarts).
-		Outputf("Actual QPS", "%.2f", daprResult.ActualQPS).
-		OutputInt("QPS", p.QPS)
+	summary.ForTest(t).
+		Service(serviceApplicationName).
+		Client(clientApplicationName).
+		CPU(appUsage.CPUm).
+		Memory(appUsage.MemoryMb).
+		SidecarCPU(sidecarUsage.CPUm).
+		SidecarMemory(sidecarUsage.MemoryMb).
+		Restarts(restarts).
+		ActualQPS(daprResult.ActualQPS).
+		Params(p).
+		Flush()
 
 	require.Equal(t, 0, daprResult.RetCodes.Num400)
 	require.Equal(t, 0, daprResult.RetCodes.Num500)

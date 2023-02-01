@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dapr/dapr/tests/perf"
+	"github.com/dapr/dapr/tests/runner/loadtest"
 	"github.com/labstack/gommon/log"
 )
 
@@ -48,9 +50,105 @@ func (t *Table) OutputInt(header string, value int) *Table {
 	return t.Output(header, strconv.Itoa(value))
 }
 
+// OutputFloat64 same as output but converts from float64 to string.
+func (t *Table) OutputFloat64(header string, value float64) *Table {
+	return t.Outputf(header, "%f", value)
+}
+
 // Outputf same as output but uses a formatter.
 func (t *Table) Outputf(header, format string, params ...any) *Table {
 	return t.Output(header, fmt.Sprintf(format, params...))
+}
+
+// Service is a shortcut for .Output("Service")
+func (t *Table) Service(serviceName string) *Table {
+	return t.Output("Service", serviceName)
+}
+
+// Service is a shortcut for .Output("Client")
+func (t *Table) Client(clientName string) *Table {
+	return t.Output("Client", clientName)
+}
+
+// CPU is a shortcut for .Outputf("CPU", "%vm")
+func (t *Table) CPU(cpu int64) *Table {
+	return t.Outputf("CPU", "%vm", cpu)
+}
+
+// Memory is a shortcut for .Outputf("Memory", "%vm")
+func (t *Table) Memory(cpu float64) *Table {
+	return t.Outputf("Memory", "%vMb", cpu)
+}
+
+// SidecarCPU is a shortcut for .Outputf("Sidecar CPU", "%vm")
+func (t *Table) SidecarCPU(cpu int64) *Table {
+	return t.Outputf("Sidecar CPU", "%vm", cpu)
+}
+
+// BaselineLatency is a shortcut for Outputf("Baseline latency avg", "%2.fms")
+func (t *Table) BaselineLatency(latency float64) *Table {
+	return t.Outputf("Baseline latency avg", "%.2fms", latency)
+}
+
+// DaprLatency is a shortcut for Outputf("Dapr latency avg", "%2.fms")
+func (t *Table) DaprLatency(latency float64) *Table {
+	return t.Outputf("Dapr latency avg", "%.2fms", latency)
+}
+
+// AddedLatency is a shortcut for Outputf("Added latency avg", "%2.fms")
+func (t *Table) AddedLatency(latency float64) *Table {
+	return t.Outputf("Dapr latency avg", "%.2fms", latency)
+}
+
+// SidecarMemory is a shortcut for .Outputf("Sidecar Memory", "%vm")
+func (t *Table) SidecarMemory(cpu float64) *Table {
+	return t.Outputf("Sidecar Memory", "%vMb", cpu)
+}
+
+// Restarts is a shortcut for .OutputInt("Restarts")
+func (t *Table) Restarts(restarts int) *Table {
+	return t.OutputInt("Restarts", restarts)
+}
+
+// ActualQPS is a short for .Outputf("QPS", ".2f")
+func (t *Table) ActualQPS(qps float64) *Table {
+	return t.Outputf("Actual QPS", "%.2f", qps)
+}
+
+// QPS is a short for .OutputInt("QPS")
+func (t *Table) QPS(qps int) *Table {
+	return t.OutputInt("QPS", qps)
+}
+
+// QPS is a short for .OutputInt("QPS")
+func (t *Table) Params(p perf.TestParameters) *Table {
+	return t.QPS(p.QPS).
+		OutputInt("Client connections", p.ClientConnections).
+		Output("Target endpoint", p.TargetEndpoint).
+		Output("Test duration", p.TestDuration).
+		OutputInt("PayloadSizeKB", p.PayloadSizeKB)
+}
+
+// OutputK6Trend outputs the given k6trend using the given prefix.
+func (t *Table) OutputK6Trend(prefix string, trend loadtest.K6TrendMetric) *Table {
+	t.OutputFloat64(fmt.Sprintf("%s MAX", prefix), trend.Values.Max)
+	t.OutputFloat64(fmt.Sprintf("%s MIN", prefix), trend.Values.Min)
+	t.OutputFloat64(fmt.Sprintf("%s AVG", prefix), trend.Values.Avg)
+	t.OutputFloat64(fmt.Sprintf("%s MED", prefix), trend.Values.Med)
+	t.OutputFloat64(fmt.Sprintf("%s P90", prefix), trend.Values.P90)
+	t.OutputFloat64(fmt.Sprintf("%s P95", prefix), trend.Values.P95)
+	return t
+}
+
+// OutputK6 summarize the K6 results for each runner.
+func (t *Table) OutputK6(k6results []*loadtest.K6RunnerMetricsSummary) *Table {
+	for i, result := range k6results {
+		t.OutputInt(fmt.Sprintf("[Runner %d]: VUs Max", i), result.Vus.Values.Max)
+		t.OutputFloat64(fmt.Sprintf("[Runner %d]: Iterations Count", i), result.Iterations.Values.Count)
+		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req duration", i), result.HTTPReqDuration)
+		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req Waiting", i), result.HTTPReqWaiting)
+	}
+	return t
 }
 
 // Flush saves the summary into the disk using the desired format.
