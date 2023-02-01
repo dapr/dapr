@@ -60,10 +60,9 @@ func (r *RunnerManager) Add(runner ...Runner) error {
 // runner returns, the RunnerManager will stop all other runners and return any
 // error.
 func (r *RunnerManager) Run(ctx context.Context) error {
-	if r.running.Load() {
+	if !r.running.CompareAndSwap(false, true) {
 		return ErrManagerAlreadyStarted
 	}
-	r.running.Store(true)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
