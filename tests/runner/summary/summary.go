@@ -23,6 +23,7 @@ import (
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/runner/loadtest"
+
 	"github.com/labstack/gommon/log"
 )
 
