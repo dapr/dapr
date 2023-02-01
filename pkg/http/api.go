@@ -408,7 +408,7 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz",
+			Route:   "healthz/{appId:*}",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
 		},
@@ -2020,7 +2020,13 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
-		respond(reqCtx, withEmpty())
+		matchAppId := reqCtx.UserValue("appId").(string)
+		if matchAppId != "" && matchAppId != a.id {
+			msg := NewErrorResponse("ERR_HEALTH_APPID_NOT_MATCH", messages.ErrHealthAppIdNotMatch)
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		} else {
+			respond(reqCtx, withEmpty())
+		}
 	}
 }
 

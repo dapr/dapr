@@ -70,7 +70,8 @@ const (
 	ErrMetadataGet = "failed deserializing metadata: %s"
 
 	// Healthz.
-	ErrHealthNotReady = "dapr is not ready"
+	ErrHealthNotReady      = "dapr is not ready"
+	ErrHealthAppIdNotMatch = "dapr appId is not match"
 
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "error configuration stores not configured"
