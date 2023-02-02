@@ -165,11 +165,15 @@ const (
 	p99Index = 3
 )
 
+const (
+	secondToMillisecond = 1000
+)
+
 // OutputFortio summarize the fortio results.
 func (t *Table) OutputFortio(result perf.TestResult) *Table {
 	return t.
-		P90(result.DurationHistogram.Percentiles[p90Index].Value).
-		P99(result.DurationHistogram.Percentiles[p99Index].Value).
+		P90(result.DurationHistogram.Percentiles[p90Index].Value*secondToMillisecond).
+		P99(result.DurationHistogram.Percentiles[p99Index].Value*secondToMillisecond).
 		OutputInt("2xx", result.RetCodes.Num200).
 		OutputInt("4xx", result.RetCodes.Num400).
 		OutputInt("5xx", result.RetCodes.Num500)
