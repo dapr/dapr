@@ -152,7 +152,15 @@ spec:
         - "--token-audience"
         - {{ .Values.tokenAudience }}
 {{- end }}
-      serviceAccountName: dapr-operator
+{{- with .Values.global.issuerFilenames }}
+        - "--issuer-ca-filename"
+        - "{{ .ca }}"
+        - "--issuer-certificate-filename"
+        - "{{ .cert }}"
+        - "--issuer-key-filename"
+        - "{{ .key }}"
+{{- end }}
+      serviceAccountName: dapr-sentry
       volumes:
         - name: credentials
           secret:

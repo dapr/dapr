@@ -15,7 +15,9 @@ package pluggable
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -28,6 +30,8 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type fakeClient struct {
@@ -39,11 +43,81 @@ func (f *fakeClient) Ping(context.Context, *proto.PingRequest, ...grpc.CallOptio
 	return &proto.PingResponse{}, nil
 }
 
+type fakeSvc struct {
+	onHandlerCalled func(context.Context)
+}
+
+func (f *fakeSvc) handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	f.onHandlerCalled(ctx)
+	return structpb.NewNullValue(), nil
+}
+
 func TestGRPCConnector(t *testing.T) {
 	// gRPC Pluggable component requires Unix Domain Socket to work, I'm skipping this test when running on windows.
 	if runtime.GOOS == "windows" {
 		return
 	}
+
+	t.Run("invoke method should contain component name as request metadata", func(t *testing.T) {
+		const (
+			fakeSvcName    = "dapr.my.service.fake"
+			fakeMethodName = "MyMethod"
+			componentName  = "my-fake-component"
+		)
+		handlerCalled := 0
+		fakeSvc := &fakeSvc{
+			onHandlerCalled: func(ctx context.Context) {
+				handlerCalled++
+				md, ok := metadata.FromIncomingContext(ctx)
+				assert.True(t, ok)
+				v := md.Get(metadataInstanceID)
+				require.NotEmpty(t, v)
+				assert.Equal(t, componentName, v[0])
+			},
+		}
+		fakeFactoryCalled := 0
+		clientFake := &fakeClient{}
+		fakeFactory := func(grpc.ClientConnInterface) *fakeClient {
+			fakeFactoryCalled++
+			return clientFake
+		}
+		const fakeSocketPath = "/tmp/socket.sock"
+		os.RemoveAll(fakeSocketPath) // guarantee that is not being used.
+		defer os.RemoveAll(fakeSocketPath)
+		listener, err := net.Listen("unix", fakeSocketPath)
+		require.NoError(t, err)
+		defer listener.Close()
+
+		connector := NewGRPCConnectorWithDialer(socketDialer(fakeSocketPath, grpc.WithBlock()), fakeFactory)
+		defer connector.Close()
+
+		s := grpc.NewServer()
+		fakeDesc := &grpc.ServiceDesc{
+			ServiceName: fakeSvcName,
+			HandlerType: (*interface{})(nil),
+			Methods: []grpc.MethodDesc{{
+				MethodName: fakeMethodName,
+				Handler:    fakeSvc.handler,
+			}},
+		}
+
+		s.RegisterService(fakeDesc, fakeSvc)
+		go func() {
+			s.Serve(listener)
+			s.Stop()
+		}()
+
+		require.NoError(t, connector.Dial(componentName))
+		acceptedStatus := []connectivity.State{
+			connectivity.Ready,
+			connectivity.Idle,
+		}
+
+		assert.Contains(t, acceptedStatus, connector.conn.GetState())
+		assert.Equal(t, 1, fakeFactoryCalled)
+		require.NoError(t, connector.conn.Invoke(context.Background(), fmt.Sprintf("/%s/%s", fakeSvcName, fakeMethodName), structpb.NewNullValue(), structpb.NewNullValue()))
+		assert.Equal(t, 1, handlerCalled)
+	})
 
 	t.Run("grpc connection should be idle or ready when the process is listening to the socket due to withblock usage", func(t *testing.T) {
 		fakeFactoryCalled := 0
@@ -52,7 +126,22 @@ func TestGRPCConnector(t *testing.T) {
 			fakeFactoryCalled++
 			return clientFake
 		}
-		connector := NewGRPCConnector("/tmp/socket.sock", fakeFactory)
+		const fakeSocketPath = "/tmp/socket.sock"
+		os.RemoveAll(fakeSocketPath) // guarantee that is not being used.
+		defer os.RemoveAll(fakeSocketPath)
+		listener, err := net.Listen("unix", fakeSocketPath)
+		require.NoError(t, err)
+		defer listener.Close()
+
+		connector := NewGRPCConnectorWithDialer(socketDialer(fakeSocketPath, grpc.WithBlock(), grpc.FailOnNonTempDialError(true)), fakeFactory)
+		defer connector.Close()
+
+		go func() {
+			s := grpc.NewServer()
+			s.Serve(listener)
+			s.Stop()
+		}()
+
 		require.NoError(t, connector.Dial(""))
 		acceptedStatus := []connectivity.State{
 			connectivity.Ready,
@@ -62,7 +151,6 @@ func TestGRPCConnector(t *testing.T) {
 		assert.Contains(t, acceptedStatus, connector.conn.GetState())
 		assert.Equal(t, 1, fakeFactoryCalled)
 		assert.Equal(t, int64(0), clientFake.pingCalled.Load())
-		connector.Close()
 	})
 
 	t.Run("grpc connection should be ready when socket is listening", func(t *testing.T) {
@@ -74,13 +162,15 @@ func TestGRPCConnector(t *testing.T) {
 		}
 
 		const fakeSocketPath = "/tmp/socket.sock"
+		os.RemoveAll(fakeSocketPath) // guarantee that is not being used.
+		defer os.RemoveAll(fakeSocketPath)
 		connector := NewGRPCConnector(fakeSocketPath, fakeFactory)
 
 		listener, err := net.Listen("unix", fakeSocketPath)
 		require.NoError(t, err)
 		defer listener.Close()
 
-		require.NoError(t, connector.Dial(""), grpc.WithBlock())
+		require.NoError(t, connector.Dial(""))
 		defer connector.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

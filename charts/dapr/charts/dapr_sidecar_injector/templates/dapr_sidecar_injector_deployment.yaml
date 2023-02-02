@@ -36,7 +36,7 @@ spec:
       {{- if .Values.hostNetwork }}
       hostNetwork: true
       {{- end }}
-      serviceAccountName: dapr-operator
+      serviceAccountName: dapr-injector
       containers:
       - name: dapr-sidecar-injector
         livenessProbe:
@@ -111,6 +111,14 @@ spec:
 {{- end }}
         - "--healthz-port"
         - "{{ .Values.healthzPort }}"
+{{- with .Values.global.issuerFilenames }}
+        - "--issuer-ca-secret-key"
+        - "{{ .ca }}"
+        - "--issuer-certificate-secret-key"
+        - "{{ .cert }}"
+        - "--issuer-key-secret-key"
+        - "{{ .key }}"
+{{- end }}
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt
@@ -143,6 +151,10 @@ spec:
 {{- if .Values.sidecarReadOnlyRootFilesystem }}
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
           value: "{{ .Values.sidecarReadOnlyRootFilesystem }}"
+{{- end }}
+{{- if .Values.allowedServiceAccounts }}
+        - name: ALLOWED_SERVICE_ACCOUNTS
+          value: "{{ .Values.allowedServiceAccounts }}"
 {{- end }}
         ports:
         - name: https

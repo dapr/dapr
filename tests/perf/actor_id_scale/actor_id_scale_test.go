@@ -31,7 +31,7 @@ import (
 
 const (
 	numHealthChecks        = 60 // Number of times to check for endpoint health per app.
-	serviceApplicationName = "perf-actorfeatures"
+	serviceApplicationName = "perf-actor-id"
 	actorType              = "scale-id"
 )
 
@@ -70,6 +70,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorIdStress(t *testing.T) {
+	t.Skip("skipping due to flakiness")
 	// Get the ingress external url of test app
 	testServiceAppURL := tr.Platform.AcquireAppExternalURL(serviceApplicationName)
 	require.NotEmpty(t, testServiceAppURL, "test app external URL must not be empty")

@@ -131,10 +131,17 @@ HELM_REGISTRY?=daprio.azurecr.io
 BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
-DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.gitcommit=$(GIT_COMMIT) \
-  -X $(BASE_PACKAGE_NAME)/pkg/version.gitversion=$(GIT_VERSION) \
-  -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION) \
+# Comma-separated list of features to enable
+ENABLED_FEATURES ?= 
+
+DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
+  -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \
+  -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.version=$(DAPR_VERSION) \
   -X $(LOGGER_PACKAGE_NAME).DaprVersion=$(DAPR_VERSION)
+
+ifneq ($(ENABLED_FEATURES),)
+  DEFAULT_LDFLAGS += -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.features=$(ENABLED_FEATURES)
+endif
 
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
@@ -409,6 +416,7 @@ gen-proto: check-proto-version $(GEN_PROTOS) modtidy
 .PHONY: get-components-contrib
 get-components-contrib:
 	go get github.com/dapr/components-contrib@master
+	make modtidy-all
 
 ################################################################################
 # Target: check-diff                                                           #
