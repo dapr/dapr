@@ -76,7 +76,7 @@ func (ss *grpcStateStore) Init(ctx context.Context, metadata state.Metadata) err
 }
 
 // Features list all implemented features.
-func (ss *grpcStateStore) Features(ctx context.Context) []state.Feature {
+func (ss *grpcStateStore) Features() []state.Feature {
 	return ss.features
 }
 
