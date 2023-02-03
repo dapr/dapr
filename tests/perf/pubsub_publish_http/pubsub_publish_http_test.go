@@ -27,6 +27,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
+	"github.com/dapr/dapr/tests/runner/summary"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,11 +77,14 @@ func TestPubsubPublishHttpPerformance(t *testing.T) {
 	defer k6Test.Dispose()
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
-	summary, err := loadtest.K6Result[json.RawMessage](k6Test)
+	sm, err := loadtest.K6ResultDefault(k6Test)
 	require.NoError(t, err)
-	require.NotNil(t, summary)
-	bts, err := json.MarshalIndent(summary, "", " ")
+	require.NotNil(t, sm)
+	summary.ForTest(t).
+		OutputK6(sm.RunnersResults).
+		Flush()
+	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
-	require.True(t, summary.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
+	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
 	t.Logf("test summary `%s`", string(bts))
 }
