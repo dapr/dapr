@@ -209,11 +209,12 @@ Test disruptions can be added using the [xk6-disruptor](https://github.com/grafa
 
 If you set the `K6_PROMETHEUS_REMOTE_URL`, `K6_PROMETHEUS_USER`, and `K6_PROMETHEUS_PASSWORD` environments variable, you should be able to send the k6 metrics to a remote prometheus server which might be helpful to have comparisons over time.
 
-### Trouble shooting
+### Troubleshooting
 
 When running k6, the errors are reported as exit codes, use the table below to help identify them.
 
 | Error | Reason |
-| 255 | Compile Error |
-| 137 | OOM (out of memory) |
-| 107 | Runtime Error |
+|-------|--------|
+| 255   | Compile Error |
+| 137   | OOM (out of memory) |
+| 107   | Runtime Error |

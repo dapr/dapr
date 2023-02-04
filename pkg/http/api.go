@@ -101,6 +101,7 @@ type api struct {
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
 	maxRequestBodySize         int64 // In bytes
+	isStreamingEnabled         bool
 }
 
 type registeredComponent struct {
@@ -179,6 +180,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsCapabilitiesFn func() map[string][]string
 	MaxRequestBodySize          int64 // In bytes
+	IsStreamingEnabled          bool
 }
 
 // NewAPI returns a new API.
@@ -211,6 +213,7 @@ func NewAPI(opts APIOpts) API {
 		maxRequestBodySize:         opts.MaxRequestBodySize,
 		transactionalStateStores:   transactionalStateStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
+		isStreamingEnabled:         opts.IsStreamingEnabled,
 		daprRunTimeVersion:         buildinfo.Version(),
 	}
 
@@ -1625,18 +1628,16 @@ func (ie invokeError) Error() string {
 	return fmt.Sprintf("invokeError (statusCode='%d') msg.errorCode='%s' msg.message='%s'", ie.statusCode, ie.msg.ErrorCode, ie.msg.Message)
 }
 
-type directMessagingPolicyRes struct {
-	body        []byte
-	statusCode  int
-	contentType string
-	headers     invokev1.DaprInternalMetadata
-}
-
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	// Because this can respond with `withStream()`, we can't defer a call to cancel() here
+	ctx, cancel := context.WithCancel(reqCtx)
+
 	targetID := a.findTargetID(reqCtx)
 	if targetID == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
+		cancel()
 		return
 	}
 
@@ -1646,6 +1647,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.directMessaging == nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		cancel()
 		return
 	}
 
@@ -1663,17 +1665,17 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 	defer req.Close()
 
-	policyRunner := resiliency.NewRunner[*directMessagingPolicyRes](reqCtx, policyDef)
+	policyRunner := resiliency.NewRunnerWithOptions(
+		ctx, policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
+	)
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
-	dmpr, err := policyRunner(func(ctx context.Context) (*directMessagingPolicyRes, error) {
-		dmpr := &directMessagingPolicyRes{}
-
+	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
-		if rResp != nil {
-			defer rResp.Close()
-		}
 		if rErr != nil {
-			// Allowlists policies that are applied on the callee side can return a Permission Denied error.
+			// Allowlist policies that are applied on the callee side can return a Permission Denied error.
 			// For everything else, treat it as a gRPC transport error
 			invokeErr := invokeError{
 				statusCode: fasthttp.StatusInternalServerError,
@@ -1682,60 +1684,87 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			if status.Code(rErr) == codes.PermissionDenied {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
-			return dmpr, invokeErr
+			return rResp, invokeErr
 		}
 
-		dmpr.headers = rResp.Headers()
-		dmpr.contentType = rResp.ContentType()
-		dmpr.body, rErr = rResp.RawDataFull()
-		if rErr != nil {
-			return dmpr, invokeError{
-				statusCode: fasthttp.StatusInternalServerError,
-				msg:        NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr)),
-			}
-		}
-
-		// Construct response
-		dmpr.statusCode = int(rResp.Status().Code)
+		// Construct response if not HTTP
+		resStatus := rResp.Status()
 		if !rResp.IsHTTPResponse() {
-			dmpr.statusCode = invokev1.HTTPStatusFromCode(codes.Code(dmpr.statusCode))
-			if dmpr.statusCode != fasthttp.StatusOK {
-				if dmpr.body, rErr = invokev1.ProtobufToJSON(rResp.Status()); rErr != nil {
-					return dmpr, invokeError{
+			statusCode := int32(invokev1.HTTPStatusFromCode(codes.Code(resStatus.Code)))
+			if statusCode != fasthttp.StatusOK {
+				// Close the response to replace the body
+				_ = rResp.Close()
+				var body []byte
+				body, rErr = invokev1.ProtobufToJSON(resStatus)
+				rResp.WithRawDataBytes(body)
+				resStatus.Code = statusCode
+				if rErr != nil {
+					return rResp, invokeError{
 						statusCode: fasthttp.StatusInternalServerError,
 						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()),
 					}
 				}
+			} else {
+				resStatus.Code = statusCode
 			}
-		} else if dmpr.statusCode != fasthttp.StatusOK {
-			return dmpr, fmt.Errorf("Received non-successful status code: %d", dmpr.statusCode) //nolint:stylecheck
+		} else if resStatus.Code != fasthttp.StatusOK {
+			return rResp, fmt.Errorf("Received non-successful status code: %d", resStatus.Code) //nolint:stylecheck
 		}
-		return dmpr, nil
+		return rResp, nil
 	})
 
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
+		cancel()
 		return
 	}
 
-	if dmpr != nil && len(dmpr.headers) > 0 {
-		invokev1.InternalMetadataToHTTPHeader(reqCtx, dmpr.headers, reqCtx.Response.Header.Set)
+	if resp != nil {
+		headers := resp.Headers()
+		if len(headers) > 0 {
+			invokev1.InternalMetadataToHTTPHeader(reqCtx, headers, reqCtx.Response.Header.Set)
+		}
 	}
 
 	invokeErr := invokeError{}
 	if errors.As(err, &invokeErr) {
 		respond(reqCtx, withError(invokeErr.statusCode, invokeErr.msg))
+		cancel()
+		if resp != nil {
+			_ = resp.Close()
+		}
 		return
 	}
 
-	if dmpr == nil {
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", "response object is nil")))
+	if resp == nil {
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, "response object is nil"))))
+		cancel()
 		return
 	}
 
-	reqCtx.Response.Header.SetContentType(dmpr.contentType)
-	respond(reqCtx, with(dmpr.statusCode, dmpr.body))
+	statusCode := int(resp.Status().Code)
+
+	// TODO @ItalyPaleAle: Make this the only path once streaming is finalized
+	if a.isStreamingEnabled {
+		// This will also close the response stream automatically; no need to invoke resp.Close()
+		// Likewise, it calls "cancel" to cancel the context at the end
+		respond(reqCtx, withStream(statusCode, resp.RawData(), cancel))
+		return
+	}
+
+	defer resp.Close()
+
+	body, err := resp.RawDataFull()
+	if err != nil {
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, err))))
+		cancel()
+		return
+	}
+
+	reqCtx.Response.Header.SetContentType(resp.ContentType())
+	respond(reqCtx, with(statusCode, body))
+	cancel()
 }
 
 // findTargetID tries to find ID of the target service from the following three places:
@@ -2267,7 +2296,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
-		})
+		}, metadata)
 		if err != nil {
 			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
 				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
@@ -2420,9 +2449,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
-			var envelope map[string]interface{}
-
-			envelope, err = runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+			envelope, envelopeErr := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
@@ -2430,8 +2457,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				TraceID:         corID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
-			})
-			if err != nil {
+			}, entries[i].Metadata)
+			if envelopeErr != nil {
 				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
 					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
 				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)

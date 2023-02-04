@@ -89,6 +89,19 @@ message InvokeResponse {
   string content_type = 2;
 }
 
+// Chunk of data sent in a streaming request or response.
+// This is used in requests including InternalInvokeRequestStream.
+message StreamPayload {
+  // Data sent in the chunk.
+  // The amount of data included in each chunk is up to the discretion of the sender, and can be empty.
+  // Additionally, the amount of data doesn't need to be fixed and subsequent messages can send more, or less, data.
+  // Receivers must not make assumptions about the number of bytes they'll receive in each chunk.
+  bytes data = 1;
+
+  // Sequence number. This is a counter that starts from 0 and increments by 1 on each chunk sent.
+  uint32 seq = 2;
+}
+
 // StateItem represents state key, value, and additional options to save state.
 message StateItem {
   // Required. The state key
