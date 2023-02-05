@@ -864,9 +864,9 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			}
 			var rErr *RetriableError
 			if errors.As(pErr, &rErr) {
-				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %s", msgTopic, rErr.Unwrap())
-			} else {
-				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %s", msgTopic, pErr)
+				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, rErr.Unwrap())
+			} else if pErr != nil {
+				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
 			}
 			return nil, pErr
 		})
