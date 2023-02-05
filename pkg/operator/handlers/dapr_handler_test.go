@@ -120,6 +120,7 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 	assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"])
 	assert.Equal(t, "12345", service.ObjectMeta.Annotations["prometheus.io/port"])
 	assert.Equal(t, "/", service.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Equal(t, "true", service.Labels[daprEnabledAnnotationKey])
 
 	deployment.GetTemplateAnnotations()[daprEnableMetricsKey] = "false"
 
@@ -129,6 +130,8 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/scrape"])
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/port"])
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Equal(t, "true", service.Labels[daprEnabledAnnotationKey])
+
 }
 
 func TestPatchDaprService(t *testing.T) {
@@ -160,6 +163,7 @@ func TestPatchDaprService(t *testing.T) {
 	assert.Len(t, actualService.OwnerReferences, 1)
 	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
+	assert.Equal(t, "true", actualService.Labels[daprEnabledAnnotationKey])
 
 	err = testDaprHandler.patchDaprService(ctx, myDaprService, deployment, actualService)
 	assert.NoError(t, err)
@@ -171,6 +175,7 @@ func TestPatchDaprService(t *testing.T) {
 	assert.Len(t, actualService.OwnerReferences, 1)
 	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
+	assert.Equal(t, "true", actualService.Labels[daprEnabledAnnotationKey])
 }
 
 func TestGetMetricsPort(t *testing.T) {

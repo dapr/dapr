@@ -13,8 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
@@ -82,8 +84,17 @@ func (h *DaprHandler) Init() error {
 		return err
 	}
 
+	p, err := predicate.LabelSelectorPredicate(
+		metaV1.LabelSelector{
+			MatchLabels: map[string]string{daprEnabledAnnotationKey: "true"},
+		},
+	)
+	if err != nil {
+		return err
+	}
+
 	if err := ctrl.NewControllerManagedBy(h.mgr).
-		For(&appsv1.Deployment{}).
+		For(&appsv1.Deployment{}, builder.WithPredicates(p)).
 		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 100,
@@ -97,7 +108,7 @@ func (h *DaprHandler) Init() error {
 		return err
 	}
 	return ctrl.NewControllerManagedBy(h.mgr).
-		For(&appsv1.StatefulSet{}).
+		For(&appsv1.StatefulSet{}, builder.WithPredicates(p)).
 		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 100,
