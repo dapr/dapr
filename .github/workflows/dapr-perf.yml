@@ -436,87 +436,9 @@ jobs:
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
         run: make setup-test-components
-      - name: Run Perf test service_invocation_http
+      - name: Run all performance tests
         if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 1000
-          DAPR_PERF_CONNECTIONS: 16
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD_SIZE: 1024
-        run: make test-perf-service_invocation_http
-      - name: Run Perf test service_invocation_grpc
-        if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 1000
-          DAPR_PERF_CONNECTIONS: 16
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD_SIZE: 1024
-        run: make test-perf-service_invocation_grpc
-      - name: Run Perf test state_get_grpc
-        if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 1000
-          DAPR_PERF_CONNECTIONS: 16
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD_SIZE: 0
-        run: make test-perf-state_get_grpc
-      - name: Run Perf test state_get_http
-        if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 1000
-          DAPR_PERF_CONNECTIONS: 16
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD_SIZE: 0
-        run: make test-perf-state_get_http
-      - name: Run Perf test pubsub_publish_grpc
-        if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 1000
-          DAPR_PERF_CONNECTIONS: 16
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD_SIZE: 0
-        run: make test-perf-pubsub_publish_grpc
-      - name: Run Perf test pubsub_bulk_publish_grpc
-        if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 200
-          DAPR_PERF_CONNECTIONS: 16
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD_SIZE: 1024
-        run: make test-perf-pubsub_bulk_publish_grpc
-      - name: Run Perf test actor_timer in Java
-        if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 220
-          DAPR_PERF_CONNECTIONS: 10
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD: "{}"
-        run: make test-perf-actor_timer
-      - name: Run Perf test actor_activation in Java
-        if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 500
-          DAPR_PERF_CONNECTIONS: 8
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD: "{}"
-        run: make test-perf-actor_activation
-      - name: Run Perf test actor reminder registration without SDK
-        if: env.TEST_PREFIX != ''
-        env:
-          DAPR_PERF_QPS: 500
-          DAPR_PERF_CONNECTIONS: 8
-          DAPR_TEST_DURATION: 1m
-          DAPR_PAYLOAD: "{}"
-        run: make test-perf-actor_reminder
-      - name: Run stress test actor double activation with SDK
-        if: env.TEST_PREFIX != ''
-        run: make test-perf-actor_double_activation
-      - name: Run stress test actor id without SDK
-        if: env.TEST_PREFIX != ''
-        run: make test-perf-actor_id_scale
-      - name: Run stress test actor types without SDK
-        if: env.TEST_PREFIX != ''
-        run: make test-perf-actor_type_scale
+        run: make test-perf-all
       - name: Save control plane logs
         if: always() && env.TEST_PREFIX != ''
         run: |
@@ -540,6 +462,18 @@ jobs:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: test_perf.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.*
+      - name: Add job test summary
+        if: always()
+        uses: test-summary/action@v2
+        with:
+          paths: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.xml
+      - name: Add job test outputs
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const script = require('./.github/scripts/dapr_tests_summary.js')
+            await script({core, glob})
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0

@@ -15,22 +15,22 @@ package messaging
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
-	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
-	"github.com/dapr/dapr/pkg/resiliency"
-
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
+	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 // Proxy is the interface for a gRPC transparent proxy.
@@ -72,7 +72,17 @@ func NewProxy(opts ProxyOpts) Proxy {
 
 // Handler returns a Stream Handler for handling requests that arrive for services that are not recognized by the server.
 func (p *proxy) Handler() grpc.StreamHandler {
-	return grpcProxy.TransparentHandler(p.intercept, p.resiliency, p.IsLocal, grpcProxy.DirectorConnectionFactory(p.connectionFactory))
+	return grpcProxy.TransparentHandler(p.intercept,
+		func(appID, methodName string) *resiliency.PolicyDefinition {
+			_, isLocal, err := p.isLocal(appID)
+			if err == nil && !isLocal {
+				return p.resiliency.EndpointPolicy(appID, appID+":"+methodName)
+			}
+
+			return resiliency.NoOp{}.EndpointPolicy("", "")
+		},
+		grpcProxy.DirectorConnectionFactory(p.connectionFactory),
+	)
 }
 
 func nopTeardown(destroy bool) {
@@ -84,17 +94,17 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 
 	v := md[diagnostics.GRPCProxyAppIDKey]
 	if len(v) == 0 {
-		return ctx, nil, nil, nopTeardown, errors.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
+		return ctx, nil, nil, nopTeardown, fmt.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
 	}
 
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 	appID := v[0]
 
 	if p.remoteAppFn == nil {
-		return ctx, nil, nil, nopTeardown, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
+		return ctx, nil, nil, nopTeardown, errors.New("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
 	}
 
-	target, isLocal, err := p.isLocalInternal(appID)
+	target, isLocal, err := p.isLocal(appID)
 	if err != nil {
 		return ctx, nil, nil, nopTeardown, err
 	}
@@ -117,11 +127,19 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	}
 
 	// proxy to a remote daprd
-	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace,
+		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
+	)
 	outCtx = p.telemetryFn(outCtx)
 	outCtx = metadata.AppendToOutgoingContext(outCtx, invokev1.CallerIDHeader, p.appID, invokev1.CalleeIDHeader, target.id)
 
-	return outCtx, conn, &grpcProxy.ProxyTarget{ID: target.id, Namespace: target.namespace, Address: target.address}, teardown, cErr
+	pt := &grpcProxy.ProxyTarget{
+		ID:        target.id,
+		Namespace: target.namespace,
+		Address:   target.address,
+	}
+
+	return outCtx, conn, pt, teardown, cErr
 }
 
 // SetRemoteAppFn sets a function that helps the proxy resolve an app ID to an actual address.
@@ -134,15 +152,9 @@ func (p *proxy) SetTelemetryFn(spanFn func(context.Context) context.Context) {
 	p.telemetryFn = spanFn
 }
 
-// Expose the functionality to detect if apps are local or not.
-func (p *proxy) IsLocal(appID string) (bool, error) {
-	_, isLocal, err := p.isLocalInternal(appID)
-	return isLocal, err
-}
-
-func (p *proxy) isLocalInternal(appID string) (remoteApp, bool, error) {
+func (p *proxy) isLocal(appID string) (remoteApp, bool, error) {
 	if p.remoteAppFn == nil {
-		return remoteApp{}, false, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
+		return remoteApp{}, false, errors.New("failed to proxy request: proxy not initialized; daprd startup may be incomplete")
 	}
 
 	target, err := p.remoteAppFn(appID)

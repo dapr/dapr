@@ -14,16 +14,15 @@ limitations under the License.
 package secretstores_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	ss "github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/kit/logger"
 )
 
 type mockSecretStore struct {
@@ -53,20 +52,20 @@ func TestRegistry(t *testing.T) {
 		}, secretStoreNameV2)
 
 		// assert v0 and v1
-		p, e := testRegistry.Create(componentName, "v0")
+		p, e := testRegistry.Create(componentName, "v0", "")
 		assert.NoError(t, e)
 		assert.Same(t, mock, p)
-		p, e = testRegistry.Create(componentName, "v1")
+		p, e = testRegistry.Create(componentName, "v1", "")
 		assert.NoError(t, e)
 		assert.Same(t, mock, p)
 
 		// assert v2
-		pV2, e := testRegistry.Create(componentName, "v2")
+		pV2, e := testRegistry.Create(componentName, "v2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 
 		// check case-insensitivity
-		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2")
+		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 	})
@@ -78,8 +77,8 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// act
-		p, actualError := testRegistry.Create(componentName, "v1")
-		expectedError := errors.Errorf("couldn't find secret store %s/v1", componentName)
+		p, actualError := testRegistry.Create(componentName, "v1", "")
+		expectedError := fmt.Errorf("couldn't find secret store %s/v1", componentName)
 
 		// assert
 		assert.Nil(t, p)

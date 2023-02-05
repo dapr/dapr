@@ -36,12 +36,12 @@ type MockPlatform struct {
 	mock.Mock
 }
 
-func (m *MockPlatform) setup() error {
+func (m *MockPlatform) Setup() error {
 	args := m.Called()
 	return args.Error(0)
 }
 
-func (m *MockPlatform) tearDown() error {
+func (m *MockPlatform) TearDown() error {
 	args := m.Called()
 	return args.Error(0)
 }
@@ -151,8 +151,8 @@ func TestStartRunner(t *testing.T) {
 
 	t.Run("Run Runner successfully", func(t *testing.T) {
 		mockPlatform := new(MockPlatform)
-		mockPlatform.On("tearDown").Return(nil)
-		mockPlatform.On("setup").Return(nil)
+		mockPlatform.On("TearDown").Return(nil)
+		mockPlatform.On("Setup").Return(nil)
 		mockPlatform.On("AddApps", fakeTestApps).Return(nil)
 		mockPlatform.On("AddComponents", fakeComps).Return(nil)
 
@@ -166,16 +166,16 @@ func TestStartRunner(t *testing.T) {
 		ret := fakeRunner.Start(&fakeTestingM{})
 		assert.Equal(t, 0, ret)
 
-		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
-		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
+		mockPlatform.AssertNumberOfCalls(t, "Setup", 1)
+		mockPlatform.AssertNumberOfCalls(t, "TearDown", 1)
 		mockPlatform.AssertNumberOfCalls(t, "AddApps", 1)
 		mockPlatform.AssertNumberOfCalls(t, "AddComponents", 1)
 	})
 
 	t.Run("setup is failed, but teardown is called", func(t *testing.T) {
 		mockPlatform := new(MockPlatform)
-		mockPlatform.On("setup").Return(fmt.Errorf("setup is failed"))
-		mockPlatform.On("tearDown").Return(nil)
+		mockPlatform.On("Setup").Return(fmt.Errorf("setup is failed"))
+		mockPlatform.On("TearDown").Return(nil)
 		mockPlatform.On("AddApps", fakeTestApps).Return(nil)
 		mockPlatform.On("AddComponents", fakeComps).Return(nil)
 
@@ -189,8 +189,8 @@ func TestStartRunner(t *testing.T) {
 		ret := fakeRunner.Start(&fakeTestingM{})
 		assert.Equal(t, 1, ret)
 
-		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
-		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
+		mockPlatform.AssertNumberOfCalls(t, "Setup", 1)
+		mockPlatform.AssertNumberOfCalls(t, "TearDown", 1)
 		mockPlatform.AssertNumberOfCalls(t, "AddApps", 0)
 		mockPlatform.AssertNumberOfCalls(t, "AddComponents", 0)
 	})

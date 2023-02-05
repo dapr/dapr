@@ -52,7 +52,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -74,12 +73,11 @@ import (
 )
 
 const (
-	maxGRPCServerUptime = 100 * time.Millisecond
-	goodStoreKey        = "fakeAPI||good-key"
-	errorStoreKey       = "fakeAPI||error-key"
-	goodKey             = "good-key"
-	goodKey2            = "good-key2"
-	mockSubscribeID     = "mockId"
+	goodStoreKey    = "fakeAPI||good-key"
+	errorStoreKey   = "fakeAPI||error-key"
+	goodKey         = "good-key"
+	goodKey2        = "good-key2"
+	mockSubscribeID = "mockId"
 )
 
 var testResiliency = &v1alpha1.Resiliency{
@@ -148,15 +146,45 @@ var testResiliency = &v1alpha1.Resiliency{
 type mockGRPCAPI struct{}
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
-	return resp.Proto(), nil
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(ctx)).
+		WithContentType("text/plain")
+	defer resp.Close()
+	return resp.ProtoWithData()
+}
+
+func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(stream.Context())).
+		WithContentType("text/plain")
+	defer resp.Close()
+
+	var data []byte
+	pd, err := resp.ProtoWithData()
+	if err != nil {
+		return err
+	}
+	if pd.Message != nil && pd.Message.Data != nil {
+		data = pd.Message.Data.Value
+	}
+
+	stream.Send(&internalv1pb.InternalInvokeResponseStream{
+		Response: resp.Proto(),
+		Payload: &commonv1pb.StreamPayload{
+			Data: data,
+			Seq:  0,
+		},
+	})
+
+	return nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
-	return resp.Proto(), nil
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(ctx)).
+		WithContentType("text/plain")
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -240,9 +268,6 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server, &buffer
 }
 
@@ -259,9 +284,6 @@ func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server
 }
 
@@ -275,9 +297,6 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 			panic(err)
 		}
 	}()
-
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
 
 	return server
 }
@@ -306,124 +325,22 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(
+		ctx,
 		fmt.Sprintf("localhost:%d", port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
 	)
 	if err != nil {
 		panic(err)
 	}
 	return conn
-}
-
-func TestCallActorWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := internalv1pb.NewServiceInvocationClient(clientConn)
-
-	request := invokev1.NewInvokeMethodRequest("method")
-	request.WithActor("test-actor", "actor-1")
-
-	resp, err := client.CallActor(context.Background(), request.Proto())
-	assert.NoError(t, err)
-	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with actor call")
-}
-
-func TestCallRemoteAppWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := internalv1pb.NewServiceInvocationClient(clientConn)
-	request := invokev1.NewInvokeMethodRequest("method").Proto()
-
-	resp, err := client.CallLocal(context.Background(), request)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with app call")
-}
-
-func TestCallLocal(t *testing.T) {
-	t.Run("appchannel is not ready", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: nil,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
-
-		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.Internal, status.Code(err))
-	})
-
-	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: mockAppChannel,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := &internalv1pb.InternalInvokeRequest{
-			Message: nil,
-		}
-
-		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	})
-
-	t.Run("invokemethod returns error", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		mockAppChannel.On("InvokeMethod",
-			mock.MatchedBy(matchContextInterface),
-			mock.AnythingOfType("*v1.InvokeMethodRequest"),
-		).Return(nil, status.Error(codes.Unknown, "unknown error"))
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: mockAppChannel,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
-
-		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.Internal, status.Code(err))
-	})
 }
 
 func mustMarshalAny(msg proto.Message) *anypb.Any {
@@ -447,8 +364,10 @@ func TestAPIToken(t *testing.T) {
 	t.Run("valid token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -495,8 +414,10 @@ func TestAPIToken(t *testing.T) {
 	t.Run("invalid token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -537,8 +458,10 @@ func TestAPIToken(t *testing.T) {
 	t.Run("missing token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -629,8 +552,10 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 
 	for _, tt := range httpResponseTests {
 		t.Run(fmt.Sprintf("handle http %d response code", tt.status), func(t *testing.T) {
-			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil)
-			fakeResp.WithRawData([]byte(tt.errHTTPMessage), "application/json")
+			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil).
+				WithRawDataString(tt.errHTTPMessage).
+				WithContentType("application/json")
+			defer fakeResp.Close()
 
 			// Set up direct messaging mock
 			mockDirectMessaging.Calls = nil // reset call count
@@ -699,8 +624,10 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 					Owner:        "Dapr",
 				}),
 			},
-		)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -1915,75 +1842,158 @@ func TestPublishTopic(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
-	_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
+	t.Run("err: empty publish event request", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
+	t.Run("err: publish event request with empty topic", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+		})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Nil(t, err)
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
+	t.Run("no err: publish event request with topic and pubsub alone", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+		})
+		assert.Nil(t, err)
 	})
-	assert.Equal(t, codes.Internal, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-found",
+	t.Run("no err: publish event request with topic, pubsub and ce metadata override", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Metadata: map[string]string{
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+			},
+		})
+		assert.Nil(t, err)
 	})
-	assert.Equal(t, codes.NotFound, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-allowed",
+	t.Run("err: publish event request with error-topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+		})
+		assert.Equal(t, codes.Internal, status.Code(err))
 	})
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
+	t.Run("err: publish event request with err-not-found topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-found",
+		})
+		assert.Equal(t, codes.NotFound, status.Code(err))
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
+	t.Run("err: publish event request with err-not-allowed topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-allowed",
+		})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
-	assert.Nil(t, err)
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
+	t.Run("err: empty bulk publish event request", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Equal(t, codes.Internal, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-found",
+	t.Run("err: bulk publish event request with duplicate entry Ids", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries: []*runtimev1pb.BulkPublishRequestEntry{
+				{
+					Event:       []byte("data"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+				{
+					Event:       []byte("data 2"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+			},
+		})
+		assert.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		assert.Contains(t, err.Error(), "entryId is duplicated")
 	})
-	assert.Equal(t, codes.NotFound, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-allowed",
+	t.Run("err: bulk publish event request with missing entry Ids", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries: []*runtimev1pb.BulkPublishRequestEntry{
+				{
+					Event:       []byte("data"),
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+				{
+					Event:       []byte("data 2"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+			},
+		})
+		assert.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		assert.Contains(t, err.Error(), "not present for entry")
 	})
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	t.Run("err: bulk publish event request with pubsub and empty topic", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+		})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("no err: bulk publish event request with pubsub, topic and empty entries", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+		})
+		assert.Nil(t, err)
+	})
+
+	t.Run("err: bulk publish event request with error-topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+		})
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("err: bulk publish event request with err-not-found topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-found",
+		})
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("err: bulk publish event request with err-not-allowed topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-allowed",
+		})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	})
 }
 
 func TestBulkPublish(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	srv := &api{
+	fakeAPI := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
 				mock := daprt.MockPubSub{}
@@ -1991,36 +2001,34 @@ func TestBulkPublish(t *testing.T) {
 				return &mock
 			},
 			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-				entries := []pubsub.BulkPublishResponseEntry{}
-
+				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
-				for i, e := range req.Entries {
-					entry := pubsub.BulkPublishResponseEntry{
-						EntryId: e.EntryId,
-					}
-					if req.Topic == "error-topic" {
-						entry.Error = errors.New("error when publish")
-						entry.Status = pubsub.PublishFailed
-					} else if req.Topic == "even-error-topic" {
-						if i%2 == 0 {
-							entry.Error = errors.New("error when publish")
-							entry.Status = pubsub.PublishFailed
-						} else {
-							entry.Status = pubsub.PublishSucceeded
+				if req.Topic == "error-topic" {
+					for _, e := range req.Entries {
+						entry := pubsub.BulkPublishResponseFailedEntry{
+							EntryId: e.EntryId,
 						}
-					} else {
-						entry.Status = pubsub.PublishSucceeded
+						entry.Error = errors.New("error on publish")
+						entries = append(entries, entry)
 					}
-
-					entries = append(entries, entry)
+				} else if req.Topic == "even-error-topic" {
+					for i, e := range req.Entries {
+						if i%2 == 0 {
+							entry := pubsub.BulkPublishResponseFailedEntry{
+								EntryId: e.EntryId,
+							}
+							entry.Error = errors.New("error on publish")
+							entries = append(entries, entry)
+						}
+					}
 				}
-
-				return pubsub.BulkPublishResponse{Statuses: entries}, nil
+				// Mock simulates only partial failures or total success, so error is always nil.
+				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
 	}
 
-	server := startTestServerAPI(port, srv)
+	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -2035,35 +2043,55 @@ func TestBulkPublish(t *testing.T) {
 		{EntryId: "4", Event: []byte("data4")},
 	}
 
-	res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
-		Entries:    sampleEntries,
+	t.Run("no failures", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries:    sampleEntries,
+		})
+		assert.Nil(t, err)
+		assert.Empty(t, res.FailedEntries)
 	})
-	assert.Nil(t, err)
-	assert.Empty(t, res.Statuses)
 
-	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
-		Entries:    sampleEntries,
+	t.Run("no failures with ce metadata override", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries:    sampleEntries,
+			Metadata: map[string]string{
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+			},
+		})
+		assert.Nil(t, err)
+		assert.Empty(t, res.FailedEntries)
 	})
-	assert.Nil(t, err)
-	assert.Equal(t, 4, len(res.Statuses))
-	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
-	}
 
-	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "even-error-topic",
-		Entries:    sampleEntries,
+	t.Run("all failures from component", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+			Entries:    sampleEntries,
+		})
+		t.Log(res)
+		// Full failure from component, so expecting no error
+		assert.Nil(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 4, len(res.FailedEntries))
 	})
-	assert.Nil(t, err)
-	assert.Equal(t, 2, len(res.Statuses))
-	for _, s := range res.Statuses {
-		assert.Equal(t, runtimev1pb.BulkPublishResponseEntry_FAILED, s.Status) //nolint:nosnakecase
-	}
+
+	t.Run("partial failures from component", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "even-error-topic",
+			Entries:    sampleEntries,
+		})
+		// Partial failure, so expecting no error
+		assert.Nil(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 2, len(res.FailedEntries))
+	})
 }
 
 func TestShutdownEndpoints(t *testing.T) {
@@ -2104,7 +2132,7 @@ func TestInvokeBinding(t *testing.T) {
 	srv := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "error-binding" {
-				return nil, errors.New("error when invoke binding")
+				return nil, errors.New("error invoking binding")
 			}
 			return &bindings.InvokeResponse{Data: []byte("ok"), Metadata: req.Metadata}, nil
 		},
@@ -3517,7 +3545,7 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().TryLock(gomock.Any()).DoAndReturn(func(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+		mockLockStore.EXPECT().TryLock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			assert.Equal(t, int32(1), req.ExpiryInSeconds)
@@ -3613,7 +3641,7 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 
-		mockLockStore.EXPECT().Unlock(gomock.Any()).DoAndReturn(func(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+		mockLockStore.EXPECT().Unlock(context.Background(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
 			assert.Equal(t, "lock||resource", req.ResourceID)
 			assert.Equal(t, "owner", req.LockOwner)
 			return &lock.UnlockResponse{

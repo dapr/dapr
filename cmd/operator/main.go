@@ -22,12 +22,12 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
-	"github.com/dapr/dapr/pkg/version"
 )
 
 var (
@@ -37,6 +37,7 @@ var (
 	watchInterval           string
 	maxPodRestartsPerMinute int
 	disableLeaderElection   bool
+	watchNamespace          string
 )
 
 //nolint:gosec
@@ -55,7 +56,7 @@ const (
 )
 
 func main() {
-	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Operator -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
 	operatorOpts := operator.Options{
 		Config:                    config,
@@ -64,6 +65,7 @@ func main() {
 		WatchdogEnabled:           false,
 		WatchdogInterval:          0,
 		WatchdogMaxRestartsPerMin: maxPodRestartsPerMinute,
+		WatchNamespace:            watchNamespace,
 	}
 
 	switch strings.ToLower(watchInterval) {
@@ -113,6 +115,8 @@ func init() {
 	flag.StringVar(&watchInterval, "watch-interval", defaultWatchInterval, "Interval for polling pods' state, e.g. '2m'. Set to '0' to disable, or 'once' to only run once when the operator starts")
 	flag.IntVar(&maxPodRestartsPerMinute, "max-pod-restarts-per-minute", defaultMaxPodRestartsPerMinute, "Maximum number of pods in an invalid state that can be restarted per minute")
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
+
+	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
 
 	flag.Parse()
 

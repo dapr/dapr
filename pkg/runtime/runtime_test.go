@@ -1144,6 +1144,54 @@ func TestMetadataNamespace(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestMetadataAppID(t *testing.T) {
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	pubsubComponent.Spec.Metadata = append(
+		pubsubComponent.Spec.Metadata,
+		componentsV1alpha1.MetadataItem{
+			Name: "clientID",
+			Value: componentsV1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{appID} {appID}"),
+				},
+			},
+		})
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
+	rt.runtimeConfig.ID = TestRuntimeConfigID
+	defer stopRuntime(t, rt)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
+			return mockPubSub
+		},
+		"mockPubSub",
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		clientID := metadata.Properties["clientID"]
+		appIds := strings.Split(clientID, " ")
+		assert.Equal(t, 2, len(appIds))
+		for _, appID := range appIds {
+			assert.Equal(t, TestRuntimeConfigID, appID)
+		}
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
 func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
@@ -1374,18 +1422,16 @@ func TestInitPubSub(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 2 topics via http app channel
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe").
-			WithHTTPExtension(http.MethodGet, "").
-			WithRawData(nil, "application/json")
-
 		subs := getSubscriptionsJSONString(
 			[]string{"topic0", "topic1"}, // first pubsub
 			[]string{"topic0"},           // second pubsub
 		)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawData([]byte(subs), "application/json")
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1411,15 +1457,13 @@ func TestInitPubSub(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes to a topic via http app channel
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe").
-			WithHTTPExtension(http.MethodGet, "").
-			WithRawData(nil, "application/json")
-
 		sub := getSubscriptionCustom("topic0", "customroute/topic0")
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawData([]byte(sub), "application/json")
+			WithRawDataString(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1442,12 +1486,10 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe").
-			WithHTTPExtension(http.MethodGet, "").
-			WithRawData(nil, "application/json")
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "Not Found", nil)
+		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1565,15 +1607,13 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData(nil, "application/json")
-
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic1"})
-		fakeResp.WithRawData([]byte(subs), "application/json")
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1597,15 +1637,13 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData(nil, "application/json")
-
 		// User App subscribes 2 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"}, []string{"topic0"})
-		fakeResp.WithRawData([]byte(subs), "application/json")
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1629,15 +1667,13 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData(nil, "application/json")
-
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		subs := getSubscriptionsJSONString([]string{"topic3"}, []string{"topic5"})
-		fakeResp.WithRawData([]byte(subs), "application/json")
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1659,17 +1695,14 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData(nil, "application/json")
-
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-
 		// topic0 is allowed, topic3 and topic5 are not
 		subs := getSubscriptionsJSONString([]string{"topic0", "topic3"}, []string{"topic0", "topic5"})
-		fakeResp.WithRawData([]byte(subs), "application/json")
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1714,9 +1747,7 @@ func TestInitPubSub(t *testing.T) {
 		})
 
 		assert.Nil(t, err)
-		assert.Equal(t, 1, len(res.Statuses))
-		assert.Equal(t, "1", res.Statuses[0].EntryId)
-		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+		assert.Empty(t, res.FailedEntries)
 
 		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
@@ -1737,12 +1768,7 @@ func TestInitPubSub(t *testing.T) {
 		})
 
 		assert.Nil(t, err)
-		assert.Equal(t, 2, len(res.Statuses))
-		expectedIds := []string{"1", "2"}
-		assert.Contains(t, expectedIds, res.Statuses[0].EntryId)
-		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
-		assert.Contains(t, expectedIds, res.Statuses[1].EntryId)
-		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[1].Status)
+		assert.Empty(t, res.FailedEntries)
 	})
 
 	t.Run("test bulk publish, topic not allowed", func(t *testing.T) {
@@ -1804,15 +1830,13 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData(nil, "application/json")
-
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic1"})
-		fakeResp.WithRawData([]byte(subs), "application/json")
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1846,15 +1870,13 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData(nil, "application/json")
-
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic0"})
-		fakeResp.WithRawData([]byte(subs), "application/json")
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -2596,10 +2618,12 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		path:       "topic1",
 	}
 
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
-	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
-	fakeReq.WithCustomHTTPMetadata(testPubSubMessage.metadata)
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic).
+		WithHTTPExtension(http.MethodPost, "").
+		WithRawDataBytes(testPubSubMessage.data).
+		WithContentType(contenttype.CloudEventContentType).
+		WithCustomHTTPMetadata(testPubSubMessage.metadata)
+	defer fakeReq.Close()
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
@@ -2617,6 +2641,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		// User App subscribes 1 topics via http app channel
 
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
@@ -2633,10 +2658,12 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"status\": \"RETRY\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
-		fakeResp.WithRawData([]byte("{ \"status\": \"RETRY\"}"), "application/json")
 
 		// act
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
@@ -2651,10 +2678,12 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"status\": \"DROP\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
-		fakeResp.WithRawData([]byte("{ \"status\": \"DROP\"}"), "application/json")
 
 		// act
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
@@ -2669,10 +2698,12 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"status\": \"UNKNOWN\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
-		fakeResp.WithRawData([]byte("{ \"status\": \"UNKNOWN\"}"), "application/json")
 
 		// act
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
@@ -2688,6 +2719,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		// User App subscribes 1 topics via http app channel
 
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
@@ -2709,10 +2741,6 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 		metadata:   map[string]string{pubsubName: TestPubsubName},
 		path:       "topic1",
 	}
-
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
-	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
@@ -2802,10 +2830,12 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		path:       "topic1",
 	}
 
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
-	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
-	fakeReq.WithCustomHTTPMetadata(testPubSubMessage.metadata)
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic).
+		WithHTTPExtension(http.MethodPost, "").
+		WithRawDataBytes(testPubSubMessage.data).
+		WithContentType(contenttype.CloudEventContentType).
+		WithCustomHTTPMetadata(testPubSubMessage.metadata)
+	defer fakeReq.Close()
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
@@ -2822,6 +2852,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -2839,6 +2870,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		defer fakeResp.Close()
 
 		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`
 		envelopeNoTraceID := pubsub.NewCloudEventsEnvelope(
@@ -2856,10 +2888,12 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			path:       "topic1",
 		}
 
-		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.topic)
-		fakeReqNoTraceID.WithHTTPExtension(http.MethodPost, "")
-		fakeReqNoTraceID.WithRawData(message.data, contenttype.CloudEventContentType)
-		fakeReqNoTraceID.WithCustomHTTPMetadata(testPubSubMessage.metadata)
+		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.topic).
+			WithHTTPExtension(http.MethodPost, "").
+			WithRawDataBytes(message.data).
+			WithContentType(contenttype.CloudEventContentType).
+			WithCustomHTTPMetadata(testPubSubMessage.metadata)
+		defer fakeReqNoTraceID.Close()
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReqNoTraceID).Return(fakeResp, nil)
 
 		// act
@@ -2875,8 +2909,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("OK"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("OK").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -2893,8 +2929,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("{ \"status\": \"SUCCESS\"}"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"status\": \"SUCCESS\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -2911,8 +2949,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("{ \"status\": \"RETRY\"}"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"status\": \"RETRY\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -2932,8 +2972,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("{ \"status\": \"DROP\"}"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"status\": \"DROP\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -2950,8 +2992,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("{ \"status\": \"not_valid\"}"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"status\": \"not_valid\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -2968,8 +3012,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("{ \"message\": \"empty status\"}"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"message\": \"empty status\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -2986,8 +3032,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("{ \"message\": \"success\"}"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("{ \"message\": \"success\"}").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -3019,9 +3067,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		clientError := errors.New("Not Found")
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "Not Found", nil)
-		fakeResp.WithRawData([]byte(clientError.Error()), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "Not Found", nil).
+			WithRawDataString("Not found").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -3037,9 +3086,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		clientError := errors.New("Internal Error")
-		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
-		fakeResp.WithRawData([]byte(clientError.Error()), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil).
+			WithRawDataString("Internal Error").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
@@ -3573,7 +3623,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 			map[string]int{},
 		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
-			rawData := req.Message().Data.Value
+			rawData, _ := io.ReadAll(req.RawData())
 			data := make(map[string]string)
 			json.Unmarshal(rawData, &data)
 			val, _ := base64.StdEncoding.DecodeString(data["data_base64"])
@@ -3704,7 +3754,7 @@ func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
 }
 
 // Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
-func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
+func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.pubCount[req.Topic]++
 	if handler, ok := m.handlers[req.Topic]; ok {
 		pubsubMsg := &pubsub.NewMessage{
@@ -3741,10 +3791,6 @@ func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPub
 				Topic: req.Topic,
 			}
 			handler(context.Background(), pubsubMsg)
-			res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-				EntryId: entry.EntryId,
-				Status:  pubsub.PublishSucceeded,
-			})
 		}
 	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
 		nbm := &pubsub.BulkMessage{
@@ -3801,22 +3847,21 @@ func TestPubSubDeadLetter(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
 			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		mockAppChannel.
-			On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).
+			On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).
 			Return(fakeResp, nil)
 		// Mock send message to app returns error.
 		mockAppChannel.
@@ -3849,22 +3894,21 @@ func TestPubSubDeadLetter(t *testing.T) {
 			},
 			"mockPubSub",
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
 
 		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
 			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
 		}
 		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(sub).
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		mockAppChannel.
-			On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).
+			On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).
 			Return(fakeResp, nil)
 		// Mock send message to app returns error.
 		mockAppChannel.
@@ -4189,22 +4233,23 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
-		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
-		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
-
 		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		defer fakeBindingResp.Close()
 
-		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
-		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData(testInputBindingData, "application/json")
-		fakeReq.WithMetadata(map[string][]string{})
+		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
+			WithHTTPExtension(http.MethodPost, "").
+			WithRawDataBytes(testInputBindingData).
+			WithContentType("application/json").
+			WithMetadata(map[string][]string{})
+		defer fakeReq.Close()
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("OK"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("OK").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeBindingReq).Return(fakeBindingResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod(testInputBindingMethod)).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -4227,20 +4272,26 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
-		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
-		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
+			WithHTTPExtension(http.MethodOptions, "").
+			WithContentType(invokev1.JSONContentType)
+		defer fakeBindingReq.Close()
 
 		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		defer fakeBindingResp.Close()
 
-		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
-		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData(testInputBindingData, "application/json")
-		fakeReq.WithMetadata(map[string][]string{})
+		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
+			WithHTTPExtension(http.MethodPost, "").
+			WithRawDataBytes(testInputBindingData).
+			WithContentType("application/json").
+			WithMetadata(map[string][]string{})
+		defer fakeReq.Close()
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
-		fakeResp.WithRawData([]byte("Internal Error"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil).
+			WithRawDataString("Internal Error").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
@@ -4264,22 +4315,28 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
-		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
-		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
+			WithHTTPExtension(http.MethodOptions, "").
+			WithContentType(invokev1.JSONContentType)
+		defer fakeBindingReq.Close()
 
 		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		defer fakeBindingResp.Close()
 
-		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
-		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData(testInputBindingData, "application/json")
-		fakeReq.WithMetadata(map[string][]string{"bindings": {"input"}})
+		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
+			WithHTTPExtension(http.MethodPost, "").
+			WithRawDataBytes(testInputBindingData).
+			WithContentType("application/json").
+			WithMetadata(map[string][]string{"bindings": {"input"}})
+		defer fakeReq.Close()
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("OK"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString("OK").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeBindingReq).Return(fakeBindingResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod(testInputBindingMethod)).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -4515,24 +4572,14 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 }
 
 // Publish is a mock publish method.
-func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
+func (m *mockPublishPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.PublishedRequest.Store(req)
 	return nil
 }
 
 // BulkPublish is a mock bulk publish method returning a success all the time.
 func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	res := pubsub.BulkPublishResponse{}
-
-	for _, entry := range req.Entries {
-		e := pubsub.BulkPublishResponseEntry{
-			EntryId: entry.EntryId,
-			Status:  pubsub.PublishSucceeded,
-			Error:   nil,
-		}
-		res.Statuses = append(res.Statuses, e)
-	}
-	return res, nil
+	return pubsub.BulkPublishResponse{}, nil
 }
 
 func (m *mockPublishPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
@@ -4737,7 +4784,8 @@ func TestBindingResiliency(t *testing.T) {
 			map[string]int{},
 		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
-			return string(req.Message().Data.Value)
+			r, _ := io.ReadAll(req.RawData())
+			return string(r)
 		},
 	}
 
@@ -5352,6 +5400,15 @@ func matchContextInterface(v any) bool {
 	return ok
 }
 
+func matchDaprRequestMethod(method string) any {
+	return mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+		if req == nil || req.Message() == nil || req.Message().Method != method {
+			return false
+		}
+		return true
+	})
+}
+
 func TestMetadataContainsNamespace(t *testing.T) {
 	t.Run("namespace field present", func(t *testing.T) {
 		r := metadataContainsNamespace(
@@ -5404,6 +5461,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		},
 		"mockPubSub",
 	)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	mockPubSub.On("Init", mock.Anything).Return(nil)
 	mockPubSub.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
 	mockPubSub.On("Close").Return(nil)
@@ -5412,33 +5470,28 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	cPubSub.ObjectMeta.Name = "mockPubSub"
 	cPubSub.Spec.Type = "pubsub.mockPubSub"
 
-	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-	req.WithHTTPExtension(http.MethodGet, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
 	subscriptionItems := []runtimePubsub.SubscriptionJSON{
 		{PubsubName: "mockPubSub", Topic: "topic0", Route: "shutdown"},
 	}
 	sub, _ := json.Marshal(subscriptionItems)
 	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	fakeResp.WithRawData(sub, "application/json")
+	fakeResp.WithRawDataBytes(sub).
+		WithContentType("application/json")
+	defer fakeResp.Close()
 
 	mockAppChannel := new(channelt.MockAppChannel)
 	rt.appChannel = mockAppChannel
-	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
-
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 	require.NoError(t, rt.initPubSub(cPubSub))
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.startSubscriptions()
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
-	assert.NotNil(t, rt.pubsubCtx)
-	assert.NotNil(t, rt.topicCtxCancels)
-	assert.NotNil(t, rt.topicRoutes)
+	assert.NoError(t, rt.pubsubCtx.Err())
+	rt.running.Store(true)
 	go sendSigterm(rt)
 	select {
 	case <-rt.pubsubCtx.Done():
-		assert.Nil(t, rt.pubsubCtx)
-		assert.Nil(t, rt.topicCtxCancels)
-		assert.Nil(t, rt.topicRoutes)
+		assert.Error(t, rt.pubsubCtx.Err(), context.Canceled)
 	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "pubsub shutdown timed out")
 	}
@@ -5446,7 +5499,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 
 func TestGracefulShutdownBindings(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
-
+	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
 	rt.bindingsRegistry.RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
 			return &daprt.MockBinding{}
@@ -5468,18 +5521,22 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cout.Spec.Type = "bindings.testOutputBinding"
 	require.NoError(t, rt.initInputBinding(cin))
 	require.NoError(t, rt.initOutputBinding(cout))
-
 	assert.Equal(t, len(rt.inputBindings), 1)
 	assert.Equal(t, len(rt.outputBindings), 1)
-
+	rt.running.Store(true)
+	rt.inputBindingsCtx, rt.inputBindingsCancel = context.WithCancel(rt.ctx)
 	go sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
-	assert.Nil(t, rt.inputBindingsCancel)
-	assert.Nil(t, rt.inputBindingsCtx)
+	select {
+	case <-rt.inputBindingsCtx.Done():
+		return
+	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
+		assert.Fail(t, "input bindings shutdown timed out")
+	}
 }
 
 func TestGracefulShutdownActors(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
@@ -5525,6 +5582,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	rt.runtimeConfig.mtlsEnabled = true
 	assert.Nil(t, rt.initActors())
 
+	rt.running.Store(true)
 	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 3*time.Second)
 
@@ -5561,6 +5619,7 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 
 func TestTraceShutdown(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
 		Otel: config.OtelSpec{
 			EndpointAddress: "foo.bar",
@@ -5573,12 +5632,12 @@ func TestTraceShutdown(t *testing.T) {
 	require.NoError(t, rt.setupTracing(rt.hostAddress, tpStore))
 	assert.NotNil(t, rt.tracerProvider)
 
+	rt.running.Store(true)
 	go sendSigterm(rt)
 	<-rt.ctx.Done()
 	assert.Nil(t, rt.tracerProvider)
 }
 
 func sendSigterm(rt *DaprRuntime) {
-	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
 	rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
 }

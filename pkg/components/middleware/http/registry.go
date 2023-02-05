@@ -14,15 +14,13 @@ limitations under the License.
 package http
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	middleware "github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/components"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/kit/logger"
 )
 
 type (
@@ -58,35 +56,41 @@ func (p *Registry) RegisterComponent(componentFactory func(logger.Logger) Factor
 }
 
 // Create instantiates a HTTP middleware based on `name`.
-func (p *Registry) Create(name, version string, metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-	if method, ok := p.getMiddleware(name, version); ok {
+func (p *Registry) Create(name, version string, metadata middleware.Metadata, logName string) (httpMiddleware.Middleware, error) {
+	if method, ok := p.getMiddleware(name, version, logName); ok {
 		mid, err := method(metadata)
 		if err != nil {
-			return nil, errors.Errorf("error creating HTTP middleware %s/%s: %s", name, version, err)
+			return nil, fmt.Errorf("error creating HTTP middleware %s/%s: %w", name, version, err)
 		}
 		return mid, nil
 	}
-	return nil, errors.Errorf("HTTP middleware %s/%s has not been registered", name, version)
+	return nil, fmt.Errorf("HTTP middleware %s/%s has not been registered", name, version)
 }
 
-func (p *Registry) getMiddleware(name, version string) (FactoryMethod, bool) {
+func (p *Registry) getMiddleware(name, version, logName string) (FactoryMethod, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	middlewareFn, ok := p.middleware[nameLower+"/"+versionLower]
 	if ok {
-		return p.applyLogger(middlewareFn), true
+		return p.applyLogger(middlewareFn, logName), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		middlewareFn, ok = p.middleware[nameLower]
 		if ok {
-			return p.applyLogger(middlewareFn), true
+			return p.applyLogger(middlewareFn, logName), true
 		}
 	}
 	return nil, false
 }
 
-func (p *Registry) applyLogger(componentFactory func(logger.Logger) FactoryMethod) FactoryMethod {
-	return componentFactory(p.Logger)
+func (p *Registry) applyLogger(componentFactory func(logger.Logger) FactoryMethod, logName string) FactoryMethod {
+	l := p.Logger
+	if logName != "" && l != nil {
+		l = l.WithFields(map[string]any{
+			"component": logName,
+		})
+	}
+	return componentFactory(l)
 }
 
 func createFullName(name string) string {

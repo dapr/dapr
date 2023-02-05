@@ -63,3 +63,27 @@ func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc f
 		}, nil
 	}
 }
+
+// TestServerWithDialer returns a grpcServer factory that bootstraps a grpcserver backed by a buf connection (in memory), and returns a connection dialer to communicate with it.
+// it also provides cleanup function for close the grpcserver but the client connection should be handled by the caller.
+func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*grpc.Server, TServer)) func(svc TServer) (dialer func(ctx context.Context, opts ...grpc.DialOption) (*grpc.ClientConn, error), cleanup func(), err error) {
+	return func(srv TServer) (dialer func(ctx context.Context, opts ...grpc.DialOption) (*grpc.ClientConn, error), cleanup func(), err error) {
+		lis := bufconn.Listen(bufSize)
+		s := grpc.NewServer()
+		registersvc(s, srv)
+		go func() {
+			if serveErr := s.Serve(lis); serveErr != nil {
+				logger.Debugf("Server exited with error: %v", serveErr)
+			}
+		}()
+
+		return func(ctx context.Context, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+				opts = append(opts, grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+					return lis.Dial()
+				}), grpc.WithTransportCredentials(insecure.NewCredentials()))
+				return grpc.DialContext(ctx, "bufnet", opts...)
+			}, func() {
+				lis.Close()
+			}, nil
+	}
+}

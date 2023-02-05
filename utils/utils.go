@@ -14,13 +14,14 @@ limitations under the License.
 package utils
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slices"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -123,14 +124,12 @@ func IsYaml(fileName string) bool {
 	return false
 }
 
-// GetIntOrDefault returns the value of the key in the map or the default value if the key is not present.
-func GetIntOrDefault(m map[string]string, key string, def int) int {
-	if val, ok := m[key]; ok {
-		if i, err := strconv.Atoi(val); err == nil {
-			return i
-		}
+// GetIntValOrDefault returns an int value if greater than 0 OR default value.
+func GetIntValOrDefault(val int, defaultValue int) int {
+	if val > 0 {
+		return val
 	}
-	return def
+	return defaultValue
 }
 
 // IsSocket returns if the given file is a unix socket.
@@ -159,4 +158,29 @@ func PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) m
 	}
 
 	return resMeta
+}
+
+// Filter returns a new slice containing all items in the given slice that satisfy the given test.
+func Filter[T any](items []T, test func(item T) bool) []T {
+	filteredItems := make([]T, 0, len(items))
+	for _, value := range items {
+		if test(value) {
+			filteredItems = append(filteredItems, value)
+		}
+	}
+	return slices.Clip(filteredItems)
+}
+
+const (
+	logNameFmt        = "%s (%s)"
+	logNameVersionFmt = "%s (%s/%s)"
+)
+
+// ComponentLogName returns the name of a component that can be used in logging.
+func ComponentLogName(name, typ, version string) string {
+	if version == "" {
+		return fmt.Sprintf(logNameFmt, name, typ)
+	}
+
+	return fmt.Sprintf(logNameVersionFmt, name, typ, version)
 }

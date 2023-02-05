@@ -92,10 +92,14 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
-| `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector | `{}`                 |
-| `global.tolerations`                      | Pods will be allowed to schedule onto a node whose taints match the tolerations | `{}`                 |
-| `global.labels`                           | Custom pod labels                                                       | `{}`                 |
-| `global.k8sLabels`                        | Custom metadata labels                                                  | `{}`                 |
+| `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector        | `{}`         |
+| `global.tolerations`                      | Pods will be allowed to schedule onto a node whose taints match the tolerations    | `{}`         |
+| `global.labels`                           | Custom pod labels                                                                  | `{}`         |
+| `global.k8sLabels`                        | Custom metadata labels                                                             | `{}`         |
+| `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
+| `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
+| `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
+| `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
 
 ### Dapr Dashboard options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -122,6 +126,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.runAsNonRoot`              | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_operator.debug.enabled`             | Boolean value for enabling debug mode | `{}` |
+| `dapr_operator.watchNamespace`            | The namespace to watch for annoated Dapr resources in | `""` |
 
 ### Dapr Placement options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -171,6 +176,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.runAsNonRoot`      | Boolean value for `securityContext.runAsNonRoot` for the Sidecar Injector container itself. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_sidecar_injector.sidecarRunAsNonRoot` | When this boolean value is true (the default), the injected sidecar containers have `runAsRoot: true`. You may have to set this to `false` when running Minikube | `true` |
 | `dapr_sidecar_injector.sidecarReadOnlyRootFilesystem` | When this boolean value is true (the default), the injected sidecar containers have `readOnlyRootFilesystem: true` | `true` |
+| `dapr_sidecar_injector.allowedServiceAccounts` | String value for extra allowed service accounts in the format of `serviceAccount1:namespace1,serviceAccount2:namespace2`  | `""` |
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 | `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |

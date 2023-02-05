@@ -16,14 +16,15 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/pkg/errors"
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -37,6 +38,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
@@ -72,6 +74,7 @@ type server struct {
 	authToken          string
 	apiSpec            config.APISpec
 	proxy              messaging.Proxy
+	workflowEngine     *wfengine.WorkflowEngine
 }
 
 var (
@@ -81,19 +84,20 @@ var (
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
-		api:         api,
-		config:      config,
-		tracingSpec: tracingSpec,
-		metricSpec:  metricSpec,
-		kind:        apiServer,
-		logger:      apiServerLogger,
-		infoLogger:  apiServerInfoLogger,
-		authToken:   auth.GetAPIToken(),
-		apiSpec:     apiSpec,
-		proxy:       proxy,
+		api:            api,
+		config:         config,
+		tracingSpec:    tracingSpec,
+		metricSpec:     metricSpec,
+		kind:           apiServer,
+		logger:         apiServerLogger,
+		infoLogger:     apiServerInfoLogger,
+		authToken:      auth.GetAPIToken(),
+		apiSpec:        apiSpec,
+		proxy:          proxy,
+		workflowEngine: workflowEngine,
 	}
 }
 
@@ -127,20 +131,23 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
+		s.logger.Infof("gRPC server listening on UNIX socket: %s", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
+			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
+			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.Port, err)
+				s.logger.Debugf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
 			} else {
+				s.logger.Infof("gRPC server listening on TCP address: %s", addr)
 				listeners = append(listeners, l)
 			}
 		}
 	}
 
 	if len(listeners) == 0 {
-		return errors.Errorf("could not listen on any endpoint")
+		return errors.New("could not listen on any endpoint")
 	}
 
 	for _, listener := range listeners {
@@ -156,6 +163,9 @@ func (s *server) StartNonBlocking() error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
+			if s.workflowEngine != nil {
+				s.workflowEngine.ConfigureGrpc(server)
+			}
 		}
 
 		go func(server *grpcGo.Server, l net.Listener) {
@@ -186,13 +196,13 @@ func (s *server) generateWorkloadCert() error {
 	s.logger.Info("sending workload csr request to sentry")
 	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
 	if err != nil {
-		return errors.Wrap(err, "error from authenticator CreateSignedWorkloadCert")
+		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %w", err)
 	}
 	s.logger.Info("certificate signed successfully")
 
 	tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 	if err != nil {
-		return errors.Wrap(err, "error creating x509 Key Pair")
+		return fmt.Errorf("error creating x509 Key Pair: %w", err)
 	}
 
 	s.signedCert = signedCert
