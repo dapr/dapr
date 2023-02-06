@@ -579,8 +579,8 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 		name      string
 		namespace string
 	}{
-		{"replicaset-controller", metav1.NamespaceSystem},
-		{"tekton-pipelines-controller", "tekton-pipelines"},
+		{metav1.NamespaceSystem, "replicaset-controller"},
+		{"tekton-pipelines", "tekton-pipelines-controller"},
 		{"test", "test"},
 	}
 
