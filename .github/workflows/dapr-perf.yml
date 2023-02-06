@@ -358,9 +358,14 @@ jobs:
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-perf") {
+              let selectedTestsEnvVar = ""
+              if (typeof testPayload.args !== "undefined") {
+                selectedTestsEnvVar = `DAPR_PERF_TEST=${testPayload.args}\n`
+              }
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
+                `${selectedTestsEnvVar}`+
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
                 `PR_NUMBER=${testPayload.issue.number}`

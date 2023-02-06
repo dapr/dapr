@@ -65,7 +65,8 @@ async function handleIssueCommentCreate({ github, context }) {
         console.log("[handleIssueCommentCreate] comment body not found, exiting.");
         return;
     }
-    const command = commentBody.split(" ")[0];
+    const commandParts = commentBody.split(" ")
+    const command = commandParts[0];
 
     // Commands that can be executed by anyone.
     if (command === "/assign") {
@@ -87,7 +88,8 @@ async function handleIssueCommentCreate({ github, context }) {
             await cmdOkToTest(github, issue, isFromPulls);
             break;
         case "/ok-to-perf":
-            await cmdOkToPerf(github, issue, isFromPulls);
+            const [_, ...commandArgs] = commandParts
+            await cmdOkToPerf(github, issue, isFromPulls, commandArgs.length > 0 ? commandArgs.join(" ") : undefined);
             break;
         default:
             console.log(`[handleIssueCommentCreate] command ${command} not found, exiting.`);
@@ -227,7 +229,7 @@ async function cmdOkToTest(github, issue, isFromPulls) {
  * @param {*} issue GitHub issue object
  * @param {boolean} isFromPulls is the workflow triggered by a pull request?
  */
-async function cmdOkToPerf(github, issue, isFromPulls) {
+async function cmdOkToPerf(github, issue, isFromPulls, args) {
     if (!isFromPulls) {
         console.log("[cmdOkToPerf] only pull requests supported, skipping command execution.");
         return;
@@ -246,6 +248,7 @@ async function cmdOkToPerf(github, issue, isFromPulls) {
             pull_head_ref: pull.data.head.sha,
             pull_head_repo: pull.data.head.repo.full_name,
             command: "ok-to-perf",
+            args,
             issue: issue,
         };
 
