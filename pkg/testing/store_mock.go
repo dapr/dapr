@@ -52,7 +52,7 @@ func (_m *MockConfigurationStore) Get(ctx context.Context, req *configuration.Ge
 }
 
 // Init provides a mock function with given fields: metadata
-func (_m *MockConfigurationStore) Init(metadata configuration.Metadata) error {
+func (_m *MockConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	ret := _m.Called(metadata)
 
 	var r0 error
@@ -113,7 +113,7 @@ func (f *FailingConfigurationStore) Get(ctx context.Context, req *configuration.
 	return &configuration.GetResponse{}, nil
 }
 
-func (f *FailingConfigurationStore) Init(metadata configuration.Metadata) error {
+func (f *FailingConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
 }
 

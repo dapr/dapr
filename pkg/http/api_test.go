@@ -4226,7 +4226,7 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 	return nil, errors.New("get key error: value not found")
 }
 
-func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
+func (c fakeConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
