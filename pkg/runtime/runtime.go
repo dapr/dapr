@@ -1078,6 +1078,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		Proxy:              a.proxy,
 		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
 		Resiliency:         a.resiliency,
+		IsStreamingEnabled: a.globalConfig.IsFeatureEnabled(config.ServiceInvocationStreaming),
 	})
 }
 
@@ -2539,8 +2540,18 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	a.components = authorizedComps
 	a.componentsLock.Unlock()
 
+	// Iterate through the list twice
+	// First, we look for secret stores and load those, then all other components
+	// Sure, we could sort the list of authorizedComps... but this is simpler and most certainly faster
 	for _, comp := range authorizedComps {
-		a.pendingComponents <- comp
+		if strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
+			a.pendingComponents <- comp
+		}
+	}
+	for _, comp := range authorizedComps {
+		if !strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
+			a.pendingComponents <- comp
+		}
 	}
 
 	return nil
@@ -2815,6 +2826,8 @@ func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
 
+// Returns the component updated with the secrets applied.
+// If the component references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
 func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Component) (componentsV1alpha1.Component, string) {
 	cache := map[string]secretstores.GetSecretResponse{}
 
@@ -3155,7 +3168,7 @@ func componentDependency(compCategory components.Category, name string) string {
 func (a *DaprRuntime) startSubscriptions() {
 	// Clean any previous state
 	if a.pubsubCancel != nil {
-		a.pubsubCancel()
+		a.stopSubscriptions() // Stop all subscriptions
 	}
 
 	// PubSub subscribers are stopped via cancellation of the main runtime's context
@@ -3170,12 +3183,12 @@ func (a *DaprRuntime) startSubscriptions() {
 
 // Stop subscriptions to all topics and cleans the cached topics
 func (a *DaprRuntime) stopSubscriptions() {
-	// Stop all subscriptions by canceling the subscription context
-	if a.pubsubCancel != nil {
-		a.pubsubCancel()
+	if a.pubsubCtx == nil || a.pubsubCtx.Err() != nil { // no pubsub to stop
+		return
 	}
-	a.pubsubCtx = nil
-	a.pubsubCancel = nil
+	if a.pubsubCancel != nil {
+		a.pubsubCancel() // Stop all subscriptions by canceling the subscription context
+	}
 
 	// Remove all contexts that are specific to each component (which have been canceled already by canceling pubsubCtx)
 	a.topicCtxCancels = nil

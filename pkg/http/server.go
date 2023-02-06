@@ -104,14 +104,16 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
+		log.Infof("HTTP server listening on UNIX socket: %s", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Debugf("Failed to listen on %s with error: %v", addr, err)
+				log.Debugf("Failed to listen for HTTP server on TCP address %s with error: %v", addr, err)
 			} else {
+				log.Infof("HTTP server listening on TCP address: %s", addr)
 				listeners = append(listeners, l)
 			}
 		}
@@ -124,9 +126,10 @@ func (s *server) StartNonBlocking() error {
 		// customServer is created in a loop because each instance
 		// has a handle on the underlying listener.
 		customServer := &fasthttp.Server{
-			Handler:            handler,
-			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
-			ReadBufferSize:     s.config.ReadBufferSize * 1024,
+			Handler:               handler,
+			MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
+			ReadBufferSize:        s.config.ReadBufferSize * 1024,
+			NoDefaultServerHeader: true,
 		}
 		s.servers = append(s.servers, customServer)
 
@@ -143,8 +146,9 @@ func (s *server) StartNonBlocking() error {
 		publicHandler = s.useTracing(publicHandler)
 
 		healthServer := &fasthttp.Server{
-			Handler:            publicHandler,
-			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+			Handler:               publicHandler,
+			MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
+			NoDefaultServerHeader: true,
 		}
 		s.servers = append(s.servers, healthServer)
 
@@ -158,11 +162,11 @@ func (s *server) StartNonBlocking() error {
 	if s.config.EnableProfiling {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.ProfilePort)
-			log.Infof("starting profiling server on %s", addr)
 			pl, err := net.Listen("tcp", addr)
 			if err != nil {
-				log.Debugf("Failed to listen on %s with error: %v", addr, err)
+				log.Debugf("Failed to listen for profiling server on TCP address %s with error: %v", addr, err)
 			} else {
+				log.Infof("HTTP profiling server listening on: %s", addr)
 				profilingListeners = append(profilingListeners, pl)
 			}
 		}
@@ -176,8 +180,9 @@ func (s *server) StartNonBlocking() error {
 			// profServer is created in a loop because each instance
 			// has a handle on the underlying listener.
 			profServer := &fasthttp.Server{
-				Handler:            pprofhandler.PprofHandler,
-				MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+				Handler:               pprofhandler.PprofHandler,
+				MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
+				NoDefaultServerHeader: true,
 			}
 			s.servers = append(s.servers, profServer)
 

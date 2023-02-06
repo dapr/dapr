@@ -3,5 +3,5 @@ kind: Configuration
 metadata:
   name: metricconfig
 spec:
-  metric:
+  metrics:
     enabled: false

@@ -34,7 +34,9 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,16 +165,21 @@ func wrapString(str string) string {
 }
 
 func TestComponentCalls(t *testing.T) {
-	getStateStore := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *server) {
-		proto.RegisterStateStoreServer(s, svc)
-		proto.RegisterTransactionalStateStoreServer(s, svc)
-		proto.RegisterQueriableStateStoreServer(s, svc)
-	}, func(cci grpc.ClientConnInterface) *grpcStateStore {
-		client := newStateStoreClient(cci)
-		stStore := NewGRPCStateStore(testLogger, "/tmp/socket.sock")
-		stStore.Client = client
-		return stStore
-	})
+	getStateStore := func(srv *server) (statestore *grpcStateStore, cleanupf func(), err error) {
+		withSvc := testingGrpc.TestServerWithDialer(testLogger, func(s *grpc.Server, svc *server) {
+			proto.RegisterStateStoreServer(s, svc)
+			proto.RegisterTransactionalStateStoreServer(s, svc)
+			proto.RegisterQueriableStateStoreServer(s, svc)
+		})
+		dialer, cleanup, err := withSvc(srv)
+		require.NoError(t, err)
+		clientFactory := newGRPCStateStore(func(ctx context.Context, name string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+			return dialer(ctx, opts...)
+		})
+		client := clientFactory(testLogger).(*grpcStateStore)
+		require.NoError(t, client.Init(state.Metadata{}))
+		return client, cleanup, err
+	}
 
 	if runtime.GOOS != "windows" {
 		t.Run("test init should populate features and call grpc init", func(t *testing.T) {
@@ -263,6 +270,72 @@ func TestComponentCalls(t *testing.T) {
 		})
 
 		assert.NotNil(t, err)
+		assert.Equal(t, int64(1), svc.deleteCalled.Load())
+	})
+
+	t.Run("delete should return etag mismatch err when grpc delete returns etag mismatch code", func(t *testing.T) {
+		const fakeKey = "fakeKey"
+		st := status.New(GRPCCodeETagMismatch, "fake-err-msg")
+		desc := "The ETag field must only contain alphanumeric characters"
+		v := &errdetails.BadRequest_FieldViolation{
+			Field:       etagField,
+			Description: desc,
+		}
+		br := &errdetails.BadRequest{}
+		br.FieldViolations = append(br.FieldViolations, v)
+		st, err := st.WithDetails(br)
+		require.NoError(t, err)
+
+		svc := &server{
+			onDeleteCalled: func(req *proto.DeleteRequest) {
+				assert.Equal(t, req.Key, fakeKey)
+			},
+			deleteErr: st.Err(),
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+		err = stStore.Delete(context.Background(), &state.DeleteRequest{
+			Key: fakeKey,
+		})
+
+		assert.NotNil(t, err)
+		etag, ok := err.(*state.ETagError)
+		require.True(t, ok)
+		assert.Equal(t, etag.Kind(), state.ETagMismatch)
+		assert.Equal(t, int64(1), svc.deleteCalled.Load())
+	})
+
+	t.Run("delete should return etag invalid err when grpc delete returns etag invalid code", func(t *testing.T) {
+		const fakeKey = "fakeKey"
+		st := status.New(GRPCCodeETagInvalid, "fake-err-msg")
+		desc := "The ETag field must only contain alphanumeric characters"
+		v := &errdetails.BadRequest_FieldViolation{
+			Field:       etagField,
+			Description: desc,
+		}
+		br := &errdetails.BadRequest{}
+		br.FieldViolations = append(br.FieldViolations, v)
+		st, err := st.WithDetails(br)
+		require.NoError(t, err)
+
+		svc := &server{
+			onDeleteCalled: func(req *proto.DeleteRequest) {
+				assert.Equal(t, req.Key, fakeKey)
+			},
+			deleteErr: st.Err(),
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+		err = stStore.Delete(context.Background(), &state.DeleteRequest{
+			Key: fakeKey,
+		})
+
+		assert.NotNil(t, err)
+		etag, ok := err.(*state.ETagError)
+		require.True(t, ok)
+		assert.Equal(t, etag.Kind(), state.ETagInvalid)
 		assert.Equal(t, int64(1), svc.deleteCalled.Load())
 	})
 
@@ -511,6 +584,40 @@ func TestComponentCalls(t *testing.T) {
 		err = stStore.BulkDelete(context.Background(), requests)
 
 		assert.NotNil(t, err)
+		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
+	})
+
+	t.Run("bulkDelete should return bulkDeleteRowMismatchError when grpc bulkDelete returns a grpcCodeBulkDeleteRowMismatchError", func(t *testing.T) {
+		requests := []state.DeleteRequest{
+			{
+				Key: "fake",
+			},
+		}
+
+		st := status.New(GRPCCodeBulkDeleteRowMismatch, "fake-err-msg")
+		br := &errdetails.ErrorInfo{}
+		br.Metadata = map[string]string{
+			affectedRowsMetadataKey: "100",
+			expectedRowsMetadataKey: "99",
+		}
+		st, err := st.WithDetails(br)
+		require.NoError(t, err)
+
+		svc := &server{
+			bulkDeleteErr: st.Err(),
+			onBulkDeleteCalled: func(bsr *proto.BulkDeleteRequest) {
+				assert.Len(t, bsr.Items, len(requests))
+			},
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		err = stStore.BulkDelete(context.Background(), requests)
+
+		assert.NotNil(t, err)
+		_, ok := err.(*state.BulkDeleteRowMismatchError)
+		require.True(t, ok)
 		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
 	})
 

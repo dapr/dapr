@@ -224,6 +224,7 @@ func (in *ConfigurationSpec) DeepCopyInto(out *ConfigurationSpec) {
 	in.HTTPPipelineSpec.DeepCopyInto(&out.HTTPPipelineSpec)
 	out.TracingSpec = in.TracingSpec
 	in.MetricSpec.DeepCopyInto(&out.MetricSpec)
+	in.MetricsSpec.DeepCopyInto(&out.MetricsSpec)
 	out.MTLSSpec = in.MTLSSpec
 	in.Secrets.DeepCopyInto(&out.Secrets)
 	in.AccessControlSpec.DeepCopyInto(&out.AccessControlSpec)
