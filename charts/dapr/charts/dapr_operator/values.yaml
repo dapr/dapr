@@ -16,6 +16,8 @@ fullnameOverride: ""
 
 runAsNonRoot: true
 
+serviceReconciler: true
+
 ports:
   protocol: TCP
   port: 80
