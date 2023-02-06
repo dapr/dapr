@@ -986,7 +986,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			if err = a.executeReminder(reminder); err != nil {
 				if errors.Is(err, ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
-					log.Infof("reminder %q was canceled by the actor", reminder.Name)
+					log.Debugf("reminder %q was canceled by the actor", reminder.Name)
 					break L
 				} else {
 					log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
@@ -1796,7 +1796,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 
 	stop, exists := a.activeReminders.Load(reminderKey)
 	if exists {
-		log.Infof("Found reminder with key: %v. Deleting reminder", reminderKey)
+		log.Debugf("Found reminder with key: %v. Deleting reminder", reminderKey)
 		close(stop.(chan bool))
 		a.activeReminders.Delete(reminderKey)
 	}
