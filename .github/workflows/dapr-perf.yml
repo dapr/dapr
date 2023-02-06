@@ -359,7 +359,7 @@ jobs:
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-perf") {
               let selectedTestsEnvVar = ""
-              if (typeof testPayload.args !== "undefined") {
+              if (testPayload?.args) {
                 selectedTestsEnvVar = `DAPR_PERF_TEST=${testPayload.args}\n`
               }
               var fs = require('fs');

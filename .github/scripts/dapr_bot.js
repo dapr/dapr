@@ -65,8 +65,8 @@ async function handleIssueCommentCreate({ github, context }) {
         console.log("[handleIssueCommentCreate] comment body not found, exiting.");
         return;
     }
-    const commandParts = commentBody.split(" ")
-    const command = commandParts[0];
+    const commandParts = commentBody.split(/\s+/)
+    const command = commandParts.shift();
 
     // Commands that can be executed by anyone.
     if (command === "/assign") {
@@ -88,8 +88,7 @@ async function handleIssueCommentCreate({ github, context }) {
             await cmdOkToTest(github, issue, isFromPulls);
             break;
         case "/ok-to-perf":
-            const [_, ...commandArgs] = commandParts
-            await cmdOkToPerf(github, issue, isFromPulls, commandArgs.length > 0 ? commandArgs.join(" ") : undefined);
+            await cmdOkToPerf(github, issue, isFromPulls, commandParts.join(" "));
             break;
         default:
             console.log(`[handleIssueCommentCreate] command ${command} not found, exiting.`);
