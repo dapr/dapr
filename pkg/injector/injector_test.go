@@ -576,8 +576,8 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
 
 	testCases := []struct {
-		name      string
 		namespace string
+		name      string
 	}{
 		{metav1.NamespaceSystem, "replicaset-controller"},
 		{"tekton-pipelines", "tekton-pipelines-controller"},
