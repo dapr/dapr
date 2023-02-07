@@ -34,6 +34,10 @@ const (
 	defaultMetricsPort              = 9090
 	clusterIPNone                   = "None"
 	daprServiceOwnerField           = ".metadata.controller"
+	annotationPrometheusProbe       = "prometheus.io/probe"
+	annotationPrometheusScrape      = "prometheus.io/scrape"
+	annotationPrometheusPort        = "prometheus.io/port"
+	annotationPrometheusPath        = "prometheus.io/path"
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -231,10 +235,10 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 
 	if enableMetrics {
-		annotationsMap["prometheus.io/probe"] = "true"
-		annotationsMap["prometheus.io/scrape"] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
-		annotationsMap["prometheus.io/port"] = strconv.Itoa(metricsPort)
-		annotationsMap["prometheus.io/path"] = "/"
+		annotationsMap[annotationPrometheusProbe] = "true"
+		annotationsMap[annotationPrometheusScrape] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
+		annotationsMap[annotationPrometheusPort] = strconv.Itoa(metricsPort)
+		annotationsMap[annotationPrometheusPath] = "/"
 	}
 
 	return &corev1.Service{
