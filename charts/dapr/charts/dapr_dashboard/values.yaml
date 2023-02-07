@@ -6,7 +6,7 @@ component: dashboard
 image:
   registry: docker.io/daprio
   name: dashboard
-  tag: "0.11.0"
+  tag: "0.11.1"
   imagePullSecrets: ""
 
 nameOverride: ""
