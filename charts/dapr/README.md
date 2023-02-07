@@ -118,7 +118,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.ingress.className`      | ingress className of the ingress controller (e.g.nginx)                                                                                                                | ``                 |
 | `dapr_dashboard.ingress.host`           | Fully qualified hostname of the dashboard URL (e.g `dashboard.dapr.local`) | ``  |
 | `dapr_dashboard.ingress.tls.enabled`    | If true, enables TLS on the ingress for the Dashboard                                                                                                                      | `false`            |
-| `dapr_dashboard.ingress.tls.secretName` | Secret name of the kubernetes tls secret (key/certificate)                                                                                                             | ``                 |
+| `dapr_dashboard.ingress.tls.secretName` | Name of the Kubernetes secret containing the TLS certificate (key/certificate) for the Dashboard. Ignored if `dapr_dashboard.ingress.tls.enabled` is `false`. | ``                 |
 
 
 
