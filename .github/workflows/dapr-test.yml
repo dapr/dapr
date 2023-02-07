@@ -26,7 +26,7 @@ name: dapr-test
 on:
   # Run every 2 hours
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: "0 */2 * * *"
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
@@ -530,11 +530,18 @@ jobs:
       - name: Run E2E tests
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: make test-e2e-all
-      - name: Show test summary
+      - name: Add job test summary
         if: always()
         uses: test-summary/action@v2
         with:
           paths: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*.xml
+      - name: Add job test outputs
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const script = require('./.github/scripts/dapr_tests_summary.js')
+            await script({core, glob})
       - name: Save control plane K8s resources
         if: always() && env.TEST_PREFIX != ''
         run: |
