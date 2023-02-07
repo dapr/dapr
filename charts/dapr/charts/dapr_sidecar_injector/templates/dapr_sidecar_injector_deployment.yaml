@@ -144,14 +144,10 @@ spec:
         - name: IGNORE_ENTRYPOINT_TOLERATIONS
           value: "{{ .Values.ignoreEntrypointTolerations }}"
 {{- end }}
-{{- if .Values.sidecarRunAsNonRoot }}
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: "{{ .Values.sidecarRunAsNonRoot }}"
-{{- end }}
-{{- if .Values.sidecarReadOnlyRootFilesystem }}
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
           value: "{{ .Values.sidecarReadOnlyRootFilesystem }}"
-{{- end }}
 {{- if .Values.allowedServiceAccounts }}
         - name: ALLOWED_SERVICE_ACCOUNTS
           value: "{{ .Values.allowedServiceAccounts }}"
