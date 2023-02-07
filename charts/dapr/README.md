@@ -116,7 +116,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.resources`              | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty                      | `{}`               |
 | `dapr_dashboard.ingress.enabled`        | Boolean value for enabling the creation of the ingress resource                                                                                                        | `false`            |
 | `dapr_dashboard.ingress.className`      | ingress className of the ingress controller (e.g.nginx)                                                                                                                | ``                 |
-| `dapr_dashboard.ingress.host`           | Fully qualified hostname of the dashboard URL (e.g dapr.127.0.0.1.nip.io)                                                                                              | ``                 |
+| `dapr_dashboard.ingress.host`           | Fully qualified hostname of the dashboard URL (e.g `dashboard.dapr.local`) | ``  |
 | `dapr_dashboard.ingress.tls.enabled`    | Boolean value for enabling the HTTPS/TLS endpoint                                                                                                                      | `false`            |
 | `dapr_dashboard.ingress.tls.secretName` | Secret name of the kubernetes tls secret (key/certificate)                                                                                                             | ``                 |
 
