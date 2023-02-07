@@ -78,6 +78,16 @@ func Contains[T comparable](s []T, v T) bool {
 	return false
 }
 
+// ContainsPrefixed reports whether v is prefixed by any of the strings in s.
+func ContainsPrefixed(prefixes []string, v string) bool {
+	for _, e := range prefixes {
+		if strings.HasPrefix(v, e) {
+			return true
+		}
+	}
+	return false
+}
+
 // SetEnvVariables set variables to environment.
 func SetEnvVariables(variables map[string]string) error {
 	for key, value := range variables {
@@ -162,6 +172,27 @@ func Filter[T any](items []T, test func(item T) bool) []T {
 		}
 	}
 	return slices.Clip(filteredItems)
+}
+
+// MapToSlice is the inversion of SliceToMap
+func MapToSlice[T comparable, V any](m map[T]V) []T {
+	l := make([]T, len(m))
+	var i int
+	for uid := range m {
+		l[i] = uid
+		i++
+	}
+	return l
+}
+
+// SliceToMap simple utility to convert from a slice to a map generally to use for contains-like operations
+func SliceToMap[T comparable, V any](l []T) map[T]V {
+	m := make(map[T]V)
+	for _, k := range l {
+		var v V
+		m[k] = v
+	}
+	return m
 }
 
 const (

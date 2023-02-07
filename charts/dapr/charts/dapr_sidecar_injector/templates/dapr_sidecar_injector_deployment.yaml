@@ -157,6 +157,14 @@ spec:
         - name: ALLOWED_SERVICE_ACCOUNTS
           value: "{{ .Values.allowedServiceAccounts }}"
 {{- end }}
+{{- if .Values.allowedServiceAccountsWatchNames }}
+        - name: ALLOWED_SERVICE_ACCOUNTS_WATCH_NAME
+          value: "{{ .Values.allowedServiceAccountsWatchNames }}"
+{{- end }}
+{{- if .Values.allowedServiceAccountsWatchLabelSelectors }}
+        - name: ALLOWED_SERVICE_ACCOUNTS_WATCH_LABEL_SELECTOR
+          value: "{{ .Values.allowedServiceAccountsWatchLabelSelectors }}"
+{{- end }}
         ports:
         - name: https
           containerPort: 4000

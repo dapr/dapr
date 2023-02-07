@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/dapr/dapr/pkg/injector/config"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,7 @@ import (
 )
 
 func TestConfigCorrectValues(t *testing.T) {
-	i := NewInjector(nil, Config{
+	i := NewInjector(nil, config.Config{
 		TLSCertFile:            "a",
 		TLSKeyFile:             "b",
 		SidecarImage:           "c",
@@ -377,7 +378,7 @@ func TestGetAppIDFromRequest(t *testing.T) {
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 
-	i := NewInjector([]string{authID}, Config{
+	i := NewInjector([]string{authID}, config.Config{
 		TLSCertFile:  "test-cert",
 		TLSKeyFile:   "test-key",
 		SidecarImage: "test-image",
@@ -596,25 +597,25 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 	}
 
 	t.Run("injector config has no allowed service account", func(t *testing.T) {
-		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{}, client)
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), config.Config{}, client)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, len(uids))
 	})
 
 	t.Run("injector config has a valid allowed service account", func(t *testing.T) {
-		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test"}, client)
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), config.Config{AllowedServiceAccounts: "test:test"}, client)
 		assert.NoError(t, err)
 		assert.Equal(t, 3, len(uids))
 	})
 
 	t.Run("injector config has a invalid allowed service account", func(t *testing.T) {
-		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "abc:abc"}, client)
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), config.Config{AllowedServiceAccounts: "abc:abc"}, client)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, len(uids))
 	})
 
 	t.Run("injector config has multiple allowed service accounts", func(t *testing.T) {
-		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), config.Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
 		assert.NoError(t, err)
 		assert.Equal(t, 3, len(uids))
 	})

@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	v1 "k8s.io/api/admission/v1"
@@ -31,6 +32,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/injector/config"
+	"github.com/dapr/dapr/pkg/injector/interfaces"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/utils"
@@ -55,18 +58,16 @@ var AllowedServiceAccountInfos = []string{
 	"tekton-pipelines:tekton-pipelines-controller",
 }
 
-// Injector is the interface for the Dapr runtime sidecar injection component.
-type Injector interface {
-	Run(ctx context.Context, onReady func())
-}
-
 type injector struct {
-	config       Config
+	config       config.Config
 	deserializer runtime.Decoder
 	server       *http.Server
 	kubeClient   kubernetes.Interface
 	daprClient   scheme.Interface
 	authUIDs     []string
+
+	authUIDsMap map[string]struct{}
+	authUIDsMu  sync.RWMutex
 }
 
 // errorToAdmissionResponse is a helper function to create an AdmissionResponse
@@ -99,7 +100,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config.
-func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) Injector {
+func NewInjector(authUIDs []string, config config.Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) interfaces.Injector {
 	mux := http.NewServeMux()
 
 	i := &injector{
@@ -112,17 +113,32 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
 		},
-		kubeClient: kubeClient,
-		daprClient: daprClient,
-		authUIDs:   authUIDs,
+		kubeClient:  kubeClient,
+		daprClient:  daprClient,
+		authUIDs:    authUIDs,
+		authUIDsMap: utils.SliceToMap[string, struct{}](authUIDs),
 	}
 
 	mux.HandleFunc("/mutate", i.handleRequest)
 	return i
 }
 
+// UpdateAllowedAuthUIDs will update the map of allowed UIDs and the materialized slice when we get an update from the dynamic watch
+func (i *injector) UpdateAllowedAuthUIDs(addAuthUIDs []string, deleteAuthUIDs []string) {
+	i.authUIDsMu.Lock()
+	defer i.authUIDsMu.Unlock()
+
+	for _, uid := range addAuthUIDs {
+		i.authUIDsMap[uid] = struct{}{}
+	}
+	for _, uid := range deleteAuthUIDs {
+		delete(i.authUIDsMap, uid)
+	}
+	i.authUIDs = utils.MapToSlice(i.authUIDsMap)
+}
+
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
-func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
+func AllowedControllersServiceAccountUID(ctx context.Context, cfg config.Config, kubeClient kubernetes.Interface) ([]string, error) {
 	allowedList := []string{}
 	if cfg.AllowedServiceAccounts != "" {
 		allowedList = append(allowedList, strings.Split(cfg.AllowedServiceAccounts, ",")...)
@@ -234,7 +250,12 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-		if !(utils.Contains(i.authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
+		// get a snapshot of the authuids
+		i.authUIDsMu.RLock()
+		authUIDs := i.authUIDs
+		i.authUIDsMu.RUnlock()
+
+		if !(utils.Contains(authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
 			log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
 		} else if ar.Request.Kind.Kind != "Pod" {
 			log.Errorf("invalid kind for review: %s", ar.Kind)

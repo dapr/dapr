@@ -220,3 +220,71 @@ func TestFilter(t *testing.T) {
 		assert.Equal(t, []string{}, out)
 	})
 }
+
+func TestContainsPrefixed(t *testing.T) {
+	tcs := []struct {
+		name     string
+		prefixes []string
+		v        string
+		want     bool
+	}{
+		{
+			name: "empty",
+			v:    "some-service-account-name",
+			want: false,
+		},
+		{
+			name:     "notFound",
+			v:        "some-service-account-name",
+			prefixes: []string{"service-account-name", "other-service-account-name"},
+			want:     false,
+		},
+		{
+			name:     "one",
+			v:        "some-service-account-name",
+			prefixes: []string{"service-account-name", "some-service-account-name"},
+			want:     true,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equalf(t, tc.want, ContainsPrefixed(tc.prefixes, tc.v), "ContainsPrefixed(%v, %v)", tc.prefixes, tc.v)
+		})
+	}
+}
+
+func TestMapToSlice(t *testing.T) {
+	t.Run("mapStringString", func(t *testing.T) {
+		m := map[string]string{"a": "b", "c": "d", "e": "f"}
+		got := MapToSlice(m)
+		assert.Equal(t, got, []string{"a", "c", "e"})
+	})
+	t.Run("mapStringStruct", func(t *testing.T) {
+		m := map[string]struct{}{"a": struct{}{}, "c": struct{}{}, "e": struct{}{}}
+		got := MapToSlice(m)
+		assert.Equal(t, got, []string{"a", "c", "e"})
+	})
+	t.Run("intStringStruct", func(t *testing.T) {
+		m := map[int]struct{}{1: struct{}{}, 2: struct{}{}, 3: struct{}{}}
+		got := MapToSlice(m)
+		assert.Equal(t, got, []int{1, 2, 3})
+	})
+}
+
+func TestSliceToMap(t *testing.T) {
+	t.Run("sliceStringToMapStringString", func(t *testing.T) {
+		m := []string{"a", "b", "c"}
+		got := SliceToMap[string, string](m)
+		assert.Equal(t, got, map[string]string{"a": "", "b": "", "c": ""})
+	})
+	t.Run("sliceStringToMapStringStruct", func(t *testing.T) {
+		m := []string{"a", "b", "c"}
+		got := SliceToMap[string, struct{}](m)
+		assert.Equal(t, got, map[string]struct{}{"a": struct{}{}, "b": struct{}{}, "c": struct{}{}})
+	})
+	t.Run("sliceIntToMapIntBool", func(t *testing.T) {
+		m := []int{1, 2, 3}
+		got := SliceToMap[int, bool](m)
+		assert.Equal(t, got, map[int]bool{1: false, 2: false, 3: false})
+	})
+}

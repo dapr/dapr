@@ -15,6 +15,8 @@ package main
 
 import (
 	"flag"
+	"github.com/dapr/dapr/pkg/injector/allowedsawatcher"
+	"github.com/dapr/dapr/pkg/injector/config"
 	"path/filepath"
 
 	"k8s.io/client-go/util/homedir"
@@ -40,7 +42,7 @@ func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
 	ctx := signals.Context()
-	cfg, err := injector.GetConfig()
+	cfg, err := config.GetConfig()
 	if err != nil {
 		log.Fatalf("error getting config: %s", err)
 	}
@@ -63,6 +65,14 @@ func main() {
 	}
 
 	inj := injector.NewInjector(uids, cfg, daprClient, kubeClient)
+
+	saWatcher := allowedsawatcher.NewWatcher(cfg, inj)
+	// service account name namespace watcher
+	go func() {
+		if err = saWatcher.Start(ctx); err != nil {
+			log.Fatalf("unable to start service account name/namespace watcher")
+		}
+	}()
 
 	// Blocking call
 	inj.Run(ctx, func() {
