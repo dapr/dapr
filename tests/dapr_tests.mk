@@ -336,8 +336,43 @@ $(foreach ITEM,$(PERF_TESTS),$(eval $(call genPerfTestRun,$(ITEM))))
 TEST_PERF_TARGETS:=$(foreach ITEM,$(PERF_TESTS),test-perf-$(ITEM))
 
 # start all perf tests
-test-perf-all: test-perf-actor_double_activation actor_type_scale test-perf-actor_timer test-perf-actor_reminder
+test-perf-all: check-e2e-env test-deps
 	# Note: use env variable DAPR_PERF_TEST to pick one e2e test to run.
+ifeq ($(DAPR_PERF_TEST),)
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
+	DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
+	GOOS=$(TARGET_OS_LOCAL) \
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) \
+	DAPR_TEST_TAG=$(DAPR_TEST_TAG) \
+	DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) \
+	DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
+	NO_API_LOGGING=true \
+		gotestsum \
+		--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json \
+		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
+		--format standard-quiet \
+		-- \
+			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
+	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
+else
+	for app in $(DAPR_PERF_TEST); do \
+		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
+		DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
+		GOOS=$(TARGET_OS_LOCAL) \
+		DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) \
+		DAPR_TEST_TAG=$(DAPR_TEST_TAG) \
+		DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) \
+		DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
+		NO_API_LOGGING=true \
+			gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
+			--format standard-quiet \
+			-- \
+				-p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
+		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
+	done
+endif
 
 # add required helm repo
 setup-helm-init:
