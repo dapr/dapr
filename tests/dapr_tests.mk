@@ -417,7 +417,7 @@ setup-test-env-kafka:
 
 # install rabbitmq to the cluster
 setup-test-env-rabbitmq:
-	$(HELM) install rabbitmq stable/rabbitmq --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade --install rabbitmq bitnami/rabbitmq --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
 # delete kafka from cluster
 delete-test-env-kafka:

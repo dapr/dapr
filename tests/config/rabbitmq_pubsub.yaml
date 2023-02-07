@@ -20,6 +20,6 @@ spec:
   initTimeout: 1m
   version: v1
   metadata:
-  # Kafka broker connection setting
+  # rabbitmq broker connection setting
   - name: host
     value: "amqp://rabbitmq.dapr-tests.svc.cluster.local:5672"
