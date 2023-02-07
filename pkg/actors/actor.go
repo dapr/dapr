@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	clocklib "github.com/benbjohnson/clock"
+
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
@@ -35,7 +37,7 @@ type actor struct {
 	// actorLock is the lock to maintain actor's turn-based concurrency with allowance for reentrancy if configured.
 	actorLock ActorLock
 	// pendingActorCalls is the number of the current pending actor calls by turn-based concurrency.
-	pendingActorCalls atomic.Int32
+	pendingActorCalls *atomic.Int32
 
 	// When consistent hashing tables are updated, actor runtime drains actor to rebalance actors
 	// across actor hosts after drainOngoingCallTimeout or until all pending actor calls are completed.
@@ -51,18 +53,24 @@ type actor struct {
 	// is used when runtime drains actor.
 	disposeCh chan struct{}
 
-	once sync.Once
+	once  sync.Once
+	clock clocklib.Clock
 }
 
-func newActor(actorType, actorID string, maxReentrancyDepth *int) *actor {
+func newActor(actorType, actorID string, maxReentrancyDepth *int, clock clocklib.Clock) *actor {
+	if clock == nil {
+		clock = clocklib.New()
+	}
 	return &actor{
-		actorType:    actorType,
-		actorID:      actorID,
-		actorLock:    NewActorLock(int32(*maxReentrancyDepth)),
-		disposeLock:  &sync.RWMutex{},
-		disposeCh:    nil,
-		disposed:     false,
-		lastUsedTime: time.Now().UTC(),
+		actorType:         actorType,
+		actorID:           actorID,
+		actorLock:         NewActorLock(int32(*maxReentrancyDepth)),
+		pendingActorCalls: &atomic.Int32{},
+		disposeLock:       &sync.RWMutex{},
+		disposeCh:         nil,
+		disposed:          false,
+		clock:             clock,
+		lastUsedTime:      clock.Now(),
 	}
 }
 
@@ -104,7 +112,7 @@ func (a *actor) lock(reentrancyID *string) error {
 		a.unlock()
 		return ErrActorDisposed
 	}
-	a.lastUsedTime = time.Now().UTC()
+	a.lastUsedTime = a.clock.Now().UTC()
 	return nil
 }
 
