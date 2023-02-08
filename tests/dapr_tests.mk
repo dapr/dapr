@@ -370,7 +370,7 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
+				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
 		[[ $$? != 0 ]] && exit_code=1; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
