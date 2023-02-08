@@ -42,9 +42,6 @@ func NewWatcher(cfgServiceAccountNamesWatch, cfgServiceAccountLabelsWatch string
 		log.Fatalf("unable to set up allowed service account watcher, err: %s", err)
 	}
 	var preds []predicate.Predicate
-	//if cfg.AllowedServiceAccountsWatchLabelSelector != "" {
-	//	preds = append(preds, getLabelSelectorPredicate(cfg.AllowedServiceAccountsWatchLabelSelector))
-	//}
 	if cfgServiceAccountNamesWatch != "" {
 		pred, err := getNameNamespacePredicates(cfgServiceAccountNamesWatch)
 		if err != nil {
