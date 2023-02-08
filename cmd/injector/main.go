@@ -15,8 +15,10 @@ package main
 
 import (
 	"flag"
-	"github.com/dapr/dapr/pkg/injector/allowedsawatcher"
 	"path/filepath"
+	"strings"
+
+	"github.com/dapr/dapr/pkg/injector/allowedsawatcher"
 
 	"k8s.io/client-go/util/homedir"
 
@@ -65,8 +67,9 @@ func main() {
 
 	inj := injector.NewInjector(uids, cfg, daprClient, kubeClient)
 
-	if saWatcher := allowedsawatcher.NewWatcher(cfg.AllowedServiceAccountsWatchNames, cfg.AllowedServiceAccountsWatchLabelSelector, inj, conf); saWatcher != nil {
+	if strings.TrimSpace(cfg.AllowedServiceAccountsWatchNames) != "" {
 		// service account name namespace watcher
+		saWatcher := allowedsawatcher.NewWatcher(cfg.AllowedServiceAccountsWatchNames, inj, conf)
 		go func() {
 			if err = saWatcher.Start(ctx); err != nil {
 				log.Fatalf("unable to start service account name/namespace watcher")

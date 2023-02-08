@@ -23,18 +23,17 @@ import (
 
 // Config represents configuration options for the Dapr Sidecar Injector webhook server.
 type Config struct {
-	TLSCertFile                              string `envconfig:"TLS_CERT_FILE" required:"true"`
-	TLSKeyFile                               string `envconfig:"TLS_KEY_FILE" required:"true"`
-	SidecarImage                             string `envconfig:"SIDECAR_IMAGE" required:"true"`
-	SidecarImagePullPolicy                   string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
-	Namespace                                string `envconfig:"NAMESPACE" required:"true"`
-	KubeClusterDomain                        string `envconfig:"KUBE_CLUSTER_DOMAIN"`
-	AllowedServiceAccounts                   string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
-	AllowedServiceAccountsWatchNames         string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_WATCH_NAME"`
-	AllowedServiceAccountsWatchLabelSelector string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_WATCH_LABEL_SELECTOR"`
-	IgnoreEntrypointTolerations              string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
-	RunAsNonRoot                             string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
-	ReadOnlyRootFilesystem                   string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
+	TLSCertFile                      string `envconfig:"TLS_CERT_FILE" required:"true"`
+	TLSKeyFile                       string `envconfig:"TLS_KEY_FILE" required:"true"`
+	SidecarImage                     string `envconfig:"SIDECAR_IMAGE" required:"true"`
+	SidecarImagePullPolicy           string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
+	Namespace                        string `envconfig:"NAMESPACE" required:"true"`
+	KubeClusterDomain                string `envconfig:"KUBE_CLUSTER_DOMAIN"`
+	AllowedServiceAccounts           string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
+	AllowedServiceAccountsWatchNames string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_WATCH_NAME"`
+	IgnoreEntrypointTolerations      string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
+	RunAsNonRoot                     string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
+	ReadOnlyRootFilesystem           string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }

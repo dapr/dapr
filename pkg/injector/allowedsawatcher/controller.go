@@ -25,11 +25,7 @@ var (
 	scheme = runtime.NewScheme()
 )
 
-func NewWatcher(cfgServiceAccountNamesWatch, cfgServiceAccountLabelsWatch string, injector injector.Injector, conf *rest.Config) ctrl.Manager {
-	// noop if nothing to watch
-	if cfgServiceAccountNamesWatch == "" && cfgServiceAccountLabelsWatch == "" {
-		return nil
-	}
+func NewWatcher(cfgServiceAccountNamesWatch string, injector injector.Injector, conf *rest.Config) ctrl.Manager {
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
