@@ -107,7 +107,7 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: false,
 			MetricsEnabled: true,
-			Config:         "app-channel-pipeline",
+			ConfigName:     "app-channel-pipeline",
 		},
 		{
 			AppName:        "grpcapp",

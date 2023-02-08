@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
-			Config:         "allowlistsappconfig",
+			ConfigName:     "allowlistsappconfig",
 			AppName:        "allowlists-callee-http",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation",
@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
-			Config:         "allowlistsgrpcappconfig",
+			ConfigName:     "allowlistsgrpcappconfig",
 			AppName:        "allowlists-callee-grpc",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation_grpc",
@@ -86,7 +86,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
-			Config:         "allowlistsgrpcappconfig",
+			ConfigName:     "allowlistsgrpcappconfig",
 			AppName:        "grpcproxyserver",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation_grpc_proxy_server",

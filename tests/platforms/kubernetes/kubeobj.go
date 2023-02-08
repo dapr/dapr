@@ -107,8 +107,13 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.MetricsPort != "" {
 		annotationObject["dapr.io/metrics-port"] = appDesc.MetricsPort
 	}
-	if appDesc.Config != "" {
-		annotationObject["dapr.io/config"] = appDesc.Config
+	if appDesc.ConfigFile != "" {
+		annotationObject["dapr.io/config-file"] = appDesc.ConfigFile
+	} else if appDesc.ConfigName != "" {
+		annotationObject["dapr.io/config-name"] = appDesc.ConfigName
+	}
+	if appDesc.ResourcesPath != "" {
+		annotationObject["dapr.io/resources-path"] = appDesc.ResourcesPath
 	}
 	if appDesc.DaprVolumeMounts != "" {
 		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts

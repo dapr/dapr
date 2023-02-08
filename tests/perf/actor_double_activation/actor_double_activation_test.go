@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 			AppName:           serviceApplicationName,
 			DaprEnabled:       true,
 			ImageName:         "perf-actor-activation-locker",
-			Config:            "redishostconfig",
+			ConfigName:        "redishostconfig",
 			Replicas:          3,
 			IngressEnabled:    true,
 			MetricsEnabled:    true,

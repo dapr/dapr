@@ -77,7 +77,7 @@ func TestMain(m *testing.M) {
 		},
 		{
 			AppName:        "disabledmetric",
-			Config:         "disable-telemetry",
+			ConfigName:     "disable-telemetry",
 			DaprEnabled:    true,
 			ImageName:      "e2e-hellodapr",
 			Replicas:       1,

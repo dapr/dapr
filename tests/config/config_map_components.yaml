@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: components-cm
+data:
+  uppercase.yaml: |
+    apiVersion: dapr.io/v1alpha1
+    kind: Component
+    metadata:
+      name: uppercase
+    spec:
+      ignoreErrors: true
+      version: v1
+      type: middleware.http.uppercase
+      metadata:
+        - name: scopes
+          value: "*"

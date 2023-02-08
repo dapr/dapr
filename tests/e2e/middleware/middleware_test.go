@@ -22,10 +22,12 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
 )
 
 const numHealthChecks = 60 // Number of get calls before starting tests.
@@ -52,26 +54,72 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("middleware")
 	utils.InitHTTPClient(true)
 
-	// These apps will be deployed before starting actual test
-	// and will be cleaned up after all tests are finished automatically
+	// These apps have a Configuration object passed as --config-file and loaded from a ConfigMap resource
+	// Likewise, Components are passed using --resources-path and loaded from a ConfigMap resource
+	componentsVolume := apiv1.Volume{
+		Name: "components",
+		VolumeSource: apiv1.VolumeSource{
+			ConfigMap: &apiv1.ConfigMapVolumeSource{
+				LocalObjectReference: apiv1.LocalObjectReference{
+					Name: "components-cm",
+				},
+			},
+		},
+	}
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "middlewareapp",
-			DaprEnabled:    true,
-			ImageName:      "e2e-middleware",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			Config:         "pipeline",
+			AppName:          "middlewareapp",
+			DaprEnabled:      true,
+			ImageName:        "e2e-middleware",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			DaprVolumeMounts: "components:/mnt/components,config:/mnt/config",
+			ConfigFile:       "/mnt/config/pipeline.yaml",
+			ResourcesPath:    "/mnt/components",
+			Volumes: []apiv1.Volume{
+				componentsVolume,
+				{
+					Name: "config",
+					VolumeSource: apiv1.VolumeSource{
+						ConfigMap: &apiv1.ConfigMapVolumeSource{
+							LocalObjectReference: apiv1.LocalObjectReference{
+								Name: "pipeline-cm",
+							},
+							Items: []apiv1.KeyToPath{
+								{Key: "pipeline.yaml", Path: "pipeline.yaml"},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
-			AppName:        "app-channel-middleware",
-			DaprEnabled:    true,
-			ImageName:      "e2e-middleware",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			Config:         "app-channel-pipeline",
+			AppName:          "app-channel-middleware",
+			DaprEnabled:      true,
+			ImageName:        "e2e-middleware",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			DaprVolumeMounts: "components:/mnt/components,config:/mnt/config",
+			ConfigFile:       "/mnt/config/app-channel-pipeline.yaml",
+			ResourcesPath:    "/mnt/components",
+			Volumes: []apiv1.Volume{
+				componentsVolume,
+				{
+					Name: "config",
+					VolumeSource: apiv1.VolumeSource{
+						ConfigMap: &apiv1.ConfigMapVolumeSource{
+							LocalObjectReference: apiv1.LocalObjectReference{
+								Name: "pipeline-cm",
+							},
+							Items: []apiv1.KeyToPath{
+								{Key: "app-channel-pipeline.yaml", Path: "app-channel-pipeline.yaml"},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			AppName:        "no-middleware",

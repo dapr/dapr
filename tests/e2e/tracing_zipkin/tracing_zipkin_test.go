@@ -57,7 +57,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			Config:            "tracingconfig-zipkin",
+			ConfigName:        "tracingconfig-zipkin",
 		},
 		{
 			AppName:           "tracingapp-b",
@@ -70,7 +70,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			Config:            "tracingconfig-zipkin",
+			ConfigName:        "tracingconfig-zipkin",
 		},
 	}
 

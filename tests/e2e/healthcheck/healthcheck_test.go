@@ -70,7 +70,7 @@ func TestMain(m *testing.M) {
 				"CONTROL_PORT": "3000",
 			},
 			// TODO: Remove once AppHealthCheck feature is finalized
-			Config: "healthcheckconfig",
+			ConfigName: "healthcheckconfig",
 		},
 		{
 			AppName:                "healthapp-grpc",
@@ -93,7 +93,7 @@ func TestMain(m *testing.M) {
 				"CONTROL_PORT": "3000",
 			},
 			// TODO: Remove once AppHealthCheck feature is finalized
-			Config: "healthcheckconfig",
+			ConfigName: "healthcheckconfig",
 		},
 	}
 

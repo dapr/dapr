@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pipeline-cm
+data:
+  pipeline.yaml: |
+    apiVersion: dapr.io/v1alpha1
+    kind: Configuration
+    metadata:
+      name: pipeline
+    spec:
+      tracing:
+        samplingRate: "1"
+      httpPipeline:
+        handlers:
+        - type: middleware.http.uppercase
+          name: uppercase
+  app-channel-pipeline.yaml: |
+    apiVersion: dapr.io/v1alpha1
+    kind: Configuration
+    metadata:
+      name: app-channel-pipeline
+    spec:
+      appHttpPipeline:
+        handlers:
+        - type: middleware.http.uppercase
+          name: uppercase

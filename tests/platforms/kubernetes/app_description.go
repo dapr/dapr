@@ -43,7 +43,9 @@ type AppDescription struct {
 	IngressPort            int                             `json:",omitempty"` // Defaults to AppPort if empty
 	MetricsEnabled         bool                            `json:",omitempty"` // This controls the setting for the dapr.io/enable-metrics annotation
 	MetricsPort            string                          `json:",omitempty"`
-	Config                 string                          `json:",omitempty"`
+	ConfigName             string                          `json:",omitempty"`
+	ConfigFile             string                          `json:",omitempty"`
+	ResourcesPath          string                          `json:",omitempty"`
 	AppCPULimit            string                          `json:",omitempty"`
 	AppCPURequest          string                          `json:",omitempty"`
 	AppMemoryLimit         string                          `json:",omitempty"`

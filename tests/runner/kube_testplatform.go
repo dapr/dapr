@@ -116,7 +116,7 @@ func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
 		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, getTestImageTag())
 
 		if dt {
-			app.Config = disableTelemetryConfig
+			app.ConfigName = disableTelemetryConfig
 		}
 
 		if app.DaprCPULimit == "" {
