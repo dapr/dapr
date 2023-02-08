@@ -355,7 +355,6 @@ ifeq ($(DAPR_PERF_TEST),)
 			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
-	exit_code=0
 	for app in $(DAPR_PERF_TEST); do \
 		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
 		DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
@@ -370,13 +369,15 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
-		[[ $$? != 0 ]] && exit_code=1; \
+				-p 1 -count=1 -v -tags=perf ./tests/perf/$$app... && exit 1 ; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
-	exit $(exit_code);
 endif
 
+tst-cmd:
+	for app in "a b c"; do \
+		echo "$(exit_code)" && exit -1; \
+	done
 # add required helm repo
 setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
