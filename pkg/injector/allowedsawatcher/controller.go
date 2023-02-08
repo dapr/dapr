@@ -109,10 +109,8 @@ func (r *allowedSAWatcher) processCreate(nsName types.NamespacedName, sa *corev1
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	uid, found := r.namespaceNameToUIDs[nsName]
-
-	if !found {
-		uid = string(sa.GetUID())
+	if _, found := r.namespaceNameToUIDs[nsName]; !found {
+		uid := string(sa.GetUID())
 		log.Debugf("requested to add UID %s for %s/%s", uid, nsName.Name, nsName.Namespace)
 		r.injector.UpdateAllowedAuthUIDs([]string{uid}, nil)
 		r.namespaceNameToUIDs[nsName] = uid

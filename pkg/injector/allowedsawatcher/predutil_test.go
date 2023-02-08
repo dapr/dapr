@@ -16,12 +16,12 @@ func Test_getNameNamespaces(t *testing.T) {
 	}{
 		{
 			name:      "emptySA",
-			s:         ":namespace",
+			s:         "namespace:",
 			wantError: true,
 		},
 		{
 			name:      "emptyNS",
-			s:         "sa:",
+			s:         ":sa",
 			wantError: true,
 		},
 		{
@@ -31,82 +31,82 @@ func Test_getNameNamespaces(t *testing.T) {
 		},
 		{
 			name:      "simpleExact",
-			s:         "sa:ns",
+			s:         "ns:sa",
 			wantEqual: map[string]*equalPrefixLists{"ns": {equal: []string{"sa"}}},
 		},
 		{
 			name:      "simpleMultipleExact",
-			s:         "sa:ns,sa2:ns2",
+			s:         "ns:sa,ns2:sa2",
 			wantEqual: map[string]*equalPrefixLists{"ns": {equal: []string{"sa"}}, "ns2": {equal: []string{"sa2"}}},
 		},
 		{
 			name:      "simpleMultipleExactSameNS",
-			s:         "sa:ns,sa2:ns",
+			s:         "ns:sa,ns:sa2",
 			wantEqual: map[string]*equalPrefixLists{"ns": {equal: []string{"sa", "sa2"}}},
 		},
 		{
 			name:      "simpleMultipleExactSameNSSameSA",
-			s:         "sa:ns,sa:ns",
+			s:         "ns:sa,ns:sa",
 			wantEqual: map[string]*equalPrefixLists{"ns": {equal: []string{"sa"}}},
 		},
 		{
 			name:      "simpleMultipleExactSameNSSameSASpaces",
-			s:         " sa : ns , sa: ns ",
+			s:         " ns: sa , ns: sa ",
 			wantEqual: map[string]*equalPrefixLists{"ns": {equal: []string{"sa"}}},
 		},
 		{
 			name:         "simplePrefixNS",
-			s:            "sa:namespace*",
+			s:            "namespace*:sa",
 			wantPrefixed: map[string]*equalPrefixLists{"namespace": {equal: []string{"sa"}}},
 		},
 		{
 			name:      "simplePrefixNSWildcarInMiddle",
-			s:         "sa:names*pace",
+			s:         "names*pace:sa",
 			wantError: true,
 		},
 		{
 			name:      "errPrefixNSTooShort",
-			s:         "sa:nam*",
+			s:         "nam*:sa",
 			wantError: true,
 		},
 		{
 			name:      "errPrefixSATooShort",
-			s:         "sa*:name",
+			s:         "name:sa*",
 			wantError: true,
 		},
 		{
 			name:      "errPrefixSAWildcardNotAtEnd",
-			s:         "sa*sa:name",
+			s:         "name:sa*sa",
 			wantError: true,
 		},
 		{
 			name:      "errPrefixNSForbidden",
-			s:         "sa:kube-*",
+			s:         "kube-*:sa",
 			wantError: true,
 		},
 		{
 			name:      "errPrefixNSForbidden",
-			s:         "sa:kube2-*,sa:kube-*",
+			s:         "kube2-*:sa,kube-*:sa",
 			wantError: true,
 		},
 		{
 			name:         "simpleMultiplePrefixNS",
-			s:            "sa:namespace*,sa:namespace2*",
+			s:            "namespace*:sa,namespace2*:sa",
 			wantPrefixed: map[string]*equalPrefixLists{"namespace": {equal: []string{"sa"}}, "namespace2": {equal: []string{"sa"}}},
 		},
 		{
 			name:      "simplePrefixSA",
-			s:         "service*:namespace",
+			s:         "namespace:service*",
 			wantEqual: map[string]*equalPrefixLists{"namespace": {prefix: []string{"service"}}},
 		},
 		{
 			name:      "simplePrefixSA",
-			s:         "service*:namespace",
+			s:         "namespace:service*",
 			wantEqual: map[string]*equalPrefixLists{"namespace": {prefix: []string{"service"}}},
 		},
 		{
 			name: "multiple",
-			s:    "service*:namespace, service:namespace, service2*:namespace, service3:namespace*, service3*:namespace2, service3*:namespace3*, service5:namespace5",
+			s:    "namespace:service*, namespace:service, namespace:service2*, namespace*:service3, namespace2:service3*, namespace3*:service3*, namespace5:service5",
 			wantEqual: map[string]*equalPrefixLists{
 				"namespace": {
 					prefix: []string{"service", "service2"},

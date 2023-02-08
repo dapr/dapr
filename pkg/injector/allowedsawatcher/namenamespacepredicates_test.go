@@ -21,7 +21,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 	}{
 		{
 			name:           "equalPredicate",
-			namespaceNames: "sa:ns",
+			namespaceNames: "ns:sa",
 			objectMeta:     metav1.ObjectMeta{Name: "sa", Namespace: "ns"},
 			wantCreate:     true,
 			wantDelete:     true,
@@ -30,7 +30,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 		},
 		{
 			name:           "equalPredicateNoMatch",
-			namespaceNames: "sa:ns,sb:ns,sc:ns",
+			namespaceNames: "ns:sa,ns:sb,ns:sc",
 			objectMeta:     metav1.ObjectMeta{Name: "sd", Namespace: "ns"},
 			wantCreate:     false,
 			wantDelete:     false,
@@ -39,7 +39,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 		},
 		{
 			name:           "equalPredicateNoMatchWrongNS",
-			namespaceNames: "sa:ns,sb:ns,sc:ns",
+			namespaceNames: "ns:sa,ns:sb,ns:sc",
 			objectMeta:     metav1.ObjectMeta{Name: "sd", Namespace: "ns2"},
 			wantCreate:     false,
 			wantDelete:     false,
@@ -48,7 +48,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 		},
 		{
 			name:           "equalNamespacePrefixSA",
-			namespaceNames: "vc-sa*:ns",
+			namespaceNames: "ns:vc-sa*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "ns"},
 			wantCreate:     true,
 			wantDelete:     true,
@@ -57,7 +57,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 		},
 		{
 			name:           "equalNamespacePrefixSABadPrefix",
-			namespaceNames: "vc-sa*sa:ns",
+			namespaceNames: "ns:vc-sa*sa",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "ns"},
 			wantCreate:     true,
 			wantDelete:     true,
@@ -66,7 +66,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 		},
 		{
 			name:           "equalNamespacePrefixSANoMatch",
-			namespaceNames: "vc-sa*:ns",
+			namespaceNames: "ns:vc-sa*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "ns"},
 			wantCreate:     false,
 			wantDelete:     false,
@@ -75,7 +75,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 		},
 		{
 			name:           "equalNamespaceMultiplePrefixSA",
-			namespaceNames: "vc-sa*:ns,vc-sb*:ns",
+			namespaceNames: "ns:vc-sa*,ns:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "ns"},
 			wantCreate:     true,
 			wantDelete:     true,
@@ -84,7 +84,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 		},
 		{
 			name:           "prefixNamespaceMultiplePrefixSA",
-			namespaceNames: "vc-sa*:name*,vc-sb*:name*",
+			namespaceNames: "name*:vc-sa*,name*:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "namespace"},
 			wantCreate:     true,
 			wantDelete:     true,
@@ -93,7 +93,7 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 		},
 		{
 			name:           "prefixNamespaceMultiplePrefixSANoMatch",
-			namespaceNames: "vc-sa*:name*,vc-sb*:name*",
+			namespaceNames: "name*:vc-sa*,name*:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "namspace"},
 			wantCreate:     false,
 			wantDelete:     false,

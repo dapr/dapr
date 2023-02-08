@@ -34,7 +34,7 @@ func getNamespaceNames(s string) (prefixed, equal map[string]*equalPrefixLists, 
 		if len(saNs) != 2 {
 			return nil, nil, fmt.Errorf("service account namespace pair not following expected format 'serviceaccountname:namespace'")
 		}
-		sa, ns := saNs[0], saNs[1]
+		sa, ns := saNs[1], saNs[0]
 		sa = strings.TrimSpace(sa)
 		ns = strings.TrimSpace(ns)
 		if len(ns) == 0 || len(sa) == 0 {
