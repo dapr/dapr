@@ -32,7 +32,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/injector/config"
 	"github.com/dapr/dapr/pkg/injector/interfaces"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
@@ -59,7 +58,7 @@ var AllowedServiceAccountInfos = []string{
 }
 
 type injector struct {
-	config       config.Config
+	config       Config
 	deserializer runtime.Decoder
 	server       *http.Server
 	kubeClient   kubernetes.Interface
@@ -100,7 +99,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config.
-func NewInjector(authUIDs []string, config config.Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) interfaces.Injector {
+func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) interfaces.Injector {
 	mux := http.NewServeMux()
 
 	i := &injector{
@@ -138,7 +137,7 @@ func (i *injector) UpdateAllowedAuthUIDs(addAuthUIDs []string, deleteAuthUIDs []
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
-func AllowedControllersServiceAccountUID(ctx context.Context, cfg config.Config, kubeClient kubernetes.Interface) ([]string, error) {
+func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
 	allowedList := []string{}
 	if cfg.AllowedServiceAccounts != "" {
 		allowedList = append(allowedList, strings.Split(cfg.AllowedServiceAccounts, ",")...)

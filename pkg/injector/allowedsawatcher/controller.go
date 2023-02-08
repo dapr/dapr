@@ -2,7 +2,6 @@ package allowedsawatcher
 
 import (
 	"context"
-	"github.com/dapr/dapr/pkg/injector/config"
 	injector "github.com/dapr/dapr/pkg/injector/interfaces"
 	"github.com/dapr/kit/logger"
 	corev1 "k8s.io/api/core/v1"
@@ -22,9 +21,9 @@ import (
 var log = logger.NewLogger("dapr.injector.allowedwatcher")
 var scheme = runtime.NewScheme()
 
-func NewWatcher(cfg config.Config, injector injector.Injector) ctrl.Manager {
+func NewWatcher(cfgServiceAccountNamesWatch, cfgServiceAccountLabelsWatch string, injector injector.Injector) ctrl.Manager {
 	// noop if nothing to watch
-	if cfg.AllowedServiceAccountsWatchNames == "" && cfg.AllowedServiceAccountsWatchLabelSelector == "" {
+	if cfgServiceAccountNamesWatch == "" && cfgServiceAccountLabelsWatch == "" {
 		return nil
 	}
 	conf, err := ctrl.GetConfig()
@@ -49,8 +48,8 @@ func NewWatcher(cfg config.Config, injector injector.Injector) ctrl.Manager {
 	//if cfg.AllowedServiceAccountsWatchLabelSelector != "" {
 	//	preds = append(preds, getLabelSelectorPredicate(cfg.AllowedServiceAccountsWatchLabelSelector))
 	//}
-	if cfg.AllowedServiceAccountsWatchNames != "" {
-		preds = append(preds, getNameNamespacePredicates(cfg.AllowedServiceAccountsWatchNames))
+	if cfgServiceAccountNamesWatch != "" {
+		preds = append(preds, getNameNamespacePredicates(cfgServiceAccountNamesWatch))
 	}
 
 	err = c.Watch(

@@ -11,19 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package config
+package injector
 
 import (
 	"encoding/json"
-	"github.com/dapr/kit/logger"
-
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/utils"
 )
-
-var log = logger.NewLogger("dapr.injector.config")
 
 // Config represents configuration options for the Dapr Sidecar Injector webhook server.
 type Config struct {
