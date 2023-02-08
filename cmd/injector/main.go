@@ -65,7 +65,7 @@ func main() {
 
 	inj := injector.NewInjector(uids, cfg, daprClient, kubeClient)
 
-	saWatcher := allowedsawatcher.NewWatcher(cfg.AllowedServiceAccountsWatchNames, cfg.AllowedServiceAccountsWatchLabelSelector, inj)
+	saWatcher := allowedsawatcher.NewWatcher(cfg.AllowedServiceAccountsWatchNames, cfg.AllowedServiceAccountsWatchLabelSelector, inj, conf)
 	// service account name namespace watcher
 	go func() {
 		if err = saWatcher.Start(ctx); err != nil {

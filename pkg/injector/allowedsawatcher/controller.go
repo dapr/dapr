@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -21,14 +22,10 @@ import (
 var log = logger.NewLogger("dapr.injector.allowedwatcher")
 var scheme = runtime.NewScheme()
 
-func NewWatcher(cfgServiceAccountNamesWatch, cfgServiceAccountLabelsWatch string, injector injector.Injector) ctrl.Manager {
+func NewWatcher(cfgServiceAccountNamesWatch, cfgServiceAccountLabelsWatch string, injector injector.Injector, conf *rest.Config) ctrl.Manager {
 	// noop if nothing to watch
 	if cfgServiceAccountNamesWatch == "" && cfgServiceAccountLabelsWatch == "" {
 		return nil
-	}
-	conf, err := ctrl.GetConfig()
-	if err != nil {
-		log.Fatalf("Unable to get controller runtime configuration, err: %s", err)
 	}
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
