@@ -264,7 +264,7 @@ func TestSecretApp(t *testing.T) {
 
 					var appResp requestResponse
 					err = json.Unmarshal(resp, &appResp)
-					require.NoError(t, err)
+					require.NoError(t, err, "Failed to unmarshal. Response (%d) was: %s", statusCode, string(resp))
 
 					require.True(t, reflect.DeepEqual(tc.expectedResponse, appResp))
 					require.Equal(t, tc.statusCode, statusCode, "Expected statusCode to be equal")
