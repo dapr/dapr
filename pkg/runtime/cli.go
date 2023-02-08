@@ -58,7 +58,9 @@ func FromFlags() (*DaprRuntime, error) {
 	componentsPath := flag.String("components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
 	var resourcesPath stringSliceFlag
 	flag.Var(&resourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
-	config := flag.String("config", "", "Path to config file, or name of a configuration object")
+	config := flag.String("config", "", "Path to config file, or name of a configuration object [Deprecated, use --config-file or --config-name]")
+	configFile := flag.String("config-file", "", "Path to config file on disk")
+	configName := flag.String("config-name", "", "Name of a configuration object to load on Kubernetes")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
 	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
@@ -339,9 +341,11 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	// Config and resiliency need the operator client
+	// Check if we're running in Kubernetes mode and if we need an operator client
+	// Config and resiliency need the operator client, unless they're being loaded from file
+	isKubernetesMode := *mode == string(modes.KubernetesMode)
 	var operatorClient operatorV1.OperatorClient
-	if *mode == string(modes.KubernetesMode) {
+	if isKubernetesMode && ((*configFile == "" && (*configName != "" || *config != "")) || len(resourcesPath) == 0) {
 		log.Info("Initializing the operator client")
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
@@ -355,12 +359,21 @@ func FromFlags() (*DaprRuntime, error) {
 	namespace := os.Getenv("NAMESPACE")
 	podName := os.Getenv("POD_NAME")
 
-	if *config != "" {
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
+	// If we have a "config-file", load that even in K8s mode
+	if *configFile != "" {
+		log.Debug("Loading config from file: " + *configFile)
+		globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*configFile)
+	} else if *configName != "" && isKubernetesMode {
+		// In Kubernetes mode, load the config named "config-name"
+		log.Debug("Loading Kubernetes config resource: " + *configName)
+		globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*configName, namespace, podName, operatorClient)
+	} else if *config != "" {
+		// Fallback to support the old "config" flag
+		log.Warn("The '--config' CLI flag is deprecated and will be removed in a future Dapr version. Please use '--config-file' or '--config-name' instead.")
+		if isKubernetesMode {
 			log.Debug("Loading Kubernetes config resource: " + *config)
 			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
-		case modes.StandaloneMode:
+		} else {
 			log.Debug("Loading config from file: " + *config)
 			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
 		}
@@ -392,21 +405,17 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	// Load Resiliency
 	var resiliencyProvider *resiliencyConfig.Resiliency
-	switch modes.DaprMode(*mode) {
-	case modes.KubernetesMode:
+	if len(resourcesPath) > 0 {
+		resiliencyConfigs := resiliencyConfig.LoadLocalResiliency(log, *appID, resourcesPath...)
+		log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
+		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+	} else if isKubernetesMode {
 		resiliencyConfigs := resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
 		log.Debugf("Found %d resiliency configurations from Kubernetes", len(resiliencyConfigs))
 		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
-	case modes.StandaloneMode:
-		if len(resourcesPath) > 0 {
-			resiliencyConfigs := resiliencyConfig.LoadLocalResiliency(log, *appID, resourcesPath...)
-			log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
-			resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
-		} else {
-			resiliencyProvider = resiliencyConfig.FromConfigurations(log)
-		}
+	} else {
+		resiliencyProvider = resiliencyConfig.FromConfigurations(log)
 	}
 	log.Info("Resiliency configuration loaded")
 

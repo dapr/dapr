@@ -65,6 +65,7 @@ type Config struct {
 	APIListenAddresses           []string
 	ApplicationProtocol          Protocol
 	Mode                         modes.DaprMode
+	ResourcesPath                []string
 	PlacementAddresses           []string
 	AllowedOrigins               string
 	Standalone                   config.StandaloneConfig
@@ -141,11 +142,10 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		APIListenAddresses:  opts.APIListenAddresses,
 		ApplicationProtocol: Protocol(opts.AppProtocol),
 		Mode:                modes.DaprMode(opts.Mode),
+		ResourcesPath:       opts.ResourcesPath,
 		PlacementAddresses:  opts.PlacementAddresses,
 		AllowedOrigins:      opts.AllowedOrigins,
-		Standalone: config.StandaloneConfig{
-			ResourcesPath: opts.ResourcesPath,
-		},
+		Standalone:          config.StandaloneConfig{},
 		Kubernetes: config.KubernetesConfig{
 			ControlPlaneAddress: opts.ControlPlaneAddress,
 		},

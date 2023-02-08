@@ -1545,7 +1545,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
+		rts.runtimeConfig.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1570,7 +1570,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
+		rts.runtimeConfig.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1596,7 +1596,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
+		rts.runtimeConfig.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		assert.Len(t, subs, 0)
 	})
@@ -4097,6 +4097,19 @@ func TestMTLS(t *testing.T) {
 
 		_, err := rt.getOperatorClient()
 		assert.Error(t, err)
+	})
+}
+
+func TestGetOperatorClient(t *testing.T) {
+	t.Run("resource paths are defined in K8s mode", func(t *testing.T) {
+		testRuntimeConfig := NewTestDaprRuntimeConfig(modes.KubernetesMode, string(HTTPProtocol), 1024)
+		testRuntimeConfig.ResourcesPath = []string{"foo", "bar"}
+		rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, rt)
+
+		client, err := rt.getOperatorClient()
+		assert.NoError(t, err)
+		assert.Nil(t, client)
 	})
 }
 

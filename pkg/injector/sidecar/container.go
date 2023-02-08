@@ -133,7 +133,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--control-plane-address", cfg.ControlPlaneAddress,
 		"--app-protocol", cfg.Annotations.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol),
 		"--placement-host-address", cfg.PlacementServiceAddress,
-		"--config", cfg.Annotations.GetString(annotations.KeyConfig),
 		"--log-level", cfg.Annotations.GetStringOrDefault(annotations.KeyLogLevel, annotations.DefaultLogLevel),
 		"--app-max-concurrency", strconv.Itoa(int(maxConcurrency)),
 		"--sentry-address", cfg.SentryAddress,
@@ -143,6 +142,28 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
 		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(disableBuiltinK8sSecretStore),
+	}
+
+	// --config-file takes priority over --config-name
+	// For config name, we try "KeyConfigName" first (new name), and then "KeyConfig" (legacy name) as fallback
+	if cfg.Annotations.GetString(annotations.KeyConfigFile) != "" {
+		args = append(args, "--config-file", cfg.Annotations.GetString(annotations.KeyConfigFile))
+	} else if cfg.Annotations.GetString(annotations.KeyConfigName) != "" {
+		args = append(args, "--config-name", cfg.Annotations.GetString(annotations.KeyConfigName))
+	} else if cfg.Annotations.GetString(annotations.KeyConfig) != "" {
+		args = append(args, "--config-name", cfg.Annotations.GetString(annotations.KeyConfig))
+	}
+
+	// Add --resources-path, which can be passed multiple times if there are comma-separated values
+	if resourcesPath := cfg.Annotations.GetString(annotations.KeyResourcesPath); resourcesPath != "" {
+		paths := strings.Split(resourcesPath, ",")
+		for _, path := range paths {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+			args = append(args, "--resources-path", path)
+		}
 	}
 
 	// --enable-api-logging is set only if there's an explicit annotation (true or false) for that

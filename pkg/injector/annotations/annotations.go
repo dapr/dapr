@@ -19,11 +19,14 @@ package annotations
 const (
 	KeyEnabled                          = "dapr.io/enabled"
 	KeyAppPort                          = "dapr.io/app-port"
-	KeyConfig                           = "dapr.io/config"
+	KeyConfig                           = "dapr.io/config"      // Mapped to config-name in Kubernetes. Legacy name, maintained for backwards-compatibility.
+	KeyConfigName                       = "dapr.io/config-name" // New name
+	KeyConfigFile                       = "dapr.io/config-file"
 	KeyAppProtocol                      = "dapr.io/app-protocol"
 	KeyAppID                            = "dapr.io/app-id"
 	KeyEnableProfiling                  = "dapr.io/enable-profiling"
 	KeyLogLevel                         = "dapr.io/log-level"
+	KeyResourcesPath                    = "dapr.io/resources-path"   // Multiple values separated by commas
 	KeyAPITokenSecret                   = "dapr.io/api-token-secret" /* #nosec */
 	KeyAppTokenSecret                   = "dapr.io/app-token-secret" /* #nosec */
 	KeyLogAsJSON                        = "dapr.io/log-as-json"

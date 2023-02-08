@@ -14,6 +14,4 @@ limitations under the License.
 package config
 
 // StandaloneConfig is the configuration for standalone mode.
-type StandaloneConfig struct {
-	ResourcesPath []string
-}
+type StandaloneConfig struct{}

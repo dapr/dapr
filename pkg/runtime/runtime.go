@@ -350,7 +350,7 @@ func (a *DaprRuntime) getPodName() string {
 
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	// Get the operator client only if we're running in Kubernetes and if we need it
-	if a.runtimeConfig.Mode != modes.KubernetesMode {
+	if a.runtimeConfig.Mode != modes.KubernetesMode || len(a.runtimeConfig.ResourcesPath) > 0 {
 		return nil, nil
 	}
 
@@ -1782,11 +1782,11 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription {
 	var subs []runtimePubsub.Subscription
 
-	switch a.runtimeConfig.Mode {
-	case modes.KubernetesMode:
+	// If we have a resourcesPath, use that, regardless of the mode we're running on
+	if len(a.runtimeConfig.ResourcesPath) > 0 {
+		subs = runtimePubsub.DeclarativeLocal(a.runtimeConfig.ResourcesPath, log)
+	} else if a.runtimeConfig.Mode == modes.KubernetesMode {
 		subs = runtimePubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
-	case modes.StandaloneMode:
-		subs = runtimePubsub.DeclarativeLocal(a.runtimeConfig.Standalone.ResourcesPath, log)
 	}
 
 	// only return valid subscriptions for this app id
@@ -2441,12 +2441,12 @@ func (a *DaprRuntime) namespaceComponentAuthorizer(component componentsV1alpha1.
 func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	var loader components.ComponentLoader
 
-	switch a.runtimeConfig.Mode {
-	case modes.KubernetesMode:
+	// If we have a resourcesPath, use that, regardless of the mode we're running on
+	if len(a.runtimeConfig.ResourcesPath) > 0 {
+		loader = components.NewLocalComponents(a.runtimeConfig.ResourcesPath...)
+	} else if a.runtimeConfig.Mode == modes.KubernetesMode {
 		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.namespace, a.operatorClient, a.podName)
-	case modes.StandaloneMode:
-		loader = components.NewLocalComponents(a.runtimeConfig.Standalone.ResourcesPath...)
-	default:
+	} else {
 		return nil
 	}
 

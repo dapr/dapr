@@ -54,8 +54,8 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
 	assert.Equal(t, "localhost:5051", c.Kubernetes.ControlPlaneAddress)
 	assert.Equal(t, "*", c.AllowedOrigins)
-	_ = assert.Len(t, c.Standalone.ResourcesPath, 1) &&
-		assert.Equal(t, "components", c.Standalone.ResourcesPath[0])
+	_ = assert.Len(t, c.ResourcesPath, 1) &&
+		assert.Equal(t, "components", c.ResourcesPath[0])
 	assert.Equal(t, "http", string(c.ApplicationProtocol))
 	assert.Equal(t, "kubernetes", string(c.Mode))
 	assert.Equal(t, 3500, c.HTTPPort)
