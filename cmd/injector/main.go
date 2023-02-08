@@ -15,12 +15,11 @@ package main
 
 import (
 	"flag"
-	"path/filepath"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/injector/allowedsawatcher"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 
-	"k8s.io/client-go/util/homedir"
+	"github.com/dapr/dapr/pkg/injector/allowedsawatcher"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
@@ -49,7 +48,7 @@ func main() {
 	}
 
 	kubeClient := utils.GetKubeClient()
-	conf := utils.GetConfig()
+	conf := controllerruntime.GetConfigOrDie()
 	daprClient, _ := scheme.NewForConfig(conf)
 
 	healthzServer := health.NewServer(log)
@@ -72,7 +71,7 @@ func main() {
 		saWatcher := allowedsawatcher.NewWatcher(cfg.AllowedServiceAccountsWatchNames, inj, conf)
 		go func() {
 			if err = saWatcher.Start(ctx); err != nil {
-				log.Fatalf("unable to start service account name/namespace watcher")
+				log.Fatalf("unable to start service account name/namespace watcher, err: %s", err)
 			}
 		}()
 	}
@@ -91,12 +90,6 @@ func init() {
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
 
 	flag.IntVar(&healthzPort, "healthz-port", 8080, "The port used for health checks")
 
@@ -105,12 +98,6 @@ func init() {
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-secret-key", credentials.IssuerKeyFilename, "Issuer private key secret key")
 
 	flag.Parse()
-
-	if err := utils.SetEnvVariables(map[string]string{
-		utils.KubeConfigVar: *kubeconfig,
-	}); err != nil {
-		log.Fatalf("error set env failed:  %s", err.Error())
-	}
 
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {

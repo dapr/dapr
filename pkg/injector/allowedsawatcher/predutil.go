@@ -90,10 +90,8 @@ func getSaExactPrefix(sa string, namespaceNames *equalPrefixLists) error {
 		if !utils.Contains(namespaceNames.prefix, saPrefix) {
 			namespaceNames.prefix = append(namespaceNames.prefix, saPrefix)
 		}
-	} else {
-		if !utils.Contains(namespaceNames.equal, sa) {
-			namespaceNames.equal = append(namespaceNames.equal, sa)
-		}
+	} else if !utils.Contains(namespaceNames.equal, sa) {
+		namespaceNames.equal = append(namespaceNames.equal, sa)
 	}
 	return nil
 }

@@ -4,11 +4,8 @@ import (
 	"context"
 	"sync"
 
-	injector "github.com/dapr/dapr/pkg/injector/interfaces"
-	"github.com/dapr/kit/logger"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -18,17 +15,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	injector "github.com/dapr/dapr/pkg/injector/interfaces"
+	"github.com/dapr/kit/logger"
 )
 
-var (
-	log    = logger.NewLogger("dapr.injector.allowedwatcher")
-	scheme = runtime.NewScheme()
-)
+var log = logger.NewLogger("dapr.injector.allowedwatcher")
 
 func NewWatcher(cfgServiceAccountNamesWatch string, injector injector.Injector, conf *rest.Config) ctrl.Manager {
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: "0",
+		MetricsBindAddress: "0", // disable metrics
 	})
 	if err != nil {
 		log.Fatalf("Unable to get controller runtime manager, err: %s", err)
@@ -42,8 +38,8 @@ func NewWatcher(cfgServiceAccountNamesWatch string, injector injector.Injector, 
 	}
 	var preds []predicate.Predicate
 	if cfgServiceAccountNamesWatch != "" {
-		pred, err := getNameNamespacePredicates(cfgServiceAccountNamesWatch)
-		if err != nil {
+		pred, watchErr := getNameNamespacePredicates(cfgServiceAccountNamesWatch)
+		if watchErr != nil {
 			log.Fatalf("problems getting namespace predicate setup, err: %s", err)
 		}
 		preds = append(preds, pred)
@@ -99,9 +95,10 @@ func (r *allowedSAWatcher) processDelete(request reconcile.Request) (reconcile.R
 
 	uid, found := r.namespaceNameToUIDs[request.NamespacedName]
 	if !found {
-		log.Debugf("requested to delete UID for %s/%s but was not found", request.Namespace, request.Name)
+		log.Debugf("requested to delete UID for %s/%s but was not found", request.Name, request.Namespace)
 		return reconcile.Result{}, nil
 	}
+	log.Debugf("deleting UID %s for %s/%s", uid, request.Name, request.Namespace)
 	r.injector.UpdateAllowedAuthUIDs(nil, []string{uid})
 	delete(r.namespaceNameToUIDs, request.NamespacedName)
 
@@ -115,8 +112,10 @@ func (r *allowedSAWatcher) processCreate(nsName types.NamespacedName, sa *corev1
 	uid, found := r.namespaceNameToUIDs[nsName]
 
 	if !found {
+		uid = string(sa.GetUID())
+		log.Debugf("requested to add UID %s for %s/%s", uid, nsName.Name, nsName.Namespace)
 		r.injector.UpdateAllowedAuthUIDs([]string{uid}, nil)
-		r.namespaceNameToUIDs[nsName] = string(sa.GetUID())
+		r.namespaceNameToUIDs[nsName] = uid
 	}
 
 	return reconcile.Result{}, nil
