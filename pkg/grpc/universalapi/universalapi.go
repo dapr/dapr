@@ -16,6 +16,7 @@ limitations under the License.
 package universalapi
 
 import (
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -26,6 +27,7 @@ import (
 type UniversalAPI struct {
 	Logger               logger.Logger
 	Resiliency           resiliency.Provider
+	CryptoProviders      map[string]contribCrypto.SubtleCrypto
 	SecretStores         map[string]secretstores.SecretStore
 	SecretsConfiguration map[string]config.SecretsScope
 }

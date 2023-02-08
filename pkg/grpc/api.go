@@ -96,7 +96,6 @@ type api struct {
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
-	cryptoProviders            map[string]contribCrypto.SubtleCrypto
 	lockStores                 map[string]lock.Store
 	pubsubAdapter              runtimePubsub.Adapter
 	id                         string
@@ -278,6 +277,7 @@ func NewAPI(opts APIOpts) API {
 		UniversalAPI: &universalapi.UniversalAPI{
 			Logger:               apiServerLogger,
 			Resiliency:           opts.Resiliency,
+			CryptoProviders:      opts.CryptoProviders,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
 		},
@@ -291,7 +291,6 @@ func NewAPI(opts APIOpts) API {
 		transactionalStateStores:   transactionalStateStores,
 		workflowComponents:         opts.WorkflowComponents,
 		configurationStores:        opts.ConfigurationStores,
-		cryptoProviders:            opts.CryptoProviders,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
