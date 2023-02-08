@@ -16,7 +16,8 @@ fullnameOverride: ""
 
 runAsNonRoot: true
 
-serviceReconciler: true
+serviceReconciler:
+  disabled: false
 
 ports:
   protocol: TCP
