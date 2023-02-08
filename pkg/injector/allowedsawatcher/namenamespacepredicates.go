@@ -7,14 +7,14 @@ import (
 	"strings"
 )
 
-func getNameNamespacePredicates(name string) predicate.Predicate {
-	wild, exact, err := getNamespaceNames(name)
+func getNameNamespacePredicates(name string) (predicate.Predicate, error) {
+	prefixed, equal, err := getNamespaceNames(name)
 	if err != nil {
-		log.Fatalf("problems getting namespace predicate setup, err: %s", err)
+		return nil, err
 	}
 	var preds []predicate.Predicate
 
-	for nsPrefix, values := range wild {
+	for nsPrefix, values := range prefixed {
 		preds = append(preds, predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
 				if strings.HasPrefix(e.Object.GetNamespace(), nsPrefix) {
@@ -28,9 +28,11 @@ func getNameNamespacePredicates(name string) predicate.Predicate {
 				}
 				return false
 			},
+			UpdateFunc:  func(updateEvent event.UpdateEvent) bool { return false },
+			GenericFunc: func(event.GenericEvent) bool { return false },
 		})
 	}
-	for ns, values := range exact {
+	for ns, values := range equal {
 		preds = append(preds, predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
 				if ns == e.Object.GetNamespace() {
@@ -44,8 +46,10 @@ func getNameNamespacePredicates(name string) predicate.Predicate {
 				}
 				return false
 			},
+			UpdateFunc:  func(updateEvent event.UpdateEvent) bool { return false },
+			GenericFunc: func(event.GenericEvent) bool { return false },
 		})
 	}
 
-	return predicate.Or(preds...)
+	return predicate.Or(preds...), nil
 }

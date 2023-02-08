@@ -46,7 +46,11 @@ func NewWatcher(cfgServiceAccountNamesWatch, cfgServiceAccountLabelsWatch string
 	//	preds = append(preds, getLabelSelectorPredicate(cfg.AllowedServiceAccountsWatchLabelSelector))
 	//}
 	if cfgServiceAccountNamesWatch != "" {
-		preds = append(preds, getNameNamespacePredicates(cfgServiceAccountNamesWatch))
+		pred, err := getNameNamespacePredicates(cfgServiceAccountNamesWatch)
+		if err != nil {
+			log.Fatalf("problems getting namespace predicate setup, err: %s", err)
+		}
+		preds = append(preds, pred)
 	}
 
 	err = c.Watch(

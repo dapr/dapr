@@ -59,8 +59,23 @@ func Test_getNameNamespaces(t *testing.T) {
 			wantPrefixed: map[string]*equalPrefixLists{"namespace": {equal: []string{"sa"}}},
 		},
 		{
+			name:      "simplePrefixNSWildcarInMiddle",
+			s:         "sa:names*pace",
+			wantError: true,
+		},
+		{
 			name:      "errPrefixNSTooShort",
-			s:         "sa:name*",
+			s:         "sa:nam*",
+			wantError: true,
+		},
+		{
+			name:      "errPrefixSATooShort",
+			s:         "sa*:name",
+			wantError: true,
+		},
+		{
+			name:      "errPrefixSAWildcardNotAtEnd",
+			s:         "sa*sa:name",
 			wantError: true,
 		},
 		{
