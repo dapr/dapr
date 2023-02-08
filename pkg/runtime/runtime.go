@@ -1425,6 +1425,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		StateStores:                 a.stateStores,
 		WorkflowsComponents:         a.workflowComponents,
 		LockStores:                  a.lockStores,
+		CryptoProviders:             a.cryptoProviders,
 		SecretStores:                a.secretStores,
 		SecretsConfiguration:        a.secretsConfiguration,
 		ConfigurationStores:         a.configurationStores,

@@ -92,7 +92,6 @@ type api struct {
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
-	cryptoProviders            map[string]contribCrypto.SubtleCrypto
 	actor                      actors.Actors
 	pubsubAdapter              runtimePubsub.Adapter
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -209,7 +208,6 @@ func NewAPI(opts APIOpts) API {
 		secretStores:               opts.SecretStores,
 		secretsConfiguration:       opts.SecretsConfiguration,
 		configurationStores:        opts.ConfigurationStores,
-		cryptoProviders:            opts.CryptoProviders,
 		pubsubAdapter:              opts.PubsubAdapter,
 		actor:                      opts.Actor,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
@@ -224,6 +222,7 @@ func NewAPI(opts APIOpts) API {
 		universal: &universalapi.UniversalAPI{
 			Logger:               log,
 			Resiliency:           opts.Resiliency,
+			CryptoProviders:      opts.CryptoProviders,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
 		},
@@ -240,6 +239,7 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, metadataEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSubtleCryptoEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
