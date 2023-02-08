@@ -2,8 +2,9 @@ package allowedsawatcher
 
 import (
 	"fmt"
-	"github.com/dapr/dapr/utils"
 	"strings"
+
+	"github.com/dapr/dapr/utils"
 )
 
 type equalPrefixLists struct {
@@ -17,6 +18,7 @@ var forbiddenPrefixes = []string{
 	"kube-",
 	"dapr-",
 }
+
 var forbiddenNS = []string{
 	"kube-system",
 	"dapr-system",

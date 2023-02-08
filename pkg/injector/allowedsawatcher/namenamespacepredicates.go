@@ -1,10 +1,11 @@
 package allowedsawatcher
 
 import (
+	"strings"
+
 	"github.com/dapr/dapr/utils"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"strings"
 )
 
 func getNameNamespacePredicates(name string) (predicate.Predicate, error) {

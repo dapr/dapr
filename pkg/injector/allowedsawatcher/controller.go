@@ -2,6 +2,8 @@ package allowedsawatcher
 
 import (
 	"context"
+	"sync"
+
 	injector "github.com/dapr/dapr/pkg/injector/interfaces"
 	"github.com/dapr/kit/logger"
 	corev1 "k8s.io/api/core/v1"
@@ -16,11 +18,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"sync"
 )
 
-var log = logger.NewLogger("dapr.injector.allowedwatcher")
-var scheme = runtime.NewScheme()
+var (
+	log    = logger.NewLogger("dapr.injector.allowedwatcher")
+	scheme = runtime.NewScheme()
+)
 
 func NewWatcher(cfgServiceAccountNamesWatch, cfgServiceAccountLabelsWatch string, injector injector.Injector, conf *rest.Config) ctrl.Manager {
 	// noop if nothing to watch

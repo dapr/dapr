@@ -1,8 +1,9 @@
 package allowedsawatcher
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_getNameNamespaces(t *testing.T) {
@@ -109,9 +110,11 @@ func Test_getNameNamespaces(t *testing.T) {
 			wantEqual: map[string]*equalPrefixLists{
 				"namespace": {
 					prefix: []string{"service", "service2"},
-					equal:  []string{"service"}},
+					equal:  []string{"service"},
+				},
 				"namespace5": {
-					equal: []string{"service5"}},
+					equal: []string{"service5"},
+				},
 				"namespace2": {
 					prefix: []string{"service3"},
 				},
