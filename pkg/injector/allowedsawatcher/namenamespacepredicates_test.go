@@ -55,6 +55,15 @@ func Test_getNameNamespacePredicates(t *testing.T) {
 			wantError:      false,
 		},
 		{
+			name:           "equalNamespacePrefixSABadPrefix",
+			namespaceNames: "vc-sa*sa:ns",
+			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "ns"},
+			wantCreate:     true,
+			wantDelete:     true,
+			wantUpdate:     false,
+			wantError:      true,
+		},
+		{
 			name:           "equalNamespacePrefixSANoMatch",
 			namespaceNames: "vc-sa*:ns",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "ns"},
