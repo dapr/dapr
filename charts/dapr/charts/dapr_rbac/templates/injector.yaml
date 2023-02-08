@@ -18,7 +18,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["serviceaccounts"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "watch"]
 {{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations", "components"]
