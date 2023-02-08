@@ -58,6 +58,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -4025,10 +4026,18 @@ func TestV1SecretEndpoints(t *testing.T) {
 		},
 	}
 
+	l := logger.NewLogger("fakeLogger")
+	res := resiliency.FromConfigurations(l, testResiliency)
 	testAPI := &api{
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeStores,
-		resiliency:           resiliency.FromConfigurations(logger.NewLogger("fakeLogger"), testResiliency),
+		resiliency:           res,
+		universal: &universalapi.UniversalAPI{
+			Logger:               l,
+			SecretsConfiguration: secretsConfiguration,
+			SecretStores:         fakeStores,
+			Resiliency:           res,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
@@ -4036,7 +4045,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	restrictedStore := "store3"
 	unrestrictedStore := "store4" // No configuration defined for the store
 
-	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
+	t.Run("Get secret - 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -4121,14 +4130,17 @@ func TestV1SecretEndpoints(t *testing.T) {
 	t.Run("Get secret - 500 for secret store not congfigured", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
+		testAPI.universal.SecretStores = nil
 		testAPI.secretStores = nil
+		defer func() {
+			testAPI.secretStores = fakeStores
+			testAPI.universal.SecretStores = fakeStores
+		}()
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
-		assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
+		assert.Equal(t, 500, resp.StatusCode, "reading from not-configured secret store should fail with 500")
 		assert.Equal(t, "ERR_SECRET_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
-
-		testAPI.secretStores = fakeStores
 	})
 
 	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
