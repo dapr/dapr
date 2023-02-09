@@ -25,9 +25,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	"github.com/dapr/components-contrib/lock"
-
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -46,13 +43,13 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -60,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -74,12 +72,11 @@ import (
 )
 
 const (
-	maxGRPCServerUptime = 100 * time.Millisecond
-	goodStoreKey        = "fakeAPI||good-key"
-	errorStoreKey       = "fakeAPI||error-key"
-	goodKey             = "good-key"
-	goodKey2            = "good-key2"
-	mockSubscribeID     = "mockId"
+	goodStoreKey    = "fakeAPI||good-key"
+	errorStoreKey   = "fakeAPI||error-key"
+	goodKey         = "good-key"
+	goodKey2        = "good-key2"
+	mockSubscribeID = "mockId"
 )
 
 var testResiliency = &v1alpha1.Resiliency{
@@ -153,6 +150,32 @@ func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalIn
 		WithContentType("text/plain")
 	defer resp.Close()
 	return resp.ProtoWithData()
+}
+
+func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(stream.Context())).
+		WithContentType("text/plain")
+	defer resp.Close()
+
+	var data []byte
+	pd, err := resp.ProtoWithData()
+	if err != nil {
+		return err
+	}
+	if pd.Message != nil && pd.Message.Data != nil {
+		data = pd.Message.Data.Value
+	}
+
+	stream.Send(&internalv1pb.InternalInvokeResponseStream{
+		Response: resp.Proto(),
+		Payload: &commonv1pb.StreamPayload{
+			Data: data,
+			Seq:  0,
+		},
+	})
+
+	return nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -244,9 +267,6 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server, &buffer
 }
 
@@ -263,9 +283,6 @@ func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server
 }
 
@@ -279,9 +296,6 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 			panic(err)
 		}
 	}()
-
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
 
 	return server
 }
@@ -310,128 +324,22 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(
+		ctx,
 		fmt.Sprintf("localhost:%d", port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
 	)
 	if err != nil {
 		panic(err)
 	}
 	return conn
-}
-
-func TestCallActorWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := internalv1pb.NewServiceInvocationClient(clientConn)
-
-	request := invokev1.NewInvokeMethodRequest("method").
-		WithActor("test-actor", "actor-1")
-	defer request.Close()
-
-	resp, err := client.CallActor(context.Background(), request.Proto())
-	assert.NoError(t, err)
-	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with actor call")
-}
-
-func TestCallRemoteAppWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := internalv1pb.NewServiceInvocationClient(clientConn)
-	request := invokev1.NewInvokeMethodRequest("method")
-	defer request.Close()
-
-	resp, err := client.CallLocal(context.Background(), request.Proto())
-	assert.NoError(t, err)
-	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with app call")
-}
-
-func TestCallLocal(t *testing.T) {
-	t.Run("appchannel is not ready", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: nil,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method")
-		defer request.Close()
-
-		_, err := client.CallLocal(context.Background(), request.Proto())
-		assert.Equal(t, codes.Internal, status.Code(err))
-	})
-
-	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: mockAppChannel,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := &internalv1pb.InternalInvokeRequest{
-			Message: nil,
-		}
-
-		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	})
-
-	t.Run("invokemethod returns error", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		mockAppChannel.On("InvokeMethod",
-			mock.MatchedBy(matchContextInterface),
-			mock.AnythingOfType("*v1.InvokeMethodRequest"),
-		).Return(nil, status.Error(codes.Unknown, "unknown error"))
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: mockAppChannel,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method")
-		defer request.Close()
-
-		_, err := client.CallLocal(context.Background(), request.Proto())
-		assert.Equal(t, codes.Internal, status.Code(err))
-	})
 }
 
 func mustMarshalAny(msg proto.Message) *anypb.Any {
@@ -764,7 +672,12 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 
 func TestSecretStoreNotConfigured(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	server := startDaprAPIServer(port, &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger: logger.NewLogger("grpc.api.test"),
+		},
+		id: "fakeAPI",
+	}, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -876,10 +789,13 @@ func TestGetSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                   "fakeAPI",
-		secretStores:         fakeStores,
-		secretsConfiguration: secretsConfiguration,
-		resiliency:           resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           resiliency.New(nil),
+			SecretStores:         fakeStores,
+			SecretsConfiguration: secretsConfiguration,
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -943,10 +859,13 @@ func TestGetBulkSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                   "fakeAPI",
-		secretStores:         fakeStores,
-		secretsConfiguration: secretsConfiguration,
-		resiliency:           resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           resiliency.New(nil),
+			SecretStores:         fakeStores,
+			SecretsConfiguration: secretsConfiguration,
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -3275,9 +3194,12 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:           "fakeAPI",
-		secretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
-		resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:       logger.NewLogger("grpc.api.test"),
+			Resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			SecretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
