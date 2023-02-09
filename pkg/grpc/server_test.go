@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,8 +47,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "1",
 			},
-			renewMutex: &sync.Mutex{},
-			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.NewLogger("dapr.runtime.grpc.test"),
 		}
 
 		serverOption := fakeServer.getMiddlewareOptions()
@@ -63,8 +61,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
-			renewMutex: &sync.Mutex{},
-			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.NewLogger("dapr.runtime.grpc.test"),
 		}
 
 		serverOption := fakeServer.getMiddlewareOptions()
@@ -78,8 +75,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
-			renewMutex: &sync.Mutex{},
-			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.NewLogger("dapr.runtime.grpc.test"),
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
