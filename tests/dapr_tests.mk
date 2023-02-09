@@ -369,15 +369,11 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
+				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
 endif
 
-tst-cmd:
-	for app in "a b c"; do \
-		echo "$(exit_code)" && exit -1; \
-	done
 # add required helm repo
 setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
