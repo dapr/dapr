@@ -174,7 +174,7 @@ func Filter[T any](items []T, test func(item T) bool) []T {
 	return slices.Clip(filteredItems)
 }
 
-// MapToSlice is the inversion of SliceToMap
+// MapToSlice is the inversion of SliceToMap. Order is not guaranteed as map retrieval order is not.
 func MapToSlice[T comparable, V any](m map[T]V) []T {
 	l := make([]T, len(m))
 	var i int

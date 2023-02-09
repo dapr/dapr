@@ -257,17 +257,17 @@ func TestMapToSlice(t *testing.T) {
 	t.Run("mapStringString", func(t *testing.T) {
 		m := map[string]string{"a": "b", "c": "d", "e": "f"}
 		got := MapToSlice(m)
-		assert.Equal(t, got, []string{"a", "c", "e"})
+		assert.ElementsMatch(t, got, []string{"a", "c", "e"})
 	})
 	t.Run("mapStringStruct", func(t *testing.T) {
 		m := map[string]struct{}{"a": {}, "c": {}, "e": {}}
 		got := MapToSlice(m)
-		assert.Equal(t, got, []string{"a", "c", "e"})
+		assert.ElementsMatch(t, got, []string{"a", "c", "e"})
 	})
 	t.Run("intStringStruct", func(t *testing.T) {
 		m := map[int]struct{}{1: {}, 2: {}, 3: {}}
 		got := MapToSlice(m)
-		assert.Equal(t, got, []int{1, 2, 3})
+		assert.ElementsMatch(t, got, []int{1, 2, 3})
 	})
 }
 
