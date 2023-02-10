@@ -137,7 +137,7 @@ func createNamespaceNameMatcher(i *injector, config Config) error {
 			return err
 		}
 		i.namespaceNameMatcher = matcher
-		log.Debugf("injector configured to allowed serviceaccounts: %s", config.AllowedServiceAccountsPrefixNames)
+		log.Debugf("Sidecar injector configured to allowed serviceaccounts prefixed by: %s", config.AllowedServiceAccountsPrefixNames)
 	}
 	return nil
 }
