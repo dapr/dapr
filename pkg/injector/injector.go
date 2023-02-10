@@ -23,8 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
-
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +32,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -138,6 +137,7 @@ func createNamespaceNameMatcher(i *injector, config Config) error {
 			return err
 		}
 		i.namespaceNameMatcher = matcher
+		log.Debugf("injector configured to allowed serviceaccounts: %s", config.AllowedServiceAccountsPrefixNames)
 	}
 	return nil
 }

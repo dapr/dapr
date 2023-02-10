@@ -182,28 +182,24 @@ func TestEqualPrefixNameNamespaceMatcher_MatchesObject(t *testing.T) {
 }
 
 func getMatcherTestCases() []struct {
-	name                   string
-	namespaceNames         string
-	objectMeta             metav1.ObjectMeta
-	wantCreate             bool
-	wantDelete, wantUpdate bool
-	wantError              bool
+	name           string
+	namespaceNames string
+	objectMeta     metav1.ObjectMeta
+	wantCreate     bool
+	wantError      bool
 } {
 	tests := []struct {
-		name                   string
-		namespaceNames         string
-		objectMeta             metav1.ObjectMeta
-		wantCreate             bool
-		wantDelete, wantUpdate bool
-		wantError              bool
+		name           string
+		namespaceNames string
+		objectMeta     metav1.ObjectMeta
+		wantCreate     bool
+		wantError      bool
 	}{
 		{
 			name:           "equalPredicate",
 			namespaceNames: "ns:sa",
 			objectMeta:     metav1.ObjectMeta{Name: "sa", Namespace: "ns"},
 			wantCreate:     true,
-			wantDelete:     true,
-			wantUpdate:     false,
 			wantError:      false,
 		},
 		{
@@ -211,8 +207,6 @@ func getMatcherTestCases() []struct {
 			namespaceNames: "ns:sa,ns:sb,ns:sc",
 			objectMeta:     metav1.ObjectMeta{Name: "sd", Namespace: "ns"},
 			wantCreate:     false,
-			wantDelete:     false,
-			wantUpdate:     false,
 			wantError:      false,
 		},
 		{
@@ -220,8 +214,6 @@ func getMatcherTestCases() []struct {
 			namespaceNames: "ns:sa,ns:sb,ns:sc",
 			objectMeta:     metav1.ObjectMeta{Name: "sd", Namespace: "ns2"},
 			wantCreate:     false,
-			wantDelete:     false,
-			wantUpdate:     false,
 			wantError:      false,
 		},
 		{
@@ -229,8 +221,6 @@ func getMatcherTestCases() []struct {
 			namespaceNames: "ns:vc-sa*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "ns"},
 			wantCreate:     true,
-			wantDelete:     true,
-			wantUpdate:     false,
 			wantError:      false,
 		},
 		{
@@ -238,8 +228,6 @@ func getMatcherTestCases() []struct {
 			namespaceNames: "ns:vc-sa*sa",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "ns"},
 			wantCreate:     true,
-			wantDelete:     true,
-			wantUpdate:     false,
 			wantError:      true,
 		},
 		{
@@ -247,8 +235,6 @@ func getMatcherTestCases() []struct {
 			namespaceNames: "ns:vc-sa*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "ns"},
 			wantCreate:     false,
-			wantDelete:     false,
-			wantUpdate:     false,
 			wantError:      false,
 		},
 		{
@@ -256,8 +242,6 @@ func getMatcherTestCases() []struct {
 			namespaceNames: "ns:vc-sa*,ns:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "ns"},
 			wantCreate:     true,
-			wantDelete:     true,
-			wantUpdate:     false,
 			wantError:      false,
 		},
 		{
@@ -265,8 +249,6 @@ func getMatcherTestCases() []struct {
 			namespaceNames: "name*:vc-sa*,name*:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "namespace"},
 			wantCreate:     true,
-			wantDelete:     true,
-			wantUpdate:     false,
 			wantError:      false,
 		},
 		{
@@ -274,8 +256,6 @@ func getMatcherTestCases() []struct {
 			namespaceNames: "name*:vc-sa*,name*:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "namspace"},
 			wantCreate:     false,
-			wantDelete:     false,
-			wantUpdate:     false,
 			wantError:      false,
 		},
 	}
