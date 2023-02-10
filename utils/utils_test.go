@@ -252,39 +252,3 @@ func TestContainsPrefixed(t *testing.T) {
 		})
 	}
 }
-
-func TestMapToSlice(t *testing.T) {
-	t.Run("mapStringString", func(t *testing.T) {
-		m := map[string]string{"a": "b", "c": "d", "e": "f"}
-		got := MapToSlice(m)
-		assert.ElementsMatch(t, got, []string{"a", "c", "e"})
-	})
-	t.Run("mapStringStruct", func(t *testing.T) {
-		m := map[string]struct{}{"a": {}, "c": {}, "e": {}}
-		got := MapToSlice(m)
-		assert.ElementsMatch(t, got, []string{"a", "c", "e"})
-	})
-	t.Run("intStringStruct", func(t *testing.T) {
-		m := map[int]struct{}{1: {}, 2: {}, 3: {}}
-		got := MapToSlice(m)
-		assert.ElementsMatch(t, got, []int{1, 2, 3})
-	})
-}
-
-func TestSliceToMap(t *testing.T) {
-	t.Run("sliceStringToMapStringString", func(t *testing.T) {
-		m := []string{"a", "b", "c"}
-		got := SliceToMap[string, string](m)
-		assert.Equal(t, got, map[string]string{"a": "", "b": "", "c": ""})
-	})
-	t.Run("sliceStringToMapStringStruct", func(t *testing.T) {
-		m := []string{"a", "b", "c"}
-		got := SliceToMap[string, struct{}](m)
-		assert.Equal(t, got, map[string]struct{}{"a": {}, "b": {}, "c": {}})
-	})
-	t.Run("sliceIntToMapIntBool", func(t *testing.T) {
-		m := []int{1, 2, 3}
-		got := SliceToMap[int, bool](m)
-		assert.Equal(t, got, map[int]bool{1: false, 2: false, 3: false})
-	})
-}

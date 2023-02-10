@@ -21,8 +21,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +33,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/injector/interfaces"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/utils"
@@ -43,6 +43,7 @@ const (
 	port                                      = 4000
 	getKubernetesServiceAccountTimeoutSeconds = 10
 	systemGroup                               = "system:masters"
+	serviceAccountUserInfoPrefix              = "system:serviceaccount:"
 )
 
 var log = logger.NewLogger("dapr.injector")
@@ -57,6 +58,11 @@ var AllowedServiceAccountInfos = []string{
 	"tekton-pipelines:tekton-pipelines-controller",
 }
 
+// Injector is the interface for the Dapr runtime sidecar injection component.
+type Injector interface {
+	Run(ctx context.Context, onReady func())
+}
+
 type injector struct {
 	config       Config
 	deserializer runtime.Decoder
@@ -65,8 +71,7 @@ type injector struct {
 	daprClient   scheme.Interface
 	authUIDs     []string
 
-	authUIDsMap map[string]struct{}
-	authUIDsMu  sync.RWMutex
+	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
 }
 
 // errorToAdmissionResponse is a helper function to create an AdmissionResponse
@@ -99,7 +104,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config.
-func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) interfaces.Injector {
+func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) (Injector, error) {
 	mux := http.NewServeMux()
 
 	i := &injector{
@@ -112,28 +117,29 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
 		},
-		kubeClient:  kubeClient,
-		daprClient:  daprClient,
-		authUIDs:    authUIDs,
-		authUIDsMap: utils.SliceToMap[string, struct{}](authUIDs),
+		kubeClient: kubeClient,
+		daprClient: daprClient,
+		authUIDs:   authUIDs,
+	}
+
+	if err := createNamespaceNameMatcher(i, config); err != nil {
+		return nil, err
 	}
 
 	mux.HandleFunc("/mutate", i.handleRequest)
-	return i
+	return i, nil
 }
 
-// UpdateAllowedAuthUIDs will update the map of allowed UIDs and the materialized slice when we get an update from the dynamic watch
-func (i *injector) UpdateAllowedAuthUIDs(addAuthUIDs []string, deleteAuthUIDs []string) {
-	i.authUIDsMu.Lock()
-	defer i.authUIDsMu.Unlock()
-
-	for _, uid := range addAuthUIDs {
-		i.authUIDsMap[uid] = struct{}{}
+func createNamespaceNameMatcher(i *injector, config Config) error {
+	i.config.AllowedServiceAccountsPrefixNames = strings.TrimSpace(config.AllowedServiceAccountsPrefixNames)
+	if prefixNames := i.config.AllowedServiceAccountsPrefixNames; prefixNames != "" {
+		matcher, err := namespacednamematcher.CreateFromString(config.AllowedServiceAccountsPrefixNames)
+		if err != nil {
+			return err
+		}
+		i.namespaceNameMatcher = matcher
 	}
-	for _, uid := range deleteAuthUIDs {
-		delete(i.authUIDsMap, uid)
-	}
-	i.authUIDs = utils.MapToSlice(i.authUIDsMap)
+	return nil
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
@@ -249,12 +255,10 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-		// get a snapshot of the authuids
-		i.authUIDsMu.RLock()
-		authUIDs := i.authUIDs
-		i.authUIDsMu.RUnlock()
 
-		if !(utils.Contains(authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
+		allowServiceAccountUser := i.allowServiceAccountUser(ar.Request.UserInfo.Username)
+
+		if !(allowServiceAccountUser || utils.Contains(i.authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
 			log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
 		} else if ar.Request.Kind.Kind != "Pod" {
 			log.Errorf("invalid kind for review: %s", ar.Kind)
@@ -326,4 +330,20 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		log.Errorf("Admission succeeded, but pod was not patched. No sidecar injected for '%s'", diagAppID)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
 	}
+}
+
+func (i *injector) allowServiceAccountUser(reviewRequestUserInfo string) (allowedUID bool) {
+	if i.namespaceNameMatcher == nil {
+		return false
+	}
+
+	if !strings.HasPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix) {
+		return false
+	}
+	namespacedName := strings.TrimPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix)
+	namespacedNameParts := strings.Split(namespacedName, ":")
+	if len(namespacedNameParts) <= 1 {
+		return false
+	}
+	return i.namespaceNameMatcher.MatchesNamespacedName(namespacedNameParts[0], namespacedNameParts[1])
 }

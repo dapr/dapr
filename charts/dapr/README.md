@@ -186,6 +186,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.sidecarRunAsNonRoot` | When this boolean value is true (the default), the injected sidecar containers have `runAsRoot: true`. You may have to set this to `false` when running Minikube | `true` |
 | `dapr_sidecar_injector.sidecarReadOnlyRootFilesystem` | When this boolean value is true (the default), the injected sidecar containers have `readOnlyRootFilesystem: true` | `true` |
 | `dapr_sidecar_injector.allowedServiceAccounts` | String value for extra allowed service accounts in the format of `serviceAccount1:namespace1,serviceAccount2:namespace2`  | `""` |
+| `dapr_sidecar_injector.allowedServiceAccountsPrefixNames` | String value for extra allowed service accounts to watch, even if not yet present, and with the possibility of using prefixes by suffixing the name or namespace prefix with a `*` sign, in the format of `namespacePrefix1*:serviceAccountPrefix1*,namespace2:serviceAccount2` | `""` |
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 | `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |

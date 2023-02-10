@@ -15,11 +15,7 @@ package main
 
 import (
 	"flag"
-	"strings"
-
 	controllerruntime "sigs.k8s.io/controller-runtime"
-
-	"github.com/dapr/dapr/pkg/injector/allowedsawatcher"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
@@ -64,18 +60,10 @@ func main() {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	inj := injector.NewInjector(uids, cfg, daprClient, kubeClient)
-
-	if strings.TrimSpace(cfg.AllowedServiceAccountsWatchNames) != "" {
-		// service account name namespace watcher
-		saWatcher := allowedsawatcher.NewWatcher(cfg.AllowedServiceAccountsWatchNames, inj, conf)
-		go func() {
-			if err = saWatcher.Start(ctx); err != nil {
-				log.Fatalf("unable to start service account name/namespace watcher, err: %s", err)
-			}
-		}()
+	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient)
+	if err != nil {
+		log.Fatalf("could not create Injector, err: %s", err)
 	}
-
 	// Blocking call
 	inj.Run(ctx, func() {
 		healthzServer.Ready()

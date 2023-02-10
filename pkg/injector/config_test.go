@@ -30,7 +30,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test1:test-service-account1,test2:test-service-account2")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test-service-account1:test1,test-service-account2:test2")
-		t.Setenv("ALLOWED_SERVICE_ACCOUNTS_WATCH_NAME", "namespace:test-service-account1,namespace2*:test-service-account2")
+		t.Setenv("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES", "namespace:test-service-account1,namespace2*:test-service-account2")
 
 		cfg, err := GetConfig()
 		assert.NoError(t, err)
@@ -42,7 +42,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		assert.Equal(t, "cluster.local", cfg.KubeClusterDomain)
 		assert.Equal(t, "test1:test-service-account1,test2:test-service-account2", cfg.AllowedServiceAccounts)
 		assert.Equal(t, "test-service-account1:test1,test-service-account2:test2", cfg.AllowedServiceAccounts)
-		assert.Equal(t, "namespace:test-service-account1,namespace2*:test-service-account2", cfg.AllowedServiceAccountsWatchNames)
+		assert.Equal(t, "namespace:test-service-account1,namespace2*:test-service-account2", cfg.AllowedServiceAccountsPrefixNames)
 	})
 
 	t.Run("not set kube cluster domain env", func(t *testing.T) {

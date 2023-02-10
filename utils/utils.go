@@ -174,27 +174,6 @@ func Filter[T any](items []T, test func(item T) bool) []T {
 	return slices.Clip(filteredItems)
 }
 
-// MapToSlice is the inversion of SliceToMap. Order is not guaranteed as map retrieval order is not.
-func MapToSlice[T comparable, V any](m map[T]V) []T {
-	l := make([]T, len(m))
-	var i int
-	for uid := range m {
-		l[i] = uid
-		i++
-	}
-	return l
-}
-
-// SliceToMap simple utility to convert from a slice to a map generally to use for contains-like operations
-func SliceToMap[T comparable, V any](l []T) map[T]V {
-	m := make(map[T]V)
-	for _, k := range l {
-		var v V
-		m[k] = v
-	}
-	return m
-}
-
 const (
 	logNameFmt        = "%s (%s)"
 	logNameVersionFmt = "%s (%s/%s)"

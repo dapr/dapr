@@ -17,11 +17,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
+
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/admission/v1"
@@ -38,13 +44,14 @@ import (
 )
 
 func TestConfigCorrectValues(t *testing.T) {
-	i := NewInjector(nil, Config{
+	i, err := NewInjector(nil, Config{
 		TLSCertFile:            "a",
 		TLSKeyFile:             "b",
 		SidecarImage:           "c",
 		SidecarImagePullPolicy: "d",
 		Namespace:              "e",
 	}, nil, nil)
+	assert.NoError(t, err)
 
 	injector := i.(*injector)
 	assert.Equal(t, "a", injector.config.TLSCertFile)
@@ -377,12 +384,14 @@ func TestGetAppIDFromRequest(t *testing.T) {
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 
-	i := NewInjector([]string{authID}, Config{
+	i, err := NewInjector([]string{authID}, Config{
 		TLSCertFile:  "test-cert",
 		TLSKeyFile:   "test-key",
 		SidecarImage: "test-image",
 		Namespace:    "test-ns",
 	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
+
+	assert.NoError(t, err)
 	injector := i.(*injector)
 
 	podBytes, _ := json.Marshal(corev1.Pod{
@@ -618,4 +627,60 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 3, len(uids))
 	})
+}
+
+func Test_injector_allowServiceAccountUser(t *testing.T) {
+	type fields struct {
+		config               Config
+		deserializer         runtime.Decoder
+		server               *http.Server
+		kubeClient           kubernetes.Interface
+		daprClient           versioned.Interface
+		authUIDs             []string
+		namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
+	}
+	type args struct {
+		reviewRequestUserInfo string
+	}
+	tests := []struct {
+		name           string
+		fields         fields
+		args           args
+		wantAllowedUID bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			i := &injector{
+				config:               tt.fields.config,
+				deserializer:         tt.fields.deserializer,
+				server:               tt.fields.server,
+				kubeClient:           tt.fields.kubeClient,
+				daprClient:           tt.fields.daprClient,
+				authUIDs:             tt.fields.authUIDs,
+				namespaceNameMatcher: tt.fields.namespaceNameMatcher,
+			}
+			assert.Equalf(t, tt.wantAllowedUID, i.allowServiceAccountUser(tt.args.reviewRequestUserInfo), "allowServiceAccountUser(%v)", tt.args.reviewRequestUserInfo)
+		})
+	}
+}
+
+func Test_createNamespaceNameMatcher(t *testing.T) {
+	type args struct {
+		i      *injector
+		config Config
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.wantErr(t, createNamespaceNameMatcher(tt.args.i, tt.args.config), fmt.Sprintf("createNamespaceNameMatcher(%v, %v)", tt.args.i, tt.args.config))
+		})
+	}
 }
