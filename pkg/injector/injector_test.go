@@ -17,17 +17,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
-
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/admission/v1"
@@ -45,11 +41,12 @@ import (
 
 func TestConfigCorrectValues(t *testing.T) {
 	i, err := NewInjector(nil, Config{
-		TLSCertFile:            "a",
-		TLSKeyFile:             "b",
-		SidecarImage:           "c",
-		SidecarImagePullPolicy: "d",
-		Namespace:              "e",
+		TLSCertFile:                       "a",
+		TLSKeyFile:                        "b",
+		SidecarImage:                      "c",
+		SidecarImagePullPolicy:            "d",
+		Namespace:                         "e",
+		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*",
 	}, nil, nil)
 	assert.NoError(t, err)
 
@@ -59,6 +56,21 @@ func TestConfigCorrectValues(t *testing.T) {
 	assert.Equal(t, "c", injector.config.SidecarImage)
 	assert.Equal(t, "d", injector.config.SidecarImagePullPolicy)
 	assert.Equal(t, "e", injector.config.Namespace)
+	m, err := namespacednamematcher.CreateFromString("ns*:sa,namespace:sa*")
+	assert.NoError(t, err)
+	assert.Equal(t, m, injector.namespaceNameMatcher)
+}
+
+func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
+	_, err := NewInjector(nil, Config{
+		TLSCertFile:                       "a",
+		TLSKeyFile:                        "b",
+		SidecarImage:                      "c",
+		SidecarImagePullPolicy:            "d",
+		Namespace:                         "e",
+		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
+	}, nil, nil)
+	assert.Error(t, err)
 }
 
 func TestAnnotations(t *testing.T) {
@@ -385,10 +397,11 @@ func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 
 	i, err := NewInjector([]string{authID}, Config{
-		TLSCertFile:  "test-cert",
-		TLSKeyFile:   "test-key",
-		SidecarImage: "test-image",
-		Namespace:    "test-ns",
+		TLSCertFile:                       "test-cert",
+		TLSKeyFile:                        "test-key",
+		SidecarImage:                      "test-image",
+		Namespace:                         "test-ns",
+		AllowedServiceAccountsPrefixNames: "vc-proj*:sa-dev*,vc-all-allowed*:*",
 	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
 
 	assert.NoError(t, err)
@@ -550,6 +563,63 @@ func TestHandleRequest(t *testing.T) {
 			http.StatusOK,
 			false,
 		},
+		{
+			"TestSidecarInjectUserInfoMatchesServiceAccountPrefix",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:vc-project-star:sa-dev-team-usa",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			true,
+		},
+		{
+			"TestSidecarInjectUserInfoMatchesAllAllowedServiceAccountPrefix",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:vc-all-allowed-project:dapr",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			true,
+		},
+		{
+			"TestSidecarInjectUserInfoNotMatchesServiceAccountPrefix",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:vc-bad-project-star:sa-dev-team-usa",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(injector.handleRequest))
@@ -627,60 +697,4 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 3, len(uids))
 	})
-}
-
-func Test_injector_allowServiceAccountUser(t *testing.T) {
-	type fields struct {
-		config               Config
-		deserializer         runtime.Decoder
-		server               *http.Server
-		kubeClient           kubernetes.Interface
-		daprClient           versioned.Interface
-		authUIDs             []string
-		namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
-	}
-	type args struct {
-		reviewRequestUserInfo string
-	}
-	tests := []struct {
-		name           string
-		fields         fields
-		args           args
-		wantAllowedUID bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			i := &injector{
-				config:               tt.fields.config,
-				deserializer:         tt.fields.deserializer,
-				server:               tt.fields.server,
-				kubeClient:           tt.fields.kubeClient,
-				daprClient:           tt.fields.daprClient,
-				authUIDs:             tt.fields.authUIDs,
-				namespaceNameMatcher: tt.fields.namespaceNameMatcher,
-			}
-			assert.Equalf(t, tt.wantAllowedUID, i.allowServiceAccountUser(tt.args.reviewRequestUserInfo), "allowServiceAccountUser(%v)", tt.args.reviewRequestUserInfo)
-		})
-	}
-}
-
-func Test_createNamespaceNameMatcher(t *testing.T) {
-	type args struct {
-		i      *injector
-		config Config
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr assert.ErrorAssertionFunc
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.wantErr(t, createNamespaceNameMatcher(tt.args.i, tt.args.config), fmt.Sprintf("createNamespaceNameMatcher(%v, %v)", tt.args.i, tt.args.config))
-		})
-	}
 }

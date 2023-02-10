@@ -166,28 +166,6 @@ func Test_getNameNamespaces(t *testing.T) {
 }
 
 func TestEqualPrefixNameNamespaceMatcher_MatchesObject(t *testing.T) {
-	for _, tc := range getMatcherTestCases() {
-		matcher, err := CreateFromString(tc.namespaceNames)
-		if tc.wantError {
-			assert.Error(t, err, "expecting error")
-			continue
-		}
-		sa := &corev1.ServiceAccount{
-			ObjectMeta: tc.objectMeta,
-		}
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equalf(t, tc.wantCreate, matcher.MatchesNamespacedName(sa.Namespace, sa.Name), "MatchesObject(%v)", tc.objectMeta)
-		})
-	}
-}
-
-func getMatcherTestCases() []struct {
-	name           string
-	namespaceNames string
-	objectMeta     metav1.ObjectMeta
-	wantCreate     bool
-	wantError      bool
-} {
 	tests := []struct {
 		name           string
 		namespaceNames string
@@ -259,5 +237,17 @@ func getMatcherTestCases() []struct {
 			wantError:      false,
 		},
 	}
-	return tests
+	for _, tc := range tests {
+		matcher, err := CreateFromString(tc.namespaceNames)
+		if tc.wantError {
+			assert.Error(t, err, "expecting error")
+			continue
+		}
+		sa := &corev1.ServiceAccount{
+			ObjectMeta: tc.objectMeta,
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equalf(t, tc.wantCreate, matcher.MatchesNamespacedName(sa.Namespace, sa.Name), "MatchesObject(%v)", tc.objectMeta)
+		})
+	}
 }

@@ -121,25 +121,25 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		authUIDs:   authUIDs,
 	}
 
-	if err := createNamespaceNameMatcher(i, config); err != nil {
+	matcher, err := createNamespaceNameMatcher(strings.TrimSpace(config.AllowedServiceAccountsPrefixNames))
+	if err != nil {
 		return nil, err
 	}
+	i.namespaceNameMatcher = matcher
 
 	mux.HandleFunc("/mutate", i.handleRequest)
 	return i, nil
 }
 
-func createNamespaceNameMatcher(i *injector, config Config) error {
-	i.config.AllowedServiceAccountsPrefixNames = strings.TrimSpace(config.AllowedServiceAccountsPrefixNames)
-	if prefixNames := i.config.AllowedServiceAccountsPrefixNames; prefixNames != "" {
-		matcher, err := namespacednamematcher.CreateFromString(config.AllowedServiceAccountsPrefixNames)
+func createNamespaceNameMatcher(allowedPrefix string) (matcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher, err error) {
+	if prefixNames := allowedPrefix; prefixNames != "" {
+		matcher, err = namespacednamematcher.CreateFromString(allowedPrefix)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		i.namespaceNameMatcher = matcher
-		log.Debugf("Sidecar injector configured to allowed serviceaccounts prefixed by: %s", config.AllowedServiceAccountsPrefixNames)
+		log.Debugf("Sidecar injector configured to allowed serviceaccounts prefixed by: %s", allowedPrefix)
 	}
-	return nil
+	return matcher, nil
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
@@ -255,7 +255,6 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-
 		allowServiceAccountUser := i.allowServiceAccountUser(ar.Request.UserInfo.Username)
 
 		if !(allowServiceAccountUser || utils.Contains(i.authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {

@@ -15,6 +15,7 @@ package namespacednamematcher
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/dapr/dapr/utils"
@@ -30,14 +31,22 @@ var forbiddenNS = []string{
 	"dapr-system",
 }
 
+// sort by length and if needed by regular comparison
+type shortestPrefixSortedSlice []string
+
+func (s shortestPrefixSortedSlice) Less(i, j int) bool { return len(s[i]) < len(s[j]) || s[i] < s[j] }
+func (s shortestPrefixSortedSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s shortestPrefixSortedSlice) Len() int           { return len(s) }
+
 type equalPrefixLists struct {
 	equal  []string
 	prefix []string
 }
 
 type EqualPrefixNameNamespaceMatcher struct {
-	prefixed map[string]*equalPrefixLists
-	equal    map[string]*equalPrefixLists
+	prefixed       map[string]*equalPrefixLists
+	equal          map[string]*equalPrefixLists
+	sortedPrefixes []string
 }
 
 // CreateFromString creates two maps from the CSV provided by the user of ns:sa values,
@@ -93,6 +102,10 @@ func CreateFromString(s string) (*EqualPrefixNameNamespaceMatcher, error) {
 			}
 		}
 	}
+	if len(matcher.prefixed) != 0 {
+		matcher.sortedPrefixes = utils.MapToSlice(matcher.prefixed)
+		sort.Sort(shortestPrefixSortedSlice(matcher.sortedPrefixes))
+	}
 	return matcher, nil
 }
 
@@ -108,6 +121,8 @@ func getSaEqualPrefix(sa string, namespaceNames *equalPrefixLists) (saPrefix str
 	} else if !utils.Contains(namespaceNames.equal, sa) {
 		namespaceNames.equal = append(namespaceNames.equal, sa)
 	}
+	// sort prefixes by length/value
+	sort.Sort(shortestPrefixSortedSlice(namespaceNames.prefix))
 	return "", saPrefixFound, nil
 }
 
@@ -122,11 +137,12 @@ func getPrefix(s string) (string, bool, error) {
 	return s[:len(s)-1], true, nil
 }
 
-// MatchesNamespacedName matches an object against all the potential options in this matcher
+// MatchesNamespacedName matches an object against all the potential options in this matcher, we first check sorted prefixes
+// to try to match the shortest one that could potentially cover others
 func (m *EqualPrefixNameNamespaceMatcher) MatchesNamespacedName(namespace, name string) bool {
-	for nsPrefix, values := range m.prefixed {
+	for _, nsPrefix := range m.sortedPrefixes {
 		if strings.HasPrefix(namespace, nsPrefix) {
-			return utils.ContainsPrefixed(values.prefix, name) || utils.Contains(values.equal, name)
+			return utils.ContainsPrefixed(m.prefixed[nsPrefix].prefix, name) || utils.Contains(m.prefixed[nsPrefix].equal, name)
 		}
 	}
 	for ns, values := range m.equal {
