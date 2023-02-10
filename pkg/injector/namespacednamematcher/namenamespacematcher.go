@@ -40,10 +40,10 @@ type EqualPrefixNameNamespaceMatcher struct {
 	equal    map[string]*equalPrefixLists
 }
 
-// CreateFromString from the csv provided by the user of sa:ns values, we create two maps
-// one with namespace prefixes and one with namespace exact values
-// inside each map we can have exact name or prefixed names
-// note there might be prefixes that cover other prefixes, but we are not filtering it for now
+// CreateFromString creates two maps from the CSV provided by the user of ns:sa values,
+// one with namespace prefixes and one with namespace exact values.
+// Inside each map we can have exact name or prefixed names.
+// Note there might be overlap in prefixes, but we are not filtering it for now.
 func CreateFromString(s string) (*EqualPrefixNameNamespaceMatcher, error) {
 	matcher := &EqualPrefixNameNamespaceMatcher{}
 	for _, nameNamespace := range strings.Split(s, ",") {
