@@ -9,7 +9,7 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
-      - 
+      -
         name: Checkout
         uses: actions/checkout@v2
       - # ghcr logins for pushing image after testing
@@ -21,7 +21,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKER_REGISTRY_ID }}
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
@@ -46,6 +46,13 @@ jobs:
           src: redis:latest
           dst: |
             ghcr.io/${{ github.repository_owner }}/3rdparty/redis:latest
+      - # copy 3rd party redis image from dockerhub to ghcr
+        name: Push Image (redis:7) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: redis:7
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/redis:7
       - # copy 3rd party redis v6 image from dockerhub to ghcr
         name: Push Image (redis) to target registries
         uses: akhilerm/tag-push-action@v2.0.0
