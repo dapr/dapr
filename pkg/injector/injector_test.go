@@ -57,28 +57,28 @@ func TestConfigCorrectValues(t *testing.T) {
 func TestAnnotations(t *testing.T) {
 	t.Run("Config", func(t *testing.T) {
 		m := map[string]string{annotations.KeyConfig: "config1"}
-		an := sidecar.Annotations(m)
+		an := annotations.New(m)
 		assert.Equal(t, "config1", an.GetString(annotations.KeyConfig))
 	})
 
 	t.Run("Profiling", func(t *testing.T) {
 		t.Run("missing annotation", func(t *testing.T) {
 			m := map[string]string{}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			e := an.GetBoolOrDefault(annotations.KeyEnableProfiling, annotations.DefaultEnableProfiling)
 			assert.Equal(t, e, false)
 		})
 
 		t.Run("enabled", func(t *testing.T) {
 			m := map[string]string{annotations.KeyEnableProfiling: "yes"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			e := an.GetBoolOrDefault(annotations.KeyEnableProfiling, annotations.DefaultEnableProfiling)
 			assert.Equal(t, e, true)
 		})
 
 		t.Run("disabled", func(t *testing.T) {
 			m := map[string]string{annotations.KeyEnableProfiling: "false"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			e := an.GetBoolOrDefault(annotations.KeyEnableProfiling, annotations.DefaultEnableProfiling)
 			assert.Equal(t, e, false)
 		})
@@ -87,7 +87,7 @@ func TestAnnotations(t *testing.T) {
 	t.Run("AppPort", func(t *testing.T) {
 		t.Run("valid port", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppPort: "3000"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			p, err := an.GetInt32(annotations.KeyAppPort)
 			assert.Nil(t, err)
 			assert.Equal(t, int32(3000), p)
@@ -95,7 +95,7 @@ func TestAnnotations(t *testing.T) {
 
 		t.Run("invalid port", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppPort: "a"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			p, err := an.GetInt32(annotations.KeyAppPort)
 			assert.NotNil(t, err)
 			assert.Equal(t, int32(-1), p)
@@ -105,21 +105,21 @@ func TestAnnotations(t *testing.T) {
 	t.Run("Protocol", func(t *testing.T) {
 		t.Run("valid grpc protocol", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppProtocol: "grpc"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
 			assert.Equal(t, "grpc", p)
 		})
 
 		t.Run("valid http protocol", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppProtocol: "http"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
 			assert.Equal(t, "http", p)
 		})
 
 		t.Run("get default http protocol", func(t *testing.T) {
 			m := map[string]string{}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
 			assert.Equal(t, "http", p)
 		})
@@ -128,14 +128,14 @@ func TestAnnotations(t *testing.T) {
 	t.Run("LogLevel", func(t *testing.T) {
 		t.Run("empty log level - get default", func(t *testing.T) {
 			m := map[string]string{}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			logLevel := an.GetStringOrDefault(annotations.KeyLogLevel, annotations.DefaultLogLevel)
 			assert.Equal(t, "info", logLevel)
 		})
 
 		t.Run("error log level", func(t *testing.T) {
 			m := map[string]string{annotations.KeyLogLevel: "error"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			logLevel := an.GetStringOrDefault(annotations.KeyLogLevel, annotations.DefaultLogLevel)
 			assert.Equal(t, "error", logLevel)
 		})
@@ -144,7 +144,7 @@ func TestAnnotations(t *testing.T) {
 	t.Run("MaxConcurrency", func(t *testing.T) {
 		t.Run("empty max concurrency - should be -1", func(t *testing.T) {
 			m := map[string]string{}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			maxConcurrency, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
 			assert.Nil(t, err)
 			assert.Equal(t, int32(-1), maxConcurrency)
@@ -152,14 +152,14 @@ func TestAnnotations(t *testing.T) {
 
 		t.Run("invalid max concurrency - should be -1", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppMaxConcurrency: "invalid"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			_, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
 			assert.NotNil(t, err)
 		})
 
 		t.Run("valid max concurrency - should be 10", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppMaxConcurrency: "10"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			maxConcurrency, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
 			assert.Nil(t, err)
 			assert.Equal(t, int32(10), maxConcurrency)
@@ -169,7 +169,7 @@ func TestAnnotations(t *testing.T) {
 	t.Run("GetMetricsPort", func(t *testing.T) {
 		t.Run("metrics port override", func(t *testing.T) {
 			m := map[string]string{annotations.KeyMetricsPort: "5050"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			pod := corev1.Pod{}
 			pod.Annotations = m
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
@@ -177,7 +177,7 @@ func TestAnnotations(t *testing.T) {
 		})
 		t.Run("invalid metrics port override", func(t *testing.T) {
 			m := map[string]string{annotations.KeyMetricsPort: "abc"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			pod := corev1.Pod{}
 			pod.Annotations = m
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
@@ -185,7 +185,7 @@ func TestAnnotations(t *testing.T) {
 		})
 		t.Run("no metrics port defined", func(t *testing.T) {
 			pod := corev1.Pod{}
-			an := sidecar.Annotations(pod.Annotations)
+			an := annotations.New(pod.Annotations)
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
 			assert.Equal(t, int32(annotations.DefaultMetricsPort), p)
 		})
@@ -238,7 +238,7 @@ func TestAnnotations(t *testing.T) {
 
 	t.Run("AppSSL", func(t *testing.T) {
 		t.Run("ssl enabled", func(t *testing.T) {
-			an := sidecar.Annotations(map[string]string{
+			an := annotations.New(map[string]string{
 				annotations.KeyAppSSL: "true",
 			})
 			s := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
@@ -246,7 +246,7 @@ func TestAnnotations(t *testing.T) {
 		})
 
 		t.Run("ssl disabled", func(t *testing.T) {
-			an := sidecar.Annotations(map[string]string{
+			an := annotations.New(map[string]string{
 				annotations.KeyAppSSL: "false",
 			})
 			s := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
@@ -254,7 +254,7 @@ func TestAnnotations(t *testing.T) {
 		})
 
 		t.Run("ssl not specified", func(t *testing.T) {
-			an := sidecar.Annotations(map[string]string{})
+			an := annotations.New(map[string]string{})
 			s := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
 			assert.False(t, s)
 		})

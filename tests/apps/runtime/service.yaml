@@ -11,9 +11,9 @@ spec:
   selector:
     testapp: runtime
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 3000
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
   type: LoadBalancer
 
 ---
@@ -36,10 +36,14 @@ spec:
         dapr.io/enabled: "true"
         dapr.io/app-id: "runtime"
         dapr.io/app-port: "3000"
+        dapr.io/container: >
+          {
+            "a": "b"
+          }
     spec:
       containers:
-      - name: runtime
-        image: docker.io/YOUR ID/e2e-runtime:dev
-        ports:
-        - containerPort: 3000
-        imagePullPolicy: Always
+        - name: runtime
+          image: docker.io/YOUR ID/e2e-runtime:dev
+          ports:
+            - containerPort: 3000
+          imagePullPolicy: Always

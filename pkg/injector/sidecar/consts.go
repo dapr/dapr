@@ -27,11 +27,9 @@ const (
 	SidecarDebugPortName           = "dapr-debug"
 	SidecarHealthzPath             = "healthz"
 	APIVersionV1                   = "v1.0"
-	UnixDomainSocketVolume         = "dapr-unix-domain-socket" // Name of the Unix domain socket volume.
-	UserContainerDaprHTTPPortName  = "DAPR_HTTP_PORT"          // Name of the variable exposed to the app containing the Dapr HTTP port.
-	UserContainerDaprGRPCPortName  = "DAPR_GRPC_PORT"          // Name of the variable exposed to the app containing the Dapr gRPC port.
-	PatchPathContainers            = "/spec/containers"
-	PatchPathVolumes               = "/spec/volumes"
+	UnixDomainSocketVolume         = "dapr-unix-domain-socket"              // Name of the Unix domain socket volume.
+	UserContainerDaprHTTPPortName  = "DAPR_HTTP_PORT"                       // Name of the variable exposed to the app containing the Dapr HTTP port.
+	UserContainerDaprGRPCPortName  = "DAPR_GRPC_PORT"                       // Name of the variable exposed to the app containing the Dapr gRPC port.
 	TokenVolumeKubernetesMountPath = "/var/run/secrets/dapr.io/sentrytoken" /* #nosec */ // Mount path for the Kubernetes service account volume with the sentry token.
 	TokenVolumeName                = "dapr-identity-token"                  /* #nosec */ // Name of the volume with the service account token for daprd.
 )

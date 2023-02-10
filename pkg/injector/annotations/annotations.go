@@ -64,6 +64,8 @@ const (
 	KeyPlacementHostAddresses           = "dapr.io/placement-host-address"
 	KeyPluggableComponents              = "dapr.io/pluggable-components"
 	KeyPluggableComponentsSocketsFolder = "dapr.io/pluggable-components-sockets-folder"
+	KeyPluggableComponentContainer      = "dapr.io/component-container"
+	KeyPluggableComponentsInjection     = "dapr.io/inject-pluggable-components"
 )
 
 // Default values

@@ -21,6 +21,7 @@ import (
 	coreV1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
@@ -28,7 +29,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		testName      string
 		mockContainer coreV1.Container
 		expOpsLen     int
-		expOps        []PatchOperation
+		expOps        []patcher.PatchOperation
 	}{
 		{
 			testName: "empty environment vars",
@@ -36,7 +37,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				Name: "MockContainer",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env",
@@ -65,7 +66,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 2,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
@@ -100,7 +101,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
@@ -127,7 +128,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
 		},
 	}
 
@@ -147,7 +148,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		mockContainer coreV1.Container
 		socketMount   *coreV1.VolumeMount
 		expOpsLen     int
-		expOps        []PatchOperation
+		expOps        []patcher.PatchOperation
 	}{
 		{
 			testName: "empty var, empty volume",
@@ -156,7 +157,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			},
 			socketMount: nil,
 			expOpsLen:   0,
-			expOps:      []PatchOperation{},
+			expOps:      []patcher.PatchOperation{},
 		},
 		{
 			testName: "existing var, empty volume",
@@ -168,7 +169,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts",
@@ -192,7 +193,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
@@ -217,7 +218,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
@@ -241,7 +242,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
 		},
 		{
 			testName: "existing var, conflict volume mount path",
@@ -256,7 +257,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
 		},
 	}
 
