@@ -25,7 +25,8 @@ import (
 
 var log = logger.NewLogger("dapr.injector.components")
 
-// buildComponentContainers returns the component containers for the given app ID.
+// Injectable parses the container definition from components annotations returning them as a list. Uses the appID to filter
+// only the eligble components for such apps avoiding injecting containers that will not be used.
 func Injectable(appID string, components []componentsapi.Component) []corev1.Container {
 	componentContainers := make([]corev1.Container, 0)
 	componentImages := make(map[string]bool, 0)
