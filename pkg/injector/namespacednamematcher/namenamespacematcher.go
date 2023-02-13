@@ -123,7 +123,7 @@ func getSaEqualPrefix(sa string, namespaceNames *equalPrefixLists) (saPrefix str
 	}
 	// sort prefixes by length/value
 	sort.Sort(shortestPrefixSortedSlice(namespaceNames.prefix))
-	return "", saPrefixFound, nil
+	return saPrefix, saPrefixFound, nil
 }
 
 func getPrefix(s string) (string, bool, error) {

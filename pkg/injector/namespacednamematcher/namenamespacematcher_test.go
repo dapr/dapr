@@ -30,14 +30,19 @@ func Test_getNameNamespaces(t *testing.T) {
 		wantError    bool
 	}{
 		{
-			name:      "emptyNamespaceAndSA",
+			name:      "emptyNamespaceAndSANotAllowed",
 			s:         ":",
 			wantError: true,
 		},
 		{
-			name:      "emptyPrefixes",
+			name:      "emptyPrefixesNotAllowed",
 			s:         "*:*",
 			wantError: true,
+		},
+		{
+			name:         "emptyNSPrefixButSApresent",
+			s:            "*:sa*",
+			wantPrefixed: map[string]*equalPrefixLists{"": {prefix: []string{"sa"}}},
 		},
 		{
 			name:      "missingColon",
@@ -170,70 +175,84 @@ func TestEqualPrefixNameNamespaceMatcher_MatchesObject(t *testing.T) {
 		name           string
 		namespaceNames string
 		objectMeta     metav1.ObjectMeta
-		wantCreate     bool
+		wantMatch      bool
 		wantError      bool
 	}{
 		{
 			name:           "equalPredicate",
 			namespaceNames: "ns:sa",
 			objectMeta:     metav1.ObjectMeta{Name: "sa", Namespace: "ns"},
-			wantCreate:     true,
+			wantMatch:      true,
 			wantError:      false,
 		},
 		{
 			name:           "equalPredicateNoMatch",
 			namespaceNames: "ns:sa,ns:sb,ns:sc",
 			objectMeta:     metav1.ObjectMeta{Name: "sd", Namespace: "ns"},
-			wantCreate:     false,
+			wantMatch:      false,
 			wantError:      false,
 		},
 		{
 			name:           "equalPredicateNoMatchWrongNS",
 			namespaceNames: "ns:sa,ns:sb,ns:sc",
 			objectMeta:     metav1.ObjectMeta{Name: "sd", Namespace: "ns2"},
-			wantCreate:     false,
+			wantMatch:      false,
 			wantError:      false,
 		},
 		{
 			name:           "equalNamespacePrefixSA",
 			namespaceNames: "ns:vc-sa*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "ns"},
-			wantCreate:     true,
+			wantMatch:      true,
 			wantError:      false,
 		},
 		{
 			name:           "equalNamespacePrefixSABadPrefix",
 			namespaceNames: "ns:vc-sa*sa",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "ns"},
-			wantCreate:     true,
+			wantMatch:      true,
 			wantError:      true,
 		},
 		{
 			name:           "equalNamespacePrefixSANoMatch",
 			namespaceNames: "ns:vc-sa*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "ns"},
-			wantCreate:     false,
+			wantMatch:      false,
+			wantError:      false,
+		},
+		{
+			name:           "anyNamespaceWithPrefixSA",
+			namespaceNames: "*:vc-sa*",
+			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "ns123456"},
+			wantMatch:      true,
+			wantError:      false,
+		},
+		{
+			name:           "anySAWithEqualNamespace",
+			namespaceNames: "default:*,my-ns:*",
+			objectMeta:     metav1.ObjectMeta{Name: "vc-sa-1234", Namespace: "default"},
+			wantMatch:      true,
 			wantError:      false,
 		},
 		{
 			name:           "equalNamespaceMultiplePrefixSA",
 			namespaceNames: "ns:vc-sa*,ns:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "ns"},
-			wantCreate:     true,
+			wantMatch:      true,
 			wantError:      false,
 		},
 		{
 			name:           "prefixNamespaceMultiplePrefixSA",
 			namespaceNames: "name*:vc-sa*,name*:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "namespace"},
-			wantCreate:     true,
+			wantMatch:      true,
 			wantError:      false,
 		},
 		{
 			name:           "prefixNamespaceMultiplePrefixSANoMatch",
 			namespaceNames: "name*:vc-sa*,name*:vc-sb*",
 			objectMeta:     metav1.ObjectMeta{Name: "vc-sb-1234", Namespace: "namspace"},
-			wantCreate:     false,
+			wantMatch:      false,
 			wantError:      false,
 		},
 	}
@@ -247,7 +266,7 @@ func TestEqualPrefixNameNamespaceMatcher_MatchesObject(t *testing.T) {
 			ObjectMeta: tc.objectMeta,
 		}
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equalf(t, tc.wantCreate, matcher.MatchesNamespacedName(sa.Namespace, sa.Name), "MatchesObject(%v)", tc.objectMeta)
+			assert.Equalf(t, tc.wantMatch, matcher.MatchesNamespacedName(sa.Namespace, sa.Name), "MatchesObject(%v)", tc.objectMeta)
 		})
 	}
 }
