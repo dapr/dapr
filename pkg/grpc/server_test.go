@@ -83,8 +83,9 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "state",
-						Version: "v1",
+						Name:     "state",
+						Version:  "v1",
+						Protocol: "grpc",
 					},
 				},
 			},

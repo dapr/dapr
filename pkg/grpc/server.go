@@ -213,28 +213,32 @@ func (s *server) generateWorkloadCert() error {
 
 func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	intr := make([]grpcGo.UnaryServerInterceptor, 0, 6)
-	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 3)
+	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 4)
 
 	intr = append(intr, metadata.SetMetadataInContextUnary)
 
 	if len(s.apiSpec.Allowed) > 0 {
-		s.logger.Info("enabled API access list on gRPC server")
-		intr = append(intr, setAPIEndpointsMiddlewareUnary(s.apiSpec.Allowed))
+		s.logger.Info("Enabled API access list on gRPC server")
+		unary, stream := setAPIEndpointsMiddlewares(s.apiSpec.Allowed)
+		if unary != nil && stream != nil {
+			intr = append(intr, unary)
+			intrStream = append(intrStream, stream)
+		}
 	}
 
 	if s.authToken != "" {
-		s.logger.Info("enabled token authentication on gRPC server")
+		s.logger.Info("Enabled token authentication on gRPC server")
 		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, authConsts.APITokenHeader))
 	}
 
 	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
-		s.logger.Info("enabled gRPC tracing middleware")
+		s.logger.Info("Enabled gRPC tracing middleware")
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
 		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
 	if s.metricSpec.Enabled {
-		s.logger.Info("enabled gRPC metrics middleware")
+		s.logger.Info("Enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 
 		if s.kind == apiServer {
