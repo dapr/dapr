@@ -415,7 +415,7 @@ func TestAPIToken(t *testing.T) {
 
 		t.Run("stream", func(t *testing.T) {
 			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
-			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/dapr.proto.runtime.v1.Dapr/InvokeActor")
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
 			require.NoError(t, err)
 			defer stream.CloseSend()
 
@@ -479,7 +479,7 @@ func TestAPIToken(t *testing.T) {
 
 		t.Run("stream", func(t *testing.T) {
 			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
-			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/dapr.proto.runtime.v1.Dapr/InvokeActor")
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
 			require.NoError(t, err)
 			defer stream.CloseSend()
 
@@ -544,7 +544,7 @@ func TestAPIToken(t *testing.T) {
 
 		t.Run("stream", func(t *testing.T) {
 			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
-			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/dapr.proto.runtime.v1.Dapr/InvokeActor")
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
 			require.NoError(t, err)
 			defer stream.CloseSend()
 
