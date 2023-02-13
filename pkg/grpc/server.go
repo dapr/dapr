@@ -249,7 +249,9 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	}
 
 	if s.config.EnableAPILogging && s.infoLogger != nil {
-		intr = append(intr, s.getGRPCAPILoggingInfo())
+		unary, stream := s.getGRPCAPILoggingMiddlewares()
+		intr = append(intr, unary)
+		intrStream = append(intrStream, stream)
 	}
 
 	return []grpcGo.ServerOption{
@@ -330,18 +332,31 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 	return percentagePassed >= renewWhenPercentagePassed
 }
 
-func (s *server) getGRPCAPILoggingInfo() grpcGo.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (interface{}, error) {
-		if s.infoLogger != nil && info != nil {
-			fields := make(map[string]any, 2)
-			fields["method"] = info.FullMethod
-			if meta, ok := metadata.FromIncomingContext(ctx); ok {
-				if val, ok := meta["user-agent"]; ok && len(val) > 0 {
-					fields["useragent"] = val[0]
-				}
-			}
-			s.infoLogger.WithFields(fields).Info("gRPC API Called")
-		}
-		return handler(ctx, req)
+func (s *server) getGRPCAPILoggingMiddlewares() (grpcGo.UnaryServerInterceptor, grpcGo.StreamServerInterceptor) {
+	if s.infoLogger == nil {
+		return nil, nil
 	}
+	return func(ctx context.Context, req any, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (any, error) {
+			if info != nil {
+				s.printAPILog(ctx, info.FullMethod)
+			}
+			return handler(ctx, req)
+		},
+		func(srv any, stream grpcGo.ServerStream, info *grpcGo.StreamServerInfo, handler grpcGo.StreamHandler) error {
+			if info != nil {
+				s.printAPILog(stream.Context(), info.FullMethod)
+			}
+			return handler(srv, stream)
+		}
+}
+
+func (s *server) printAPILog(ctx context.Context, method string) {
+	fields := make(map[string]any, 2)
+	fields["method"] = method
+	if meta, ok := metadata.FromIncomingContext(ctx); ok {
+		if val, ok := meta["user-agent"]; ok && len(val) > 0 {
+			fields["useragent"] = val[0]
+		}
+	}
+	s.infoLogger.WithFields(fields).Info("gRPC API Called")
 }
