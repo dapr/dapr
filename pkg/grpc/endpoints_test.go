@@ -51,6 +51,7 @@ func TestEndpointCompleteness(t *testing.T) {
 func hUnary(ctx context.Context, req any) (any, error) {
 	return nil, nil
 }
+
 func hStream(srv any, stream grpc.ServerStream) error {
 	return nil
 }
