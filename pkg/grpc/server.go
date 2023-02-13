@@ -213,7 +213,7 @@ func (s *server) generateWorkloadCert() error {
 
 func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	intr := make([]grpcGo.UnaryServerInterceptor, 0, 6)
-	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 4)
+	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 5)
 
 	intr = append(intr, metadata.SetMetadataInContextUnary)
 
@@ -228,7 +228,9 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 
 	if s.authToken != "" {
 		s.logger.Info("Enabled token authentication on gRPC server")
-		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, authConsts.APITokenHeader))
+		unary, stream := getAPIAuthenticationMiddlewares(s.authToken, authConsts.APITokenHeader)
+		intr = append(intr, unary)
+		intrStream = append(intrStream, stream)
 	}
 
 	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
