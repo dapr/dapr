@@ -132,7 +132,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 }
 
 func createNamespaceNameMatcher(allowedPrefix string) (matcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher, err error) {
-	if prefixNames := allowedPrefix; prefixNames != "" {
+	if allowedPrefix != "" {
 		matcher, err = namespacednamematcher.CreateFromString(allowedPrefix)
 		if err != nil {
 			return nil, err

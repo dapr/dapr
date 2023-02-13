@@ -23,8 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
-
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -36,6 +34,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 )
 
