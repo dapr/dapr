@@ -29,6 +29,7 @@ const yamlSeparator = "\n---"
 
 // manifestLoader loads a specific manifest kind from a folder.
 type DiskManifestLoader[T kubernetesManifest] struct {
+	zvFn  func() T
 	kind  string
 	paths []string
 }
@@ -40,6 +41,12 @@ func NewDiskManifestLoader[T kubernetesManifest](paths ...string) DiskManifestLo
 		paths: paths,
 		kind:  zero.Kind(),
 	}
+}
+
+// SetZeroValueFn sets the function that returns the "zero" object of the given type.
+// This can be used to set default values before unmarshalling.
+func (m *DiskManifestLoader[T]) SetZeroValueFn(zvFn func() T) {
+	m.zvFn = zvFn
 }
 
 // load loads manifests for the given directory.
@@ -112,7 +119,6 @@ func (m DiskManifestLoader[T]) decodeYaml(b []byte) ([]T, []error) {
 			err := scanner.Err()
 			if err != nil {
 				errors = append(errors, err)
-
 				continue
 			}
 
@@ -123,7 +129,6 @@ func (m DiskManifestLoader[T]) decodeYaml(b []byte) ([]T, []error) {
 		var ti typeInfo
 		if err := yaml.Unmarshal(scannerBytes, &ti); err != nil {
 			errors = append(errors, err)
-
 			continue
 		}
 
@@ -132,12 +137,13 @@ func (m DiskManifestLoader[T]) decodeYaml(b []byte) ([]T, []error) {
 		}
 
 		var manifest T
+		if m.zvFn != nil {
+			manifest = m.zvFn()
+		}
 		if err := yaml.Unmarshal(scannerBytes, &manifest); err != nil {
 			errors = append(errors, err)
-
 			continue
 		}
-
 		list = append(list, manifest)
 	}
 
