@@ -645,8 +645,8 @@ github.com/bradfitz/gomemcache v0.0.0-20221031212613-62deef7fc822/go.mod h1:H0wQ
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/bytecodealliance/wasmtime-go/v3 v3.0.2 h1:3uZCA/BLTIu+DqCfguByNMJa2HVHpXvjfy0Dy7g6fuA=
-github.com/camunda/zeebe/clients/go/v8 v8.1.6 h1:nxsU1gNxDxaKoWFT0OoZ7TrQ5N5516ny+UHWz9UFJmE=
-github.com/camunda/zeebe/clients/go/v8 v8.1.6/go.mod h1:HZ7hlFKAfCkdLeLds0nqEO48FDRl8LCBaAtDu9GxaAI=
+github.com/camunda/zeebe/clients/go/v8 v8.0.11 h1:rDqsr0h5H9wmPg1bk0srNRakhtvVO5KcMVgbftKTQqg=
+github.com/camunda/zeebe/clients/go/v8 v8.0.11/go.mod h1:vqeNO1EphExqC15spP56PNXQ6SB8sMjhEfO16bfFRPo=
 github.com/casbin/casbin/v2 v2.1.2/go.mod h1:YcPU1XXisHhLzuxH9coDNf2FbKpjGlbCg3n9yuLkIJQ=
 github.com/cenkalti/backoff v2.0.0+incompatible/go.mod h1:90ReRw6GdpyfrHakVjL/QHaoyV4aDUVVkXQJJJ3NXXM=
 github.com/cenkalti/backoff v2.2.1+incompatible h1:tNowT99t7UNflLxfYYSlKYsBpXdEet03Pg2g16Swow4=
@@ -716,8 +716,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.10.0-rc.5 h1:QkXAocZv3OFE5fdh+HSx9Hmi8/H49izHMLEMgDjhzqg=
-github.com/dapr/components-contrib v1.10.0-rc.5/go.mod h1:5uwls/Q8AFJH+SLxAT38ZQ4cOuULoS6XyndsATRXqm8=
+github.com/dapr/components-contrib v1.10.0-rc.6 h1:TUvTb8LsFZjTMNpjVgBbF48byJz05IXJ7R6kM/kdBeo=
+github.com/dapr/components-contrib v1.10.0-rc.6/go.mod h1:sr+nhohYQCtKM5bALE6zXF3RhqnMQmQ3u8R1WlW5FU0=
 github.com/dapr/kit v0.0.4 h1:i+7TIN4crC1Mo0JFyWpIkwAE8orlliA0O6/ibvs2AaE=
 github.com/dapr/kit v0.0.4/go.mod h1:RFN6r5pZzhrelB0SUr8Dha44ckRBl7t+B01X5aw8WeE=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
