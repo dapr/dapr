@@ -100,19 +100,14 @@ func Test_getNameNamespaces(t *testing.T) {
 			wantError: true,
 		},
 		{
-			name:      "errPrefixNSForbidden",
-			s:         "kube-*:sa",
-			wantError: true,
+			name:         "errPrefixNSCanIncludeKube",
+			s:            "kube2-*:sa,kube-*:sa",
+			wantPrefixed: map[string]*equalPrefixLists{"kube2-": {equal: []string{"sa"}}, "kube-": {equal: []string{"sa"}}},
 		},
 		{
-			name:      "errPrefixNSForbidden",
-			s:         "kube2-*:sa,kube-*:sa",
-			wantError: true,
-		},
-		{
-			name:      "errPreNSForbidden",
+			name:      "errPreNSCanINcludeDapr",
 			s:         "kube-system:sa,dapr-system:sa",
-			wantError: true,
+			wantEqual: map[string]*equalPrefixLists{"kube-system": {equal: []string{"sa"}}, "dapr-system": {equal: []string{"sa"}}},
 		},
 		{
 			name:         "simpleMultiplePrefixNS",
@@ -162,7 +157,9 @@ func Test_getNameNamespaces(t *testing.T) {
 					return
 				}
 			} else {
-				assert.NoError(t, err, "not expecting error to happen")
+				if !assert.NoError(t, err, "not expecting error to happen") {
+					return
+				}
 			}
 			assert.Equalf(t, tc.wantPrefixed, matcher.prefixed, "CreateFromString(%v)", tc.s)
 			assert.Equalf(t, tc.wantEqual, matcher.equal, "CreateFromString(%v)", tc.s)

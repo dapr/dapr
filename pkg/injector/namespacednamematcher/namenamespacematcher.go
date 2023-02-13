@@ -21,16 +21,6 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-var forbiddenPrefixes = []string{
-	"kube-",
-	"dapr-",
-}
-
-var forbiddenNS = []string{
-	"kube-system",
-	"dapr-system",
-}
-
 // sort by length and if needed by regular comparison
 type shortestPrefixSortedSlice []string
 
@@ -71,9 +61,6 @@ func CreateFromString(s string) (*EqualPrefixNameNamespaceMatcher, error) {
 			return nil, err
 		}
 		if prefixFound {
-			if utils.Contains(forbiddenPrefixes, nsPrefix) {
-				return nil, fmt.Errorf("prefixes for namespace cannot start with %s and provided one was %s", strings.Join(forbiddenPrefixes, ", "), nsPrefix)
-			}
 			if matcher.prefixed == nil {
 				matcher.prefixed = make(map[string]*equalPrefixLists)
 			}
@@ -88,9 +75,6 @@ func CreateFromString(s string) (*EqualPrefixNameNamespaceMatcher, error) {
 				return nil, fmt.Errorf("service account name and namespace prefixes cannot both be empty (ie '*:*'")
 			}
 		} else {
-			if utils.Contains(forbiddenNS, ns) {
-				return nil, fmt.Errorf("namespace cannot be one of the following system namespaces %s and provided one was %s", strings.Join(forbiddenNS, ", "), ns)
-			}
 			if matcher.equal == nil {
 				matcher.equal = make(map[string]*equalPrefixLists)
 			}
