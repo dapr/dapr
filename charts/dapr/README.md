@@ -102,18 +102,25 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
 
 ### Dapr Dashboard options:
-| Parameter                                 | Description                                                             | Default                 |
-|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `dapr_dashboard.enabled`                  | Enable the Dapr dashboard                                               | `true`                     |
-| `dapr_dashboard.replicaCount`             | Number of replicas                                                      | `1`                     |
-| `dapr_dashboard.logLevel`                 | service Log level                                                       | `info`                  |
-| `dapr_dashboard.image.registry`           | docker registry                                                         | `docker.io/daprio`      |
-| `dapr_dashboard.image.imagePullSecrets`   | docker images pull secrets for docker registry                          | `docker.io/daprio`      |
-| `dapr_dashboard.image.name`               | docker image name                                                       | `dashboard`             |
-| `dapr_dashboard.image.tag`                | docker image tag                                                        | `"0.6.0"`               |
-| `dapr_dashboard.serviceType`              | Type of [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to use for the Dapr Dashboard service | `ClusterIP` |
-| `dapr_dashboard.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
-| `dapr_dashboard.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+| Parameter                               | Description                                                                                                                                                            | Default            |
+|-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------|
+| `dapr_dashboard.enabled`                | Enable the Dapr dashboard                                                                                                                                              | `true`             |
+| `dapr_dashboard.replicaCount`           | Number of replicas                                                                                                                                                     | `1`                |
+| `dapr_dashboard.logLevel`               | service Log level                                                                                                                                                      | `info`             |
+| `dapr_dashboard.image.registry`         | docker registry                                                                                                                                                        | `docker.io/daprio` |
+| `dapr_dashboard.image.imagePullSecrets` | docker images pull secrets for docker registry                                                                                                                         | `docker.io/daprio` |
+| `dapr_dashboard.image.name`             | docker image name                                                                                                                                                      | `dashboard`        |
+| `dapr_dashboard.image.tag`              | docker image tag                                                                                                                                                       | `"0.11.1"`         |
+| `dapr_dashboard.serviceType`            | Type of [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to use for the Dapr Dashboard service | `ClusterIP`        |
+| `dapr_dashboard.runAsNonRoot`           | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube                                                         | `true`             |
+| `dapr_dashboard.resources`              | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty                      | `{}`               |
+| `dapr_dashboard.ingress.enabled`        | Boolean value for enabling the creation of the ingress resource                                                                                                        | `false`            |
+| `dapr_dashboard.ingress.className`      | ingress className of the ingress controller (e.g.nginx)                                                                                                                | ``                 |
+| `dapr_dashboard.ingress.host`           | Fully qualified hostname of the dashboard URL (e.g `dashboard.dapr.local`) | ``                 |
+| `dapr_dashboard.ingress.tls.enabled`    | If true, enables TLS on the ingress for the Dashboard                                                                                                                      | `false`            |
+| `dapr_dashboard.ingress.tls.secretName` | Name of the Kubernetes secret containing the TLS certificate (key/certificate) for the Dashboard. Ignored if `dapr_dashboard.ingress.tls.enabled` is `false`. | ``                 |
+
+
 
 ### Dapr Operator options:
 | Parameter                                 | Description                                                             | Default                 |
