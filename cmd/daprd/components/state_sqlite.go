@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/pubsub/hazelcast"
-	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	"github.com/dapr/components-contrib/state/sqlite"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(hazelcast.NewHazelcastPubSub, "hazelcast")
+	stateLoader.DefaultRegistry.RegisterComponent(sqlite.NewSQLiteStateStore, "sqlite", "sqlite3")
 }

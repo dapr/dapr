@@ -29,6 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/utils"
 )
 
 // Feature Flags section
@@ -36,6 +37,8 @@ import (
 type Feature string
 
 const (
+	// Enable support for streaming in HTTP service invocation
+	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
 	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
 )
@@ -97,6 +100,7 @@ type ConfigurationSpec struct {
 	TracingSpec         TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 	MTLSSpec            MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
 	MetricSpec          MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
+	MetricsSpec         MetricSpec         `json:"metrics,omitempty" yaml:"metrics,omitempty"`
 	Secrets             SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 	AccessControlSpec   AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
 	NameResolutionSpec  NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
@@ -139,6 +143,11 @@ type HandlerSpec struct {
 	Type         string       `json:"type" yaml:"type"`
 	Version      string       `json:"version" yaml:"version"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+}
+
+// LogName returns the name of the handler that can be used in logging.
+func (h HandlerSpec) LogName() string {
+	return utils.ComponentLogName(h.Name, h.Type, h.Version)
 }
 
 type SelectorSpec struct {
@@ -270,6 +279,9 @@ func LoadDefaultConfiguration() *Configuration {
 			MetricSpec: MetricSpec{
 				Enabled: true,
 			},
+			MetricsSpec: MetricSpec{
+				Enabled: true,
+			},
 			AccessControlSpec: AccessControlSpec{
 				DefaultAction: AllowAccess,
 				TrustDomain:   "public",
@@ -303,6 +315,7 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 		return nil, string(b), err
 	}
 
+	sortMetricsSpec(conf)
 	return conf, string(b), nil
 }
 
@@ -330,7 +343,19 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 		return nil, err
 	}
 
+	sortMetricsSpec(conf)
 	return conf, nil
+}
+
+// Apply .metrics if set. If not, retain .metric.
+func sortMetricsSpec(conf *Configuration) {
+	if !conf.Spec.MetricsSpec.Enabled {
+		conf.Spec.MetricSpec.Enabled = false
+	}
+
+	if len(conf.Spec.MetricsSpec.Rules) > 0 {
+		conf.Spec.MetricSpec.Rules = conf.Spec.MetricsSpec.Rules
+	}
 }
 
 // Validate the secrets configuration and sort to the allowed and denied lists if present.

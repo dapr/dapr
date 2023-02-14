@@ -21,6 +21,7 @@ sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
+allowedServiceAccounts: ""
 resources: {}
 kubeClusterDomain: cluster.local
 ignoreEntrypointTolerations: "[{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"alibabacloud.com/eci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"azure.com/aci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"aws\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"huawei.com/cci\\\"}]"

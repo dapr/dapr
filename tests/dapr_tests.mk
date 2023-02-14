@@ -55,7 +55,7 @@ pluggable_kafka-bindings \
 tracingapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -74,6 +74,7 @@ state_get_http \
 pubsub_publish_grpc \
 pubsub_publish_http \
 pubsub_bulk_publish_grpc \
+pubsub_bulk_subscribe_http \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
@@ -368,7 +369,7 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
+				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
 endif

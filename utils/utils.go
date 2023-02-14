@@ -14,11 +14,11 @@ limitations under the License.
 package utils
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"golang.org/x/exp/slices"
 	"k8s.io/client-go/kubernetes"
@@ -65,12 +65,6 @@ func GetKubeClient() *kubernetes.Clientset {
 	}
 
 	return clientSet
-}
-
-// ToISO8601DateTimeString converts dateTime to ISO8601 Format
-// ISO8601 Format: 2020-01-01T01:01:01.10101Z.
-func ToISO8601DateTimeString(dateTime time.Time) string {
-	return dateTime.UTC().Format("2006-01-02T15:04:05.999999Z")
 }
 
 // Contains reports whether v is present in s.
@@ -168,4 +162,18 @@ func Filter[T any](items []T, test func(item T) bool) []T {
 		}
 	}
 	return slices.Clip(filteredItems)
+}
+
+const (
+	logNameFmt        = "%s (%s)"
+	logNameVersionFmt = "%s (%s/%s)"
+)
+
+// ComponentLogName returns the name of a component that can be used in logging.
+func ComponentLogName(name, typ, version string) string {
+	if version == "" {
+		return fmt.Sprintf(logNameFmt, name, typ)
+	}
+
+	return fmt.Sprintf(logNameVersionFmt, name, typ, version)
 }

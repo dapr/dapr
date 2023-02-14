@@ -38,6 +38,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
@@ -62,7 +63,7 @@ type server struct {
 	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
 	servers            []*grpcGo.Server
-	renewMutex         *sync.Mutex
+	renewMutex         sync.Mutex
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
@@ -73,6 +74,7 @@ type server struct {
 	authToken          string
 	apiSpec            config.APISpec
 	proxy              messaging.Proxy
+	workflowEngine     *wfengine.WorkflowEngine
 }
 
 var (
@@ -82,19 +84,20 @@ var (
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
-		api:         api,
-		config:      config,
-		tracingSpec: tracingSpec,
-		metricSpec:  metricSpec,
-		kind:        apiServer,
-		logger:      apiServerLogger,
-		infoLogger:  apiServerInfoLogger,
-		authToken:   auth.GetAPIToken(),
-		apiSpec:     apiSpec,
-		proxy:       proxy,
+		api:            api,
+		config:         config,
+		tracingSpec:    tracingSpec,
+		metricSpec:     metricSpec,
+		kind:           apiServer,
+		logger:         apiServerLogger,
+		infoLogger:     apiServerInfoLogger,
+		authToken:      auth.GetAPIToken(),
+		apiSpec:        apiSpec,
+		proxy:          proxy,
+		workflowEngine: workflowEngine,
 	}
 }
 
@@ -106,7 +109,6 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		tracingSpec:      tracingSpec,
 		metricSpec:       metricSpec,
 		authenticator:    authenticator,
-		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
 		logger:           internalServerLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
@@ -128,14 +130,16 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
+		s.logger.Infof("gRPC server listening on UNIX socket: %s", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Warnf("Failed to listen on %s with error: %v", addr, err)
+				s.logger.Debugf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
 			} else {
+				s.logger.Infof("gRPC server listening on TCP address: %s", addr)
 				listeners = append(listeners, l)
 			}
 		}
@@ -158,6 +162,9 @@ func (s *server) StartNonBlocking() error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
+			if s.workflowEngine != nil {
+				s.workflowEngine.ConfigureGrpc(server)
+			}
 		}
 
 		go func(server *grpcGo.Server, l net.Listener) {

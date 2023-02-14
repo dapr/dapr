@@ -380,7 +380,7 @@ message InvokeBindingResponse {
 // GetSecretRequest is the message to get secret from secret store.
 message GetSecretRequest {
   // The name of secret store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The name of secret key.
   string key = 2;
@@ -399,7 +399,7 @@ message GetSecretResponse {
 // GetBulkSecretRequest is the message to get the secrets from secret store.
 message GetBulkSecretRequest {
   // The name of secret store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The metadata which will be sent to secret store components.
   map<string, string> metadata = 2;
@@ -697,7 +697,7 @@ message StartWorkflowRequest {
   string workflow_component = 2;
   string workflow_name = 3;
   map<string, string> options = 4;
-  google.protobuf.Any input = 5;
+  bytes input = 5;
 }
 
 message TerminateWorkflowRequest {

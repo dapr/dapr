@@ -51,6 +51,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -83,6 +84,7 @@ type API interface {
 }
 
 type api struct {
+	*universalapi.UniversalAPI
 	actor                      actors.Actors
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
@@ -90,8 +92,6 @@ type api struct {
 	stateStores                map[string]state.Store
 	workflowComponents         map[string]workflows.Workflow
 	transactionalStateStores   map[string]state.TransactionalStore
-	secretStores               map[string]secretstores.SecretStore
-	secretsConfiguration       map[string]config.SecretsScope
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
@@ -272,6 +272,12 @@ func NewAPI(opts APIOpts) API {
 		}
 	}
 	return &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           opts.Resiliency,
+			SecretStores:         opts.SecretStores,
+			SecretsConfiguration: opts.SecretsConfiguration,
+		},
 		directMessaging:            opts.DirectMessaging,
 		actor:                      opts.Actor,
 		id:                         opts.AppID,
@@ -280,12 +286,10 @@ func NewAPI(opts APIOpts) API {
 		pubsubAdapter:              opts.PubsubAdapter,
 		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
-		secretStores:               opts.SecretStores,
 		workflowComponents:         opts.WorkflowComponents,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
-		secretsConfiguration:       opts.SecretsConfiguration,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
 		tracingSpec:                opts.TracingSpec,
 		accessControlList:          opts.AccessControlList,
@@ -355,7 +359,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
-		})
+		}, in.Metadata)
 		if err != nil {
 			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 			apiServerLogger.Debug(err)
@@ -555,8 +559,6 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
-			var envelope map[string]interface{}
-
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
@@ -565,7 +567,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				TraceID:         corID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
-			})
+			}, entries[i].Metadata)
 			if err != nil {
 				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 				apiServerLogger.Debug(err)
@@ -1106,118 +1108,6 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	return empty, nil
 }
 
-func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
-	response := &runtimev1pb.GetSecretResponse{}
-
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	secretStoreName := in.StoreName
-
-	if a.secretStores[secretStoreName] == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	if !a.isSecretAllowed(in.StoreName, in.Key) {
-		err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, in.Key, in.StoreName)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	req := secretstores.GetSecretRequest{
-		Name:     in.Key,
-		Metadata: in.Metadata,
-	}
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*secretstores.GetSecretResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
-	)
-	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.GetSecretResponse, error) {
-		rResp, rErr := a.secretStores[secretStoreName].GetSecret(ctx, req)
-		return &rResp, rErr
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
-
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	if getResponse != nil {
-		response.Data = getResponse.Data
-	}
-	return response, nil
-}
-
-func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error) {
-	response := &runtimev1pb.GetBulkSecretResponse{}
-
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	secretStoreName := in.StoreName
-
-	if a.secretStores[secretStoreName] == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	req := secretstores.BulkGetSecretRequest{
-		Metadata: in.Metadata,
-	}
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*secretstores.BulkGetSecretResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
-	)
-	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.BulkGetSecretResponse, error) {
-		rResp, rErr := a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
-		return &rResp, rErr
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
-
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	if getResponse == nil {
-		return response, nil
-	}
-	filteredSecrets := map[string]map[string]string{}
-	for key, v := range getResponse.Data {
-		if a.isSecretAllowed(secretStoreName, key) {
-			filteredSecrets[key] = v
-		} else {
-			apiServerLogger.Debugf(messages.ErrPermissionDenied, key, in.StoreName)
-		}
-	}
-
-	if getResponse.Data != nil {
-		response.Data = map[string]*runtimev1pb.SecretResponse{}
-		for key, v := range filteredSecrets {
-			response.Data[key] = &runtimev1pb.SecretResponse{Secrets: v}
-		}
-	}
-	return response, nil
-}
-
 func extractEtag(req *commonv1pb.StateItem) (bool, string) {
 	if req.Etag != nil {
 		return true, req.Etag.Value
@@ -1617,14 +1507,6 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	return response, nil
 }
 
-func (a *api) isSecretAllowed(storeName, key string) bool {
-	if config, ok := a.secretsConfiguration[storeName]; ok {
-		return config.IsSecretAllowed(key)
-	}
-	// By default, if a configuration is not defined for a secret store, return true.
-	return true
-}
-
 func (a *api) SetAppChannel(appChannel channel.AppChannel) {
 	a.appChannel = appChannel
 }
@@ -1798,11 +1680,14 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	wf := workflows.WorkflowReference{
 		InstanceID: in.InstanceId,
 	}
+
+	var inputMap map[string]interface{}
+	json.Unmarshal(in.Input, &inputMap)
 	req := workflows.StartRequest{
 		WorkflowReference: wf,
 		Options:           in.Options,
 		WorkflowName:      in.WorkflowName,
-		Input:             in.Input,
+		Input:             inputMap,
 	}
 
 	resp, err := workflowRun.Start(ctx, &req)
