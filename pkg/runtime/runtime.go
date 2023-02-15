@@ -1365,14 +1365,16 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
+
+		appResponseBody, err = resp.RawDataFull()
+
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code < 200 || resp.Status().Code > 299 {
-			body, _ := resp.RawDataFull()
-			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(appResponseBody))
 		}
 
-		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
-			appResponseBody = resp.Message().Data.Value
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
 	}
 
