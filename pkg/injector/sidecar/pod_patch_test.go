@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/stretchr/testify/assert"
 	coreV1 "k8s.io/api/core/v1"
