@@ -135,6 +135,8 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		Value: sidecarContainer,
 	})
 	patchOps = append(patchOps,
+		sidecar.AddDaprSideCarInjectedLabel(pod.Labels))
+	patchOps = append(patchOps,
 		sidecar.AddDaprEnvVarsToContainers(appContainers)...)
 	patchOps = append(patchOps,
 		sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)

@@ -32,6 +32,7 @@ const (
 	UserContainerDaprGRPCPortName  = "DAPR_GRPC_PORT"          // Name of the variable exposed to the app containing the Dapr gRPC port.
 	PatchPathContainers            = "/spec/containers"
 	PatchPathVolumes               = "/spec/volumes"
+	PatchPathLabels                = "/metadata/labels"
 	TokenVolumeKubernetesMountPath = "/var/run/secrets/dapr.io/sentrytoken" /* #nosec */ // Mount path for the Kubernetes service account volume with the sentry token.
 	TokenVolumeName                = "dapr-identity-token"                  /* #nosec */ // Name of the volume with the service account token for daprd.
 )

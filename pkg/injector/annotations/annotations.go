@@ -47,6 +47,7 @@ const (
 	KeyReadinessProbePeriodSeconds      = "dapr.io/sidecar-readiness-probe-period-seconds"
 	KeyReadinessProbeThreshold          = "dapr.io/sidecar-readiness-probe-threshold"
 	KeySidecarImage                     = "dapr.io/sidecar-image"
+	KeySidecarInjected                  = "dapr.io/sidecar-injected"
 	KeyAppSSL                           = "dapr.io/app-ssl"
 	KeyHTTPMaxRequestBodySize           = "dapr.io/http-max-request-size"
 	KeyHTTPReadBufferSize               = "dapr.io/http-read-buffer-size"
