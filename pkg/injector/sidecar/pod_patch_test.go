@@ -18,10 +18,10 @@ import (
 	"strconv"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/stretchr/testify/assert"
 	coreV1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 )
@@ -155,7 +155,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 			mockPod: coreV1.Pod{
 				ObjectMeta: metav1.ObjectMeta{},
 			},
-			expLabels: map[string]string{annotations.KeySidecarInjected: "true"},
+			expLabels: map[string]string{SidecarInjectedLabel: "true"},
 		},
 		{
 			testName: "with some previous labels",
@@ -164,16 +164,16 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 					Labels: map[string]string{"app": "my-app"},
 				},
 			},
-			expLabels: map[string]string{annotations.KeySidecarInjected: "true", "app": "my-app"},
+			expLabels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
 		},
 		{
 			testName: "with dapr injected label already present",
 			mockPod: coreV1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{annotations.KeySidecarInjected: "true", "app": "my-app"},
+					Labels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
 				},
 			},
-			expLabels: map[string]string{annotations.KeySidecarInjected: "true", "app": "my-app"},
+			expLabels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
 		},
 	}
 

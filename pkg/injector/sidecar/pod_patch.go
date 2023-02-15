@@ -65,7 +65,7 @@ func AddDaprSideCarInjectedLabel(labels map[string]string) PatchOperation {
 			Op:   "replace",
 			Path: PatchPathLabels,
 			Value: map[string]string{
-				annotations.KeySidecarInjected: "true",
+				SidecarInjectedLabel: "true",
 			},
 		}
 	}
