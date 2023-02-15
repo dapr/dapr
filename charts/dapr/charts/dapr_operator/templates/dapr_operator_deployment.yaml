@@ -188,7 +188,7 @@ spec:
         - "--watch-namespace"
         - "{{ .Values.watchNamespace }}"
 {{- end }}
-{{- if .Values.serviceReconciler.disabled }}
+{{- if not .Values.serviceReconciler.enabled }}
         - "--disable-service-reconciler"
 {{- end }}
       serviceAccountName: dapr-operator
