@@ -86,13 +86,12 @@ var endpoints = map[string][]string{
 	},
 }
 
-const protocol = "grpc"
-
-func setAPIEndpointsMiddlewareUnary(rules []config.APIAccessRule) grpc.UnaryServerInterceptor {
+// Returns the middlewares (unary and stream) for supporting API allowlist
+func setAPIEndpointsMiddlewares(rules []config.APIAccessRule) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
 	allowed := map[string]struct{}{}
 
 	for _, rule := range rules {
-		if rule.Protocol != protocol {
+		if rule.Protocol != "grpc" {
 			continue
 		}
 
@@ -105,17 +104,23 @@ func setAPIEndpointsMiddlewareUnary(rules []config.APIAccessRule) grpc.UnaryServ
 
 	// Passthrough if no gRPC rules
 	if len(allowed) == 0 {
-		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		return nil, nil
+	}
+
+	// Return the unary middleware function
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+			_, ok := allowed[info.FullMethod]
+			if !ok {
+				return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+			}
+
 			return handler(ctx, req)
+		},
+		func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			_, ok := allowed[info.FullMethod]
+			if !ok {
+				return invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+			}
+			return handler(srv, stream)
 		}
-	}
-
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		_, ok := allowed[info.FullMethod]
-		if !ok {
-			return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
-		}
-
-		return handler(ctx, req)
-	}
 }
