@@ -198,7 +198,7 @@ func patchObject(t *testing.T, origObj interface{}, patchOperations []PatchOpera
 
 	podJSON := marshal(origObj)
 	patchJSON := marshal(patchOperations)
-	decodedPatch, err := jsonpatch.DecodePatch([]byte(patchJSON))
+	decodedPatch, err := jsonpatch.DecodePatch(patchJSON)
 	assert.NoError(t, err)
 	newJSON, err := decodedPatch.Apply(podJSON)
 	assert.NoError(t, err)
