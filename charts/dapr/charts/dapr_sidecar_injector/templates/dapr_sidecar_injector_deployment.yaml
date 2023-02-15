@@ -1,3 +1,4 @@
+{{- if eq .Values.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -219,4 +220,5 @@ spec:
 {{- if .Values.global.tolerations }}
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
 {{- end }}
