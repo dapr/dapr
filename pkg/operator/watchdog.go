@@ -4,6 +4,12 @@ import (
 	"context"
 	"time"
 
+	"k8s.io/apimachinery/pkg/selection"
+
+	"k8s.io/apimachinery/pkg/types"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"go.uber.org/ratelimit"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,6 +51,14 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
+	sel := labels.NewSelector()
+	// TODO: 'dapr.io/sidecar-injected' should be replaced with sidecar.SidecarInjectedLabel when https://github.com/dapr/dapr/pull/5937/files is merged
+	req, err := labels.NewRequirement("dapr.io/sidecar-injected", selection.DoesNotExist, []string{})
+	if err != nil {
+		log.Fatalf("Unable to add label requirement to find pods with Injector created label , err: %s", err)
+	}
+	sel.Add(*req)
+
 	if dw.maxRestartsPerMin > 0 {
 		dw.restartLimiter = ratelimit.New(
 			dw.maxRestartsPerMin,
@@ -70,7 +84,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 				if !ok {
 					continue
 				}
-				ok = dw.listPods(ctx)
+				ok = dw.listPods(ctx, sel)
 				if firstCompleteCh != nil {
 					if ok {
 						close(firstCompleteCh)
@@ -123,12 +137,13 @@ forloop:
 	return nil
 }
 
-func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
+func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLabelSelector labels.Selector) bool {
 	log.Infof("DaprWatchdog started checking pods")
 
 	// Look for the dapr-sidecar-injector deployment first and ensure it's running
 	// Otherwise, the pods would come back up without the sidecar again
 	deployment := &appsv1.DeploymentList{}
+
 	err := dw.client.List(ctx, deployment, &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(
 			map[string]string{"app": sidecarInjectorDeploymentName},
@@ -147,17 +162,21 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 
 	// Request the list of pods
 	// We are not using pagination because we may be deleting pods during the iterations
-	// The client implements some level of caching anyways
-	pod := &corev1.PodList{}
-	err = dw.client.List(ctx, pod)
+	// The client implements some level of caching anyway
+	podList := &metav1.PartialObjectMetadataList{}
+	podList.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
+	err = dw.client.List(ctx, podList, client.MatchingLabelsSelector{Selector: podsNotMatchingInjectorLabelSelector})
 	if err != nil {
 		log.Errorf("Failed to list pods. Error: %v", err)
 		return false
 	}
 
-	for _, v := range pod.Items {
+	var potentialPods []types.NamespacedName
+
+	// first let's check if there is anything we can quickly skip from the metadata not having dapr annotation
+	for _, v := range podList.Items {
 		// Skip invalid pods
-		if v.Name == "" || len(v.Spec.Containers) == 0 {
+		if v.Name == "" {
 			continue
 		}
 
@@ -168,15 +187,24 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 			log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
 			continue
 		}
+		potentialPods = append(potentialPods, types.NamespacedName{Name: v.Name, Namespace: v.Namespace})
+	}
 
+	// let's now get more detail pod information from those pods with the annotation we found on our previous check
+	for i := 0; i < len(potentialPods); i++ {
+		pod := corev1.Pod{}
+		if err := dw.client.Get(ctx, potentialPods[i], &pod); err != nil {
+			continue
+		}
 		// Check if the sidecar container is running
 		hasSidecar := false
-		for _, c := range v.Spec.Containers {
+		for _, c := range pod.Spec.Containers {
 			if c.Name == sidecarContainerName {
 				hasSidecar = true
 				break
 			}
 		}
+		logName := pod.Namespace + "/" + pod.Name
 		if hasSidecar {
 			log.Debugf("Found Dapr sidecar in pod %s", logName)
 			continue
@@ -185,7 +213,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		// Pod doesn't have a sidecar, so we need to kill it so it can be restarted and have the sidecar injected
 		log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", logName)
 		//nolint:gosec
-		err = dw.client.Delete(ctx, &v)
+		err = dw.client.Delete(ctx, &pod)
 		if err != nil {
 			log.Errorf("Failed to delete pod %s. Error: %v", logName, err)
 			continue
