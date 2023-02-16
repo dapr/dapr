@@ -62,7 +62,7 @@ func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []PatchOper
 func AddDaprSideCarInjectedLabel(labels map[string]string) PatchOperation {
 	if len(labels) == 0 { // empty labels
 		return PatchOperation{
-			Op:   "replace",
+			Op:   "add",
 			Path: PatchPathLabels,
 			Value: map[string]string{
 				SidecarInjectedLabel: "true",
