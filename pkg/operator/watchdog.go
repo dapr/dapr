@@ -162,7 +162,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 
 	// We are splitting the process of finding the potential pods by first querying only for the metadata of the pods
 	// to verify the annotation.  If we find some with dapr enabled annotation we will subsequently query those further.
-	var daprEnabledPods []types.NamespacedName
+	var podsMaybeMissingSidecar []types.NamespacedName
 
 	// Request the list of pods metadata
 	// We are not using pagination because we may be deleting pods during the iterations
@@ -188,13 +188,13 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 			log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
 			continue
 		}
-		daprEnabledPods = append(daprEnabledPods, types.NamespacedName{Name: v.Name, Namespace: v.Namespace})
+		podsMaybeMissingSidecar = append(podsMaybeMissingSidecar, types.NamespacedName{Name: v.Name, Namespace: v.Namespace})
 	}
 
 	// let's now get more detail pod information from those pods with the annotation we found on our previous check
-	for i := 0; i < len(daprEnabledPods); i++ {
+	for _, podNameNamespace := range podsMaybeMissingSidecar {
 		pod := corev1.Pod{}
-		if err := dw.client.Get(ctx, daprEnabledPods[i], &pod); err != nil {
+		if err := dw.client.Get(ctx, podNameNamespace, &pod); err != nil {
 			continue
 		}
 		// Check if the sidecar container is running
