@@ -51,13 +51,8 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
-	sel := labels.NewSelector()
-	// TODO: 'dapr.io/sidecar-injected' should be replaced with sidecar.SidecarInjectedLabel when https://github.com/dapr/dapr/pull/5937/files is merged
-	req, err := labels.NewRequirement("dapr.io/sidecar-injected", selection.DoesNotExist, []string{})
-	if err != nil {
-		log.Fatalf("Unable to add label requirement to find pods with Injector created label , err: %s", err)
-	}
-	sel.Add(*req)
+	// negative selector to be used during list pod operations
+	sel := getSideCarInjectedNotExistsSelector()
 
 	if dw.maxRestartsPerMin > 0 {
 		dw.restartLimiter = ratelimit.New(
@@ -135,6 +130,18 @@ forloop:
 
 	log.Infof("DaprWatchdog worker stopping")
 	return nil
+}
+
+// getSideCarInjectedNotExistsSelector creates a selector that matches pod without the injector patched label
+func getSideCarInjectedNotExistsSelector() labels.Selector {
+	sel := labels.NewSelector()
+	// TODO: 'dapr.io/sidecar-injected' should be replaced with sidecar.SidecarInjectedLabel when https://github.com/dapr/dapr/pull/5937/files is merged
+	req, err := labels.NewRequirement("dapr.io/sidecar-injected", selection.DoesNotExist, []string{})
+	if err != nil {
+		log.Fatalf("Unable to add label requirement to find pods with Injector created label , err: %s", err)
+	}
+	sel.Add(*req)
+	return sel
 }
 
 func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLabelSelector labels.Selector) bool {
