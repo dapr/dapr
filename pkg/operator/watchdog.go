@@ -192,9 +192,9 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 	}
 
 	// let's now get more detail pod information from those pods with the annotation we found on our previous check
-	for _, podNameNamespace := range podsMaybeMissingSidecar {
+	for _, podNamespaceName := range podsMaybeMissingSidecar {
 		pod := corev1.Pod{}
-		if err := dw.client.Get(ctx, podNameNamespace, &pod); err != nil {
+		if err := dw.client.Get(ctx, podNamespaceName, &pod); err != nil {
 			continue
 		}
 		// Check if the sidecar container is running
