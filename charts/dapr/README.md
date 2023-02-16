@@ -175,6 +175,7 @@ The Helm chart has the follow configuration options that can be supplied:
 ### Dapr Sidecar Injector options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
+| `dapr_sidecar_injector.enabled`           | Enable the sidecar injector                                             | `true`                |
 | `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                                | `IfNotPresent`                     |
 | `dapr_sidecar_injector.replicaCount`      | Number of replicas                                                      | `1`                     |
 | `dapr_sidecar_injector.logLevel`          | Log level                                                               | `info`                  |
