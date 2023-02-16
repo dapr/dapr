@@ -72,6 +72,11 @@ func (rr *replayableRequest) SetReplay(enabled bool) {
 	}
 }
 
+// CanReplay returns true if the data stream can be replayed.
+func (rr *replayableRequest) CanReplay() bool {
+	return rr.replay != nil
+}
+
 // RawData returns the stream body.
 func (rr *replayableRequest) RawData() (r io.Reader) {
 	rr.lock.Lock()

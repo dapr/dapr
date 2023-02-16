@@ -1,3 +1,4 @@
+{{- if eq .Values.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -152,6 +153,10 @@ spec:
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
           value: "{{ .Values.sidecarReadOnlyRootFilesystem }}"
 {{- end }}
+{{- if .Values.allowedServiceAccounts }}
+        - name: ALLOWED_SERVICE_ACCOUNTS
+          value: "{{ .Values.allowedServiceAccounts }}"
+{{- end }}
         ports:
         - name: https
           containerPort: 4000
@@ -215,4 +220,5 @@ spec:
 {{- if .Values.global.tolerations }}
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
 {{- end }}

@@ -43,6 +43,8 @@ type ConfigurationSpec struct {
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
 	// +kubebuilder:default={enabled:true}
 	MetricSpec MetricSpec `json:"metric,omitempty"`
+	// +kubebuilder:default={enabled:true}
+	MetricsSpec MetricSpec `json:"metrics,omitempty"`
 	// +optional
 	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
 	// +optional

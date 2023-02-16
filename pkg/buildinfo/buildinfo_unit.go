@@ -21,7 +21,7 @@ import (
 )
 
 // Comma-separated list of features to enable in unit tests
-const unitTestFeatures = "Resiliency"
+const unitTestFeatures = "Resiliency,ServiceInvocationStreaming"
 
 // Set values for feature flags used in unit tests
 func init() {

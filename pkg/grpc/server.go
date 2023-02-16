@@ -63,7 +63,7 @@ type server struct {
 	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
 	servers            []*grpcGo.Server
-	renewMutex         *sync.Mutex
+	renewMutex         sync.Mutex
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
@@ -109,7 +109,6 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		tracingSpec:      tracingSpec,
 		metricSpec:       metricSpec,
 		authenticator:    authenticator,
-		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
 		logger:           internalServerLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
@@ -131,14 +130,16 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
+		s.logger.Infof("gRPC server listening on UNIX socket: %s", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Debugf("Failed to listen on %s with error: %v", addr, err)
+				s.logger.Debugf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
 			} else {
+				s.logger.Infof("gRPC server listening on TCP address: %s", addr)
 				listeners = append(listeners, l)
 			}
 		}

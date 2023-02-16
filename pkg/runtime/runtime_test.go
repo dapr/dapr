@@ -5469,21 +5469,16 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel := new(channelt.MockAppChannel)
 	rt.appChannel = mockAppChannel
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
-
 	require.NoError(t, rt.initPubSub(cPubSub))
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.startSubscriptions()
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
-	assert.NotNil(t, rt.pubsubCtx)
-	assert.NotNil(t, rt.topicCtxCancels)
-	assert.NotNil(t, rt.topicRoutes)
+	assert.NoError(t, rt.pubsubCtx.Err())
 	rt.running.Store(true)
 	go sendSigterm(rt)
 	select {
 	case <-rt.pubsubCtx.Done():
-		assert.Nil(t, rt.pubsubCtx)
-		assert.Nil(t, rt.topicCtxCancels)
-		assert.Nil(t, rt.topicRoutes)
+		assert.Error(t, rt.pubsubCtx.Err(), context.Canceled)
 	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "pubsub shutdown timed out")
 	}
@@ -5491,8 +5486,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 
 func TestGracefulShutdownBindings(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
-
+	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
 	rt.bindingsRegistry.RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
 			return &daprt.MockBinding{}
@@ -5514,15 +5508,17 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cout.Spec.Type = "bindings.testOutputBinding"
 	require.NoError(t, rt.initInputBinding(cin))
 	require.NoError(t, rt.initOutputBinding(cout))
-
 	assert.Equal(t, len(rt.inputBindings), 1)
 	assert.Equal(t, len(rt.outputBindings), 1)
-
 	rt.running.Store(true)
+	rt.inputBindingsCtx, rt.inputBindingsCancel = context.WithCancel(rt.ctx)
 	go sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration)
-	assert.Nil(t, rt.inputBindingsCancel)
-	assert.Nil(t, rt.inputBindingsCtx)
+	select {
+	case <-rt.inputBindingsCtx.Done():
+		return
+	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
+		assert.Fail(t, "input bindings shutdown timed out")
+	}
 }
 
 func TestGracefulShutdownActors(t *testing.T) {
