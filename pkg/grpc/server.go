@@ -63,7 +63,7 @@ type server struct {
 	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
 	servers            []*grpcGo.Server
-	renewMutex         *sync.Mutex
+	renewMutex         sync.Mutex
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
@@ -109,7 +109,6 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		tracingSpec:      tracingSpec,
 		metricSpec:       metricSpec,
 		authenticator:    authenticator,
-		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
 		logger:           internalServerLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),

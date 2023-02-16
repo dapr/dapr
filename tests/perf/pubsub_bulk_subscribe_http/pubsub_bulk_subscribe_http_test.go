@@ -27,6 +27,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
+	"github.com/dapr/dapr/tests/runner/summary"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,13 +119,9 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
-	summary, err := loadtest.K6ResultDefault(k6Test)
+	sm, err := loadtest.K6ResultDefault(k6Test)
 	require.NoError(t, err)
-	require.NotNil(t, summary)
-	bts, err := json.MarshalIndent(summary, "", " ")
-	require.NoError(t, err)
-	require.True(t, summary.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
-	t.Logf("test summary `%s`", string(bts))
+	require.NotNil(t, sm)
 
 	appUsage, err := tr.Platform.GetAppUsage(testAppName)
 	require.NoError(t, err)
@@ -135,9 +132,27 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 	restarts, err := tr.Platform.GetTotalRestarts(testAppName)
 	require.NoError(t, err)
 
+	summary.ForTest(t).
+		Service(testAppName).
+		CPU(appUsage.CPUm).
+		Memory(appUsage.MemoryMb).
+		SidecarCPU(sidecarUsage.CPUm).
+		SidecarMemory(sidecarUsage.MemoryMb).
+		Restarts(restarts).
+		OutputK6(sm.RunnersResults).
+		Output("TARGET_URL", testAppURL).
+		Output("PUBLISH_TYPE", publishType).
+		Output("SUBSCRIBE_TYPE", subscribeType).
+		Output("HTTP_REQ_DURATION_THRESHOLD", httpReqDurationThresholdMs).
+		Flush()
+
 	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
 	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 	t.Logf("target dapr app or sidecar restarted %v times", restarts)
+	bts, err := json.MarshalIndent(sm, "", " ")
+	require.NoError(t, err)
+	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
+	t.Logf("test summary `%s`", string(bts))
 	require.Equal(t, 0, restarts)
 }
 

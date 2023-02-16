@@ -12,7 +12,10 @@
 
 		// Uncomment to disable docker-in-docker and automatically proxy default /var/run/docker.sock to
 		// the localhost bind-mount /var/run/docker-host.sock.
-		// "BIND_LOCALHOST_DOCKER": "true"
+		// "BIND_LOCALHOST_DOCKER": "true",
+
+		// Necessary for components-contrib's certification tests
+		"GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "true"
 	},
 	"extensions": [
 		"davidanson.vscode-markdownlint",
@@ -31,7 +34,7 @@
 		"type=volume,source=dind-var-lib-docker,target=/var/lib/docker",
 
 		// Bind mount docker socket under an alias to support docker-from-docker
-		"type=bind,source=/var/run/docker.sock,target=/var/run/docker-host.sock",
+		"type=bind,source=/var/run/docker.sock,target=/var/run/docker-host.sock"
 
 		// Uncomment to clone local .kube/config into devcontainer
 		// "type=bind,source=${env:HOME}${env:USERPROFILE}/.kube,target=/home/dapr/.kube-localhost",
@@ -64,8 +67,13 @@
 	"settings": {
 		"go.toolsManagement.checkForUpdates": "local",
 		"go.useLanguageServer": true,
-		"go.gopath": "/go"
+		"go.gopath": "/go",
+		"go.buildTags": "e2e,perf,conftests,unit,integration_test,certtests",
+		"git.alwaysSignOff": true,
+		"terminal.integrated.env.linux": {
+			"GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "ignore"
+		}
 	},
 	"workspaceFolder": "/workspaces/dapr",
-	"workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspaces/dapr",
+	"workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspaces/dapr"
 }
