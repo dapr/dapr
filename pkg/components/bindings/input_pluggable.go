@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -30,10 +31,14 @@ type grpcInputBinding struct {
 	*pluggable.GRPCConnector[proto.InputBindingClient]
 	bindings.InputBinding
 	logger logger.Logger
+
+	closed  atomic.Bool
+	wg      sync.WaitGroup
+	closeCh chan struct{}
 }
 
 // Init initializes the grpc inputbinding passing out the metadata to the grpc component.
-func (b *grpcInputBinding) Init(metadata bindings.Metadata) error {
+func (b *grpcInputBinding) Init(ctx context.Context, metadata bindings.Metadata) error {
 	if err := b.Dial(metadata.Name); err != nil {
 		return err
 	}
@@ -104,7 +109,18 @@ func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) e
 	streamCtx, cancel := context.WithCancel(readStream.Context())
 	handle := b.adaptHandler(streamCtx, readStream, handler)
 
+	b.wg.Add(2)
+	// Cancel on input binding close.
 	go func() {
+		defer b.wg.Done()
+		defer cancel()
+		select {
+		case <-b.closeCh:
+		case <-streamCtx.Done():
+		}
+	}()
+	go func() {
+		defer b.wg.Done()
 		defer cancel()
 		for {
 			msg, err := readStream.Recv()
@@ -117,11 +133,23 @@ func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) e
 				b.logger.Errorf("failed to receive message: %v", err)
 				return
 			}
-			go handle(msg)
+			b.wg.Add(1)
+			go func() {
+				defer b.wg.Done()
+				handle(msg)
+			}()
 		}
 	}()
 
 	return nil
+}
+
+func (b *grpcInputBinding) Close() error {
+	defer b.wg.Wait()
+	if b.closed.CompareAndSwap(false, true) {
+		close(b.closeCh)
+	}
+	return b.InputBinding.Close()
 }
 
 // Returns the component metadata options
@@ -135,6 +163,7 @@ func inputFromConnector(l logger.Logger, connector *pluggable.GRPCConnector[prot
 	return &grpcInputBinding{
 		GRPCConnector: connector,
 		logger:        l,
+		closeCh:       make(chan struct{}),
 	}
 }
 
