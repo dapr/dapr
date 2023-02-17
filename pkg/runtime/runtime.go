@@ -1365,14 +1365,16 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
+
+		appResponseBody, err = resp.RawDataFull()
+
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code < 200 || resp.Status().Code > 299 {
-			body, _ := resp.RawDataFull()
-			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(appResponseBody))
 		}
 
-		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
-			appResponseBody = resp.Message().Data.Value
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
 	}
 
@@ -1429,19 +1431,20 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	})
 
 	serverConf := http.ServerConfig{
-		AppID:              a.runtimeConfig.ID,
-		HostAddress:        a.hostAddress,
-		Port:               port,
-		APIListenAddresses: a.runtimeConfig.APIListenAddresses,
-		PublicPort:         publicPort,
-		ProfilePort:        profilePort,
-		AllowedOrigins:     allowedOrigins,
-		EnableProfiling:    a.runtimeConfig.EnableProfiling,
-		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
-		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
-		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
-		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
-		APILogHealthChecks: !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
+		AppID:                   a.runtimeConfig.ID,
+		HostAddress:             a.hostAddress,
+		Port:                    port,
+		APIListenAddresses:      a.runtimeConfig.APIListenAddresses,
+		PublicPort:              publicPort,
+		ProfilePort:             profilePort,
+		AllowedOrigins:          allowedOrigins,
+		EnableProfiling:         a.runtimeConfig.EnableProfiling,
+		MaxRequestBodySize:      a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:        a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSize:          a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:        a.runtimeConfig.EnableAPILogging,
+		APILoggingObfuscateURLs: a.globalConfig.Spec.LoggingSpec.APILogging.ObfuscateURLs,
+		APILogHealthChecks:      !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
 	}
 
 	server := http.NewServer(http.NewServerOpts{
