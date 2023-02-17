@@ -3042,7 +3042,7 @@ func (a *DaprRuntime) getComponents() []componentsV1alpha1.Component {
 func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 	capabilities := make(map[string][]string)
 	for key, store := range a.stateStores {
-		features := store.Features(context.TODO())
+		features := store.Features()
 		stateStoreCapabilities := featureTypeToString(features)
 		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
 			stateStoreCapabilities = append(stateStoreCapabilities, "ACTOR")

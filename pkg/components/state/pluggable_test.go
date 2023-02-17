@@ -227,10 +227,10 @@ func TestComponentCalls(t *testing.T) {
 		stStore, cleanup, err := getStateStore(&server{})
 		require.NoError(t, err)
 		defer cleanup()
-		assert.Empty(t, stStore.Features(context.Background()))
+		assert.Empty(t, stStore.Features())
 		stStore.features = []state.Feature{state.FeatureETag}
-		assert.NotEmpty(t, stStore.Features(context.Background()))
-		assert.Equal(t, stStore.Features(context.Background())[0], state.FeatureETag)
+		assert.NotEmpty(t, stStore.Features())
+		assert.Equal(t, stStore.Features()[0], state.FeatureETag)
 	})
 
 	t.Run("delete should call delete grpc method", func(t *testing.T) {

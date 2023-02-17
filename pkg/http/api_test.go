@@ -4009,7 +4009,7 @@ func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error
 	return nil
 }
 
-func (c fakeStateStore) Features(ctx context.Context) []state.Feature {
+func (c fakeStateStore) Features() []state.Feature {
 	return []state.Feature{
 		state.FeatureETag,
 		state.FeatureTransactional,
