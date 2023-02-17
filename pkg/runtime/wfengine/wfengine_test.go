@@ -80,7 +80,7 @@ func (f *fakeStateStore) Ping() error {
 	return nil
 }
 
-func (f *fakeStateStore) Features(ctx context.Context) []state.Feature {
+func (f *fakeStateStore) Features() []state.Feature {
 	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
 }
 

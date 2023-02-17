@@ -37,7 +37,7 @@ func (storeMock *TransactionalStoreMock) Multi(ctx context.Context, request *sta
 	return r0
 }
 
-func (storeMock *TransactionalStoreMock) Features(ctx context.Context) []state.Feature {
+func (storeMock *TransactionalStoreMock) Features() []state.Feature {
 	return []state.Feature{state.FeatureTransactional}
 }
 
@@ -64,6 +64,6 @@ func (f *FailingStatestore) Multi(ctx context.Context, request *state.Transactio
 	return nil
 }
 
-func (f *FailingStatestore) Features(ctx context.Context) []state.Feature {
+func (f *FailingStatestore) Features() []state.Feature {
 	return []state.Feature{state.FeatureTransactional, state.FeatureETag}
 }
