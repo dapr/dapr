@@ -2983,7 +2983,7 @@ func (a *DaprRuntime) initCryptoProvider(c componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	err = component.Init(contribCrypto.Metadata{Base: a.toBaseMetadata(c)})
+	err = component.Init(context.TODO(), contribCrypto.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)
