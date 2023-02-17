@@ -465,6 +465,19 @@ ifeq (,$(wildcard $(BUILD_TOOLS)))
 endif
 
 ################################################################################
+# Prettier                                                                     #
+################################################################################
+.PHONY: prettier-install prettier-check prettier-format
+prettier-install:
+	npm install --global prettier
+
+prettier-check:
+	npx prettier --check "*/**/*.{ts,js,mjs,json}"
+
+prettier-format:
+	npx prettier --write "*/**/*.{ts,js,mjs,json}"
+
+################################################################################
 # Target: codegen                                                              #
 ################################################################################
 include tools/codegen.mk
