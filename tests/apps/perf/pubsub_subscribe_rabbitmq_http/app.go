@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	pubSubName = "rabbitmq-pubsub"
+	pubSubName = "rabbitmq-messagebus"
 	topic      = "perf-test"
 	route      = "perf-test"
 )

@@ -1,0 +1,47 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: kafka-messagebus
+spec:
+  type: pubsub.kafka
+  initTimeout: 1m
+  version: v1
+  metadata:
+  # Kafka broker connection setting
+  - name: brokers
+    value: dapr-kafka:9092
+  - name: authRequired
+    value: "false"
+  - name: initialOffset
+    value: oldest
+
+---
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: rabbitmq-messagebus
+spec:
+  type: pubsub.rabbitmq
+  initTimeout: 1m
+  version: v1
+  metadata:
+  # rabbitmq broker connection setting
+  - name: host
+    value: "amqp://user:l7CqHjeAxtb3cE0C@rabbitmq.dapr-tests.svc.cluster.local:5672"
+
+---
+#add new component here

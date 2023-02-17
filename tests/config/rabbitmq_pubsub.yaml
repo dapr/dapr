@@ -14,7 +14,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: rabbitmq-pubsub
+  name: rabbitmq-messagebus
 spec:
   type: pubsub.rabbitmq
   initTimeout: 1m

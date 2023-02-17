@@ -80,7 +80,7 @@ func runTest(t *testing.T, testAppURL, httpReqDurationThresholdMs string) {
 		loadtest.WithParallelism(1),
 		loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
-		loadtest.WithRunnerEnvVar("PUBSUB_NAME", "rabbitmq-pubsub"),
+		loadtest.WithRunnerEnvVar("PUBSUB_NAME", "rabbitmq-messagebus"),
 		loadtest.WithRunnerEnvVar("HTTP_REQ_DURATION_THRESHOLD", httpReqDurationThresholdMs))
 	defer k6Test.Dispose()
 
