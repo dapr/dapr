@@ -149,7 +149,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			}()
 
 			ps := fromConnector(testLogger, connector)
-			err = ps.Init(pubsub.Metadata{
+			err = ps.Init(context.Background(), pubsub.Metadata{
 				Base: contribMetadata.Base{},
 			})
 

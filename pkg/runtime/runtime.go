@@ -1365,14 +1365,16 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
+
+		appResponseBody, err = resp.RawDataFull()
+
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code < 200 || resp.Status().Code > 299 {
-			body, _ := resp.RawDataFull()
-			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(appResponseBody))
 		}
 
-		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
-			appResponseBody = resp.Message().Data.Value
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
 	}
 
@@ -1429,19 +1431,20 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	})
 
 	serverConf := http.ServerConfig{
-		AppID:              a.runtimeConfig.ID,
-		HostAddress:        a.hostAddress,
-		Port:               port,
-		APIListenAddresses: a.runtimeConfig.APIListenAddresses,
-		PublicPort:         publicPort,
-		ProfilePort:        profilePort,
-		AllowedOrigins:     allowedOrigins,
-		EnableProfiling:    a.runtimeConfig.EnableProfiling,
-		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
-		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
-		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
-		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
-		APILogHealthChecks: !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
+		AppID:                   a.runtimeConfig.ID,
+		HostAddress:             a.hostAddress,
+		Port:                    port,
+		APIListenAddresses:      a.runtimeConfig.APIListenAddresses,
+		PublicPort:              publicPort,
+		ProfilePort:             profilePort,
+		AllowedOrigins:          allowedOrigins,
+		EnableProfiling:         a.runtimeConfig.EnableProfiling,
+		MaxRequestBodySize:      a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:        a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSize:          a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:        a.runtimeConfig.EnableAPILogging,
+		APILoggingObfuscateURLs: a.globalConfig.Spec.LoggingSpec.APILogging.ObfuscateURLs,
+		APILogHealthChecks:      !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
 	}
 
 	server := http.NewServer(http.NewServerOpts{
@@ -1595,7 +1598,7 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
-	err = binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
+	err = binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)
@@ -1622,7 +1625,7 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	}
 
 	if binding != nil {
-		err := binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
+		err := binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			return NewInitError(InitComponentFailure, fName, err)
@@ -1642,7 +1645,7 @@ func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		err := store.Init(configuration.Metadata{Base: a.toBaseMetadata(s)})
+		err := store.Init(context.TODO(), configuration.Metadata{Base: a.toBaseMetadata(s)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			return NewInitError(InitComponentFailure, fName, err)
@@ -1669,7 +1672,7 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	// initialization
 	baseMetadata := a.toBaseMetadata(s)
 	props := baseMetadata.Properties
-	err = store.InitLockStore(lock.Metadata{Base: baseMetadata})
+	err = store.InitLockStore(context.TODO(), lock.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)
@@ -1742,7 +1745,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 
 		baseMetadata := a.toBaseMetadata(s)
 		props := baseMetadata.Properties
-		err = store.Init(state.Metadata{Base: baseMetadata})
+		err = store.Init(context.TODO(), state.Metadata{Base: baseMetadata})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			return NewInitError(InitComponentFailure, fName, err)
@@ -1928,7 +1931,7 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	}
 	properties["consumerID"] = consumerID
 
-	err = pubSub.Init(pubsub.Metadata{Base: baseMetadata})
+	err = pubSub.Init(context.TODO(), pubsub.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)
@@ -2964,7 +2967,7 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	err = secretStore.Init(secretstores.Metadata{Base: a.toBaseMetadata(c)})
+	err = secretStore.Init(context.TODO(), secretstores.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)
