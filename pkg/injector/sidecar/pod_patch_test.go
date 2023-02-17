@@ -181,7 +181,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
-			newPodJSON := patchObject(t, tc.mockPod, []PatchOperation{AddDaprSideCarInjectedLabel(tc.mockPod.Labels)})
+			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarInjectedLabel(tc.mockPod.Labels)})
 			newPod := coreV1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
 			assert.Equal(t, tc.expLabels, newPod.Labels)
@@ -190,7 +190,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 }
 
 // patchObject executes a jsonpatch action against the object passed
-func patchObject(t *testing.T, origObj interface{}, patchOperations []PatchOperation) []byte {
+func patchObject(t *testing.T, origObj interface{}, patchOperations []patcher.PatchOperation) []byte {
 	marshal := func(o interface{}) []byte {
 		objBytes, err := json.Marshal(o)
 		assert.NoError(t, err)

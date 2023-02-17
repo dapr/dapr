@@ -52,9 +52,9 @@ func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []patcher.P
 }
 
 // AddDaprSideCarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
-func AddDaprSideCarInjectedLabel(labels map[string]string) PatchOperation {
+func AddDaprSideCarInjectedLabel(labels map[string]string) patcher.PatchOperation {
 	if len(labels) == 0 { // empty labels
-		return PatchOperation{
+		return patcher.PatchOperation{
 			Op:   "add",
 			Path: PatchPathLabels,
 			Value: map[string]string{
@@ -62,7 +62,7 @@ func AddDaprSideCarInjectedLabel(labels map[string]string) PatchOperation {
 			},
 		}
 	}
-	return PatchOperation{
+	return patcher.PatchOperation{
 		Op:    "add",
 		Path:  PatchPathLabels + "/dapr.io~1sidecar-injected",
 		Value: "true",
