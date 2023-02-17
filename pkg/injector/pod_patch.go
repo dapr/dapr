@@ -133,11 +133,13 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		})
 	}
 
-	patchOps = append(patchOps, patcher.PatchOperation{
-		Op:    "add",
-		Path:  patcher.PatchPathContainers + "/-",
-		Value: sidecarContainer,
-	})
+	patchOps = append(patchOps,
+		patcher.PatchOperation{
+			Op:    "add",
+			Path:  patcher.PatchPathContainers + "/-",
+			Value: sidecarContainer,
+		},
+		sidecar.AddDaprSideCarInjectedLabel(pod.Labels))
 	patchOps = append(patchOps,
 		sidecar.AddDaprEnvVarsToContainers(appContainers)...)
 	patchOps = append(patchOps,

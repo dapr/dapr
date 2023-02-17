@@ -47,13 +47,13 @@ const (
 var log = logger.NewLogger("dapr.injector")
 
 var AllowedServiceAccountInfos = []string{
-	"replicaset-controller:kube-system",
-	"deployment-controller:kube-system",
-	"cronjob-controller:kube-system",
-	"job-controller:kube-system",
-	"statefulset-controller:kube-system",
-	"daemon-set-controller:kube-system",
-	"tekton-pipelines-controller:tekton-pipelines",
+	"kube-system:replicaset-controller",
+	"kube-system:deployment-controller",
+	"kube-system:cronjob-controller",
+	"kube-system:job-controller",
+	"kube-system:statefulset-controller",
+	"kube-system:daemon-set-controller",
+	"tekton-pipelines:tekton-pipelines-controller",
 }
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
@@ -149,7 +149,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
 		found := false
 		for _, sa := range serviceaccounts.Items {
-			if sa.Name == serviceAccountInfo[0] && sa.Namespace == serviceAccountInfo[1] {
+			if sa.Namespace == serviceAccountInfo[0] && sa.Name == serviceAccountInfo[1] {
 				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
 				found = true
 				break

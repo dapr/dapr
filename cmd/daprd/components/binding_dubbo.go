@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/bindings/alicloud/dubbo"
+	"github.com/dapr/components-contrib/bindings/dubbo"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 )
 
 func init() {
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(dubbo.NewDubboOutput, "alicloud.dubbo")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(dubbo.NewDubboOutput, "dubbo", "alicloud.dubbo")
 }

@@ -14,11 +14,14 @@ limitations under the License.
 package sidecar
 
 import (
+	"encoding/json"
 	"strconv"
 	"testing"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	coreV1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/patcher"
@@ -140,6 +143,67 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			assert.Equal(t, tc.expOps, patchEnv)
 		})
 	}
+}
+
+func TestAddDaprInjectedLabel(t *testing.T) {
+	testCases := []struct {
+		testName  string
+		mockPod   coreV1.Pod
+		expLabels map[string]string
+	}{
+		{
+			testName: "empty labels",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{},
+			},
+			expLabels: map[string]string{SidecarInjectedLabel: "true"},
+		},
+		{
+			testName: "with some previous labels",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "my-app"},
+				},
+			},
+			expLabels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
+		},
+		{
+			testName: "with dapr injected label already present",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
+				},
+			},
+			expLabels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // closure copy
+		t.Run(tc.testName, func(t *testing.T) {
+			newPodJSON := patchObject(t, tc.mockPod, []PatchOperation{AddDaprSideCarInjectedLabel(tc.mockPod.Labels)})
+			newPod := coreV1.Pod{}
+			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
+			assert.Equal(t, tc.expLabels, newPod.Labels)
+		})
+	}
+}
+
+// patchObject executes a jsonpatch action against the object passed
+func patchObject(t *testing.T, origObj interface{}, patchOperations []PatchOperation) []byte {
+	marshal := func(o interface{}) []byte {
+		objBytes, err := json.Marshal(o)
+		assert.NoError(t, err)
+		return objBytes
+	}
+
+	podJSON := marshal(origObj)
+	patchJSON := marshal(patchOperations)
+	decodedPatch, err := jsonpatch.DecodePatch(patchJSON)
+	assert.NoError(t, err)
+	newJSON, err := decodedPatch.Apply(podJSON)
+	assert.NoError(t, err)
+	return newJSON
 }
 
 func TestAddSocketVolumeToContainers(t *testing.T) {
