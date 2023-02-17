@@ -28,7 +28,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("SIDECAR_IMAGE_PULL_POLICY", "Always")
 		t.Setenv("NAMESPACE", "test-namespace")
 		t.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
-		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test-service-account1:test1,test-service-account2:test2")
+		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test1:test-service-account1,test2:test-service-account2")
 
 		cfg, err := GetConfig()
 		assert.NoError(t, err)
@@ -38,7 +38,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		assert.Equal(t, "Always", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)
 		assert.Equal(t, "cluster.local", cfg.KubeClusterDomain)
-		assert.Equal(t, "test-service-account1:test1,test-service-account2:test2", cfg.AllowedServiceAccounts)
+		assert.Equal(t, "test1:test-service-account1,test2:test-service-account2", cfg.AllowedServiceAccounts)
 	})
 
 	t.Run("not set kube cluster domain env", func(t *testing.T) {

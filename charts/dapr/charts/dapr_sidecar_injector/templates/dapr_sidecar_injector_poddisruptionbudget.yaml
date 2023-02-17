@@ -1,3 +1,4 @@
+{{- if eq .Values.enabled true }}
 {{- if eq .Values.global.ha.enabled true }}
 {{- if .Capabilities.APIVersions.Has "policy/v1" }}
 apiVersion: policy/v1
@@ -28,4 +29,5 @@ spec:
       {{- with .Values.global.labels }}
         {{- toYaml . | nindent 6 }}
       {{- end }}
+{{- end }}
 {{- end }}

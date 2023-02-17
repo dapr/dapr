@@ -23,8 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/phayes/freeport"
-
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -167,7 +165,9 @@ func FromFlags() (*DaprRuntime, error) {
 			return nil, fmt.Errorf("error parsing dapr-internal-grpc-port: %w", err)
 		}
 	} else {
-		daprInternalGRPC, err = freeport.GetFreePort()
+		// Get a "stable random" port in the range 47300-49,347 if it can be acquired using a deterministic algorithm that returns the same value if the same app is restarted
+		// Otherwise, the port will be random.
+		daprInternalGRPC, err = utils.GetStablePort(47300, *appID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
 		}
