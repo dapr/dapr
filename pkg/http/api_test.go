@@ -4004,7 +4004,7 @@ func (c fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bo
 	return false, nil, nil
 }
 
-func (c fakeStateStore) Init(metadata state.Metadata) error {
+func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
@@ -4329,7 +4329,7 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 	return nil, errors.New("get key error: value not found")
 }
 
-func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
+func (c fakeConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
@@ -4351,7 +4351,7 @@ func (l fakeLockStore) Ping() error {
 	return nil
 }
 
-func (l *fakeLockStore) InitLockStore(metadata lock.Metadata) error {
+func (l *fakeLockStore) InitLockStore(ctx context.Context, metadata lock.Metadata) error {
 	return nil
 }
 

@@ -177,7 +177,7 @@ func TestComponentCalls(t *testing.T) {
 			return dialer(ctx, opts...)
 		})
 		client := clientFactory(testLogger).(*grpcStateStore)
-		require.NoError(t, client.Init(state.Metadata{}))
+		require.NoError(t, client.Init(context.Background(), state.Metadata{}))
 		return client, cleanup, err
 	}
 
@@ -211,7 +211,7 @@ func TestComponentCalls(t *testing.T) {
 			}()
 
 			ps := fromConnector(testLogger, connector)
-			err = ps.Init(state.Metadata{
+			err = ps.Init(context.Background(), state.Metadata{
 				Base: contribMetadata.Base{},
 			})
 

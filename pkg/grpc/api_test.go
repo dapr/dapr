@@ -3436,7 +3436,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 
 type mockConfigStore struct{}
 
-func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
+func (m *mockConfigStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
 }
 
