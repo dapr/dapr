@@ -15,17 +15,18 @@ package http
 
 // ServerConfig holds config values for an HTTP server.
 type ServerConfig struct {
-	AppID              string
-	HostAddress        string
-	Port               int
-	APIListenAddresses []string
-	PublicPort         *int
-	ProfilePort        int
-	AllowedOrigins     string
-	EnableProfiling    bool
-	MaxRequestBodySize int
-	UnixDomainSocket   string
-	ReadBufferSize     int
-	EnableAPILogging   bool
-	APILogHealthChecks bool
+	AppID                   string
+	HostAddress             string
+	Port                    int
+	APIListenAddresses      []string
+	PublicPort              *int
+	ProfilePort             int
+	AllowedOrigins          string
+	EnableProfiling         bool
+	MaxRequestBodySize      int
+	UnixDomainSocket        string
+	ReadBufferSize          int
+	EnableAPILogging        bool
+	APILoggingObfuscateURLs bool
+	APILogHealthChecks      bool
 }

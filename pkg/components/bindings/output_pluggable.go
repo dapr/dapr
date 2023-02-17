@@ -30,7 +30,7 @@ type grpcOutputBinding struct {
 }
 
 // Init initializes the grpc outputbinding passing out the metadata to the grpc component.
-func (b *grpcOutputBinding) Init(metadata bindings.Metadata) error {
+func (b *grpcOutputBinding) Init(ctx context.Context, metadata bindings.Metadata) error {
 	if err := b.Dial(metadata.Name); err != nil {
 		return err
 	}

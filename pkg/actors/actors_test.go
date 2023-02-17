@@ -173,7 +173,7 @@ func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
 	}
 }
 
-func (f *fakeStateStore) Init(metadata state.Metadata) error {
+func (f *fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	return nil
 }
 

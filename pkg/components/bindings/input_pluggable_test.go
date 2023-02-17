@@ -125,7 +125,7 @@ func TestInputBindingCalls(t *testing.T) {
 			}()
 
 			conn := inputFromConnector(testLogger, connector)
-			err = conn.Init(bindings.Metadata{
+			err = conn.Init(context.Background(), bindings.Metadata{
 				Base: contribMetadata.Base{},
 			})
 
