@@ -2145,8 +2145,12 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		WithCustomHTTPMetadata(msg.metadata)
 	defer req.Close()
 
-	if cloudEvent[pubsub.TraceIDField] != nil {
-		traceID := cloudEvent[pubsub.TraceIDField].(string)
+	iTraceID := cloudEvent[pubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[pubsub.TraceIDField]
+	}
+	if iTraceID != nil {
+		traceID := iTraceID.(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.topic, sc, a.globalConfig.Spec.TracingSpec)
 	}
@@ -2265,7 +2269,11 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	var span trace.Span
-	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
+	iTraceID := cloudEvent[pubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[pubsub.TraceIDField]
+	}
+	if iTraceID != nil {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
