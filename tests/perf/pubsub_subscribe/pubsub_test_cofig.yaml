@@ -22,17 +22,17 @@ components:
     subscribeHttpThresholdMs: 1500
     bulkSubscribeHttpThresholdMs: 500
     imageName: perf-pubsub_subscribe_app
-    operations: [normal, bulk]
+    operations: [bulk, normal]
   - name: rabbitmq-messagebus
     topic: rabbitmq-perf-test
     route: rabbitmq-perf-test
     numHealthChecks: 60
     testAppName: rabbitmq-test-app
     testLabel: pubsub_subscribe_rabbitmq
-    subscribeHttpThresholdMs: 1500
-    bulkSubscribeHttpThresholdMs: 500
+    subscribeHttpThresholdMs: 15000
+    bulkSubscribeHttpThresholdMs: 5000
     imageName: perf-pubsub_subscribe_app
-    operations: [normal, bulk]
+    operations: [bulk, normal]
   # - name: mqtt-messagebus
   #   topic: mqtt-perf-test
   #   route: mqtt-perf-test

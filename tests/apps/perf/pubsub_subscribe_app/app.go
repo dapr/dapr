@@ -24,9 +24,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var pubSubName string
-var topic string
-var route string
+var (
+	pubSubName string
+	topic      string
+	route      string
+)
 
 var numMessages = 100
 
@@ -105,6 +107,7 @@ func main() {
 	messagesCh = make(chan string, numMessages)
 
 	go notify(messagesCh, notifyCh)
+	log.Printf("Env variable route is set to %s", route)
 
 	http.HandleFunc("/dapr/subscribe", subscribeHandler)
 	http.HandleFunc("/"+route+"-bulk", bulkMessageHandler)
@@ -114,33 +117,27 @@ func main() {
 }
 
 func readPubsubEnvVar() error {
-	pubSubName, ok := os.LookupEnv("PUB_SUB_COMPONENT_NAME")
 
-	if !validateEnvVar("PUB_SUB_COMPONENT_NAME", pubSubName, ok) {
+	pubSubName = os.Getenv("PUB_SUB_COMPONENT_NAME")
+	topic = os.Getenv("PUB_SUB_TOPIC_NAME")
+	route = os.Getenv("PUB_SUB_ROUTE_NAME")
+
+	if !validateEnvVar("PUB_SUB_COMPONENT_NAME", pubSubName) {
 		return errors.New("Invalid PUB_SUB_COMPONENT_NAME")
 	}
 
-	topic, ok := os.LookupEnv("PUB_SUB_TOPIC_NAME")
-
-	if !validateEnvVar("PUB_SUB_TOPIC_NAME", topic, ok) {
+	if !validateEnvVar("PUB_SUB_TOPIC_NAME", topic) {
 		return errors.New("Invalid PUB_SUB_TOPIC_NAME")
 	}
 
-	route, ok := os.LookupEnv("PUB_SUB_ROUTE_NAME")
-
-	if !validateEnvVar("PUB_SUB_ROUTE_NAME", route, ok) {
+	if !validateEnvVar("PUB_SUB_ROUTE_NAME", route) {
 		return errors.New("Invalid PUB_SUB_ROUTE_NAME")
 	}
 
 	return nil
 }
 
-func validateEnvVar(key string, value string, ok bool) bool {
-	if !ok {
-		log.Printf("error: Env variable %s is not set", key)
-		return false
-	}
-
+func validateEnvVar(key string, value string) bool {
 	if value == "" {
 		log.Printf("error: Env variable %s is set to empty", key)
 		return false
