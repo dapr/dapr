@@ -8,9 +8,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 )
 
 const (
@@ -45,6 +46,12 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
+	// selector to be used during list pod operations
+	sel, err := getSideCarInjectedExistsSelector()
+	if err != nil {
+		log.Warnf("unable to inject sidecar selector for list pods operation, err: %w", err)
+	}
+
 	if dw.maxRestartsPerMin > 0 {
 		dw.restartLimiter = ratelimit.New(
 			dw.maxRestartsPerMin,
@@ -70,7 +77,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 				if !ok {
 					continue
 				}
-				ok = dw.listPods(ctx)
+				ok = dw.listPods(ctx, sel)
 				if firstCompleteCh != nil {
 					if ok {
 						close(firstCompleteCh)
@@ -123,12 +130,32 @@ forloop:
 	return nil
 }
 
-func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
+// getSideCarInjectedExistsSelector creates a selector that matches pods
+// with the injector patched label
+func getSideCarInjectedExistsSelector() (labels.Selector, error) {
+	sel := labels.NewSelector()
+	req, err := labels.NewRequirement(
+		sidecar.SidecarInjectedLabel,
+		selection.Exists,
+		[]string{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	sel.Add(*req)
+	return sel, nil
+}
+
+func (dw *DaprWatchdog) listPods(
+	ctx context.Context,
+	selector labels.Selector,
+) bool {
 	log.Infof("DaprWatchdog started checking pods")
 
 	// Look for the dapr-sidecar-injector deployment first and ensure it's running
 	// Otherwise, the pods would come back up without the sidecar again
 	deployment := &appsv1.DeploymentList{}
+
 	err := dw.client.List(ctx, deployment, &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(
 			map[string]string{"app": sidecarInjectorDeploymentName},
@@ -145,49 +172,102 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 
 	log.Debugf("Found running dapr-sidecar-injector container")
 
-	// Request the list of pods
+	// We are splitting the process of finding the potential pods by first querying only for the metadata of the pods
+	// to verify the annotation.  If we find some with dapr enabled annotation we will subsequently query those further.
+	// TODO: Now that we can filter, we could potentially directly
+	// remove this two step process?
+	// var podsMaybeMissingSidecar []types.NamespacedName
+
+	// Request the list of pods metadata
 	// We are not using pagination because we may be deleting pods during the iterations
-	// The client implements some level of caching anyways
-	pod := &corev1.PodList{}
-	err = dw.client.List(ctx, pod)
+	// The client implements some level of caching anyway
+	// podList := new(metav1.PartialObjectMetadataList)
+	// podList.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
+	// err = dw.client.List(
+	// 	ctx,
+	// 	podList,
+	// 	client.MatchingLabelsSelector{Selector: selector},
+	// )
+	pods := new(corev1.PodList)
+	dw.client.List(ctx, pods, client.MatchingLabelsSelector{Selector: selector})
 	if err != nil {
 		log.Errorf("Failed to list pods. Error: %v", err)
 		return false
 	}
 
-	for _, v := range pod.Items {
-		// Skip invalid pods
-		if v.Name == "" || len(v.Spec.Containers) == 0 {
-			continue
-		}
+	// for _, v := range podList.Items {
+	// 	// Skip invalid pods
+	// 	if v.Name == "" {
+	// 		continue
+	// 	}
 
-		logName := v.Namespace + "/" + v.Name
+	// 	logName := v.Namespace + "/" + v.Name
 
-		// Filter for pods with the dapr.io/enabled annotation
-		if daprEnabled, ok := v.Annotations[daprEnabledAnnotationKey]; !ok || !utils.IsTruthy(daprEnabled) {
-			log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
-			continue
-		}
+	// 	// Filter for pods with the dapr.io/enabled annotation
+	// 	// TODO: Consider removing this since pods that have the
+	// 	// injected label should have the dapr.io/enabled annotation?
+	// 	if daprEnabled, ok := v.Annotations[daprEnabledAnnotationKey]; !ok || !utils.IsTruthy(daprEnabled) {
+	// 		log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
+	// 		continue
+	// 	}
+	// 	podsMaybeMissingSidecar = append(podsMaybeMissingSidecar, types.NamespacedName{Name: v.Name, Namespace: v.Namespace})
+	// }
 
-		// Check if the sidecar container is running
+	// let's now get more detail pod information from those pods with the annotation we found on our previous check
+	// for _, podNamespaceName := range podsMaybeMissingSidecar {
+	// 	pod := corev1.Pod{}
+	// 	if err := dw.client.Get(ctx, podNamespaceName, &pod); err != nil {
+	// 		continue
+	// 	}
+	// 	// Check if the sidecar container is running
+	// 	hasSidecar := false
+	// 	for _, c := range pod.Spec.Containers {
+	// 		if c.Name == sidecarContainerName {
+	// 			hasSidecar = true
+	// 			break
+	// 		}
+	// 	}
+	// 	logName := pod.Namespace + "/" + pod.Name
+	// 	if hasSidecar {
+	// 		log.Debugf("Found Dapr sidecar in pod %s", logName)
+	// 		continue
+	// 	}
+
+	// 	// Pod doesn't have a sidecar, so we need to kill it so it can be restarted and have the sidecar injected
+	// 	log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", logName)
+	// 	//nolint:gosec
+	// 	err = dw.client.Delete(ctx, &pod)
+	// 	if err != nil {
+	// 		log.Errorf("Failed to delete pod %s. Error: %v", logName, err)
+	// 		continue
+	// 	}
+
+	// 	log.Infof("Deleted pod %s", logName)
+
+	// 	log.Debugf("Taking a pod restart token")
+	// 	before := time.Now()
+	// 	_ = dw.restartLimiter.Take()
+	// 	log.Debugf("Resumed after pausing for %v", time.Since(before))
+	// }
+
+	for _, pod := range pods.Items {
 		hasSidecar := false
-		for _, c := range v.Spec.Containers {
+		for _, c := range pod.Spec.Containers {
 			if c.Name == sidecarContainerName {
 				hasSidecar = true
 				break
 			}
 		}
+		logName := pod.Namespace + "/" + pod.Name
 		if hasSidecar {
 			log.Debugf("Found Dapr sidecar in pod %s", logName)
 			continue
 		}
 
-		// Pod doesn't have a sidecar, so we need to kill it so it can be restarted and have the sidecar injected
 		log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", logName)
-		//nolint:gosec
-		err = dw.client.Delete(ctx, &v)
+		err = dw.client.Delete(ctx, &pod)
 		if err != nil {
-			log.Errorf("Failed to delete pod %s. Error: %v", logName, err)
+			log.Errorf("Failed to delete pod %s. Error: %w", logName, err)
 			continue
 		}
 
@@ -195,10 +275,9 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 
 		log.Debugf("Taking a pod restart token")
 		before := time.Now()
-		_ = dw.restartLimiter.Take()
-		log.Debugf("Resumed after pausing for %v", time.Since(before))
+		now := dw.restartLimiter.Take()
+		log.Debugf("Resumed after pausing for %v", now.Sub(before))
 	}
-
 	log.Infof("DaprWatchdog completed checking pods")
 
 	return true
