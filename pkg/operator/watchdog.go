@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/dapr/dapr/pkg/injector/sidecar"
+
 	"go.uber.org/ratelimit"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +27,7 @@ const (
 
 // DaprWatchdog is a controller that periodically polls all pods and ensures that they are in the correct state.
 // This controller only runs on the cluster's leader.
-// Currently, this ensures that the sidecar is injected in each pod, otherwise it kills the pod so it can be restarted.
+// Currently, this ensures that the sidecar is injected in each pod, otherwise it kills the pod, so it can be restarted.
 type DaprWatchdog struct {
 	interval          time.Duration
 	maxRestartsPerMin int
@@ -132,8 +134,7 @@ forloop:
 // getSideCarInjectedNotExistsSelector creates a selector that matches pod without the injector patched label
 func getSideCarInjectedNotExistsSelector() labels.Selector {
 	sel := labels.NewSelector()
-	// TODO: 'dapr.io/sidecar-injected' should be replaced with sidecar.SidecarInjectedLabel when https://github.com/dapr/dapr/pull/5937/files is merged
-	req, err := labels.NewRequirement("dapr.io/sidecar-injected", selection.DoesNotExist, []string{})
+	req, err := labels.NewRequirement(sidecar.SidecarInjectedLabel, selection.DoesNotExist, []string{})
 	if err != nil {
 		log.Fatalf("Unable to add label requirement to find pods with Injector created label , err: %s", err)
 	}
@@ -166,7 +167,6 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 
 	// We are splitting the process of finding the potential pods by first querying only for the metadata of the pods
 	// to verify the annotation.  If we find some with dapr enabled annotation we will subsequently query those further.
-	var podsMaybeMissingSidecar []types.NamespacedName
 
 	// Request the list of pods metadata
 	// We are not using pagination because we may be deleting pods during the iterations
@@ -178,6 +178,8 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 		log.Errorf("Failed to list pods. Error: %v", err)
 		return false
 	}
+
+	podsMaybeMissingSidecar := make([]types.NamespacedName, 0, len(podList.Items))
 
 	for _, v := range podList.Items {
 		// Skip invalid pods
@@ -198,7 +200,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 	// let's now get more detail pod information from those pods with the annotation we found on our previous check
 	for _, podNamespaceName := range podsMaybeMissingSidecar {
 		pod := corev1.Pod{}
-		if err := dw.client.Get(ctx, podNamespaceName, &pod); err != nil {
+		if err = dw.client.Get(ctx, podNamespaceName, &pod); err != nil {
 			continue
 		}
 		// Check if the sidecar container is running
@@ -215,9 +217,8 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 			continue
 		}
 
-		// Pod doesn't have a sidecar, so we need to kill it so it can be restarted and have the sidecar injected
+		// Pod doesn't have a sidecar, so we need to kill it, so it can be restarted and have the sidecar injected
 		log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", logName)
-		//nolint:gosec
 		err = dw.client.Delete(ctx, &pod)
 		if err != nil {
 			log.Errorf("Failed to delete pod %s. Error: %v", logName, err)
