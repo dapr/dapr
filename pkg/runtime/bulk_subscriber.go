@@ -358,8 +358,12 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	n := 0
 	for _, pubsubMsg := range psm.pubSubMessages {
 		cloudEvent := pubsubMsg.cloudEvent
-		if cloudEvent[pubsub.TraceIDField] != nil {
-			traceID := cloudEvent[pubsub.TraceIDField].(string)
+		iTraceID := cloudEvent[pubsub.TraceParentField]
+		if iTraceID == nil {
+			iTraceID = cloudEvent[pubsub.TraceIDField]
+		}
+		if iTraceID != nil {
+			traceID := iTraceID.(string)
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			var span trace.Span
 			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, a.globalConfig.Spec.TracingSpec)
@@ -570,7 +574,11 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 	n := 0
 	for _, pubSubMsg := range psm.pubSubMessages {
 		cloudEvent := pubSubMsg.cloudEvent
-		if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
+		iTraceID := cloudEvent[pubsub.TraceParentField]
+		if iTraceID == nil {
+			iTraceID = cloudEvent[pubsub.TraceIDField]
+		}
+		if iTraceID != nil {
 			if traceID, ok := iTraceID.(string); ok {
 				sc, _ := diag.SpanContextFromW3CString(traceID)
 
