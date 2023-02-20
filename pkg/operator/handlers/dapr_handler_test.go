@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -280,6 +281,7 @@ func TestInit(t *testing.T) {
 		assert.NotNil(t, wrapper)
 
 		assert.Equal(t, reflect.TypeOf(&appsv1.Deployment{}), reflect.TypeOf(wrapper.GetObject()))
+		assert.Equal(t, wrapper.GetMatchLabels(), map[string]string{sidecar.SidecarInjectedLabel: "true"})
 
 		reconciler = reflect.Indirect(reflect.ValueOf(statefulsetCtl)).FieldByName("Do").Interface().(*Reconciler)
 
@@ -288,6 +290,7 @@ func TestInit(t *testing.T) {
 		assert.NotNil(t, wrapper)
 
 		assert.Equal(t, reflect.TypeOf(&appsv1.StatefulSet{}), reflect.TypeOf(wrapper.GetObject()))
+		assert.Equal(t, wrapper.GetMatchLabels(), map[string]string{sidecar.SidecarInjectedLabel: "true"})
 	})
 }
 

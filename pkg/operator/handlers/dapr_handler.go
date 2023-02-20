@@ -12,10 +12,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
@@ -85,8 +88,19 @@ func (h *DaprHandler) Init() error {
 		return err
 	}
 
+	// Filter only for objects that have the sidecar injected label.
+	selector := &metaV1.LabelSelector{
+		MatchLabels: map[string]string{
+			sidecar.SidecarInjectedLabel: "true",
+		},
+	}
+	p, err := predicate.LabelSelectorPredicate(*selector)
+	if err != nil {
+		return err
+	}
+
 	err = ctrl.NewControllerManagedBy(h.mgr).
-		For(&appsv1.Deployment{}).
+		For(&appsv1.Deployment{}, builder.WithPredicates(p)).
 		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 100,
@@ -94,7 +108,13 @@ func (h *DaprHandler) Init() error {
 		Complete(&Reconciler{
 			DaprHandler: h,
 			newWrapper: func() ObjectWrapper {
-				return &DeploymentWrapper{}
+				return &DeploymentWrapper{
+					Deployment: appsv1.Deployment{
+						Spec: appsv1.DeploymentSpec{
+							Selector: selector,
+						},
+					},
+				}
 			},
 		})
 	if err != nil {
@@ -102,7 +122,7 @@ func (h *DaprHandler) Init() error {
 	}
 
 	err = ctrl.NewControllerManagedBy(h.mgr).
-		For(&appsv1.StatefulSet{}).
+		For(&appsv1.StatefulSet{}, builder.WithPredicates(p)).
 		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 100,
@@ -110,7 +130,13 @@ func (h *DaprHandler) Init() error {
 		Complete(&Reconciler{
 			DaprHandler: h,
 			newWrapper: func() ObjectWrapper {
-				return &StatefulSetWrapper{}
+				return &StatefulSetWrapper{
+					StatefulSet: appsv1.StatefulSet{
+						Spec: appsv1.StatefulSetSpec{
+							Selector: selector,
+						},
+					},
+				}
 			},
 		})
 	if err != nil {
