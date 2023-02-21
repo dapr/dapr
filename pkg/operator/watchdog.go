@@ -235,7 +235,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 				log.Debugf("Found Dapr sidecar in pod %s, will patch the pod labels", logName)
 				err = patchPodLabel(ctx, dw.client, &pod)
 				if err != nil {
-					log.Errorf("problems patching pod %s in namespace %s, err: %s", pod.Name, pod.Name, err)
+					log.Errorf("problems patching pod %s, err: %s", logName, err)
 				}
 			} else {
 				log.Debugf("Found Dapr sidecar in pod %s", logName)
