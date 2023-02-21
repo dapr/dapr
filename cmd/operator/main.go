@@ -20,24 +20,26 @@ import (
 
 	"k8s.io/klog"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
-	"github.com/dapr/kit/logger"
 )
 
 var (
-	log                      = logger.NewLogger("dapr.operator")
-	config                   string
-	certChainPath            string
-	watchInterval            string
-	maxPodRestartsPerMinute  int
-	disableLeaderElection    bool
-	disableServiceReconciler bool
-	watchNamespace           string
+	log                       = logger.NewLogger("dapr.operator")
+	config                    string
+	certChainPath             string
+	watchInterval             string
+	maxPodRestartsPerMinute   int
+	disableLeaderElection     bool
+	disableServiceReconciler  bool
+	watchNamespace            string
+	watchdotCanPatchPodLabels bool
 )
 
 //nolint:gosec
@@ -66,6 +68,7 @@ func main() {
 		WatchdogInterval:          0,
 		WatchdogMaxRestartsPerMin: maxPodRestartsPerMinute,
 		WatchNamespace:            watchNamespace,
+		WatchdogCanPatchPodLabels: watchdotCanPatchPodLabels,
 		ServiceReconcilerEnabled:  !disableServiceReconciler,
 	}
 
@@ -119,6 +122,7 @@ func init() {
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
 	flag.BoolVar(&disableServiceReconciler, "disable-service-reconciler", false, "Disable the Service reconciler for Dapr-enabled Deployments and StatefulSets")
 	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
+	flag.BoolVar(&watchdotCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
 
 	flag.Parse()
 

@@ -25,6 +25,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/dapr/kit/fswatcher"
+	"github.com/dapr/kit/logger"
+
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -34,8 +37,6 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
-	"github.com/dapr/kit/fswatcher"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -57,6 +58,7 @@ type Options struct {
 	WatchdogEnabled           bool
 	WatchdogInterval          time.Duration
 	WatchdogMaxRestartsPerMin int
+	WatchdogCanPatchPodLabels bool
 	WatchNamespace            string
 	ServiceReconcilerEnabled  bool
 }
@@ -108,8 +110,10 @@ func NewOperator(opts Options) Operator {
 		}
 		wd := &DaprWatchdog{
 			client:            mgrClient,
+			nonCachedClient:   mgr.GetAPIReader(),
 			interval:          opts.WatchdogInterval,
 			maxRestartsPerMin: opts.WatchdogMaxRestartsPerMin,
+			canPatchPodLabels: opts.WatchdogCanPatchPodLabels,
 		}
 		err = mgr.Add(wd)
 		if err != nil {

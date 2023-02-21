@@ -191,6 +191,9 @@ spec:
 {{- if not .Values.serviceReconciler.enabled }}
         - "--disable-service-reconciler"
 {{- end }}
+{{- if .Values.global.operator.watchdogCanPatchPodLabels }}
+        - "--watchdog-can-patch-pod-labels"
+{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: credentials

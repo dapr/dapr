@@ -37,3 +37,6 @@ global:
   #   ca: "ca.crt"
   #   cert: "tls.crt"
   #   key: "tls.key"
+
+  operator:
+    watchdogCanPatchPodLabels: false
