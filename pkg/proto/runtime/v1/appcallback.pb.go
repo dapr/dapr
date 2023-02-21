@@ -972,8 +972,8 @@ type TopicSubscription struct {
 	DeadLetterTopic string `protobuf:"bytes,6,opt,name=dead_letter_topic,json=deadLetterTopic,proto3" json:"dead_letter_topic,omitempty"`
 	// The optional bulk subscribe settings for this topic.
 	BulkSubscribe *BulkSubscribeConfig `protobuf:"bytes,7,opt,name=bulk_subscribe,json=bulkSubscribe,proto3" json:"bulk_subscribe,omitempty"`
-	// The optional bulk subscribe settings for this topic.
-	SubscriptionID string `protobuf:"bytes,8,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscriptionId,omitempty"`
+	// The optional subscriberID to enable multiple subscriptions to a topic for an app
+	SubscriptionID string `protobuf:"bytes,8,opt,name=subscription_id,json=subscriptionID,proto3" json:"subscription_id,omitempty"`
 }
 
 func (x *TopicSubscription) Reset() {
