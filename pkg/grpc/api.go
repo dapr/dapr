@@ -560,7 +560,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				ID:              a.id,
+				Source:          a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,

@@ -2302,7 +2302,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			ID:              a.id,
+			Source:          a.id,
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
