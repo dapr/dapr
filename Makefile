@@ -467,7 +467,7 @@ endif
 ################################################################################
 # Prettier                                                                     #
 ################################################################################
-.PHONY: prettier-install prettier-check prettier-format
+.PHONY: prettier-install prettier-check prettier-format me prettier
 prettier-install:
 	npm install --global prettier
 
@@ -476,6 +476,13 @@ prettier-check:
 
 prettier-format:
 	npx prettier --write "*/**/*.{ts,js,mjs,json}"
+
+# "make me prettier"
+me:
+	@echo "🪄💄🪄💄🪄💄"
+
+prettier:
+	@npx prettier --write "*/**/*.{ts,js,mjs,json}"
 
 ################################################################################
 # Target: codegen                                                              #
