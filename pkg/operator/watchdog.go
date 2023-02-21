@@ -78,6 +78,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	firstCompleteCh := make(chan struct{})
 	go func() {
 		defer log.Infof("DaprWatchdog worker stopped")
+		firstCompleted := false
 		for {
 			select {
 			case <-ctx.Done():
@@ -87,10 +88,10 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 					continue
 				}
 				ok = dw.listPods(ctx, sel)
-				if firstCompleteCh != nil {
+				if !firstCompleted {
 					if ok {
 						close(firstCompleteCh)
-						firstCompleteCh = nil
+						firstCompleted = true
 					} else {
 						// Ensure that there's at least one successful run
 						// If it failed, retry after a bit
@@ -104,9 +105,14 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 
 	log.Infof("DaprWatchdog worker started")
 
-	// Start an iteration right away, at startup, then wait for completion
 	workCh <- struct{}{}
-	<-firstCompleteCh
+	// Start an iteration right away, at startup
+	// Wait for completion of first iteration
+	select {
+	case <-ctx.Done(): // in case context Done on first iteration to not get stuck waiting for sigkill on channel to close
+		return nil
+	case <-firstCompleteCh:
+	}
 
 	// If we only run once, exit when it's done
 	if dw.interval < singleIterationDurationThreshold {

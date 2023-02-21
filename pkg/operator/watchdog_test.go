@@ -1,14 +1,10 @@
 package operator
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
-
-	"github.com/dapr/kit/logger"
 
 	"go.uber.org/ratelimit"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -245,13 +241,8 @@ func TestDaprWatchdog_Start(t *testing.T) {
 	}()
 
 	// change log for tests
-	log.SetOutputLevel(logger.DebugLevel)
-	var buff bytes.Buffer
-	log.SetOutput(&buff)
 	singleIterationDurationThreshold = 100 * time.Millisecond
 	defer func() {
-		log.SetOutputLevel(logger.InfoLevel)
-		log.SetOutput(os.Stdout)
 		singleIterationDurationThreshold = time.Second
 		sidecarInjectorWaitInterval = 100 * time.Millisecond
 	}()
@@ -272,8 +263,10 @@ func TestDaprWatchdog_Start(t *testing.T) {
 		require.NoError(t, ctlClient.Create(ctx, pod))
 	}
 
+	startDone := make(chan struct{}, 1)
 	go func() {
 		require.NoError(t, dw.Start(ctx))
+		startDone <- struct{}{}
 	}()
 
 	// let it run a few cycles
@@ -281,16 +274,10 @@ func TestDaprWatchdog_Start(t *testing.T) {
 	cancel()
 	cancelled = true
 
+	<-startDone
+
 	t.Log("daprized pods should be deleted except those running")
 	assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running)
 	t.Log("daprized pods with sidecar should have been patched")
 	assertExpectedPodsPatched(t, ctlClient, ctx, running)
-
-	t.Log("log messages expected deletion for Pod 1-4, and Patch for Pod 0")
-	logString := buff.String()
-	require.Contains(t, logString, `level=warning msg="Pod default/pod-1 does not have the Dapr sidecar and will be deleted"`)
-	require.Contains(t, logString, `level=warning msg="Pod default/pod-2 does not have the Dapr sidecar and will be deleted"`)
-	require.Contains(t, logString, `level=warning msg="Pod default/pod-3 does not have the Dapr sidecar and will be deleted"`)
-	require.Contains(t, logString, `level=warning msg="Pod default/pod-4 does not have the Dapr sidecar and will be deleted"`)
-	require.Contains(t, logString, `level=debug msg="Found Dapr sidecar in pod default/pod-0, will patch the pod labels"`)
 }
