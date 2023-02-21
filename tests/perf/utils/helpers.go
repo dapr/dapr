@@ -93,7 +93,7 @@ func UploadAzureBlob(report *perf.TestReport) error {
 	l := logger.NewLogger("dapr-perf-test")
 	azblob := blobstorage.NewAzureBlobStorage(l)
 
-	err = azblob.Init(bindings.Metadata{
+	err = azblob.Init(context.Background(), bindings.Metadata{
 		Base: metadata.Base{
 			Properties: map[string]string{
 				"storageAccount":    accountName,
