@@ -39,7 +39,7 @@ var (
 	disableLeaderElection     bool
 	disableServiceReconciler  bool
 	watchNamespace            string
-	watchdotCanPatchPodLabels bool
+	watchdogCanPatchPodLabels bool
 )
 
 //nolint:gosec
@@ -68,7 +68,7 @@ func main() {
 		WatchdogInterval:          0,
 		WatchdogMaxRestartsPerMin: maxPodRestartsPerMinute,
 		WatchNamespace:            watchNamespace,
-		WatchdogCanPatchPodLabels: watchdotCanPatchPodLabels,
+		WatchdogCanPatchPodLabels: watchdogCanPatchPodLabels,
 		ServiceReconcilerEnabled:  !disableServiceReconciler,
 	}
 
@@ -122,7 +122,7 @@ func init() {
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
 	flag.BoolVar(&disableServiceReconciler, "disable-service-reconciler", false, "Disable the Service reconciler for Dapr-enabled Deployments and StatefulSets")
 	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
-	flag.BoolVar(&watchdotCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
+	flag.BoolVar(&watchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
 
 	flag.Parse()
 

@@ -2,11 +2,8 @@ package operator
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
-
-	jsonpatch "github.com/evanphx/json-patch/v5"
 
 	"go.uber.org/ratelimit"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,8 +22,13 @@ const (
 	sidecarContainerName          = "daprd"
 	daprEnabledAnnotationKey      = "dapr.io/enabled"
 	sidecarInjectorDeploymentName = "dapr-sidecar-injector"
-	sidecarInjectorWaitInterval   = 5 * time.Second // How long to wait for the sidecar injector deployment to be up and running before retrying
 	watchdogPatchedLabel          = "dapr.io/watchdog-patched"
+)
+
+var (
+	// service timers, using var to be able to mock their values in tests
+	singleIterationDurationThreshold = time.Second
+	sidecarInjectorWaitInterval      = 5 * time.Second // How long to wait for the sidecar injector deployment to be up and running before retrying
 )
 
 // DaprWatchdog is a controller that periodically polls all pods and ensures that they are in the correct state.
@@ -107,7 +109,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	<-firstCompleteCh
 
 	// If we only run once, exit when it's done
-	if dw.interval < time.Second {
+	if dw.interval < singleIterationDurationThreshold {
 		return nil
 	}
 
@@ -265,21 +267,10 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 }
 
 func patchPodLabel(ctx context.Context, cl client.Client, pod *corev1.Pod) error {
-	oldPodData, err := json.Marshal(pod)
-	if err != nil {
-		return fmt.Errorf("problems marshaling pod to patch label in watchdog, err: %w", err)
+	// in case this has been already patched just return
+	if _, ok := pod.GetLabels()[watchdogPatchedLabel]; ok {
+		return nil
 	}
-	if pod.Labels == nil {
-		pod.Labels = make(map[string]string)
-	}
-	pod.Labels[watchdogPatchedLabel] = "true"
-	newPodData, err := json.Marshal(pod)
-	if err != nil {
-		return fmt.Errorf("problems marshaling pod to patch label in watchdog, err: %w", err)
-	}
-	mergePatch, err := jsonpatch.CreateMergePatch(oldPodData, newPodData)
-	if err != nil {
-		return fmt.Errorf("problems creating json merge patch to patch pod label, err: %w", err)
-	}
+	mergePatch := []byte(fmt.Sprintf(`{"metadata":{"labels":{"%s":"true"}}}`, watchdogPatchedLabel))
 	return cl.Patch(ctx, pod, client.RawPatch(types.MergePatchType, mergePatch))
 }
