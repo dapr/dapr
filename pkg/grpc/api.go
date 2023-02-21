@@ -352,7 +352,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			ID:              a.id,
+			Source:          a.id,
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
 			Data:            body,
