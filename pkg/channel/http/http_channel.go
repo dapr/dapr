@@ -260,7 +260,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 			}
 		}))
 		execPipeline.ServeHTTP(rw, channelReq)
-		resp = rw.Result()
+		resp = rw.Result() //nolint:bodyclose
 	} else {
 		// Send request to user application
 		// (Body is closed below, but linter isn't detecting that)

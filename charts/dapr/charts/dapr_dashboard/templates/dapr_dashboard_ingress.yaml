@@ -1,0 +1,33 @@
+{{- if eq .Values.ingress.enabled true }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dapr-dashboard
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app: dapr-dashboard
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- end }}
+  {{- if eq .Values.ingress.tls.enabled true }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dapr-dashboard
+                port:
+                  number: {{ .Values.ports.port }}
+{{- end }}
