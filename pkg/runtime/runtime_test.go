@@ -284,6 +284,23 @@ func getSubscriptionCustom(topic, path string) string {
 	return string(b)
 }
 
+// Helper to populate subscription array from corresponding topics, path, and subscriptionid
+func getSubscriptionsCustomWithSubscriptionID(topics, paths, ids []string) string {
+	s := []runtimePubsub.SubscriptionJSON{}
+	for idx, t := range topics {
+		s = append(s, runtimePubsub.SubscriptionJSON{
+			PubsubName: TestPubsubName,
+			Topic:      t,
+			Routes: runtimePubsub.RoutesJSON{
+				Default: paths[idx],
+			},
+			SubscriptionID: ids[idx],
+		})
+	}
+	b, _ := json.Marshal(&s)
+	return string(b)
+}
+
 func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
 		TypeMeta: metaV1.TypeMeta{
@@ -1415,6 +1432,53 @@ func TestInitPubSub(t *testing.T) {
 		return mockPubSub, mockPubSub2
 	}
 
+	initMockPubSubForRuntimeFanoutMode := func(rt *DaprRuntime) *daprt.MockPubSub {
+		mockPubSub := new(daprt.MockPubSub)
+
+		rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+			return mockPubSub
+		}, "mockPubSub")
+
+		expectedMetadata := pubsub.Metadata{
+			Base: mdata.Base{
+				Name:       TestPubsubName,
+				Properties: getFakeProperties(),
+			},
+		}
+
+		expectedMetadataSecond := pubsub.Metadata{
+			Base: mdata.Base{
+				Name:       TestPubsubName,
+				Properties: getFakeProperties(),
+			},
+		}
+		expectedMetadataSecond.Properties["consumerID"] = TestRuntimeConfigID + "_" + "subID1"
+
+		expectedMetadataThird := pubsub.Metadata{
+			Base: mdata.Base{
+				Name:       TestPubsubName,
+				Properties: getFakeProperties(),
+			},
+		}
+		expectedMetadataThird.Properties["consumerID"] = TestRuntimeConfigID + "_" + "subID2"
+
+		mockPubSub.On("Init", expectedMetadata).Return(nil)
+		mockPubSub.On("Init", expectedMetadataSecond).Return(nil)
+		mockPubSub.On("Init", expectedMetadataThird).Return(nil)
+		mockPubSub.On(
+			"Subscribe",
+			mock.AnythingOfType("pubsub.SubscribeRequest"),
+			mock.AnythingOfType("pubsub.Handler")).Return(nil)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+		rt.topicRoutes = nil
+		rt.subscriptions = nil
+		rt.pubSubs = make(map[string]pubsubItem)
+
+		return mockPubSub
+	}
+
 	t.Run("subscribe 2 topics", func(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
 
@@ -1480,6 +1544,41 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
+	t.Run("subscribe 1 topic fanout mode", func(t *testing.T) {
+		mockPubSub := initMockPubSubForRuntimeFanoutMode(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 2 topics using subscriptionid to enable fanout within an app
+		subs := getSubscriptionsCustomWithSubscriptionID(
+			[]string{"topic0", "topic0"},
+			[]string{"customroute1/topic0", "customroute2/topic0"},
+			[]string{"subID1", "subID2"},
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+			break
+		}
+
+		rt.startSubscriptions()
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 3)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
 	t.Run("subscribe 0 topics unless user app provides topic list", func(t *testing.T) {
 		mockPubSub, _ := initMockPubSubForRuntime(rt)
 
@@ -1503,7 +1602,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 	})
 
 	t.Run("publish adapter is nil, no pub sub component", func(t *testing.T) {
@@ -1723,6 +1822,16 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("test bulk publish, topic allowed", func(t *testing.T) {
 		initMockPubSubForRuntime(rt)
 
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic3"}, []string{"topic0", "topic5"})
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
@@ -1773,6 +1882,16 @@ func TestInitPubSub(t *testing.T) {
 
 	t.Run("test bulk publish, topic not allowed", func(t *testing.T) {
 		initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic3"}, []string{"topic0", "topic5"})
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		// act
 		for _, comp := range pubsubComponents {

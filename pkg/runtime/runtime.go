@@ -151,6 +151,7 @@ type TopicRouteElem struct {
 	rules           []*runtimePubsub.Rule
 	deadLetterTopic string
 	bulkSubscribe   *runtimePubsub.BulkSubscribe
+	subscriptionID  string
 }
 
 // Type of function that determines if a component is authorized.
@@ -762,7 +763,6 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	ctx, cancel := context.WithCancel(parentCtx)
 	policyDef := a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub)
 	routeMetadata := route.metadata
-
 	namespaced := a.pubSubs[name].namespaceScoped
 
 	if route.bulkSubscribe != nil && route.bulkSubscribe.Enabled {
@@ -1883,15 +1883,21 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 	}
 
 	for _, s := range subscriptions {
-		if topicRoutes[s.PubsubName] == nil {
-			topicRoutes[s.PubsubName] = TopicRoutes{}
+		pubSubName := s.PubsubName
+		if s.SubscriptionID != "" {
+			pubSubName = s.PubsubName + "_" + s.SubscriptionID
 		}
 
-		topicRoutes[s.PubsubName][s.Topic] = TopicRouteElem{
+		if topicRoutes[pubSubName] == nil {
+			topicRoutes[pubSubName] = TopicRoutes{}
+		}
+
+		topicRoutes[pubSubName][s.Topic] = TopicRouteElem{
 			metadata:        s.Metadata,
 			rules:           s.Rules,
 			deadLetterTopic: s.DeadLetterTopic,
 			bulkSubscribe:   s.BulkSubscribe,
+			subscriptionID:  s.SubscriptionID,
 		}
 	}
 
@@ -1913,6 +1919,40 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 }
 
 func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
+	mainPubsubName := c.ObjectMeta.Name
+	// Find and iterate through subscriptions that contain subscriptionIDs for this component
+	subscriptions, err := a.getSubscriptions()
+	if err != nil {
+		return err
+	}
+	subIds := make(map[string]struct{})
+	for _, s := range subscriptions {
+		if s.PubsubName == mainPubsubName && s.SubscriptionID != "" {
+			subIds[s.SubscriptionID] = struct{}{}
+		}
+	}
+
+	baseMetadata := a.toBaseMetadata(c)
+	properties := baseMetadata.Properties
+	consumerID := strings.TrimSpace(properties["consumerID"])
+	if consumerID == "" {
+		consumerID = a.runtimeConfig.ID
+	}
+
+	// Create additional pubsub component for each unique subscription id
+	for subscriberID := range subIds {
+		newConsumerId := consumerID + "_" + subscriberID
+		newpubsubName := mainPubsubName + "_" + subscriberID
+		if err = a.initPubSubInstance(c, newConsumerId, newpubsubName); err != nil {
+			return err
+		}
+	}
+
+	// Initialize main instance
+	return a.initPubSubInstance(c, consumerID, mainPubsubName)
+}
+
+func (a *DaprRuntime) initPubSubInstance(c componentsV1alpha1.Component, consumerID string, newPubSubName string) error {
 	fName := c.LogName()
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
@@ -1922,10 +1962,6 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 
 	baseMetadata := a.toBaseMetadata(c)
 	properties := baseMetadata.Properties
-	consumerID := strings.TrimSpace(properties["consumerID"])
-	if consumerID == "" {
-		consumerID = a.runtimeConfig.ID
-	}
 	properties["consumerID"] = consumerID
 
 	err = pubSub.Init(pubsub.Metadata{Base: baseMetadata})
@@ -1934,9 +1970,7 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 		return NewInitError(InitComponentFailure, fName, err)
 	}
 
-	pubsubName := c.ObjectMeta.Name
-
-	a.pubSubs[pubsubName] = pubsubItem{
+	a.pubSubs[newPubSubName] = pubsubItem{
 		component:           pubSub,
 		scopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties),
 		scopedPublishings:   scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties),
@@ -1944,7 +1978,6 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 		namespaceScoped:     metadataContainsNamespace(c.Spec.Metadata),
 	}
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
-
 	return nil
 }
 

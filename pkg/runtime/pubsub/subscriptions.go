@@ -47,6 +47,7 @@ type (
 		Route           string            `json:"route"`  // Single route from v1alpha1
 		Routes          RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
 		BulkSubscribe   BulkSubscribeJSON `json:"bulkSubscribe,omitempty"`
+		SubscriptionID  string            `json:"subscriptionID"`
 	}
 
 	RoutesJSON struct {
@@ -144,6 +145,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 				DeadLetterTopic: si.DeadLetterTopic,
 				Rules:           rules[:n],
 				BulkSubscribe:   bulkSubscribe,
+				SubscriptionID:  si.SubscriptionID,
 			}
 		}
 
@@ -221,6 +223,7 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 				DeadLetterTopic: s.DeadLetterTopic,
 				Rules:           rules,
 				BulkSubscribe:   bulkSubscribe,
+				SubscriptionID:  s.SubscriptionID,
 			}
 		}
 	}
