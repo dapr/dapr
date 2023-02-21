@@ -11,6 +11,7 @@
 # limitations under the License.
 #
 
+#kafka pubsub component
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -30,6 +31,7 @@ spec:
 
 ---
 
+#rabbit pubsub component
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -44,4 +46,45 @@ spec:
     value: "amqp://user:l7CqHjeAxtb3cE0C@rabbitmq.dapr-tests.svc.cluster.local:5672"
 
 ---
-#add new component here
+
+#mqtt pubsub component
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: mqtt-messagebus
+spec:
+  type: pubsub.mqtt3
+  version: v1
+  metadata:
+    - name: url
+      #value: "tcp://[username][:password]@host.domain[:port]"
+      value: tcp://perf-test-emqx@perf-test-emqx-0.perf-test-emqx-headless.dapr-tests.svc.cluster.local:1883
+
+---
+
+#pulsar pubsub component
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pulsar-messagebus
+spec:
+  type: pubsub.pulsar
+  version: v1
+  metadata:
+  - name: host
+    value: "perf-test-pulsar-broker.dapr-tests.svc.cluster.local:6650"
+
+---
+#redis pubsub component
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: redis-messagebus
+spec:
+  type: pubsub.redis
+  version: v1
+  metadata:
+  - name: redisHost
+    value: dapr-redis-master.dapr-tests.svc.cluster.local:6379
+  - name: redisPassword
+    value: ""

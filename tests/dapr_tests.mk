@@ -420,6 +420,18 @@ setup-test-env-kafka:
 setup-test-env-rabbitmq:
 	$(HELM) upgrade --install rabbitmq bitnami/rabbitmq --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
+# install mqtt to the cluster
+setup-test-env-mqtt:
+	$(HELM) repo add emqx https://repos.emqx.io/charts 
+	$(HELM) repo update
+	$(HELM) upgrade --install perf-test-emqx emqx/emqx --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+
+# install mqtt to the cluster
+setup-test-env-pulsar:
+	$(HELM) repo add apache https://pulsar.apache.org/charts
+	$(HELM) repo update
+	$(HELM) upgrade --install perf-test-pulsar apache/pulsar --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+
 # delete kafka from cluster
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)

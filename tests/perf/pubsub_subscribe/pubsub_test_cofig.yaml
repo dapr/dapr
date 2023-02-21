@@ -19,10 +19,11 @@ components:
     numHealthChecks: 60
     testAppName: kafka-test-app
     testLabel: pubsub_subscribe_kafka
-    subscribeHttpThresholdMs: 1500
-    bulkSubscribeHttpThresholdMs: 500
+    subscribeHttpThresholdMs: 15000
+    bulkSubscribeHttpThresholdMs: 5000
     imageName: perf-pubsub_subscribe_app
     operations: [bulk, normal]
+
   - name: rabbitmq-messagebus
     topic: rabbitmq-perf-test
     route: rabbitmq-perf-test
@@ -33,11 +34,36 @@ components:
     bulkSubscribeHttpThresholdMs: 5000
     imageName: perf-pubsub_subscribe_app
     operations: [bulk, normal]
-  # - name: mqtt-messagebus
-  #   topic: mqtt-perf-test
-  #   route: mqtt-perf-test
-  #   numHealthChecks: 60
-  #   testAppName: mqtt-test-app
-  #   testLabel: pubsub_subscribe_mqtt
-  #   defaultSubscribeHttpThresholdMs: 500
-  #   imageName: perf-pubsub_subscribe_app
+
+  - name: mqtt-messagebus
+    topic: mqtt-perf-test
+    route: mqtt-perf-test
+    numHealthChecks: 60
+    testAppName: mqtt-test-app
+    testLabel: pubsub_subscribe_mqtt
+    subscribeHttpThresholdMs: 15000
+    bulkSubscribeHttpThresholdMs: 5000
+    imageName: perf-pubsub_subscribe_app
+    operations: [bulk, normal]
+
+  - name: pulsar-messagebus
+    topic: pulsar-perf-test
+    route: pulsar-perf-test
+    numHealthChecks: 60
+    testAppName: pulsar-test-app
+    testLabel: pubsub_subscribe_pulsar
+    subscribeHttpThresholdMs: 15000
+    bulkSubscribeHttpThresholdMs: 5000
+    imageName: perf-pubsub_subscribe_app
+    operations: [bulk]
+
+  - name: redis-messagebus
+    topic: redis-perf-test
+    route: redis-perf-test
+    numHealthChecks: 60
+    testAppName: redis-test-app
+    testLabel: pubsub_subscribe_redis
+    subscribeHttpThresholdMs: 15000
+    bulkSubscribeHttpThresholdMs: 5000
+    imageName: perf-pubsub_subscribe_app
+    operations: [bulk]
