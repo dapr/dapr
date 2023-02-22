@@ -235,7 +235,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal setup-test-env-rabbitmq
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt setup-test-env-pulsar
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -463,7 +463,7 @@ delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin setup-test-env-rabbitmq
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt setup-test-env-pulsar
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'

@@ -19,8 +19,8 @@ components:
     numHealthChecks: 60
     testAppName: kafka-test-app
     testLabel: pubsub_subscribe_kafka
-    subscribeHttpThresholdMs: 15000
-    bulkSubscribeHttpThresholdMs: 5000
+    subscribeHttpThresholdMs: 1500
+    bulkSubscribeHttpThresholdMs: 500
     imageName: perf-pubsub_subscribe_app
     operations: [bulk, normal]
 
@@ -30,8 +30,8 @@ components:
     numHealthChecks: 60
     testAppName: rabbitmq-test-app
     testLabel: pubsub_subscribe_rabbitmq
-    subscribeHttpThresholdMs: 150000
-    bulkSubscribeHttpThresholdMs: 50000
+    subscribeHttpThresholdMs: 1500
+    bulkSubscribeHttpThresholdMs: 500
     imageName: perf-pubsub_subscribe_app
     operations: [normal]
 
@@ -41,8 +41,8 @@ components:
     numHealthChecks: 60
     testAppName: mqtt-test-app
     testLabel: pubsub_subscribe_mqtt
-    subscribeHttpThresholdMs: 15000
-    bulkSubscribeHttpThresholdMs: 5000
+    subscribeHttpThresholdMs: 1500
+    bulkSubscribeHttpThresholdMs: 500
     imageName: perf-pubsub_subscribe_app
     operations: [bulk, normal]
 
@@ -52,8 +52,8 @@ components:
     numHealthChecks: 60
     testAppName: pulsar-test-app
     testLabel: pubsub_subscribe_pulsar
-    subscribeHttpThresholdMs: 15000
-    bulkSubscribeHttpThresholdMs: 5000
+    subscribeHttpThresholdMs: 1500
+    bulkSubscribeHttpThresholdMs: 500
     imageName: perf-pubsub_subscribe_app
     operations: [bulk, normal]
 
@@ -63,7 +63,7 @@ components:
     numHealthChecks: 60
     testAppName: redis-test-app
     testLabel: pubsub_subscribe_redis
-    subscribeHttpThresholdMs: 15000
-    bulkSubscribeHttpThresholdMs: 5000
+    subscribeHttpThresholdMs: 1500
+    bulkSubscribeHttpThresholdMs: 500
     imageName: perf-pubsub_subscribe_app
     operations: [bulk, normal]
