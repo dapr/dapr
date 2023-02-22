@@ -122,7 +122,7 @@ func TestGetActorState(t *testing.T) {
 	})
 
 	t.Run("Get actor state - OK", func(t *testing.T) {
-		data := []byte("{ \"data\": 123 }")
+		data := []byte(`{ "data": 123 }`)
 		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",

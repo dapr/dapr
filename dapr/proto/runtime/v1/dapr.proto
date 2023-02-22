@@ -243,7 +243,7 @@ message SaveStateRequest {
 // QueryStateRequest is the message to query state store.
 message QueryStateRequest {
   // The name of state store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The query in JSON format.
   string query = 2;

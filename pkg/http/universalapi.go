@@ -38,6 +38,9 @@ type UniversalFastHTTPHandlerOpts[T proto.Message, U proto.Message] struct {
 	// The response could be a proto object (which will be serialized with protojson) or any other object (serialized with the standard JSON package). If the response is nil, a 204 (no content) response is sent to the client, with no data in the body.
 	// NOTE: Newly-implemented APIs should ensure that on the HTTP endpoint the response matches the protos to offer a consistent experience, and should NOT modify the output before it's sent to the client.
 	OutModifier func(out U) (any, error)
+
+	// If true, skips parsing the body of the request in the input proto.
+	SkipInputBody bool
 }
 
 // UniversalFastHTTPHandler wraps a UniversalAPI method into a FastHTTP handler.
@@ -53,17 +56,21 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 	}
 
 	return func(reqCtx *fasthttp.RequestCtx) {
-		// Read the response body and decode it as JSON using protojson
-		body := reqCtx.PostBody()
 		// Need to use some reflection magic to allocate a value for the pointer of the generic type T
 		in := reflect.New(rt).Interface().(T)
-		if len(body) > 0 {
-			err := pjsonDec.Unmarshal(body, in)
-			if err != nil {
-				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-				log.Debug(msg)
-				return
+
+		// Parse the body as JSON
+		if !opts.SkipInputBody {
+			// Read the response body and decode it as JSON using protojson
+			body := reqCtx.PostBody()
+			if len(body) > 0 {
+				err := pjsonDec.Unmarshal(body, in)
+				if err != nil {
+					msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+					respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+					log.Debug(msg)
+					return
+				}
 			}
 		}
 
