@@ -87,7 +87,7 @@ var endpoints = map[string][]string{
 }
 
 // Returns the middlewares (unary and stream) for supporting API allowlist
-func setAPIEndpointsMiddlewares(allowedRules []config.APIAccessRule, deniedRules []config.APIAccessRule) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
+func setAPIEndpointsMiddlewares(allowedRules config.APIAccessRules, deniedRules config.APIAccessRules) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
 	allowed := apiAccessRuleToMap(allowedRules)
 	denied := apiAccessRuleToMap(deniedRules)
 
@@ -132,7 +132,7 @@ func setAPIEndpointsMiddlewares(allowedRules []config.APIAccessRule, deniedRules
 }
 
 // Converts a slice of config.APIAccessRule into a map where the key is the gRPC full endpoint
-func apiAccessRuleToMap(rules []config.APIAccessRule) map[string]struct{} {
+func apiAccessRuleToMap(rules config.APIAccessRules) map[string]struct{} {
 	res := map[string]struct{}{}
 
 	for _, rule := range rules {

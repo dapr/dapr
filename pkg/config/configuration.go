@@ -129,9 +129,9 @@ type PipelineSpec struct {
 // APISpec describes the configuration for Dapr APIs.
 type APISpec struct {
 	// List of allowed APIs. Can be used in conjunction with Denied.
-	Allowed []APIAccessRule `json:"allowed,omitempty"`
+	Allowed APIAccessRules `json:"allowed,omitempty"`
 	// List of disallowed APIs. Can be used in conjunction with Allowed.
-	Denied []APIAccessRule `json:"denied,omitempty"`
+	Denied APIAccessRules `json:"denied,omitempty"`
 }
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
@@ -139,6 +139,22 @@ type APIAccessRule struct {
 	Name     string `json:"name"`
 	Version  string `json:"version"`
 	Protocol string `json:"protocol"`
+}
+
+// APIAccessRules is a list of API access rules (allowlist or denylist).
+type APIAccessRules []APIAccessRule
+
+// ForProtocol returns a list of APIAccessRule objects filtered by protocol
+func (r APIAccessRules) ForProtocol(protocol string) []APIAccessRule {
+	res := make([]APIAccessRule, len(r))
+	n := 0
+	for _, v := range r {
+		if v.Protocol == protocol {
+			res[n] = v
+			n++
+		}
+	}
+	return res[:n]
 }
 
 type HandlerSpec struct {

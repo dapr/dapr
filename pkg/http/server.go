@@ -335,8 +335,13 @@ func (s *server) unescapeRequestParametersHandler(next fasthttp.RequestHandler) 
 func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 	router := routing.New()
 	parameterFinder, _ := regexp.Compile("/{.*}")
+
+	// Build the API allowlist and denylist
+	allowedAPIs := s.apiSpec.Allowed.ForProtocol("http")
+	deniedAPIs := s.apiSpec.Denied.ForProtocol("http")
+
 	for _, e := range endpoints {
-		if !s.endpointAllowed(e) {
+		if !e.IsAllowed(allowedAPIs, deniedAPIs) {
 			continue
 		}
 
@@ -366,25 +371,4 @@ func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string,
 
 		router.Handle(m, path, handler)
 	}
-}
-
-func (s *server) endpointAllowed(endpoint Endpoint) bool {
-	var httpRules []config.APIAccessRule
-
-	for _, rule := range s.apiSpec.Allowed {
-		if rule.Protocol == "http" {
-			httpRules = append(httpRules, rule)
-		}
-	}
-	if len(httpRules) == 0 {
-		return true
-	}
-
-	for _, rule := range httpRules {
-		if (strings.HasPrefix(endpoint.Route, rule.Name) && endpoint.Version == rule.Version) || endpoint.AlwaysAllowed {
-			return true
-		}
-	}
-
-	return false
 }
