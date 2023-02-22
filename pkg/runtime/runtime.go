@@ -408,6 +408,10 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 		tpStore.RegisterExporter(otelExporter)
 	}
 
+	if !tpStore.HasExporter() && tracingSpec.SamplingRate != "" {
+		tpStore.RegisterExporter(diagUtils.NewNullExporter())
+	}
+
 	// Register a resource
 	r := resource.NewWithAttributes(
 		semconv.SchemaURL,
