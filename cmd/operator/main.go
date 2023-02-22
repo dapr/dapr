@@ -20,14 +20,13 @@ import (
 
 	"k8s.io/klog"
 
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
+	"github.com/dapr/kit/logger"
 )
 
 var (
