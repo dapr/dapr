@@ -128,7 +128,10 @@ type PipelineSpec struct {
 
 // APISpec describes the configuration for Dapr APIs.
 type APISpec struct {
+	// List of allowed APIs. Can be used in conjunction with Denied.
 	Allowed []APIAccessRule `json:"allowed,omitempty"`
+	// List of disallowed APIs. Can be used in conjunction with Allowed.
+	Denied []APIAccessRule `json:"denied,omitempty"`
 }
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
