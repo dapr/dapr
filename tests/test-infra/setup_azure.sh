@@ -25,6 +25,7 @@ fi
 # Control if we're using Cosmos DB
 USE_COSMOSDB=${1:-true}
 USE_SERVICEBUS=${2:-true}
+USE_RABBITMQ=${3:-true}
 
 if $USE_COSMOSDB ; then
   echo "Configuring Cosmos DB as state store"
@@ -78,4 +79,17 @@ if $USE_SERVICEBUS ; then
     --from-literal=connectionString=${SERVICEBUS_CONNSTRING}
 else
   echo "NOT configuring Service Bus as pubsub store"
+fi
+
+if $USE_RABBITMQ ; then
+  echo "Configuring RabbitMQ as pubsub component"
+
+  # Get the credentials for RabbitMQ
+  RABBITMQ_PWD=$(kubectl get secret --namespace dapr-tests rabbitmq -o jsonpath="{.data.rabbitmq-password}" | base64 -d)
+
+  kubectl create secret generic rabbitmq-secret \
+    --namespace=$DAPR_NAMESPACE \
+    --from-literal=connectionString="amqp://user:${RABBITMQ_PWD}@rabbitmq.dapr-tests.svc.cluster.local:5672"
+else
+  echo "NOT configuring RabbitMQ"
 fi
