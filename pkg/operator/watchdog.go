@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/injector/sidecar"
@@ -49,6 +50,20 @@ type DaprWatchdog struct {
 // Implements sigs.k8s.io/controller-runtime/pkg/manager.LeaderElectionRunnable .
 func (dw *DaprWatchdog) NeedLeaderElection() bool {
 	return true
+}
+
+// GetWatchdogLimitedCacheForPods creates a cache that limits what Pods are retrieved in the List Watch
+// All other GVKs will retrieve the regular set (ie all, unless manager is set to a specific namespace)
+func GetWatchdogLimitedCacheForPods() cache.NewCacheFunc {
+	podSelector := getSideCarInjectedNotExistsSelector()
+	return cache.BuilderWithOptions(cache.Options{
+		SelectorsByObject: cache.SelectorsByObject{
+			&corev1.Pod{}: {
+				// For Pods only cache non injected and non-watchdog-patched pods
+				Label: podSelector,
+			},
+		},
+	})
 }
 
 // Start the controller. This method blocks until the context is canceled.

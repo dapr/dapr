@@ -97,6 +97,7 @@ func NewOperator(opts Options) Operator {
 		LeaderElection:     opts.LeaderElection,
 		LeaderElectionID:   "operator.dapr.io",
 		Namespace:          opts.WatchNamespace,
+		NewCache:           GetWatchdogLimitedCacheForPods(),
 	})
 	if err != nil {
 		log.Fatalf("Unable to start manager, err: %s", err)
