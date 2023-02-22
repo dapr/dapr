@@ -30,6 +30,7 @@ type tracerProviderStore interface {
 	RegisterResource(res *resource.Resource)
 	RegisterSampler(sampler sdktrace.Sampler)
 	RegisterTracerProvider() *sdktrace.TracerProvider
+	HasExporter() bool
 }
 
 // newOpentelemetryTracerProviderStore returns an opentelemetryOptionsStore
@@ -48,6 +49,11 @@ type opentelemetryTracerProviderStore struct {
 // RegisterExporter adds a Span Exporter for registration with open telemetry global trace provider
 func (s *opentelemetryTracerProviderStore) RegisterExporter(exporter sdktrace.SpanExporter) {
 	s.exporters = append(s.exporters, exporter)
+}
+
+// HasExporter returns whether at least one Span Exporter has been registered
+func (s *opentelemetryTracerProviderStore) HasExporter() bool {
+	return len(s.exporters) > 0
 }
 
 // RegisterResource adds a Resource for registration with open telemetry global trace provider
@@ -117,3 +123,8 @@ func (s *fakeTracerProviderStore) RegisterSampler(sampler sdktrace.Sampler) {
 
 // RegisterTraceProvider does nothing
 func (s *fakeTracerProviderStore) RegisterTracerProvider() *sdktrace.TracerProvider { return nil }
+
+// HasExporter returns whether at least one Span Exporter has been registered
+func (s *fakeTracerProviderStore) HasExporter() bool {
+	return len(s.exporters) > 0
+}
