@@ -408,7 +408,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 
 			// Read the next chunk
 			readErr = stream.RecvMsg(chunk)
-			if readErr == io.EOF {
+			if errors.Is(readErr, io.EOF) {
 				// Receiving an io.EOF signifies that the client has stopped sending data over the pipe, so we can stop reading
 				break
 			} else if readErr != nil {
