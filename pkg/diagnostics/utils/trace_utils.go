@@ -61,6 +61,24 @@ func (e *StdoutExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// NullExporter implements an open telemetry span exporter that discards all telemetry.
+type NullExporter struct{}
+
+// NewNullExporter returns a NullExporter
+func NewNullExporter() *NullExporter {
+	return &NullExporter{}
+}
+
+// ExportSpans implements the open telemetry span exporter interface.
+func (e *NullExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	return nil
+}
+
+// Shutdown implements the open telemetry span exporter interface.
+func (e *NullExporter) Shutdown(ctx context.Context) error {
+	return nil
+}
+
 // GetTraceSamplingRate parses the given rate and returns the parsed rate.
 func GetTraceSamplingRate(rate string) float64 {
 	f, err := strconv.ParseFloat(rate, 64)
