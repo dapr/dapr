@@ -51,7 +51,7 @@ func createMockPods(n, daprized, injected, daprdPresent int) (pods []*corev1.Pod
 				Annotations: make(map[string]string),
 			},
 			Spec: corev1.PodSpec{
-				Containers: []corev1.Container{{Name: "my-app"}},
+				Containers: []corev1.Container{{Name: "my-app", Image: "quay.io/prometheus/busybox-linux-arm64", Args: []string{"sh", "-c", "sleep 3600"}}},
 			},
 			Status: corev1.PodStatus{},
 		}
@@ -63,8 +63,10 @@ func createMockPods(n, daprized, injected, daprdPresent int) (pods []*corev1.Pod
 		}
 		if i < daprdPresent {
 			pods[i].Spec.Containers = append(pods[i].Spec.Containers, corev1.Container{
-				Name: sidecarContainerName,
-			})
+				Name:  sidecarContainerName,
+				Image: "quay.io/prometheus/busybox-linux-arm64", Args: []string{"sh", "-c", "sleep 3600"},
+			},
+			)
 		}
 	}
 	return pods
@@ -76,25 +78,25 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 
 	t.Run("injectorNotPresent", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects().Build()
-		dw := &DaprWatchdog{client: ctlClient, nonCachedClient: ctlClient}
+		dw := &DaprWatchdog{client: ctlClient}
 		require.False(t, dw.listPods(ctx, nil))
 	})
 
 	t.Run("injectorPresentNoReplicas", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(0)).Build()
-		dw := &DaprWatchdog{client: ctlClient, nonCachedClient: ctlClient}
+		dw := &DaprWatchdog{client: ctlClient}
 		require.False(t, dw.listPods(ctx, nil))
 	})
 
 	t.Run("noPods", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, nonCachedClient: ctlClient}
+		dw := &DaprWatchdog{client: ctlClient}
 		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
 	})
 
 	t.Run("noPodsWithAnnotations", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, nonCachedClient: ctlClient}
+		dw := &DaprWatchdog{client: ctlClient}
 		pods := createMockPods(10, 0, 0, 0)
 		for _, pod := range pods {
 			require.NoError(t, ctlClient.Create(ctx, pod))
@@ -107,7 +109,7 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 	})
 	t.Run("noInjectedPods", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, nonCachedClient: ctlClient}
+		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl}
 		daprized := 5
 		var injected, running int
 		pods := createMockPods(10, daprized, injected, running)
@@ -116,11 +118,11 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 		}
 		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
 		t.Log("daprized pods should be deleted")
-		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running)
+		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
 	})
 	t.Run("noInjectedPodsSomeRunning", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, nonCachedClient: ctlClient}
+		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl}
 		daprized := 5
 		running := 2
 		var injected int
@@ -130,11 +132,11 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 		}
 		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
 		t.Log("daprized pods should be deleted except those running")
-		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running)
+		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
 	})
 	t.Run("someInjectedPodsWatchdogCannotPatch", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, nonCachedClient: ctlClient}
+		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl}
 		daprized := 5
 		running := 1
 		injected := 3
@@ -144,38 +146,42 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 		}
 		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
 		t.Log("daprized pods should be deleted except those running")
-		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running)
-		assertExpectedPodsPatched(t, ctlClient, ctx, 0)
+		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
+		assertExpectedPodsPatched(t, ctlClient, ctx, 0) // not expecting any patched pods as all pods with sidecar already have the injected label
 	})
 	t.Run("someInjectedPodsWatchdogCanPatch", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, nonCachedClient: ctlClient, canPatchPodLabels: true}
+		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, canPatchPodLabels: true}
 		daprized := 5
-		running := 1
-		injected := 3
+		running := 3
+		injected := 1
 		pods := createMockPods(10, daprized, injected, running)
 		for _, pod := range pods {
 			require.NoError(t, ctlClient.Create(ctx, pod))
 		}
 		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
 		t.Log("daprized pods should be deleted except those running")
-		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running)
-		assertExpectedPodsPatched(t, ctlClient, ctx, running)
+		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
+		assertExpectedPodsPatched(t, ctlClient, ctx, 2) // expecting 2, as we have 3 with sidecar but only one with label injected
 	})
 }
 
 // assertExpectedPodsPatched check that we have patched the pods that did not have the label when the watchdog can patch pods
-func assertExpectedPodsPatched(t *testing.T, ctlClient client.WithWatch, ctx context.Context, expectedPatchPods int) {
+func assertExpectedPodsPatched(t *testing.T, ctlClient client.Reader, ctx context.Context, expectedPatchPods int) {
 	objList := corev1.PodList{}
 	require.NoError(t, ctlClient.List(ctx, &objList, client.MatchingLabels{watchdogPatchedLabel: "true"}))
 	require.Len(t, objList.Items, expectedPatchPods)
 }
 
 // assertExpectedPodsDeleted
-func assertExpectedPodsDeleted(t *testing.T, pods []*corev1.Pod, ctlClient client.WithWatch, ctx context.Context, daprized int, running int) {
+func assertExpectedPodsDeleted(t *testing.T, pods []*corev1.Pod, ctlClient client.Reader, ctx context.Context, daprized int, running int, injected int) {
 	for i, pod := range pods {
 		err := ctlClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{})
-		if i < daprized && i >= running {
+		injectedOrRunning := running
+		if injected > injectedOrRunning {
+			injectedOrRunning = injected
+		}
+		if i < daprized && i >= injectedOrRunning {
 			require.Error(t, err)
 			require.True(t, apierrors.IsNotFound(err))
 		} else {
@@ -251,13 +257,12 @@ func TestDaprWatchdog_Start(t *testing.T) {
 	dw := &DaprWatchdog{
 		client:            ctlClient,
 		maxRestartsPerMin: 0,
-		nonCachedClient:   ctlClient,
 		canPatchPodLabels: true,
 		interval:          200 * time.Millisecond,
 	}
 	daprized := 5
-	running := 1
-	injected := 3
+	running := 3
+	injected := 1
 	pods := createMockPods(10, daprized, injected, running)
 	for _, pod := range pods {
 		require.NoError(t, ctlClient.Create(ctx, pod))
@@ -277,7 +282,7 @@ func TestDaprWatchdog_Start(t *testing.T) {
 	<-startDone
 
 	t.Log("daprized pods should be deleted except those running")
-	assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running)
+	assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
 	t.Log("daprized pods with sidecar should have been patched")
-	assertExpectedPodsPatched(t, ctlClient, ctx, running)
+	assertExpectedPodsPatched(t, ctlClient, ctx, 2)
 }

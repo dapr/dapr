@@ -110,7 +110,6 @@ func NewOperator(opts Options) Operator {
 		}
 		wd := &DaprWatchdog{
 			client:            mgrClient,
-			nonCachedClient:   mgr.GetAPIReader(),
 			interval:          opts.WatchdogInterval,
 			maxRestartsPerMin: opts.WatchdogMaxRestartsPerMin,
 			canPatchPodLabels: opts.WatchdogCanPatchPodLabels,

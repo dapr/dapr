@@ -25,10 +25,12 @@ const (
 	watchdogPatchedLabel          = "dapr.io/watchdog-patched"
 )
 
+// service timers, using var to be able to mock their values in tests
 var (
-	// service timers, using var to be able to mock their values in tests
+	// minimum amount of time that interval should be to not execute this only once
 	singleIterationDurationThreshold = time.Second
-	sidecarInjectorWaitInterval      = 5 * time.Second // How long to wait for the sidecar injector deployment to be up and running before retrying
+	// How long to wait for the sidecar injector deployment to be up and running before retrying
+	sidecarInjectorWaitInterval = 5 * time.Second
 )
 
 // DaprWatchdog is a controller that periodically polls all pods and ensures that they are in the correct state.
@@ -39,7 +41,6 @@ type DaprWatchdog struct {
 	maxRestartsPerMin int
 
 	client            client.Client
-	nonCachedClient   client.Reader
 	restartLimiter    ratelimit.Limiter
 	canPatchPodLabels bool
 }
@@ -105,11 +106,11 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 
 	log.Infof("DaprWatchdog worker started")
 
-	workCh <- struct{}{}
 	// Start an iteration right away, at startup
+	workCh <- struct{}{}
 	// Wait for completion of first iteration
 	select {
-	case <-ctx.Done(): // in case context Done on first iteration to not get stuck waiting for sigkill on channel to close
+	case <-ctx.Done(): // in case context Done, as first iteration can get stuck, and the channel would not be closed
 		return nil
 	case <-firstCompleteCh:
 	}
@@ -152,13 +153,12 @@ func getSideCarInjectedNotExistsSelector() labels.Selector {
 	if err != nil {
 		log.Fatalf("Unable to add label requirement to find pods with Injector created label , err: %s", err)
 	}
-	sel.Add(*req)
+	sel = sel.Add(*req)
 	req, err = labels.NewRequirement(watchdogPatchedLabel, selection.DoesNotExist, []string{})
 	if err != nil {
 		log.Fatalf("Unable to add label requirement to find pods with Watchdog created label , err: %s", err)
 	}
-	sel.Add(*req)
-	return sel
+	return sel.Add(*req)
 }
 
 func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLabelSelector labels.Selector) bool {
@@ -219,13 +219,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 	// let's now get more detail pod information from those pods with the annotation we found on our previous check
 	for _, podNamespaceName := range podsMaybeMissingSidecar {
 		pod := corev1.Pod{}
-		// get pod that might be missing sidecar. we are using the non-cached client if we know we can patch as
-		// we'll know that the next time we will probably not get back here as the list watch should have removed it
-		cl := dw.client.(client.Reader)
-		if dw.canPatchPodLabels {
-			cl = dw.nonCachedClient
-		}
-		if err = cl.Get(ctx, podNamespaceName, &pod); err != nil {
+		if err = dw.client.Get(ctx, podNamespaceName, &pod); err != nil {
 			continue
 		}
 
