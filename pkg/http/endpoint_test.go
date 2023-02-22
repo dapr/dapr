@@ -478,10 +478,41 @@ func TestAPIAllowlist(t *testing.T) {
 		}
 	})
 
-	t.Run("router handler mismatch protocol, all handlers exist", func(t *testing.T) {
+	t.Run("allowlist router handler mismatch protocol, all handlers exist", func(t *testing.T) {
 		s := server{
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
+					{
+						Name:     "state",
+						Version:  "v1.0",
+						Protocol: "grpc",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.APIEndpoints()
+
+		router := s.getRouter(eps)
+		r := &fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+		}
+
+		for _, e := range eps {
+			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
+			for _, m := range e.Methods {
+				handler, ok := router.Lookup(m, path, r)
+				assert.NotNil(t, handler)
+				assert.True(t, ok)
+			}
+		}
+	})
+
+	t.Run("denylist router handler mismatch protocol, all handlers exist", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Denied: []config.APIAccessRule{
 					{
 						Name:     "state",
 						Version:  "v1.0",
