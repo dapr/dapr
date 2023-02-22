@@ -900,6 +900,12 @@ func TestSetupTracing(t *testing.T) {
 		name:          "no trace exporter",
 		tracingConfig: config.TracingSpec{},
 	}, {
+		name: "sampling rate 1 without trace exporter",
+		tracingConfig: config.TracingSpec{
+			SamplingRate: "1",
+		},
+		expectedExporters: []sdktrace.SpanExporter{&diagUtils.NullExporter{}},
+	}, {
 		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
 			Zipkin: config.ZipkinSpec{
@@ -972,6 +978,9 @@ func TestSetupTracing(t *testing.T) {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.Nil(t, err)
+			}
+			if len(tc.expectedExporters) > 0 {
+				assert.True(t, tpStore.HasExporter())
 			}
 			for i, exporter := range tpStore.exporters {
 				// Exporter types don't expose internals, so we can only validate that
