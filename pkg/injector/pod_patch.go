@@ -114,7 +114,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
 		RunAsNonRoot:                 i.config.GetRunAsNonRoot(),
 		ReadOnlyRootFilesystem:       i.config.GetReadOnlyRootFilesystem(),
-		DropCapabilities:             i.config.GetDropCapabilities(),
+		SidecarDropALLCapabilities:   i.config.GetDropCapabilities(),
 	})
 	if err != nil {
 		return nil, err

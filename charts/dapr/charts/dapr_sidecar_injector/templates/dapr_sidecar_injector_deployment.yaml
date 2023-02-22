@@ -147,8 +147,8 @@ spec:
 {{- end }}
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: "{{ .Values.sidecarRunAsNonRoot }}"
-        - name: DROP_CAPABILITIES
-          value: "{{ .Values.dropCapabilities }}"
+        - name: SIDECAR_DROP_ALL_CAPABILITIES
+          value: "{{ .Values.sidecarDropALLCapabilities }}"
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
           value: "{{ .Values.sidecarReadOnlyRootFilesystem }}"
 {{- if .Values.allowedServiceAccounts }}

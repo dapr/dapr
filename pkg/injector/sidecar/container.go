@@ -53,7 +53,7 @@ type ContainerConfig struct {
 	ComponentsSocketsVolumeMount *corev1.VolumeMount
 	RunAsNonRoot                 bool
 	ReadOnlyRootFilesystem       bool
-	DropCapabilities             bool
+	SidecarDropALLCapabilities   bool
 }
 
 var (
@@ -205,7 +205,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		securityContext.SeccompProfile = &corev1.SeccompProfile{Type: corev1.SeccompProfileType(seccompProfileType)}
 	}
 
-	if cfg.DropCapabilities {
+	if cfg.SidecarDropALLCapabilities {
 		securityContext.Capabilities = &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
 	}
 

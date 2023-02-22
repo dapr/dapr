@@ -34,7 +34,7 @@ type Config struct {
 	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
 	RunAsNonRoot                string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
 	ReadOnlyRootFilesystem      string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
-	DropCapabilities            string `envconfig:"DROP_CAPABILITIES"`
+	SidecarDropALLCapabilities  string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }
@@ -108,10 +108,10 @@ func (c *Config) GetReadOnlyRootFilesystem() bool {
 
 func (c *Config) GetDropCapabilities() bool {
 	// Default is true if empty
-	if c.DropCapabilities == "" {
+	if c.SidecarDropALLCapabilities == "" {
 		return true
 	}
-	return utils.IsTruthy(c.DropCapabilities)
+	return utils.IsTruthy(c.SidecarDropALLCapabilities)
 }
 
 func (c *Config) parseTolerationsJSON() {

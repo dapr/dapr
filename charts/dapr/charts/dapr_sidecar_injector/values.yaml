@@ -22,7 +22,7 @@ sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
-dropCapabilities: true
+sidecarDropALLCapabilities: true
 allowedServiceAccounts: ""
 resources: {}
 kubeClusterDomain: cluster.local
