@@ -79,7 +79,7 @@ func Test_RunnerManager(t *testing.T) {
 				atomic.AddInt32(&i, 1)
 				return errors.New("error")
 			},
-		).Run(context.Background()), errors.New("error; error; error"))
+		).Run(context.Background()), errors.New("error; error; error")) //nolint:dupword
 		assert.Equal(t, int32(3), i)
 	})
 
