@@ -33,7 +33,7 @@ type mockSecretStore struct {
 	secondaryKey string
 }
 
-func (m *mockSecretStore) Init(metadata secretstores.Metadata) error {
+func (m *mockSecretStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
 	if val, ok := metadata.Properties["primaryKey"]; ok {
 		m.primaryKey = val
 	}
@@ -92,7 +92,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 		secondaryKey := hex.EncodeToString(bytes[:16]) // 128-bit key
 
 		secretStore := &mockSecretStore{}
-		secretStore.Init(secretstores.Metadata{Base: metadata.Base{
+		secretStore.Init(context.Background(), secretstores.Metadata{Base: metadata.Base{
 			Properties: map[string]string{
 				"primaryKey":   primaryKey,
 				"secondaryKey": secondaryKey,
@@ -156,7 +156,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 func TestTryGetEncryptionKeyFromMetadataItem(t *testing.T) {
 	t.Run("no secretRef on valid item", func(t *testing.T) {
 		secretStore := &mockSecretStore{}
-		secretStore.Init(secretstores.Metadata{Base: metadata.Base{
+		secretStore.Init(context.Background(), secretstores.Metadata{Base: metadata.Base{
 			Properties: map[string]string{
 				"primaryKey":   "123",
 				"secondaryKey": "456",

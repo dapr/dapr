@@ -15,12 +15,15 @@ package messaging
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -153,11 +156,17 @@ func TestInvokeRemote(t *testing.T) {
 	log.SetOutputLevel(logger.FatalLevel)
 	defer log.SetOutputLevel(logger.InfoLevel)
 
+	socketDir := t.TempDir()
+
 	prepareEnvironment := func(t *testing.T, enableStreaming bool, chunks []string) (*directMessaging, func()) {
-		port, err := freeport.GetFreePort()
+		// Generate a random file name
+		name := make([]byte, 8)
+		_, err := io.ReadFull(rand.Reader, name)
 		require.NoError(t, err)
-		server := startInternalServer(port, enableStreaming, chunks)
-		clientConn := createTestClient(port)
+
+		socket := filepath.Join(socketDir, hex.EncodeToString(name))
+		server := startInternalServer(socket, enableStreaming, chunks)
+		clientConn := createTestClient(socket)
 
 		messaging := NewDirectMessaging(NewDirectMessagingOpts{
 			MaxRequestBodySize: 10 << 20,
@@ -295,14 +304,17 @@ func TestInvokeRemote(t *testing.T) {
 	})
 }
 
-func createTestClient(port int) *grpc.ClientConn {
+func createTestClient(socket string) *grpc.ClientConn {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	conn, err := grpc.DialContext(
 		ctx,
-		fmt.Sprintf("localhost:%d", port),
+		socket,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
+		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+			return net.Dial("unix", addr)
+		}),
 	)
 	if err != nil {
 		panic(err)
@@ -310,8 +322,8 @@ func createTestClient(port int) *grpc.ClientConn {
 	return conn
 }
 
-func startInternalServer(port int, enableStreaming bool, chunks []string) *grpc.Server {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func startInternalServer(socket string, enableStreaming bool, chunks []string) *grpc.Server {
+	lis, _ := net.Listen("unix", socket)
 
 	server := grpc.NewServer()
 

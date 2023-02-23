@@ -172,7 +172,7 @@ type MockKubernetesStateStore struct {
 	callback func()
 }
 
-func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
+func (m *MockKubernetesStateStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
 	if m.callback != nil {
 		m.callback()
 	}
@@ -349,7 +349,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// setup
 		ctrl := gomock.NewController(t)
 		mockLockStore := daprt.NewMockStore(ctrl)
-		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(assert.AnError)
+		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(assert.AnError)
 
 		rt.lockStoreRegistry.RegisterComponent(
 			func(_ logger.Logger) lock.Store {
@@ -393,7 +393,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// setup
 		ctrl := gomock.NewController(t)
 		mockLockStore := daprt.NewMockStore(ctrl)
-		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(nil)
+		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(nil)
 
 		rt.lockStoreRegistry.RegisterComponent(
 			func(_ logger.Logger) lock.Store {
@@ -421,7 +421,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// setup
 		ctrl := gomock.NewController(t)
 		mockLockStore := daprt.NewMockStore(ctrl)
-		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(nil)
+		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(nil)
 
 		rt.lockStoreRegistry.RegisterComponent(
 			func(_ logger.Logger) lock.Store {
@@ -900,6 +900,12 @@ func TestSetupTracing(t *testing.T) {
 		name:          "no trace exporter",
 		tracingConfig: config.TracingSpec{},
 	}, {
+		name: "sampling rate 1 without trace exporter",
+		tracingConfig: config.TracingSpec{
+			SamplingRate: "1",
+		},
+		expectedExporters: []sdktrace.SpanExporter{&diagUtils.NullExporter{}},
+	}, {
 		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
 			Zipkin: config.ZipkinSpec{
@@ -972,6 +978,9 @@ func TestSetupTracing(t *testing.T) {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.NoError(t, err)
+			}
+			if len(tc.expectedExporters) > 0 {
+				assert.True(t, tpStore.HasExporter())
 			}
 			for i, exporter := range tpStore.exporters {
 				// Exporter types don't expose internals, so we can only validate that
@@ -3705,7 +3714,7 @@ type mockSubscribePubSub struct {
 // type BulkSubscribeResponse struct {
 
 // Init is a mock initialization method.
-func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
+func (m *mockSubscribePubSub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	m.bulkHandlers = make(map[string]pubsub.BulkHandler)
 	m.handlers = make(map[string]pubsub.Handler)
 	m.pubCount = make(map[string]int)
@@ -4107,7 +4116,7 @@ type mockBinding struct {
 	closeErr    error
 }
 
-func (b *mockBinding) Init(metadata bindings.Metadata) error {
+func (b *mockBinding) Init(ctx context.Context, metadata bindings.Metadata) error {
 	return nil
 }
 
@@ -4525,7 +4534,7 @@ type mockPublishPubSub struct {
 }
 
 // Init is a mock initialization method.
-func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
+func (m *mockPublishPubSub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	return nil
 }
 
@@ -4905,7 +4914,7 @@ type mockPubSub struct {
 	closeErr error
 }
 
-func (p *mockPubSub) Init(metadata pubsub.Metadata) error {
+func (p *mockPubSub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	return nil
 }
 
@@ -4918,7 +4927,7 @@ type mockStateStore struct {
 	closeErr error
 }
 
-func (s *mockStateStore) Init(metadata state.Metadata) error {
+func (s *mockStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	return nil
 }
 
@@ -4941,7 +4950,7 @@ func (s *mockSecretStore) GetSecret(ctx context.Context, req secretstores.GetSec
 	}, nil
 }
 
-func (s *mockSecretStore) Init(metadata secretstores.Metadata) error {
+func (s *mockSecretStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
 	return nil
 }
 

@@ -79,8 +79,9 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "state",
-						Version: "v1",
+						Name:     "state",
+						Version:  "v1",
+						Protocol: "grpc",
 					},
 				},
 			},
@@ -136,7 +137,7 @@ func TestClose(t *testing.T) {
 	})
 }
 
-func Test_server_getGRPCAPILoggingInfo(t *testing.T) {
+func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog := logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
@@ -153,7 +154,7 @@ func Test_server_getGRPCAPILoggingInfo(t *testing.T) {
 		return nil, nil
 	}
 
-	logInterceptor := s.getGRPCAPILoggingInfo()
+	logInterceptor, _ := s.getGRPCAPILoggingMiddlewares()
 
 	runTest := func(userAgent string) func(t *testing.T) {
 		md := grpcMetadata.MD{}

@@ -98,7 +98,7 @@ func (_m *MockStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (
 }
 
 // Init provides a mock function with given fields: metadata
-func (_m *MockStateStore) Init(metadata state.Metadata) error {
+func (_m *MockStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	ret := _m.Called(metadata)
 
 	var r0 error
@@ -202,7 +202,7 @@ func (f *FailingStatestore) BulkGet(ctx context.Context, req []state.GetRequest)
 	return false, nil, nil
 }
 
-func (f *FailingStatestore) Init(metadata state.Metadata) error {
+func (f *FailingStatestore) Init(ctx context.Context, metadata state.Metadata) error {
 	return nil
 }
 
