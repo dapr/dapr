@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/credentials"
@@ -33,17 +33,15 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 	}
 
 	namespace := getNamespace()
-	secret := &v1.Secret{
-		Data: map[string][]byte{
-			credentials.RootCertFilename:   rootCertPem,
-			credentials.IssuerCertFilename: issuerCertPem,
-			credentials.IssuerKeyFilename:  issuerCertKey,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      consts.TrustBundleK8sSecretName,
-			Namespace: namespace,
-		},
-		Type: v1.SecretTypeOpaque,
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), consts.TrustBundleK8sSecretName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return fmt.Errorf("failed to get secret %w", err)
+	}
+
+	secret.Data = map[string][]byte{
+		credentials.RootCertFilename:   rootCertPem,
+		credentials.IssuerCertFilename: issuerCertPem,
+		credentials.IssuerKeyFilename:  issuerCertKey,
 	}
 
 	// We update and not create because sentry expects a secret to already exist

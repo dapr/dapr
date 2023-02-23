@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/state/postgresql"
-	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	"github.com/dapr/components-contrib/bindings/dubbo"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(postgresql.NewPostgreSQLStateStore, "postgresql")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(dubbo.NewDubboOutput, "dubbo", "alicloud.dubbo")
 }

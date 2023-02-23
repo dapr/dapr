@@ -15,7 +15,7 @@ type MockPubSub struct {
 }
 
 // Init is a mock initialization method.
-func (m *MockPubSub) Init(metadata pubsub.Metadata) error {
+func (m *MockPubSub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	args := m.Called(metadata)
 	return args.Error(0)
 }
@@ -67,7 +67,7 @@ func (f *FailingPubsub) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
 
-func (f *FailingPubsub) Init(metadata pubsub.Metadata) error {
+func (f *FailingPubsub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	return nil
 }
 
@@ -125,7 +125,7 @@ type subscription struct {
 }
 
 // Init is a mock initialization method.
-func (m *InMemoryPubsub) Init(metadata pubsub.Metadata) error {
+func (m *InMemoryPubsub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	m.lock = &sync.Mutex{}
 	args := m.Called(metadata)
 	return args.Error(0)

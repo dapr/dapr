@@ -19,5 +19,5 @@ import (
 )
 
 func init() {
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(postgres.NewPostgres, "postgres")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(postgres.NewPostgres, "postgres", "postgresql")
 }
