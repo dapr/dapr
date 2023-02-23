@@ -830,7 +830,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 		}
 		for _, tc := range testCases {
-
 			container, _ := GetSidecarContainer(ContainerConfig{
 				Annotations:                tc.an,
 				SidecarDropALLCapabilities: tc.dropCapabilities,
