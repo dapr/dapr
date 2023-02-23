@@ -90,9 +90,9 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs(testLabel)
 
 	//Read the config file for individual components
-	data, err := ioutil.ReadFile("pubsub_component_config.yaml")
+	data, err := ioutil.ReadFile("pubsub_component_test_config.yaml")
 	if err != nil {
-		fmt.Println("error reading pubsub_component_config.yaml: ", err)
+		fmt.Println("error reading pubsub_component_test_config.yaml: ", err)
 		return
 	}
 
