@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub_subscribe
+package pubsub_subscribe_http
 
 import (
 	"encoding/json"
