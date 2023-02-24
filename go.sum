@@ -813,8 +813,8 @@ github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a h1:yDWHCSQ40h88yi
 github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a/go.mod h1:7Ga40egUymuWXxAe151lTNnCv97MddSOVsjpPPkityA=
 github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5 h1:M4CVMQ5ueVmGZAtkW2bsO+ftesCYpfxl27JTqtzKBzE=
 github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5/go.mod h1:MQXNGeXkpojWTxbN7vXoE3f7EmlA11MlJbsrJpVBINA=
-github.com/fasthttp/router v1.4.15 h1:ERaILezYX6ks1I+Z2v5qY4vqiQKnujauo9nV6M+HIOg=
-github.com/fasthttp/router v1.4.15/go.mod h1:NFNlTCilbRVkeLc+E5JDkcxUdkpiJGKDL8Zy7Ey2JTI=
+github.com/fasthttp/router v1.4.16 h1:faWJ9OtaHvAtodreyQLps58M80YFNzphMJtOJzeESXs=
+github.com/fasthttp/router v1.4.16/go.mod h1:NFNlTCilbRVkeLc+E5JDkcxUdkpiJGKDL8Zy7Ey2JTI=
 github.com/fastly/go-utils v0.0.0-20180712184237-d95a45783239/go.mod h1:Gdwt2ce0yfBxPvZrHkprdPPTTS3N5rwmLE8T22KBXlw=
 github.com/fatih/camelcase v1.0.0/go.mod h1:yN2Sb0lFhZJUdVvtELVWefmrXpuZESvPmqwoZc+/fpc=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
