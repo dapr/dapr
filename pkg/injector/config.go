@@ -107,10 +107,7 @@ func (c *Config) GetReadOnlyRootFilesystem() bool {
 }
 
 func (c *Config) GetDropCapabilities() bool {
-	// Default is true if empty
-	if c.SidecarDropALLCapabilities == "" {
-		return false
-	}
+	// Default is false if empty
 	return utils.IsTruthy(c.SidecarDropALLCapabilities)
 }
 
