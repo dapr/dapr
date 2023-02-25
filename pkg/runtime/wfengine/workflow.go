@@ -365,13 +365,11 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				if errors.Is(err, ErrDuplicateInvocation) {
 					wfLogger.Warnf("%s: activity invocation %s#%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
-				} else {
-					return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
+					continue
 				}
+				return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
 			}
-			if resp != nil {
-				resp.Close()
-			}
+			resp.Close()
 		} else {
 			wfLogger.Warn("don't know how to process task %v", e)
 		}
