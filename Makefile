@@ -465,6 +465,17 @@ ifeq (,$(wildcard $(BUILD_TOOLS)))
 endif
 
 ################################################################################
+# Targets for components-contrib                                               #
+################################################################################
+.PHONY: update-components-contrib
+# Branch or tag to pin
+COMPONENTS_CONTRIB_BRANCH ?= master
+COMPONENTS_CONTRIB_REPO ?= github.com/dapr/components-contrib
+update-components-contrib:
+	go get -u $(COMPONENTS_CONTRIB_REPO)@$(COMPONENTS_CONTRIB_BRANCH)
+	make modtidy-all
+
+################################################################################
 # Target: codegen                                                              #
 ################################################################################
 include tools/codegen.mk
