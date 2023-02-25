@@ -298,6 +298,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
+	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
+	// will use this updated generation value for their duplication execution handling.
+	if runtimeState.ContinuedAsNew() {
+		state.Generation += 1
+	}
+
 	if !runtimeState.IsCompleted() {
 		// Create reminders for the durable timers. We only do this if the orchestration is still running.
 		for _, t := range runtimeState.PendingTimers() {
@@ -357,10 +363,15 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 			resp, err := wf.actors.Call(ctx, req)
 			if err != nil {
-				return newRecoverableError(
-					fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
+				if errors.Is(err, ErrDuplicateInvocation) {
+					wfLogger.Warnf("%s: activity invocation %s#%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
+				} else {
+					return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
+				}
 			}
-			defer resp.Close()
+			if resp != nil {
+				resp.Close()
+			}
 		} else {
 			wfLogger.Warn("don't know how to process task %v", e)
 		}
