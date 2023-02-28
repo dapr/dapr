@@ -52,6 +52,9 @@ jobs:
             target_os: linux
           - os: windows-2019
             target_os: windows
+          - os: windows-2022
+            target_os: windows
+            windows_version: ltsc2022
           - os: macOS-latest
             target_os: darwin
         exclude:
@@ -191,6 +194,9 @@ jobs:
         with:
           name: dapr_grafana_dashboards
           path: ./grafana/*.json
+      - name: set WINDOWS_VERSION
+        if: matrix.target_os == 'windows' && matrix.windows_version != ''
+        run: echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
       # - name: Docker Hub Login
       #   if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
       #   uses: docker/login-action@v1
@@ -223,11 +229,6 @@ jobs:
       #     if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
       #       DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
       #     fi
-
-      #     # Additional Windows images
-      #     if [ "$TARGET_OS" = "windows" ]; then
-      #       WINDOWS_VERSION=ltsc2022 make docker-push
-      #     fi
       #   shell: bash
       - name: Build and push Docker images to GHCR
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
@@ -242,11 +243,6 @@ jobs:
           # Mariner images are built only on linux/amd64 and linux/arm64
           if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
             DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
-          fi
-
-          # Additional Windows images
-          if [ "$TARGET_OS" = "windows" ]; then
-            WINDOWS_VERSION=ltsc2022 make docker-push
           fi
         shell: bash
       - name: Upload test results
