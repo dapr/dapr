@@ -1,6 +1,7 @@
 package certs
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -21,13 +22,13 @@ const (
 
 // Credentials holds a certificate and private key.
 type Credentials struct {
-	PrivateKey  interface{}
+	PrivateKey  crypto.PrivateKey
 	Certificate *x509.Certificate
 }
 
 // DecodePEMKey takes a key PEM byte array and returns an object that represents
 // either an RSA or EC private key.
-func DecodePEMKey(key []byte) (interface{}, error) {
+func DecodePEMKey(key []byte) (crypto.PrivateKey, error) {
 	block, _ := pem.Decode(key)
 	if block == nil {
 		return nil, errors.New("key is not PEM encoded")
@@ -105,20 +106,20 @@ func PEMCredentialsFromFiles(certPem, keyPem []byte) (*Credentials, error) {
 	return creds, nil
 }
 
-func matchCertificateAndKey(pk interface{}, cert *x509.Certificate) bool {
+func matchCertificateAndKey(pk any, cert *x509.Certificate) bool {
 	switch key := pk.(type) {
 	case *ecdsa.PrivateKey:
 		if cert.PublicKeyAlgorithm != x509.ECDSA {
 			return false
 		}
 		pub, ok := cert.PublicKey.(*ecdsa.PublicKey)
-		return ok && pub.X.Cmp(key.X) == 0 && pub.Y.Cmp(key.Y) == 0
+		return ok && pub.Equal(key.Public())
 	case *rsa.PrivateKey:
 		if cert.PublicKeyAlgorithm != x509.RSA {
 			return false
 		}
 		pub, ok := cert.PublicKey.(*rsa.PublicKey)
-		return ok && pub.N.Cmp(key.N) == 0 && pub.E == key.E
+		return ok && pub.Equal(key.Public())
 	case ed25519.PrivateKey:
 		if cert.PublicKeyAlgorithm != x509.Ed25519 {
 			return false
