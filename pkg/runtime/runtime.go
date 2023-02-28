@@ -408,6 +408,10 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 		tpStore.RegisterExporter(otelExporter)
 	}
 
+	if !tpStore.HasExporter() && tracingSpec.SamplingRate != "" {
+		tpStore.RegisterExporter(diagUtils.NewNullExporter())
+	}
+
 	// Register a resource
 	r := resource.NewWithAttributes(
 		semconv.SchemaURL,
@@ -2134,8 +2138,12 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		WithCustomHTTPMetadata(msg.metadata)
 	defer req.Close()
 
-	if cloudEvent[pubsub.TraceIDField] != nil {
-		traceID := cloudEvent[pubsub.TraceIDField].(string)
+	iTraceID := cloudEvent[pubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[pubsub.TraceIDField]
+	}
+	if iTraceID != nil {
+		traceID := iTraceID.(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.topic, sc, a.globalConfig.Spec.TracingSpec)
 	}
@@ -2254,7 +2262,11 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	var span trace.Span
-	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
+	iTraceID := cloudEvent[pubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[pubsub.TraceIDField]
+	}
+	if iTraceID != nil {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
@@ -2773,11 +2785,6 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 		}
 
 		secretStoreName := a.authSecretStoreOrDefault(component)
-		secretStore := a.getSecretStore(secretStoreName)
-		if secretStore == nil {
-			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
-			return component, secretStoreName
-		}
 
 		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
@@ -2803,6 +2810,12 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 			component.Spec.Metadata[i] = m
 			continue
+		}
+
+		secretStore := a.getSecretStore(secretStoreName)
+		if secretStore == nil {
+			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
+			return component, secretStoreName
 		}
 
 		resp, ok := cache[m.SecretKeyRef.Name]
