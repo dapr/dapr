@@ -185,6 +185,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.runAsNonRoot`      | Boolean value for `securityContext.runAsNonRoot` for the Sidecar Injector container itself. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_sidecar_injector.sidecarRunAsNonRoot` | When this boolean value is true (the default), the injected sidecar containers have `runAsRoot: true`. You may have to set this to `false` when running Minikube | `true` |
 | `dapr_sidecar_injector.sidecarReadOnlyRootFilesystem` | When this boolean value is true (the default), the injected sidecar containers have `readOnlyRootFilesystem: true` | `true` |
+| `dapr_sidecar_injector.sidecarDropALLCapabilities` | When this boolean valus is true, the injected sidecar containers have `securityContext.capabilities.drop: ["ALL"]` | `false` |
 | `dapr_sidecar_injector.allowedServiceAccounts` | String value for extra allowed service accounts in the format of `serviceAccount1:namespace1,serviceAccount2:namespace2`  | `""` |
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
