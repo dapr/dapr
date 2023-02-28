@@ -53,6 +53,7 @@ type ContainerConfig struct {
 	ComponentsSocketsVolumeMount *corev1.VolumeMount
 	RunAsNonRoot                 bool
 	ReadOnlyRootFilesystem       bool
+	SidecarDropALLCapabilities   bool
 }
 
 var (
@@ -194,17 +195,27 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		cfg.DaprSidecarImage = image
 	}
 
+	securityContext := &corev1.SecurityContext{
+		AllowPrivilegeEscalation: ptr.Of(false),
+		RunAsNonRoot:             ptr.Of(cfg.RunAsNonRoot),
+		ReadOnlyRootFilesystem:   ptr.Of(cfg.ReadOnlyRootFilesystem),
+	}
+
+	if seccompProfileType := cfg.Annotations.GetString(annotations.KeySidecarSeccompProfileType); seccompProfileType != "" {
+		securityContext.SeccompProfile = &corev1.SeccompProfile{Type: corev1.SeccompProfileType(seccompProfileType)}
+	}
+
+	if cfg.SidecarDropALLCapabilities {
+		securityContext.Capabilities = &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
+	}
+
 	container := &corev1.Container{
 		Name:            SidecarContainerName,
 		Image:           cfg.DaprSidecarImage,
 		ImagePullPolicy: cfg.ImagePullPolicy,
-		SecurityContext: &corev1.SecurityContext{
-			AllowPrivilegeEscalation: ptr.Of(false),
-			RunAsNonRoot:             ptr.Of(cfg.RunAsNonRoot),
-			ReadOnlyRootFilesystem:   ptr.Of(cfg.ReadOnlyRootFilesystem),
-		},
-		Ports: ports,
-		Args:  append(cmd, args...),
+		SecurityContext: securityContext,
+		Ports:           ports,
+		Args:            append(cmd, args...),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "NAMESPACE",
