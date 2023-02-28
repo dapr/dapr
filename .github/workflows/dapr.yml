@@ -405,6 +405,7 @@ jobs:
         if: matrix.target_os != 'darwin'
         env:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
+          WINDOWS_VERSION: ${{ matrix.windows_version }}
         run: |
           echo "Build Docker multiarch manifest and push to GHCR"
           DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
