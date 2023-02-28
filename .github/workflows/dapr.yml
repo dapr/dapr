@@ -80,7 +80,7 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
         with: # TODO: remove this
-          ref: 6cc25d333245c1a4c35b7b5eb26e634dbbc08af0
+          ref: bb9f7dd8d4f9cce95c37b3acd2a15f35a7c667f4
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
