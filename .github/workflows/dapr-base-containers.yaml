@@ -23,8 +23,6 @@ jobs:
   build:
     strategy:
       matrix:
-        windows-version: ["1809", "ltsc2022"]
-        os: ["windows-2019", "windows-2022"]
         include:
           - os: "windows-2019"
             windows-version: "1809"
