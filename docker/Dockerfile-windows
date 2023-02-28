@@ -1,6 +1,7 @@
 ARG WINDOWS_VERSION=1809
 #This version confirmed to work for both github and AKS
-FROM ghcr.io/dapr/windows-base:$WINDOWS_VERSION
+# TODO, replace this
+FROM ghcr.io/shubham1172/windows-base:$WINDOWS_VERSION
 
 ARG PKG_FILES
 WORKDIR /
