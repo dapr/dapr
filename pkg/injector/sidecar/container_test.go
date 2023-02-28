@@ -812,6 +812,44 @@ func TestGetSidecarContainer(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("get sidecar container with appropriate security context", func(t *testing.T) {
+		testCases := []struct {
+			an               map[string]string
+			dropCapabilities bool
+		}{
+			{
+				map[string]string{
+					annotations.KeySidecarSeccompProfileType: "RuntimeDefault",
+				},
+				true,
+			},
+			{
+				map[string]string{},
+				false,
+			},
+		}
+		for _, tc := range testCases {
+			container, _ := GetSidecarContainer(ContainerConfig{
+				Annotations:                tc.an,
+				SidecarDropALLCapabilities: tc.dropCapabilities,
+			})
+
+			if tc.dropCapabilities {
+				assert.NotNil(t, container.SecurityContext.Capabilities, "SecurityContext.Capabilities should not be nil")
+				assert.Equal(t, corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}, *container.SecurityContext.Capabilities, "SecurityContext.Capabilities should drop all capabilities")
+			} else {
+				assert.Nil(t, container.SecurityContext.Capabilities)
+			}
+
+			if len(tc.an) != 0 {
+				assert.NotNil(t, container.SecurityContext.SeccompProfile, "SecurityContext.SeccompProfile should not be nil")
+				assert.Equal(t, corev1.SeccompProfile{Type: corev1.SeccompProfileType("RuntimeDefault")}, *container.SecurityContext.SeccompProfile, "SecurityContext.SeccompProfile.Type should not be RuntimeDefault")
+			} else {
+				assert.Nil(t, container.SecurityContext.SeccompProfile)
+			}
+		}
+	})
 }
 
 func TestAppendUnixDomainSocketVolume(t *testing.T) {
