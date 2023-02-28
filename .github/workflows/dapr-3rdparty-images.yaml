@@ -11,7 +11,7 @@ jobs:
     steps:
       - 
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - # ghcr logins for pushing image after testing
         name: Login to GitHub Container Registry
         uses: docker/login-action@v1
@@ -21,7 +21,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v12
         with:
           username: ${{ secrets.DOCKER_REGISTRY_ID }}
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
