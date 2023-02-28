@@ -24,8 +24,9 @@ jobs:
     strategy:
       matrix:
         windows-version: ["1809", "ltsc2022"]
+        os: ["windows-2019", "windows-2022"]
     name: Build base Windows images
-    runs-on: windows-2019
+    runs-on: ${{ matrix.os }}
     env:
       WINDOWS_VERSION: ${{ matrix.windows-version }}
       TARGET_OS: windows
