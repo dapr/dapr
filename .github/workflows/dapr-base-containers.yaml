@@ -74,13 +74,13 @@ jobs:
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
         run: |
           docker login ghcr.io -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }} # TODO REMOVE ghcr.io
-      - name: GitHub container registry login
-        if: env.CHECKOUT_REPO != ''
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      # - name: GitHub container registry login
+      #   if: env.CHECKOUT_REPO != ''
+      #   uses: docker/login-action@v1
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.repository_owner }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
       # TODO - uncomment this when we are ready to push to Docker Hub
       # - name: Build Windows base images for Docker Hub
       #   if: env.CHECKOUT_REPO != '' && env.DAPR_REGISTRY != ''
