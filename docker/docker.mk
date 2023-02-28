@@ -85,6 +85,7 @@ endif
 # If unset, use a simpler tag, example, foo.io/dapr/dapr:1.10.0-rc.2-windows-amd64.
 ifneq ($(WINDOWS_VERSION),)
 BUILD_ARGS=--build-arg WINDOWS_VERSION=$(WINDOWS_VERSION)
+DOCKER_MULTI_ARCH:=$(DOCKER_MULTI_ARCH) windows-$(WINDOWS_VERSION)-amd64
 DOCKER_IMAGE_PLATFORM=$(TARGET_OS)-$(WINDOWS_VERSION)-$(TARGET_ARCH)
 else
 DOCKER_IMAGE_PLATFORM=$(TARGET_OS)-$(TARGET_ARCH)
@@ -189,23 +190,23 @@ else
 	-$(DOCKER) buildx create --use --name daprbuild
 	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push
+	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(TARGET_OS)-$(TARGET_ARCH) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push
 else
-	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push
+	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(TARGET_OS)-$(TARGET_ARCH) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(TARGET_OS)-$(TARGET_ARCH) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(TARGET_OS)-$(TARGET_ARCH) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(TARGET_OS)-$(TARGET_ARCH) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		$(DOCKER) buildx build --build-arg PKG_FILES=operator --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=operator --platform $(TARGET_OS)-$(TARGET_ARCH) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		$(DOCKER) buildx build --build-arg PKG_FILES=injector --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=injector --platform $(TARGET_OS)-$(TARGET_ARCH) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE_TAG)-$(DOCKER_IMAGE_PLATFORM) --provenance=false --push; \
 	fi
 endif
 endif

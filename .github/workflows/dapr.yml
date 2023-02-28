@@ -219,6 +219,11 @@ jobs:
           if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
             DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
           fi
+
+          # Additional Windows images
+          if [ "$TARGET_OS" = "windows" ]; then
+            WINDOWS_VERSION=ltsc2022 make docker-push
+          fi
         shell: bash
       - name: Build and push Docker images to GHCR
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
@@ -233,6 +238,11 @@ jobs:
           # Mariner images are built only on linux/amd64 and linux/arm64
           if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
             DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
+          fi
+
+          # Additional Windows images
+          if [ "$TARGET_OS" = "windows" ]; then
+            WINDOWS_VERSION=ltsc2022 make docker-push
           fi
         shell: bash
       - name: Upload test results
