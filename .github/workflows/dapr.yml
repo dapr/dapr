@@ -16,7 +16,7 @@ name: dapr
 on:
   workflow_dispatch:
   schedule:
-    - cron: '00 22 * * *'
+    - cron: "00 22 * * *"
   push:
     branches:
       - master
@@ -79,6 +79,8 @@ jobs:
           version: v0.10.1 # Don't use latest since it broke our workflow once
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
+        with: # TODO: remove this
+          ref: 6cc25d333245c1a4c35b7b5eb26e634dbbc08af0
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -403,7 +405,7 @@ jobs:
       - name: Build and push Docker multiarch manifest to GHCR
         if: matrix.target_os != 'darwin'
         env:
-           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
+          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           echo "Build Docker multiarch manifest and push to GHCR"
           DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
@@ -423,7 +425,7 @@ jobs:
       - name: Package Helm chart
         if: ${{ env.LATEST_RELEASE }} == "true" && env.DOCKER_REGISTRY != ''
         env:
-              HELM_CHARTS_DIR: charts/dapr
+          HELM_CHARTS_DIR: charts/dapr
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
           helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
@@ -458,8 +460,8 @@ jobs:
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v2
         env:
-              DAPR_HELM_REPO: dapr/helm-charts
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
+          DAPR_HELM_REPO: dapr/helm-charts
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
         with:
           repository: ${{ env.DAPR_HELM_REPO }}
           ref: refs/heads/master
@@ -467,24 +469,24 @@ jobs:
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         env:
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
-              DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
+          DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
         run: |
-            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
-            cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-            cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
-            git config --global user.email "daprweb@microsoft.com"
-            git config --global user.name "dapr-bot"
-            git add --all
-            # Check if the dapr-${daprVersion}.tgz file is modified.
-            if git diff --name-only --staged | grep -q ${daprVersion}; then
-              # If it is, we update the Helm chart, since this is an intentional update.
-              git commit -m "Release - $daprVersion"
-              git push
-            else
-              # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
-              echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
-              exit -1
-            fi
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
+          git config --global user.email "daprweb@microsoft.com"
+          git config --global user.name "dapr-bot"
+          git add --all
+          # Check if the dapr-${daprVersion}.tgz file is modified.
+          if git diff --name-only --staged | grep -q ${daprVersion}; then
+            # If it is, we update the Helm chart, since this is an intentional update.
+            git commit -m "Release - $daprVersion"
+            git push
+          else
+            # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
+            echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
+            exit -1
+          fi
