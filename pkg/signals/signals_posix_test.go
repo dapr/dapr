@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +16,8 @@ limitations under the License.
 
 package signals
 
+// Note this file is not built on Windows, as we depend on syscall methods not available on Windows.
+
 import (
 	"os/signal"
 	"syscall"
@@ -22,7 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_Context(t *testing.T) {
+func TestContext(t *testing.T) {
 	signal.Reset()
 
 	t.Run("if receive signal, should cancel context", func(t *testing.T) {
