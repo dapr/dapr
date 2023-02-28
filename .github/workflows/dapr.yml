@@ -54,6 +54,7 @@ jobs:
             target_os: windows
           - os: windows-2022
             target_os: windows
+            target_arch: amd64
             windows_version: ltsc2022
           - os: macOS-latest
             target_os: darwin
