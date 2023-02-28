@@ -195,9 +195,6 @@ jobs:
         with:
           name: dapr_grafana_dashboards
           path: ./grafana/*.json
-      - name: set WINDOWS_VERSION
-        if: matrix.target_os == 'windows' && matrix.windows_version != ''
-        run: echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
       # - name: Docker Hub Login
       #   if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
       #   uses: docker/login-action@v1
@@ -237,6 +234,7 @@ jobs:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
           TARGET_OS: ${{ matrix.target_os }}
           TARGET_ARCH: ${{ matrix.target_arch }}
+          WINDOWS_VERSION: ${{ matrix.windows_version }}
         run: |
           echo "Build Docker images and push to GHCR..."
           DAPR_TAG=${{ env.REL_VERSION }} make docker-push
