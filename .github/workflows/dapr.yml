@@ -16,7 +16,7 @@ name: dapr
 on:
   workflow_dispatch:
   schedule:
-    - cron: "00 22 * * *"
+    - cron: '00 22 * * *'
   push:
     branches:
       - master
@@ -83,8 +83,6 @@ jobs:
           version: v0.10.1 # Don't use latest since it broke our workflow once
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
-        with: # TODO: remove this
-          ref: bb9f7dd8d4f9cce95c37b3acd2a15f35a7c667f4
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -195,39 +193,37 @@ jobs:
         with:
           name: dapr_grafana_dashboards
           path: ./grafana/*.json
-      # - name: Docker Hub Login
-      #   if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
-      #   uses: docker/login-action@v1
-      #   env:
-      #     DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-      #   with:
-      #     username: ${{ secrets.DOCKER_REGISTRY_ID }}
-      #     password: ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Docker Hub Login
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
+        uses: docker/login-action@v1
+        env:
+          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+        with:
+          username: ${{ secrets.DOCKER_REGISTRY_ID }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
-          # username: ${{ github.repository_owner }}
-          # password: ${{ secrets.GITHUB_TOKEN }}
-          username: ${{ secrets.DOCKER_REGISTRY_ID }}
-          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
-      # - name: Build and push Docker images to Docker Hub
-      #   if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
-      #   env:
-      #     DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-      #     DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-      #     TARGET_OS: ${{ matrix.target_os }}
-      #     TARGET_ARCH: ${{ matrix.target_arch }}
-      #   run: |
-      #     echo "Build Docker images and push to Docker Hub..."
-      #     DAPR_TAG=${{ env.REL_VERSION }} make docker-push
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Docker images to Docker Hub
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
+        env:
+          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+          TARGET_OS: ${{ matrix.target_os }}
+          TARGET_ARCH: ${{ matrix.target_arch }}
+        run: |
+          echo "Build Docker images and push to Docker Hub..."
+          DAPR_TAG=${{ env.REL_VERSION }} make docker-push
 
-      #     # Mariner images are built only on linux/amd64 and linux/arm64
-      #     if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
-      #       DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
-      #     fi
-      #   shell: bash
+          # Mariner images are built only on linux/amd64 and linux/arm64
+          if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
+            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
+          fi
+        shell: bash
       - name: Build and push Docker images to GHCR
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
         env:
@@ -369,38 +365,36 @@ jobs:
             --prerelease true \
             ${RELEASE_ARTIFACT[*]}
         shell: bash
-      # - name: Docker Hub Login
-      #   uses: docker/login-action@v1
-      #   if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
-      #   with:
-      #     username: ${{ secrets.DOCKER_REGISTRY_ID }}
-      #     password: ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Docker Hub Login
+        uses: docker/login-action@v1
+        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
+        with:
+          username: ${{ secrets.DOCKER_REGISTRY_ID }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
         uses: docker/login-action@v1
         if: matrix.target_os != 'darwin'
         with:
           registry: ghcr.io
-          # username: ${{ github.repository_owner }}
-          # password: ${{ secrets.GITHUB_TOKEN }}
-          username: ${{ secrets.DOCKER_REGISTRY_ID }}
-          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
-      # - name: Build and push Docker multiarch manifest to Docker Hub
-      #   if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != ''
-      #   env:
-      #     DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-      #     DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-      #   run: |
-      #     echo "Build Docker multiarch manifest and push to GHCR"
-      #     DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Docker multiarch manifest to Docker Hub
+        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != ''
+        env:
+          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+        run: |
+          echo "Build Docker multiarch manifest and push to GHCR"
+          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
 
-      #     # Publish the `-mariner` tag
-      #     # Mariner images are built only on linux/amd64 and linux/arm64
-      #     # Also, these use the "latest-mariner" tag if it's the latest
-      #     DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
-      #     DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
-      #     LATEST_TAG=latest-mariner \
-      #       make docker-publish
-      #   shell: bash
+          # Publish the `-mariner` tag
+          # Mariner images are built only on linux/amd64 and linux/arm64
+          # Also, these use the "latest-mariner" tag if it's the latest
+          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
+          LATEST_TAG=latest-mariner \
+            make docker-publish
+        shell: bash
       - name: Build and push Docker multiarch manifest to GHCR
         if: matrix.target_os != 'darwin'
         env:
