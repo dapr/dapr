@@ -57,7 +57,7 @@ else
 endif
 
 # Supported docker image architecture
-DOCKER_MULTI_ARCH?=linux-amd64 linux-arm linux-arm64 windows-amd64
+DOCKER_MULTI_ARCH?=linux-amd64 linux-arm linux-arm64 windows-amd64 windows-ltsc2022-amd64
 
 ################################################################################
 # Target: docker-build, docker-push                                            #
@@ -85,7 +85,6 @@ endif
 # If unset, use a simpler tag, example, foo.io/dapr/dapr:1.10.0-rc.2-windows-amd64.
 ifneq ($(WINDOWS_VERSION),)
 BUILD_ARGS=--build-arg WINDOWS_VERSION=$(WINDOWS_VERSION)
-DOCKER_MULTI_ARCH:=$(DOCKER_MULTI_ARCH) windows-$(WINDOWS_VERSION)-amd64
 DOCKER_IMAGE_VARIANT=$(TARGET_OS)-$(WINDOWS_VERSION)-$(TARGET_ARCH)
 else
 DOCKER_IMAGE_VARIANT=$(TARGET_OS)-$(TARGET_ARCH)
