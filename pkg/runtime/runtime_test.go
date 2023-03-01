@@ -2079,14 +2079,14 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 		assert.Empty(t, pipeline.Handlers)
 	})
 
-	t.Run("panic when component does not exists", func(t *testing.T) {
+	t.Run("ignore component that does not exists", func(t *testing.T) {
 		rt := &DaprRuntime{
 			globalConfig:   &config.Configuration{},
 			componentsLock: &sync.RWMutex{},
 			runtimeConfig:  &Config{},
 		}
 
-		_, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
 			Handlers: []config.HandlerSpec{
 				{
 					Name:         "not_exists",
@@ -2096,12 +2096,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 				},
 			},
 		}, "test")
-		require.Error(t, err)
-		require.ErrorContains(t, err, "dapr panicked")
-		require.Equal(t, 1, lnp.fatalCalled)
-
-		// Reset
-		lnp.fatalCalled = 0
+		require.NoError(t, err)
+		assert.Len(t, pipeline.Handlers, 0)
 	})
 
 	t.Run("all components exists", func(t *testing.T) {

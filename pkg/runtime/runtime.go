@@ -683,12 +683,10 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 			middlewareSpec := spec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
-				log.Warn("error processing middleware component, daprd process will exit gracefully")
-				a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
-				log.Fatalf("couldn't find middleware component with name %s and type %s/%s",
+				// Log the error but continue with initializing the pipeline
+				log.Error("couldn't find middleware component defined in configuration with name %s and type %s/%s",
 					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version)
-				// This error is only caught by tests, since during normal execution we panic
-				return pipeline, errors.New("dapr panicked")
+				continue
 			}
 			md := middleware.Metadata{Base: a.toBaseMetadata(component)}
 			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
