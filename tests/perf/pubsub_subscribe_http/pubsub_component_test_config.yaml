@@ -1,5 +1,5 @@
 #
-# Copyright 2021 The Dapr Authors
+# Copyright 2023 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -33,7 +33,7 @@ components:
     subscribeHttpThresholdMs: 1500
     bulkSubscribeHttpThresholdMs: 500
     imageName: perf-pubsub_subscribe_app
-    operations: [normal]
+    operations: [bulk, normal]
 
   - name: mqtt-messagebus
     topic: mqtt-perf-test
