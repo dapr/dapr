@@ -99,7 +99,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}

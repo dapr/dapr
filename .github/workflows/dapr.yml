@@ -451,7 +451,7 @@ jobs:
           name: dapr_helm_charts_package
           path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
       - name: Checkout Helm Charts Repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         env:
               DAPR_HELM_REPO: dapr/helm-charts
               DAPR_HELM_REPO_CODE_PATH: helm-charts
