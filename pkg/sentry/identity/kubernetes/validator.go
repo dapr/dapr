@@ -31,8 +31,6 @@ type validator struct {
 	client    k8s.Interface
 	auth      kauth.AuthenticationV1Interface
 	audiences []string
-	// TODO: Remove in Dapr 1.12 to enforce setting an explicit audience
-	noDefaultTokenAudience bool
 }
 
 func (v *validator) Validate(id, token, namespace string) error {
@@ -52,7 +50,7 @@ func (v *validator) Validate(id, token, namespace string) error {
 
 		// TODO: Remove in Dapr 1.12 to enforce setting an explicit audience
 		// Because the user did not specify an explicit audience and is instead relying on the default, if the authentication fails we can retry with nil audience
-		canTryWithNilAudience = !v.noDefaultTokenAudience
+		canTryWithNilAudience = true
 	}
 	tokenReview := &kauthapi.TokenReview{
 		Spec: kauthapi.TokenReviewSpec{
