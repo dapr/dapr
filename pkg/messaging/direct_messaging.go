@@ -323,7 +323,11 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		// Send the chunk if there's anything to send
 		if proto.Request != nil || proto.Payload != nil {
 			err = stream.SendMsg(proto)
-			if err != nil {
+			if errors.Is(err, io.EOF) {
+				// If SendMsg returns an io.EOF error, it usually means that there's a transport-level error
+				// The exact error can only be determined by RecvMsg, so if we encounter an EOF error here, just consider the stream done and let RecvMsg handle the error
+				done = true
+			} else if err != nil {
 				return nil, fmt.Errorf("error sending message: %w", err)
 			}
 		}
@@ -408,7 +412,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 
 			// Read the next chunk
 			readErr = stream.RecvMsg(chunk)
-			if readErr == io.EOF {
+			if errors.Is(readErr, io.EOF) {
 				// Receiving an io.EOF signifies that the client has stopped sending data over the pipe, so we can stop reading
 				break
 			} else if readErr != nil {
