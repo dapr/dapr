@@ -133,12 +133,12 @@ func (p *Service) Run(ctx context.Context, port string, certChain *daprCredentia
 	var err error
 	p.serverListener, err = net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
-		return fmt.Errorf("failed to listen: %v", err)
+		return fmt.Errorf("failed to listen: %w", err)
 	}
 
 	opts, err := daprCredentials.GetServerOptions(certChain)
 	if err != nil {
-		return fmt.Errorf("error creating gRPC options: %s", err)
+		return fmt.Errorf("error creating gRPC options: %w", err)
 	}
 	p.grpcServer = grpc.NewServer(opts...)
 	placementv1pb.RegisterPlacementServer(p.grpcServer, p)
@@ -149,7 +149,7 @@ func (p *Service) Run(ctx context.Context, port string, certChain *daprCredentia
 	go func() {
 		if err = p.grpcServer.Serve(p.serverListener); err != nil &&
 			!errors.Is(err, grpc.ErrServerStopped) {
-			stopErr <- fmt.Errorf("failed to serve: %v", err)
+			stopErr <- fmt.Errorf("failed to serve: %w", err)
 			return
 		}
 		stopErr <- nil
@@ -160,6 +160,7 @@ func (p *Service) Run(ctx context.Context, port string, certChain *daprCredentia
 		p.grpcServer.GracefulStop()
 		err = <-stopErr
 	case err = <-stopErr:
+		// nop
 	}
 	return err
 }
@@ -184,7 +185,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				p.addStreamConn(stream)
 				// TODO: If each sidecar can report table version, then placement
 				// doesn't need to disseminate tables to each sidecar.
-				if err = p.performTablesUpdate(stream.Context(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState()); err != nil {
+				err = p.performTablesUpdate(stream.Context(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState())
+				if err != nil {
 					return err
 				}
 				log.Debugf("Stream connection is established from %s", registeredMemberID)
@@ -227,7 +229,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 		default:
 			if registeredMemberID == "" {
-				log.Error("stream is disconnected before member is added")
+				log.Error("Stream is disconnected before member is added")
 				return nil
 			}
 

@@ -47,7 +47,9 @@ func TestPlacementHA(t *testing.T) {
 	}
 
 	// Create 3 raft servers
-	raftServers, ready, raftServerCancel := make([]*raft.Server, 3), make([]<-chan struct{}, 3), make([]context.CancelFunc, 3)
+	raftServers := make([]*raft.Server, 3)
+	ready := make([]<-chan struct{}, 3)
+	raftServerCancel := make([]context.CancelFunc, 3)
 	peers := make([]raft.PeerInfo, 3)
 	for i := 0; i < 3; i++ {
 		peers[i] = raft.PeerInfo{
@@ -61,6 +63,7 @@ func TestPlacementHA(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		select {
 		case <-ready[i]:
+			// nop
 		case <-time.After(time.Second):
 			t.Fatalf("raft server %d did not start in time", i)
 		}
@@ -129,6 +132,7 @@ func TestPlacementHA(t *testing.T) {
 		raftServers[i], ready[i], raftServerCancel[i] = createRaftServer(t, i, peers)
 		select {
 		case <-ready[i]:
+			// nop
 		case <-time.After(time.Second):
 			t.Fatalf("raft server %d did not start in time", i)
 		}
@@ -171,6 +175,7 @@ func TestPlacementHA(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			select {
 			case <-ready[i]:
+				// nop
 			case <-time.After(time.Second):
 				t.Fatalf("raft server %d did not start in time", i)
 			}
@@ -223,6 +228,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 		cancel()
 		select {
 		case <-serverStopped:
+			// nop
 		case <-time.After(5 * time.Second):
 			t.Error("raft server did not stop in time")
 		}

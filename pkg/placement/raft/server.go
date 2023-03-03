@@ -101,6 +101,7 @@ func tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr string) (*net.TCP
 		case <-ctx.Done():
 			return nil, err
 		case <-time.After(nameResolveRetryInterval):
+			// nop
 		}
 	}
 	return nil, err

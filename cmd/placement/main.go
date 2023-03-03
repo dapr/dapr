@@ -33,7 +33,7 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func main() {
-	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
 	cfg := newConfig()
 
@@ -41,21 +41,23 @@ func main() {
 	if err := logger.ApplyOptionsToLoggers(&cfg.loggerOptions); err != nil {
 		log.Fatal(err)
 	}
-	log.Infof("log level set to: %s", cfg.loggerOptions.OutputLevel)
+	log.Infof("Log level set to: %s", cfg.loggerOptions.OutputLevel)
 
 	// Initialize dapr metrics for placement.
-	if err := cfg.metricsExporter.Init(); err != nil {
+	err := cfg.metricsExporter.Init()
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := monitoring.InitMetrics(); err != nil {
+	err = monitoring.InitMetrics()
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Start Raft cluster.
 	raftServer := raft.New(cfg.raftID, cfg.raftInMemEnabled, cfg.raftPeers, cfg.raftLogStorePath)
 	if raftServer == nil {
-		log.Fatal("failed to create raft server.")
+		log.Fatal("Failed to create raft server.")
 	}
 
 	// Start Placement gRPC server.
@@ -66,16 +68,15 @@ func main() {
 	if cfg.tlsEnabled {
 		tlsCreds := credentials.NewTLSCredentials(cfg.certChainPath)
 
-		var err error
 		certChain, err = credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		log.Info("tls certificates loaded successfully")
+		log.Info("TLS certificates loaded successfully")
 	}
 
-	if err := concurrency.NewRunnerManager(
+	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
 			return raftServer.StartRaft(ctx, nil)
 		},
@@ -83,17 +84,18 @@ func main() {
 		func(ctx context.Context) error {
 			healthzServer := health.NewServer(log)
 			healthzServer.Ready()
-			if err := healthzServer.Run(ctx, cfg.healthzPort); err != nil {
-				return fmt.Errorf("failed to start healthz server: %w", err)
+			if healthzErr := healthzServer.Run(ctx, cfg.healthzPort); healthzErr != nil {
+				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
 			}
 			return nil
 		},
 		func(ctx context.Context) error {
 			return apiServer.Run(ctx, strconv.Itoa(cfg.placementPort), certChain)
 		},
-	).Run(signals.Context()); err != nil {
+	).Run(signals.Context())
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Info("placement service shut down gracefully")
+	log.Info("Placement service shut down gracefully")
 }

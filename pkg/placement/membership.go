@@ -68,7 +68,7 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 					loopNotRunning = make(chan struct{})
 					go func() {
 						defer close(loopNotRunning)
-						log.Info("cluster leadership acquired")
+						log.Info("Cluster leadership acquired")
 						p.leaderLoop(leaderCtx)
 						oneLeaderLoopRun = sync.Once{}
 					}()
@@ -76,19 +76,19 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 			} else {
 				select {
 				case <-loopNotRunning:
-					log.Error("attempted to stop leader loop when it was not running")
+					log.Error("Attempted to stop leader loop when it was not running")
 					continue
 				default:
 				}
 
-				log.Info("shutting down leader loop")
+				log.Info("Shutting down leader loop")
 				leaderLoopCancel()
 				select {
 				case <-loopNotRunning:
 				case <-ctx.Done():
 					return nil
 				}
-				log.Info("cluster leadership lost")
+				log.Info("Cluster leadership lost")
 				leaderCtx, leaderLoopCancel = context.WithCancel(ctx)
 				defer leaderLoopCancel()
 			}
@@ -105,6 +105,7 @@ func (p *Service) leaderLoop(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		default:
+			// nop
 		}
 
 		raft, err := p.raftNode.Raft(ctx)
@@ -141,9 +142,9 @@ func (p *Service) establishLeadership() {
 func (p *Service) revokeLeadership() {
 	p.hasLeadership.Store(false)
 
-	log.Info("Waiting until all connections are drained.")
+	log.Info("Waiting until all connections are drained")
 	p.streamConnGroup.Wait()
-	log.Info("Connections are drained.")
+	log.Info("Connections are drained")
 
 	p.cleanupHeartbeats()
 }
@@ -252,7 +253,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 			return
 
 		case <-processingTicker.C:
-			log.Debugf("process raft state command: nothing happened...")
+			log.Debugf("Process Raft state command: nothing happened...")
 			continue
 
 		case op := <-p.membershipCh:
@@ -396,14 +397,14 @@ func (p *Service) disseminateOperation(ctx context.Context, targets []placementG
 		config := retry.DefaultConfig()
 		config.MaxRetries = 3
 		backoff := config.NewBackOffWithContext(ctx)
-		if err := retry.NotifyRecover(func() error {
+		err := retry.NotifyRecover(func() error {
 			// Check stream in stream pool, if stream is not available, skip to next.
 			if !p.hasStreamConn(s) {
 				remoteAddr := "n/a"
 				if p, ok := peer.FromContext(s.Context()); ok {
 					remoteAddr = p.Addr.String()
 				}
-				log.Debugf("runtime host (%q) is disconnected with server. go with next dissemination (operation: %s).", remoteAddr, operation)
+				log.Debugf("Runtime host (%q) is disconnected with server; go with next dissemination (operation: %s)", remoteAddr, operation)
 				return nil
 			}
 
@@ -419,8 +420,9 @@ func (p *Service) disseminateOperation(ctx context.Context, targets []placementG
 		},
 			backoff,
 			func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
-			func() { log.Debug("Dissemination successful.") },
-		); err != nil {
+			func() { log.Debug("Dissemination successful") },
+		)
+		if err != nil {
 			return err
 		}
 	}
