@@ -22,6 +22,7 @@ sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
+sidecarDropALLCapabilities: false
 allowedServiceAccounts: ""
 allowedServiceAccountsPrefixNames: ""
 resources: {}
