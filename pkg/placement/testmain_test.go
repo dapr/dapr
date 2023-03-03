@@ -1,6 +1,7 @@
 package placement
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -27,10 +28,17 @@ func TestMain(m *testing.M) {
 		},
 	}, "")
 
-	testRaftServer.StartRaft(nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	serverStoped := make(chan struct{})
+	go func() {
+		defer close(serverStoped)
+		if err := testRaftServer.StartRaft(ctx, nil); err != nil {
+			log.Fatalf("error running test raft server: %v", err)
+		}
+	}()
 
 	// Wait until test raft node become a leader.
-	for range time.Tick(200 * time.Millisecond) {
+	for range time.Tick(50 * time.Millisecond) {
 		if testRaftServer.IsLeader() {
 			break
 		}
@@ -38,7 +46,13 @@ func TestMain(m *testing.M) {
 
 	retVal := m.Run()
 
-	testRaftServer.Shutdown()
+	cancel()
+	select {
+	case <-serverStoped:
+	case <-time.After(5 * time.Second):
+		log.Error("server did not stop in time")
+		retVal = 1
+	}
 
 	os.Exit(retVal)
 }
