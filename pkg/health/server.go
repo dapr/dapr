@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/dapr/kit/logger"
@@ -32,7 +33,7 @@ type Server interface {
 }
 
 type server struct {
-	ready bool
+	ready atomic.Bool
 	log   logger.Logger
 }
 
@@ -45,12 +46,12 @@ func NewServer(log logger.Logger) Server {
 
 // Ready sets a ready state for the endpoint handlers.
 func (s *server) Ready() {
-	s.ready = true
+	s.ready.Store(true)
 }
 
 // NotReady sets a not ready state for the endpoint handlers.
 func (s *server) NotReady() {
-	s.ready = false
+	s.ready.Store(false)
 }
 
 // Run starts a net/http server with a healthz endpoint.
@@ -92,7 +93,7 @@ func (s *server) Run(ctx context.Context, port int) error {
 func (s *server) healthz() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var status int
-		if s.ready {
+		if s.ready.Load() {
 			status = http.StatusOK
 		} else {
 			status = http.StatusServiceUnavailable
