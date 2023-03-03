@@ -52,7 +52,7 @@ jobs:
           - os: windows-2019
             target_os: windows
             target_arch: amd64
-            windows_version: 1809
+            windows_version: "1809"
           - os: windows-2022
             target_os: windows
             target_arch: amd64
