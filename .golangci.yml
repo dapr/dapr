@@ -233,6 +233,7 @@ linters:
   disable:
     # TODO Enforce the below linters later
     - nosnakecase
+    - musttag
     - dupl
     - errcheck
     - funlen

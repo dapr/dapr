@@ -333,8 +333,8 @@ test-race:
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.50.1 , otherwise you might encounter errors.
-# You can download version v1.50.1 at https://github.com/golangci/golangci-lint/releases/tag/v1.50.1
+# Please use golangci-lint version v1.51.2 , otherwise you might encounter errors.
+# You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
