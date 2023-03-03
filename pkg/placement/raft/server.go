@@ -218,7 +218,7 @@ func (s *Server) StartRaft(ctx context.Context, config *raft.Config) error {
 	logging.Info("Raft server is shutting down ...")
 
 	var errs []string
-	if err := s.raftTransport.Close(); err != nil {
+	if err = s.raftTransport.Close(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	s.lock.RLock()

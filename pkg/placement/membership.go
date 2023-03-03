@@ -73,7 +73,6 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 						oneLeaderLoopRun = sync.Once{}
 					}()
 				})
-
 			} else {
 				select {
 				case <-loopNotRunning:

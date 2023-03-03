@@ -147,7 +147,7 @@ func (p *Service) Run(ctx context.Context, port string, certChain *daprCredentia
 
 	stopErr := make(chan error, 1)
 	go func() {
-		if err := p.grpcServer.Serve(p.serverListener); err != nil &&
+		if err = p.grpcServer.Serve(p.serverListener); err != nil &&
 			!errors.Is(err, grpc.ErrServerStopped) {
 			stopErr <- fmt.Errorf("failed to serve: %v", err)
 			return
@@ -184,7 +184,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				p.addStreamConn(stream)
 				// TODO: If each sidecar can report table version, then placement
 				// doesn't need to disseminate tables to each sidecar.
-				if err := p.performTablesUpdate(stream.Context(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState()); err != nil {
+				if err = p.performTablesUpdate(stream.Context(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState()); err != nil {
 					return err
 				}
 				log.Debugf("Stream connection is established from %s", registeredMemberID)

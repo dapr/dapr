@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -32,8 +31,6 @@ import (
 )
 
 var log = logger.NewLogger("dapr.placement")
-
-const gracefulTimeout = 10 * time.Second
 
 func main() {
 	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
