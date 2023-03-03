@@ -34,8 +34,7 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: "^1.19.2"
-      GOLANGCILINT_VER: "v1.51.1"
+      GOLANGCILINT_VER: "v1.51.2"
       PROTOC_VERSION: "21.12"
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
@@ -64,10 +63,6 @@ jobs:
           - os: macOS-latest
             target_arch: arm
     steps:
-      - name: Set up Go ${{ env.GOVER }}
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ env.GOVER }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
@@ -80,7 +75,12 @@ jobs:
         with:
           version: v0.10.1 # Don't use latest since it broke our workflow once
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -116,9 +116,9 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Cache Go modules (Windows)
         if: matrix.target_os == 'windows'
         uses: actions/cache@v3
@@ -126,9 +126,9 @@ jobs:
           path: |
             ~\AppData\Local\go-build
             ~\go\pkg\mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Cache Go modules (macOS)
         if: matrix.target_os == 'darwin'
         uses: actions/cache@v3
@@ -136,9 +136,9 @@ jobs:
           path: |
             ~/Library/Caches/go-build
             ~/go/pkg/mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Check for disallowed changes in go.mod
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: node ./.github/scripts/check_go_mod.mjs
@@ -193,7 +193,7 @@ jobs:
           path: ./grafana/*.json
       - name: Docker Hub Login
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
         with:
@@ -201,7 +201,7 @@ jobs:
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -261,7 +261,7 @@ jobs:
         with:
           version: ${{ env.HELMVER }}
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -364,13 +364,13 @@ jobs:
             ${RELEASE_ARTIFACT[*]}
         shell: bash
       - name: Docker Hub Login
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
         with:
           username: ${{ secrets.DOCKER_REGISTRY_ID }}
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         if: matrix.target_os != 'darwin'
         with:
           registry: ghcr.io
@@ -461,7 +461,7 @@ jobs:
           name: dapr_helm_charts_package
           path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
       - name: Checkout Helm Charts Repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         env:
           DAPR_HELM_REPO: dapr/helm-charts
           DAPR_HELM_REPO_CODE_PATH: helm-charts
