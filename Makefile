@@ -323,7 +323,8 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/placement/... \
 ./pkg/proto/... \
 ./pkg/resiliency/... \
-./pkg/runtime/...
+./pkg/runtime/... \
+./pkg/signals/...
 
 .PHONY: test-race
 test-race:
