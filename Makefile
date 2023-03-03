@@ -323,7 +323,8 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/placement/... \
 ./pkg/proto/... \
 ./pkg/resiliency/... \
-./pkg/runtime/...
+./pkg/runtime/... \
+./pkg/signals/...
 
 .PHONY: test-race
 test-race:
@@ -333,8 +334,8 @@ test-race:
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.51.1 , otherwise you might encounter errors.
-# You can download version v1.51.1 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.1
+# Please use golangci-lint version v1.51.2 , otherwise you might encounter errors.
+# You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
@@ -347,7 +348,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); go mod tidy -compat=1.19; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.20; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
