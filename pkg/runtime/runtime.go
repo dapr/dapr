@@ -408,6 +408,10 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 		tpStore.RegisterExporter(otelExporter)
 	}
 
+	if !tpStore.HasExporter() && tracingSpec.SamplingRate != "" {
+		tpStore.RegisterExporter(diagUtils.NewNullExporter())
+	}
+
 	// Register a resource
 	r := resource.NewWithAttributes(
 		semconv.SchemaURL,
@@ -1365,14 +1369,16 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
+
+		appResponseBody, err = resp.RawDataFull()
+
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code < 200 || resp.Status().Code > 299 {
-			body, _ := resp.RawDataFull()
-			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(appResponseBody))
 		}
 
-		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
-			appResponseBody = resp.Message().Data.Value
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
 	}
 
@@ -1429,19 +1435,20 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	})
 
 	serverConf := http.ServerConfig{
-		AppID:              a.runtimeConfig.ID,
-		HostAddress:        a.hostAddress,
-		Port:               port,
-		APIListenAddresses: a.runtimeConfig.APIListenAddresses,
-		PublicPort:         publicPort,
-		ProfilePort:        profilePort,
-		AllowedOrigins:     allowedOrigins,
-		EnableProfiling:    a.runtimeConfig.EnableProfiling,
-		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
-		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
-		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
-		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
-		APILogHealthChecks: !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
+		AppID:                   a.runtimeConfig.ID,
+		HostAddress:             a.hostAddress,
+		Port:                    port,
+		APIListenAddresses:      a.runtimeConfig.APIListenAddresses,
+		PublicPort:              publicPort,
+		ProfilePort:             profilePort,
+		AllowedOrigins:          allowedOrigins,
+		EnableProfiling:         a.runtimeConfig.EnableProfiling,
+		MaxRequestBodySize:      a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:        a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSize:          a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:        a.runtimeConfig.EnableAPILogging,
+		APILoggingObfuscateURLs: a.globalConfig.Spec.LoggingSpec.APILogging.ObfuscateURLs,
+		APILogHealthChecks:      !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
 	}
 
 	server := http.NewServer(http.NewServerOpts{
@@ -2131,8 +2138,12 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		WithCustomHTTPMetadata(msg.metadata)
 	defer req.Close()
 
-	if cloudEvent[pubsub.TraceIDField] != nil {
-		traceID := cloudEvent[pubsub.TraceIDField].(string)
+	iTraceID := cloudEvent[pubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[pubsub.TraceIDField]
+	}
+	if iTraceID != nil {
+		traceID := iTraceID.(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.topic, sc, a.globalConfig.Spec.TracingSpec)
 	}
@@ -2251,7 +2262,11 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	var span trace.Span
-	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
+	iTraceID := cloudEvent[pubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[pubsub.TraceIDField]
+	}
+	if iTraceID != nil {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
@@ -2770,11 +2785,6 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 		}
 
 		secretStoreName := a.authSecretStoreOrDefault(component)
-		secretStore := a.getSecretStore(secretStoreName)
-		if secretStore == nil {
-			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
-			return component, secretStoreName
-		}
 
 		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
@@ -2800,6 +2810,12 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 			component.Spec.Metadata[i] = m
 			continue
+		}
+
+		secretStore := a.getSecretStore(secretStoreName)
+		if secretStore == nil {
+			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
+			return component, secretStoreName
 		}
 
 		resp, ok := cache[m.SecretKeyRef.Name]

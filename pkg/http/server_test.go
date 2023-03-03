@@ -708,8 +708,9 @@ func TestAPILogging(t *testing.T) {
 	}
 	dec := json.NewDecoder(logDest)
 
-	runTest := func(userAgent string) func(t *testing.T) {
+	runTest := func(userAgent string, obfuscateURL bool) func(t *testing.T) {
 		return func(t *testing.T) {
+			srv.config.APILoggingObfuscateURLs = obfuscateURL
 			r.Request.Header.Set("User-Agent", userAgent)
 
 			for _, e := range endpoints {
@@ -718,6 +719,7 @@ func TestAPILogging(t *testing.T) {
 				for _, m := range e.Methods {
 					handler, _ := router.Lookup(m, path, r)
 					r.Request.Header.SetMethod(m)
+					r.Request.Header.SetRequestURI(path)
 					handler(r)
 
 					assert.Equal(t, body, r.Response.Body())
@@ -728,7 +730,11 @@ func TestAPILogging(t *testing.T) {
 
 					assert.Equal(t, "test-api-logging", logData["scope"])
 					assert.Equal(t, "HTTP API Called", logData["msg"])
-					assert.Equal(t, m+" "+routePath, logData["method"])
+					if obfuscateURL {
+						assert.Equal(t, m+" "+routePath, logData["method"])
+					} else {
+						assert.Equal(t, m+" "+path, logData["method"])
+					}
 					if userAgent != "" {
 						assert.Equal(t, userAgent, logData["useragent"])
 					} else {
@@ -740,8 +746,12 @@ func TestAPILogging(t *testing.T) {
 		}
 	}
 
-	t.Run("without user agent", runTest(""))
-	t.Run("with user agent", runTest("daprtest/1"))
+	// Test user agent inclusion
+	t.Run("without user agent", runTest("", false))
+	t.Run("with user agent", runTest("daprtest/1", false))
+
+	// Test obfuscate URLs
+	t.Run("obfuscate URL", runTest("daprtest/1", true))
 }
 
 func TestAPILoggingOmitHealthChecks(t *testing.T) {
@@ -790,6 +800,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		handler, _ := router.Lookup(fasthttp.MethodGet, path, r)
 		r.Request.Header.SetMethod(fasthttp.MethodGet)
+		r.Request.Header.SetRequestURI(path)
 		handler(r)
 
 		assert.Equal(t, body, r.Response.Body())
