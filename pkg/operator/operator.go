@@ -99,7 +99,7 @@ func init() {
 func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	conf, err := ctrl.GetConfig()
 	if err != nil {
-		return nil, fmt.Errorf("Unable to get controller runtime configuration, err: %s", err)
+		return nil, fmt.Errorf("unable to get controller runtime configuration, err: %s", err)
 	}
 	watchdogPodSelector := getSideCarInjectedNotExistsSelector()
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
@@ -113,7 +113,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		NewCache:               operatorcache.GetFilteredCache(watchdogPodSelector),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Unable to start manager, err: %s", err)
+		return nil, fmt.Errorf("unable to start manager, err: %s", err)
 	}
 	mgrClient := mgr.GetClient()
 
@@ -129,7 +129,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 			podSelector:       watchdogPodSelector,
 		}
 		if err := mgr.Add(wd); err != nil {
-			return nil, fmt.Errorf("Unable to add watchdog controller, err: %s", err)
+			return nil, fmt.Errorf("unable to add watchdog controller, err: %s", err)
 		}
 	} else {
 		log.Infof("Dapr Watchdog is not enabled")
@@ -177,6 +177,7 @@ func (o *operator) loadCertChain(ctx context.Context) (*credentials.CertChain, e
 	log.Info("Getting TLS certificates")
 
 	watchCtx, watchCancel := context.WithTimeout(ctx, time.Minute)
+	defer watchCancel()
 	fsevent := make(chan struct{})
 	fserr := make(chan error)
 
@@ -339,7 +340,7 @@ func (o *operator) patchCRDs(ctx context.Context, trustChain []byte, conf *rest.
 			crd.Spec.Conversion == nil ||
 			crd.Spec.Conversion.Webhook == nil ||
 			crd.Spec.Conversion.Webhook.ClientConfig == nil {
-			return fmt.Errorf("CRD %q does not have an existing webhook client config. Applying resources of this type will fail.", crdName)
+			return fmt.Errorf("crd %q does not have an existing webhook client config. Applying resources of this type will fail.", crdName)
 		}
 
 		if crd.Spec.Conversion.Webhook.ClientConfig.Service != nil &&
