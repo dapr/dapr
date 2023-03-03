@@ -16,7 +16,7 @@ name: dapr
 on:
   workflow_dispatch:
   schedule:
-    - cron: '00 22 * * *'
+    - cron: "00 22 * * *"
   push:
     branches:
       - master
@@ -45,13 +45,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2019, macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
         target_arch: [arm, arm64, amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
           - os: windows-2019
             target_os: windows
+            target_arch: amd64
+            windows_version: 1809
           - os: windows-2022
             target_os: windows
             target_arch: amd64
@@ -59,10 +61,6 @@ jobs:
           - os: macOS-latest
             target_os: darwin
         exclude:
-          - os: windows-2019
-            target_arch: arm
-          - os: windows-2019
-            target_arch: arm64
           - os: macOS-latest
             target_arch: arm
     steps:
@@ -394,11 +392,17 @@ jobs:
           DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
           LATEST_TAG=latest-mariner \
             make docker-publish
+
+          # Publish the `-windows-amd64` manifest.
+          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
+          LATEST_TAG=latest-windows-amd64 \
+            make docker-publish
         shell: bash
       - name: Build and push Docker multiarch manifest to GHCR
         if: matrix.target_os != 'darwin'
         env:
-           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
+          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           echo "Build Docker multiarch manifest and push to GHCR"
           DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
@@ -410,6 +414,12 @@ jobs:
           DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
           LATEST_TAG=latest-mariner \
             make docker-publish
+
+          # Publish the `-windows-amd64` manifest.
+          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
+          LATEST_TAG=latest-windows-amd64 \
+            make docker-publish
         shell: bash
       - name: Save release version
         run: |
@@ -418,7 +428,7 @@ jobs:
       - name: Package Helm chart
         if: ${{ env.LATEST_RELEASE }} == "true" && env.DOCKER_REGISTRY != ''
         env:
-              HELM_CHARTS_DIR: charts/dapr
+          HELM_CHARTS_DIR: charts/dapr
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
           helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
@@ -453,8 +463,8 @@ jobs:
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v2
         env:
-              DAPR_HELM_REPO: dapr/helm-charts
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
+          DAPR_HELM_REPO: dapr/helm-charts
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
         with:
           repository: ${{ env.DAPR_HELM_REPO }}
           ref: refs/heads/master
@@ -462,24 +472,24 @@ jobs:
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         env:
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
-              DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
+          DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
         run: |
-            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
-            cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-            cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
-            git config --global user.email "daprweb@microsoft.com"
-            git config --global user.name "dapr-bot"
-            git add --all
-            # Check if the dapr-${daprVersion}.tgz file is modified.
-            if git diff --name-only --staged | grep -q ${daprVersion}; then
-              # If it is, we update the Helm chart, since this is an intentional update.
-              git commit -m "Release - $daprVersion"
-              git push
-            else
-              # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
-              echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
-              exit -1
-            fi
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
+          git config --global user.email "daprweb@microsoft.com"
+          git config --global user.name "dapr-bot"
+          git add --all
+          # Check if the dapr-${daprVersion}.tgz file is modified.
+          if git diff --name-only --staged | grep -q ${daprVersion}; then
+            # If it is, we update the Helm chart, since this is an intentional update.
+            git commit -m "Release - $daprVersion"
+            git push
+          else
+            # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
+            echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
+            exit -1
+          fi
