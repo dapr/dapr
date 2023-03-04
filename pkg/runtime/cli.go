@@ -41,7 +41,6 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
-	"github.com/labstack/gommon/log"
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
