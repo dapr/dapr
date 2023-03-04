@@ -189,10 +189,6 @@ jobs:
       run: |
         make setup-test-env-mongodb
 
-    - name: Setup Temporal
-      run: |
-        make setup-test-env-temporal
-
     - name: Setup Zipkin
       run: |
         make setup-test-env-zipkin
