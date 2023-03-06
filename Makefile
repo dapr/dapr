@@ -323,7 +323,8 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/placement/... \
 ./pkg/proto/... \
 ./pkg/resiliency/... \
-./pkg/runtime/...
+./pkg/runtime/... \
+./pkg/signals/...
 
 .PHONY: test-race
 test-race:
@@ -463,6 +464,17 @@ compile-build-tools:
 ifeq (,$(wildcard $(BUILD_TOOLS)))
 	cd .build-tools; CGO_ENABLED=$(CGO) GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go build -o $(BUILD_TOOLS_BIN) .
 endif
+
+################################################################################
+# Targets for components-contrib                                               #
+################################################################################
+.PHONY: update-components-contrib
+# Branch or tag to pin
+COMPONENTS_CONTRIB_BRANCH ?= master
+COMPONENTS_CONTRIB_REPO ?= github.com/dapr/components-contrib
+update-components-contrib:
+	go get -u $(COMPONENTS_CONTRIB_REPO)@$(COMPONENTS_CONTRIB_BRANCH)
+	make modtidy-all
 
 ################################################################################
 # Target: codegen                                                              #
