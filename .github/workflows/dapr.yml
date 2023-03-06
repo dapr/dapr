@@ -77,7 +77,7 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
         with:
-          ref: 18c15d95ad2b7650f9a7198c9971153dcd50ad68
+          ref: 221131c67bcc199632d54388d3dc15233edd7d66
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v3
@@ -265,7 +265,7 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
         with:
-          ref: 18c15d95ad2b7650f9a7198c9971153dcd50ad68
+          ref: 221131c67bcc199632d54388d3dc15233edd7d66
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
