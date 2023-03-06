@@ -142,7 +142,7 @@ func (s *sentry) Stop() {
 // Watches certificates' expiry and shows an error message when they're nearing expiration time.
 // This is a blocking method that should be run in its own goroutine.
 func watchCertExpiry(ctx context.Context, certAuth ca.CertificateAuthority) {
-	log.Debug("starting root certificate expiration watcher")
+	log.Debug("Starting root certificate expiration watcher")
 	certExpiryCheckTicker := time.NewTicker(time.Hour)
 	for {
 		select {
@@ -151,7 +151,7 @@ func watchCertExpiry(ctx context.Context, certAuth ca.CertificateAuthority) {
 			block, _ := pem.Decode(caCrt)
 			cert, certParseErr := x509.ParseCertificate(block.Bytes)
 			if certParseErr != nil {
-				log.Warn("could not determine Dapr root certificate expiration time")
+				log.Warn("Could not determine Dapr root certificate expiration time")
 				break
 			}
 			if cert.NotAfter.Before(time.Now().UTC()) {
@@ -166,7 +166,7 @@ func watchCertExpiry(ctx context.Context, certAuth ca.CertificateAuthority) {
 				log.Debugf("Dapr root certificate is still valid for %s", validity.String())
 			}
 		case <-ctx.Done():
-			log.Debug("terminating root certificate expiration watcher")
+			log.Debug("Terminating root certificate expiration watcher")
 			certExpiryCheckTicker.Stop()
 			return
 		}
@@ -181,10 +181,7 @@ func (s *sentry) createValidator() (identity.Validator, error) {
 			return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 		}
 
-		// TODO: Remove once the NoDefaultTokenAudience feature is finalized
-		noDefaultTokenAudience := false
-
-		return kubernetes.NewValidator(kubeClient, s.conf.GetTokenAudiences(), noDefaultTokenAudience), nil
+		return kubernetes.NewValidator(kubeClient, s.conf.GetTokenAudiences()), nil
 	}
 	return selfhosted.NewValidator(), nil
 }
