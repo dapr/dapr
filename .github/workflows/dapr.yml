@@ -423,6 +423,8 @@ jobs:
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
           LATEST_TAG=latest-windows-amd64 \
+          MANIFEST_TAG="{{ env.REL_VERSION }}" \
+          MANIFEST_LATEST_TAG="latest" \
             make docker-publish
         shell: bash
       - name: Save release version
