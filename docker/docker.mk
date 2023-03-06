@@ -161,19 +161,19 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 else
 	$(DOCKER) push $(DOCKER_IMAGE):$(BUILD_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG) \
+		$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG) \
+		$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG) \
+		$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		$(DOCKER) push $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG) \
+		$(DOCKER) push $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		$(DOCKER) push $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) \
+		$(DOCKER) push $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 endif
 else
@@ -210,19 +210,19 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 else
 	kind load docker-image $(DOCKER_IMAGE):$(BUILD_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		kind load docker-image $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG) \
+		kind load docker-image $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG) \
+		kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG) \
+		kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		kind load docker-image $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG) \
+		kind load docker-image $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) \
+		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 endif
 
@@ -282,44 +282,44 @@ endif
 docker-publish: SHELL := $(shell which bash)
 docker-publish: docker-manifest-create
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	$(DOCKER) manifest push $(DOCKER_IMAGE_TAG)
+	$(DOCKER) manifest push $(DOCKER_IMAGE):$(DAPR_TAG)
 else
-	$(DOCKER) manifest push $(DOCKER_IMAGE_TAG)
+	$(DOCKER) manifest push $(DOCKER_IMAGE):$(DAPR_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG); \
+	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG); \
+	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_TAG); \
+	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_OPERATOR_DOCKER_IMAGE_TAG); \
+	$(DOCKER) manifest push $(DAPR_OPERATOR_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE_TAG); \
+	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 endif
 ifeq ($(LATEST_RELEASE),true)
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	$(DOCKER) manifest push $(DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) manifest push $(DOCKER_IMAGE):$(LATEST_TAG)
 else
-	$(DOCKER) manifest push $(DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) manifest push $(DOCKER_IMAGE):$(LATEST_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG); \
+	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG); \
+	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG); \
+	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_OPERATOR_DOCKER_IMAGE_LATEST_TAG); \
+	$(DOCKER) manifest push $(DAPR_OPERATOR_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE_LATEST_TAG); \
+	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 endif
 endif
