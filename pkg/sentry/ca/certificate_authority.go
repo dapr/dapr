@@ -44,8 +44,7 @@ func NewCertificateAuthority(config config.SentryConfig) (CertificateAuthority, 
 	switch config.CAStore {
 	default:
 		return &defaultCA{
-			config:     config,
-			issuerLock: &sync.RWMutex{},
+			config: config,
 		}, nil
 	}
 }
@@ -53,7 +52,7 @@ func NewCertificateAuthority(config config.SentryConfig) (CertificateAuthority, 
 type defaultCA struct {
 	bundle     *trustRootBundle
 	config     config.SentryConfig
-	issuerLock *sync.RWMutex
+	issuerLock sync.RWMutex
 }
 
 type SignedCertificate struct {
@@ -132,7 +131,7 @@ func (c *defaultCA) ValidateCSR(csr *x509.CertificateRequest) error {
 func shouldCreateCerts(conf config.SentryConfig) bool {
 	exists, err := certs.CredentialsExist(conf)
 	if err != nil {
-		log.Errorf("error checking if credentials exist: %s", err)
+		log.Errorf("Error checking if credentials exist: %s", err)
 	}
 	if exists {
 		return false
@@ -194,14 +193,14 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		issuerCertBytes = certChain.Cert
 	} else {
 		// create self signed root and issuer certs
-		log.Info("root and issuer certs not found: generating self signed CA")
+		log.Info("Root and issuer certs not found: generating self signed CA")
 		var err error
 		issuerCreds, rootCertBytes, issuerCertBytes, err = c.generateRootAndIssuerCerts()
 		if err != nil {
 			return nil, fmt.Errorf("error generating trust root bundle: %w", err)
 		}
 
-		log.Info("self signed certs generated and persisted successfully")
+		log.Info("Self-signed certs generated and persisted successfully")
 	}
 
 	// load trust anchors

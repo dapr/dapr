@@ -33,20 +33,26 @@ import (
 
 const testStreamSendLatency = 50 * time.Millisecond
 
-func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) {
+func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, context.CancelFunc) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	serverStoped := make(chan struct{})
 	testServer := NewPlacementService(raftServer)
 
 	port, _ := freeport.GetFreePort()
 	go func() {
-		testServer.Run(strconv.Itoa(port), nil)
+		defer close(serverStoped)
+		assert.NoError(t, testServer.Run(ctx, strconv.Itoa(port), nil))
 	}()
 
-	// Wait until test server starts
-	time.Sleep(100 * time.Millisecond)
-
 	cleanUpFn := func() {
-		testServer.hasLeadership.Store(false)
-		testServer.Shutdown()
+		cancel()
+		select {
+		case <-serverStoped:
+		case <-time.After(time.Second):
+			t.Error("server did not stop in time")
+		}
 	}
 
 	serverAddress := "127.0.0.1:" + strconv.Itoa(port)
@@ -70,7 +76,7 @@ func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_Repor
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
 	// set up
-	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
 	testServer.hasLeadership.Store(false)
 
 	// arrange
@@ -101,7 +107,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 }
 
 func TestMemberRegistration_Leadership(t *testing.T) {
-	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
 	testServer.hasLeadership.Store(true)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
