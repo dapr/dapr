@@ -66,19 +66,19 @@ jobs:
           REPO_OWNER=${{ github.repository_owner }}
           # Lowercase the value
           echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
-      - name: Docker Hub login
-        if: env.CHECKOUT_REPO != '' && env.DAPR_REGISTRY != ''
-        env:
-          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-        run: |
-          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
+      # - name: Docker Hub login
+      #   if: env.CHECKOUT_REPO != '' && env.DAPR_REGISTRY != ''
+      #   env:
+      #     DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      #   run: |
+      #     docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub container registry login
         if: env.CHECKOUT_REPO != ''
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_REGISTRY_ID }} # ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASS }} # ${{ secrets.GITHUB_TOKEN }}
       - name: Build Windows base images for Docker Hub
         if: env.CHECKOUT_REPO != '' && env.DAPR_REGISTRY != ''
         env:

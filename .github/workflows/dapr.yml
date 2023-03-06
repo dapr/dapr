@@ -16,7 +16,7 @@ name: dapr
 on:
   workflow_dispatch:
   schedule:
-    - cron: '00 22 * * *'
+    - cron: "00 22 * * *"
   push:
     branches:
       - master
@@ -80,7 +80,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v3
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -191,37 +191,37 @@ jobs:
         with:
           name: dapr_grafana_dashboards
           path: ./grafana/*.json
-      - name: Docker Hub Login
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
-        uses: docker/login-action@v2
-        env:
-          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-        with:
-          username: ${{ secrets.DOCKER_REGISTRY_ID }}
-          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
+      # - name: Docker Hub Login
+      #   if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
+      #   uses: docker/login-action@v2
+      #   env:
+      #     DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+      #   with:
+      #     username: ${{ secrets.DOCKER_REGISTRY_ID }}
+      #     password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push Docker images to Docker Hub
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
-        env:
-          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-          TARGET_OS: ${{ matrix.target_os }}
-          TARGET_ARCH: ${{ matrix.target_arch }}
-        run: |
-          echo "Build Docker images and push to Docker Hub..."
-          DAPR_TAG=${{ env.REL_VERSION }} make docker-push
+          username: ${{ secrets.DOCKER_REGISTRY_ID }} # ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASS }} # ${{ secrets.GITHUB_TOKEN }}
+      # - name: Build and push Docker images to Docker Hub
+      #   if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
+      #   env:
+      #     DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+      #     DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      #     TARGET_OS: ${{ matrix.target_os }}
+      #     TARGET_ARCH: ${{ matrix.target_arch }}
+      #   run: |
+      #     echo "Build Docker images and push to Docker Hub..."
+      #     DAPR_TAG=${{ env.REL_VERSION }} make docker-push
 
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
-            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
-          fi
-        shell: bash
+      #     # Mariner images are built only on linux/amd64 and linux/arm64
+      #     if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
+      #       DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
+      #     fi
+      #   shell: bash
       - name: Build and push Docker images to GHCR
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
         env:
@@ -363,46 +363,46 @@ jobs:
             --prerelease true \
             ${RELEASE_ARTIFACT[*]}
         shell: bash
-      - name: Docker Hub Login
-        uses: docker/login-action@v2
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
-        with:
-          username: ${{ secrets.DOCKER_REGISTRY_ID }}
-          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
+      # - name: Docker Hub Login
+      #   uses: docker/login-action@v2
+      #   if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
+      #   with:
+      #     username: ${{ secrets.DOCKER_REGISTRY_ID }}
+      #     password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
         uses: docker/login-action@v2
         if: matrix.target_os != 'darwin'
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push Docker multiarch manifest to Docker Hub
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != ''
-        env:
-          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-        run: |
-          echo "Build Docker multiarch manifest and push to GHCR"
-          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
+          username: ${{ secrets.DOCKER_REGISTRY_ID }} # ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASS }} # ${{ secrets.GITHUB_TOKEN }}
+      # - name: Build and push Docker multiarch manifest to Docker Hub
+      #   if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != ''
+      #   env:
+      #     DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+      #     DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      #   run: |
+      #     echo "Build Docker multiarch manifest and push to GHCR"
+      #     DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
 
-          # Publish the `-mariner` tag
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          # Also, these use the "latest-mariner" tag if it's the latest
-          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
-          LATEST_TAG=latest-mariner \
-            make docker-publish
+      #     # Publish the `-mariner` tag
+      #     # Mariner images are built only on linux/amd64 and linux/arm64
+      #     # Also, these use the "latest-mariner" tag if it's the latest
+      #     DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
+      #     DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
+      #     LATEST_TAG=latest-mariner \
+      #       make docker-publish
 
-          # Publish the `-windows-amd64` manifest.
-          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
-          LATEST_TAG=latest-windows-amd64 \
-            make docker-publish
-        shell: bash
+      #     # Publish the `-windows-amd64` manifest.
+      #     DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
+      #     DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
+      #     LATEST_TAG=latest-windows-amd64 \
+      #       make docker-publish
+      #   shell: bash
       - name: Build and push Docker multiarch manifest to GHCR
         if: matrix.target_os != 'darwin'
         env:
-           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
+          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           echo "Build Docker multiarch manifest and push to GHCR"
           DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
@@ -428,7 +428,7 @@ jobs:
       - name: Package Helm chart
         if: ${{ env.LATEST_RELEASE }} == "true" && env.DOCKER_REGISTRY != ''
         env:
-              HELM_CHARTS_DIR: charts/dapr
+          HELM_CHARTS_DIR: charts/dapr
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
           helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
@@ -463,8 +463,8 @@ jobs:
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v3
         env:
-              DAPR_HELM_REPO: dapr/helm-charts
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
+          DAPR_HELM_REPO: dapr/helm-charts
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
         with:
           repository: ${{ env.DAPR_HELM_REPO }}
           ref: refs/heads/master
@@ -472,24 +472,24 @@ jobs:
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         env:
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
-              DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
+          DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
         run: |
-            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
-            cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-            cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
-            git config --global user.email "daprweb@microsoft.com"
-            git config --global user.name "dapr-bot"
-            git add --all
-            # Check if the dapr-${daprVersion}.tgz file is modified.
-            if git diff --name-only --staged | grep -q ${daprVersion}; then
-              # If it is, we update the Helm chart, since this is an intentional update.
-              git commit -m "Release - $daprVersion"
-              git push
-            else
-              # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
-              echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
-              exit -1
-            fi
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
+          git config --global user.email "daprweb@microsoft.com"
+          git config --global user.name "dapr-bot"
+          git add --all
+          # Check if the dapr-${daprVersion}.tgz file is modified.
+          if git diff --name-only --staged | grep -q ${daprVersion}; then
+            # If it is, we update the Helm chart, since this is an intentional update.
+            git commit -m "Release - $daprVersion"
+            git push
+          else
+            # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
+            echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
+            exit -1
+          fi
