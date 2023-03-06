@@ -2104,10 +2104,6 @@ func (a *DaprRuntime) initNameResolution() error {
 		nr.AppPort:      strconv.Itoa(a.runtimeConfig.ApplicationPort),
 		nr.HostAddress:  a.hostAddress,
 		nr.AppID:        a.runtimeConfig.ID,
-		// TODO - change other nr components to use above properties (specifically MDNS component)
-		nr.MDNSInstanceName:    a.runtimeConfig.ID,
-		nr.MDNSInstanceAddress: a.hostAddress,
-		nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
 	}
 
 	if err != nil {
