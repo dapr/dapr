@@ -73,6 +73,13 @@ else
 DOCKER_IMAGE_VARIANT=$(TARGET_OS)-$(TARGET_ARCH)
 endif
 
+ifeq ($(MANIFEST_TAG),)
+	MANIFEST_TAG=$(DAPR_TAG)
+endif
+ifeq ($(MANIFEST_LATEST_TAG),)
+	MANIFEST_LATEST_TAG=$(LATEST_TAG)
+endif
+
 LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)
 DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SYSTEM_IMAGE_NAME)
 DAPR_RUNTIME_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_RUNTIME_IMAGE_NAME)
@@ -224,13 +231,6 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
-endif
-
-ifeq ($(MANIFEST_TAG),)
-	MANIFEST_TAG=$(DAPR_TAG)
-endif
-ifeq ($(MANIFEST_LATEST_TAG),)
-	MANIFEST_LATEST_TAG=$(LATEST_TAG)
 endif
 
 # publish muti-arch docker image to the registry
