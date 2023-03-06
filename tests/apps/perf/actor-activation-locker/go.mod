@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/perf/actor-activation-locker
 
-go 1.19
+go 1.20
 
 require github.com/dapr/go-sdk v1.6.0
 

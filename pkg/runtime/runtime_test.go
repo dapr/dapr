@@ -804,14 +804,11 @@ func TestInitNameResolution(t *testing.T) {
 		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
 			Name: resolverName,
 			Properties: map[string]string{
-				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
-				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
-				nameresolution.AppPort:             strconv.Itoa(rt.runtimeConfig.ApplicationPort),
-				nameresolution.HostAddress:         rt.hostAddress,
-				nameresolution.AppID:               rt.runtimeConfig.ID,
-				nameresolution.MDNSInstanceName:    rt.runtimeConfig.ID,
-				nameresolution.MDNSInstanceAddress: rt.hostAddress,
-				nameresolution.MDNSInstancePort:    strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
+				nameresolution.DaprHTTPPort: strconv.Itoa(rt.runtimeConfig.HTTPPort),
+				nameresolution.DaprPort:     strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
+				nameresolution.AppPort:      strconv.Itoa(rt.runtimeConfig.ApplicationPort),
+				nameresolution.HostAddress:  rt.hostAddress,
+				nameresolution.AppID:        rt.runtimeConfig.ID,
 			},
 		}}
 
@@ -900,6 +897,12 @@ func TestSetupTracing(t *testing.T) {
 		name:          "no trace exporter",
 		tracingConfig: config.TracingSpec{},
 	}, {
+		name: "sampling rate 1 without trace exporter",
+		tracingConfig: config.TracingSpec{
+			SamplingRate: "1",
+		},
+		expectedExporters: []sdktrace.SpanExporter{&diagUtils.NullExporter{}},
+	}, {
 		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
 			Zipkin: config.ZipkinSpec{
@@ -972,6 +975,9 @@ func TestSetupTracing(t *testing.T) {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.Nil(t, err)
+			}
+			if len(tc.expectedExporters) > 0 {
+				assert.True(t, tpStore.HasExporter())
 			}
 			for i, exporter := range tpStore.exporters {
 				// Exporter types don't expose internals, so we can only validate that
