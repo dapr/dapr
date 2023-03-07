@@ -70,7 +70,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.1
 )
 
-require github.com/redis/go-redis/v9 v9.0.2 // indirect
+require github.com/go-redis/redis/v9 v9.0.0-rc.2 // indirect
 
 require (
 	cloud.google.com/go v0.107.0 // indirect
@@ -421,7 +421,7 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => ../components-contrib
+// replace github.com/dapr/components-contrib => ../components-contrib
 
 //
 // Then, run `make modtidy` in this repository.

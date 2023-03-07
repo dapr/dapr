@@ -710,15 +710,6 @@ message TerminateWorkflowRequest {
 
 message TerminateWorkflowResponse {
 }
-
-message PurgeWorkflowRequest {
-  string instance_id = 1;
-  string workflow_component = 2;
-}
-
-message PurgeWorkflowResponse {
-}
-
 message RaiseEventWorkflowRequest {
   string instance_id = 1;
   string workflow_component = 2;

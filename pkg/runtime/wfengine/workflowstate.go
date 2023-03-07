@@ -222,21 +222,3 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 func getMultiEntryKeyName(prefix string, i int) string {
 	return fmt.Sprintf("%s-%06d", prefix, i)
 }
-
-func Purge(ctx context.Context, actorRuntime actors.Actors, actorID string) error {
-	req := actors.GetStateRequest{
-		ActorType: WorkflowActorType,
-		ActorID:   actorID,
-		Key:       metadataKey,
-	}
-	res, err := actorRuntime.GetState(ctx, &req)
-	if err != nil {
-		return fmt.Errorf("failed to load workflow metadata: %w", err)
-	}
-	if len(res.Data) == 0 {
-		// no state found
-		return fmt.Errorf("no state found for actor with ID: %s", actorID)
-	}
-
-	return nil
-}
