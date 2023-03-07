@@ -92,7 +92,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	}
 
 	// act
-	stream.Send(ost)
+	stream.Send(host)
 	_, err = stream.Recv()
 	s, ok := status.FromError(err)
 
