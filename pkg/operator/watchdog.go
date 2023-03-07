@@ -15,14 +15,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/injector/sidecar"
+	operatorconsts "github.com/dapr/dapr/pkg/operator/meta"
 	"github.com/dapr/dapr/utils"
 )
 
 const (
-	sidecarContainerName          = "daprd"
-	daprEnabledAnnotationKey      = "dapr.io/enabled"
-	sidecarInjectorDeploymentName = "dapr-sidecar-injector"
-	watchdogPatchedLabel          = "dapr.io/watchdog-patched"
+	sidecarContainerName     = "daprd"
+	daprEnabledAnnotationKey = "dapr.io/enabled"
 )
 
 // service timers, using var to be able to mock their values in tests
@@ -43,6 +42,7 @@ type DaprWatchdog struct {
 	client            client.Client
 	restartLimiter    ratelimit.Limiter
 	canPatchPodLabels bool
+	podSelector       labels.Selector
 }
 
 // NeedLeaderElection makes it so the controller runs on the leader node only.
@@ -58,9 +58,6 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
-
-	// negative selector to be used during list pod operations
-	sel := getSideCarInjectedNotExistsSelector()
 
 	if dw.maxRestartsPerMin > 0 {
 		dw.restartLimiter = ratelimit.New(
@@ -88,7 +85,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 				if !ok {
 					continue
 				}
-				ok = dw.listPods(ctx, sel)
+				ok = dw.listPods(ctx)
 				if !firstCompleted {
 					if ok {
 						close(firstCompleteCh)
@@ -154,14 +151,14 @@ func getSideCarInjectedNotExistsSelector() labels.Selector {
 		log.Fatalf("Unable to add label requirement to find pods with Injector created label , err: %s", err)
 	}
 	sel = sel.Add(*req)
-	req, err = labels.NewRequirement(watchdogPatchedLabel, selection.DoesNotExist, []string{})
+	req, err = labels.NewRequirement(operatorconsts.WatchdogPatchedLabel, selection.DoesNotExist, []string{})
 	if err != nil {
 		log.Fatalf("Unable to add label requirement to find pods with Watchdog created label , err: %s", err)
 	}
 	return sel.Add(*req)
 }
 
-func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLabelSelector labels.Selector) bool {
+func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 	log.Infof("DaprWatchdog started checking pods")
 
 	// Look for the dapr-sidecar-injector deployment first and ensure it's running
@@ -170,7 +167,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 
 	err := dw.client.List(ctx, deployment, &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(
-			map[string]string{"app": sidecarInjectorDeploymentName},
+			map[string]string{"app": operatorconsts.SidecarInjectorDeploymentName},
 		),
 	})
 	if err != nil {
@@ -188,10 +185,8 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 	// to verify the annotation.  If we find some with dapr enabled annotation we will subsequently query those further.
 
 	podListOpts := &client.ListOptions{
-		LabelSelector: podsNotMatchingInjectorLabelSelector,
+		LabelSelector: dw.podSelector,
 	}
-
-	var podsMaybeMissingSidecar []types.NamespacedName
 
 	podList := &metav1.PartialObjectMetadataList{}
 	podList.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
@@ -200,6 +195,8 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 		log.Errorf("Failed to list pods. Error: %v", err)
 		return false
 	}
+
+	podsMaybeMissingSidecar := make([]types.NamespacedName, 0, len(podList.Items))
 
 	for _, v := range podList.Items {
 		// Skip invalid pods
@@ -269,9 +266,9 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 
 func patchPodLabel(ctx context.Context, cl client.Client, pod *corev1.Pod) error {
 	// in case this has been already patched just return
-	if _, ok := pod.GetLabels()[watchdogPatchedLabel]; ok {
+	if _, ok := pod.GetLabels()[operatorconsts.WatchdogPatchedLabel]; ok {
 		return nil
 	}
-	mergePatch := []byte(fmt.Sprintf(`{"metadata":{"labels":{"%s":"true"}}}`, watchdogPatchedLabel))
+	mergePatch := []byte(fmt.Sprintf(`{"metadata":{"labels":{"%s":"true"}}}`, operatorconsts.WatchdogPatchedLabel))
 	return cl.Patch(ctx, pod, client.RawPatch(types.MergePatchType, mergePatch))
 }

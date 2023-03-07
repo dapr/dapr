@@ -16,7 +16,6 @@ package operator
 import (
 	"context"
 	"errors"
-	"net/http"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
+	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
@@ -92,13 +92,14 @@ func NewOperator(opts Options) Operator {
 	if err != nil {
 		log.Fatalf("Unable to get controller runtime configuration, err: %s", err)
 	}
+	watchdogPodSelector := getSideCarInjectedNotExistsSelector()
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
 		LeaderElection:     opts.LeaderElection,
 		LeaderElectionID:   "operator.dapr.io",
 		Namespace:          opts.WatchNamespace,
-		NewCache:           GetFilteredCache(),
+		NewCache:           operatorcache.GetFilteredCache(watchdogPodSelector),
 	})
 	if err != nil {
 		log.Fatalf("Unable to start manager, err: %s", err)
@@ -114,6 +115,7 @@ func NewOperator(opts Options) Operator {
 			interval:          opts.WatchdogInterval,
 			maxRestartsPerMin: opts.WatchdogMaxRestartsPerMin,
 			canPatchPodLabels: opts.WatchdogCanPatchPodLabels,
+			podSelector:       watchdogPodSelector,
 		}
 		err = mgr.Add(wd)
 		if err != nil {
@@ -217,10 +219,6 @@ func (o *operator) Run(ctx context.Context) {
 		if err := o.mgr.Start(ctx); err != nil {
 			log.Fatalf("Failed to start controller manager, err: %s", err)
 		}
-	}()
-
-	go func() {
-		log.Errorf("error serving default mux: %v", http.ListenAndServe("0.0.0.0:6060", nil))
 	}()
 
 	if !o.mgr.GetCache().WaitForCacheSync(ctx) {

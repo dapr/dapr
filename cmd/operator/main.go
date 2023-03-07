@@ -20,8 +20,6 @@ import (
 
 	"k8s.io/klog"
 
-	_ "net/http/pprof"
-
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/metrics"

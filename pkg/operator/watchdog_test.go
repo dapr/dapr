@@ -15,6 +15,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 
+	operatorconsts "github.com/dapr/dapr/pkg/operator/meta"
+
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/stretchr/testify/require"
@@ -29,7 +31,7 @@ func createMockInjectorDeployment(replicas int32) *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "injector",
 			Namespace: "dapr-system",
-			Labels:    map[string]string{"app": sidecarInjectorDeploymentName},
+			Labels:    map[string]string{"app": operatorconsts.SidecarInjectorDeploymentName},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: pointer.Int32(replicas),
@@ -46,12 +48,24 @@ func createMockPods(n, daprized, injected, daprdPresent int) (pods []*corev1.Pod
 		pods[i] = &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        fmt.Sprintf("pod-%d", i),
-				Namespace:   "default",
+				Namespace:   "dapr-system",
 				Labels:      make(map[string]string),
 				Annotations: make(map[string]string),
 			},
 			Spec: corev1.PodSpec{
-				Containers: []corev1.Container{{Name: "my-app", Image: "quay.io/prometheus/busybox-linux-arm64", Args: []string{"sh", "-c", "sleep 3600"}}},
+				Containers:                    []corev1.Container{{Name: "my-app", Image: "quay.io/prometheus/busybox-linux-arm64", Args: []string{"sh", "-c", "sleep 3600"}}},
+				TerminationGracePeriodSeconds: pointer.Int64(0),
+				Tolerations: []corev1.Toleration{
+					{
+						Key:      "kwok.x-k8s.io/node",
+						Operator: corev1.TolerationOpEqual,
+						Value:    "fake",
+						Effect:   corev1.TaintEffectNoSchedule,
+					},
+				},
+				NodeSelector: map[string]string{
+					"type": "kwok",
+				},
 			},
 			Status: corev1.PodStatus{},
 		}
@@ -79,29 +93,29 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 	t.Run("injectorNotPresent", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects().Build()
 		dw := &DaprWatchdog{client: ctlClient}
-		require.False(t, dw.listPods(ctx, nil))
+		require.False(t, dw.listPods(ctx))
 	})
 
 	t.Run("injectorPresentNoReplicas", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(0)).Build()
 		dw := &DaprWatchdog{client: ctlClient}
-		require.False(t, dw.listPods(ctx, nil))
+		require.False(t, dw.listPods(ctx))
 	})
 
 	t.Run("noPods", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient}
-		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
+		dw := &DaprWatchdog{client: ctlClient, podSelector: getSideCarInjectedNotExistsSelector()}
+		require.True(t, dw.listPods(ctx))
 	})
 
 	t.Run("noPodsWithAnnotations", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient}
+		dw := &DaprWatchdog{client: ctlClient, podSelector: getSideCarInjectedNotExistsSelector()}
 		pods := createMockPods(10, 0, 0, 0)
 		for _, pod := range pods {
 			require.NoError(t, ctlClient.Create(ctx, pod))
 		}
-		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
+		require.True(t, dw.listPods(ctx))
 		t.Log("all pods should be present")
 		for _, pod := range pods {
 			require.NoError(t, ctlClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{}))
@@ -109,20 +123,20 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 	})
 	t.Run("noInjectedPods", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl}
+		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, podSelector: getSideCarInjectedNotExistsSelector()}
 		daprized := 5
 		var injected, running int
 		pods := createMockPods(10, daprized, injected, running)
 		for _, pod := range pods {
 			require.NoError(t, ctlClient.Create(ctx, pod))
 		}
-		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
+		require.True(t, dw.listPods(ctx))
 		t.Log("daprized pods should be deleted")
 		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
 	})
 	t.Run("noInjectedPodsSomeRunning", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl}
+		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, podSelector: getSideCarInjectedNotExistsSelector()}
 		daprized := 5
 		running := 2
 		var injected int
@@ -130,13 +144,13 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 		for _, pod := range pods {
 			require.NoError(t, ctlClient.Create(ctx, pod))
 		}
-		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
+		require.True(t, dw.listPods(ctx))
 		t.Log("daprized pods should be deleted except those running")
 		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
 	})
 	t.Run("someInjectedPodsWatchdogCannotPatch", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl}
+		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, podSelector: getSideCarInjectedNotExistsSelector()}
 		daprized := 5
 		running := 1
 		injected := 3
@@ -144,14 +158,14 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 		for _, pod := range pods {
 			require.NoError(t, ctlClient.Create(ctx, pod))
 		}
-		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
+		require.True(t, dw.listPods(ctx))
 		t.Log("daprized pods should be deleted except those running")
 		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
 		assertExpectedPodsPatched(t, ctlClient, ctx, 0) // not expecting any patched pods as all pods with sidecar already have the injected label
 	})
 	t.Run("someInjectedPodsWatchdogCanPatch", func(t *testing.T) {
 		ctlClient := fake.NewClientBuilder().WithObjects(createMockInjectorDeployment(1)).Build()
-		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, canPatchPodLabels: true}
+		dw := &DaprWatchdog{client: ctlClient, restartLimiter: rl, canPatchPodLabels: true, podSelector: getSideCarInjectedNotExistsSelector()}
 		daprized := 5
 		running := 3
 		injected := 1
@@ -159,7 +173,7 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 		for _, pod := range pods {
 			require.NoError(t, ctlClient.Create(ctx, pod))
 		}
-		require.True(t, dw.listPods(ctx, getSideCarInjectedNotExistsSelector()))
+		require.True(t, dw.listPods(ctx))
 		t.Log("daprized pods should be deleted except those running")
 		assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)
 		assertExpectedPodsPatched(t, ctlClient, ctx, 2) // expecting 2, as we have 3 with sidecar but only one with label injected
@@ -169,7 +183,7 @@ func TestDaprWatchdog_listPods(t *testing.T) {
 // assertExpectedPodsPatched check that we have patched the pods that did not have the label when the watchdog can patch pods
 func assertExpectedPodsPatched(t *testing.T, ctlClient client.Reader, ctx context.Context, expectedPatchPods int) {
 	objList := corev1.PodList{}
-	require.NoError(t, ctlClient.List(ctx, &objList, client.MatchingLabels{watchdogPatchedLabel: "true"}))
+	require.NoError(t, ctlClient.List(ctx, &objList, client.MatchingLabels{operatorconsts.WatchdogPatchedLabel: "true"}))
 	require.Len(t, objList.Items, expectedPatchPods)
 }
 
@@ -200,17 +214,17 @@ func Test_patchPodLabel(t *testing.T) {
 		{
 			name:       "nilLabels",
 			pod:        &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
-			wantLabels: map[string]string{watchdogPatchedLabel: "true"},
+			wantLabels: map[string]string{operatorconsts.WatchdogPatchedLabel: "true"},
 		},
 		{
 			name:       "emptyLabels",
 			pod:        &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test", Labels: map[string]string{}}},
-			wantLabels: map[string]string{watchdogPatchedLabel: "true"},
+			wantLabels: map[string]string{operatorconsts.WatchdogPatchedLabel: "true"},
 		},
 		{
 			name:       "nonEmptyLabels",
 			pod:        &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test", Labels: map[string]string{"app": "name"}}},
-			wantLabels: map[string]string{watchdogPatchedLabel: "true", "app": "name"},
+			wantLabels: map[string]string{operatorconsts.WatchdogPatchedLabel: "true", "app": "name"},
 		},
 		{
 			name:    "noName",
@@ -219,8 +233,8 @@ func Test_patchPodLabel(t *testing.T) {
 		},
 		{
 			name:       "alreadyPresent",
-			pod:        &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "name", watchdogPatchedLabel: "true"}}},
-			wantLabels: map[string]string{watchdogPatchedLabel: "true", "app": "name"},
+			pod:        &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "name", operatorconsts.WatchdogPatchedLabel: "true"}}},
+			wantLabels: map[string]string{operatorconsts.WatchdogPatchedLabel: "true", "app": "name"},
 		},
 	}
 	for _, tc := range tests {
@@ -246,7 +260,6 @@ func TestDaprWatchdog_Start(t *testing.T) {
 		}
 	}()
 
-	// change log for tests
 	singleIterationDurationThreshold = 100 * time.Millisecond
 	defer func() {
 		singleIterationDurationThreshold = time.Second
@@ -259,6 +272,7 @@ func TestDaprWatchdog_Start(t *testing.T) {
 		maxRestartsPerMin: 0,
 		canPatchPodLabels: true,
 		interval:          200 * time.Millisecond,
+		podSelector:       getSideCarInjectedNotExistsSelector(),
 	}
 	daprized := 5
 	running := 3
