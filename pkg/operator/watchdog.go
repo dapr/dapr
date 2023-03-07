@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/injector/sidecar"
@@ -50,20 +49,6 @@ type DaprWatchdog struct {
 // Implements sigs.k8s.io/controller-runtime/pkg/manager.LeaderElectionRunnable .
 func (dw *DaprWatchdog) NeedLeaderElection() bool {
 	return true
-}
-
-// GetWatchdogLimitedCacheForPods creates a cache that limits what Pods are retrieved in the List Watch
-// All other GVKs will retrieve the regular set (ie all, unless manager is set to a specific namespace)
-func GetWatchdogLimitedCacheForPods() cache.NewCacheFunc {
-	podSelector := getSideCarInjectedNotExistsSelector()
-	return cache.BuilderWithOptions(cache.Options{
-		SelectorsByObject: cache.SelectorsByObject{
-			&corev1.Pod{}: {
-				// For Pods only cache non injected and non-watchdog-patched pods
-				Label: podSelector,
-			},
-		},
-	})
 }
 
 // Start the controller. This method blocks until the context is canceled.
@@ -202,18 +187,19 @@ func (dw *DaprWatchdog) listPods(ctx context.Context, podsNotMatchingInjectorLab
 	// We are splitting the process of finding the potential pods by first querying only for the metadata of the pods
 	// to verify the annotation.  If we find some with dapr enabled annotation we will subsequently query those further.
 
-	// Request the list of pods metadata
-	// We are not using pagination because we may be deleting pods during the iterations
-	// The client implements some level of caching anyway
+	podListOpts := &client.ListOptions{
+		LabelSelector: podsNotMatchingInjectorLabelSelector,
+	}
+
+	var podsMaybeMissingSidecar []types.NamespacedName
+
 	podList := &metav1.PartialObjectMetadataList{}
 	podList.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
-	err = dw.client.List(ctx, podList, client.MatchingLabelsSelector{Selector: podsNotMatchingInjectorLabelSelector})
+	err = dw.client.List(ctx, podList, podListOpts)
 	if err != nil {
 		log.Errorf("Failed to list pods. Error: %v", err)
 		return false
 	}
-
-	podsMaybeMissingSidecar := make([]types.NamespacedName, 0, len(podList.Items))
 
 	for _, v := range podList.Items {
 		// Skip invalid pods

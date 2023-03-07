@@ -16,6 +16,7 @@ package operator
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -97,7 +98,7 @@ func NewOperator(opts Options) Operator {
 		LeaderElection:     opts.LeaderElection,
 		LeaderElectionID:   "operator.dapr.io",
 		Namespace:          opts.WatchNamespace,
-		NewCache:           GetWatchdogLimitedCacheForPods(),
+		NewCache:           GetFilteredCache(),
 	})
 	if err != nil {
 		log.Fatalf("Unable to start manager, err: %s", err)
@@ -217,6 +218,11 @@ func (o *operator) Run(ctx context.Context) {
 			log.Fatalf("Failed to start controller manager, err: %s", err)
 		}
 	}()
+
+	go func() {
+		log.Errorf("error serving default mux: %v", http.ListenAndServe("0.0.0.0:6060", nil))
+	}()
+
 	if !o.mgr.GetCache().WaitForCacheSync(ctx) {
 		log.Fatalf("Failed to wait for cache sync")
 	}
