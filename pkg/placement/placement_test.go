@@ -81,7 +81,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 
 	// arrange
 	conn, stream, err := newTestClient(serverAddress)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	host := &v1pb.Host{
 		Name:     "127.0.0.1:50102",
@@ -92,7 +92,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	}
 
 	// act
-	stream.Send(host)
+	stream.Send(ost)
 	_, err = stream.Recv()
 	s, ok := status.FromError(err)
 
@@ -113,7 +113,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
 		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50102",
@@ -160,7 +160,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
 		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// act
 		host := &v1pb.Host{
@@ -209,7 +209,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	t.Run("non actor host", func(t *testing.T) {
 		// arrange
 		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// act
 		host := &v1pb.Host{

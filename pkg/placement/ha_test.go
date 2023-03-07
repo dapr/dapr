@@ -264,5 +264,6 @@ func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMem
 		return found && expect.Name == actual.Name &&
 			expect.AppID == actual.AppID
 	}, 5*time.Second, 100*time.Millisecond, "%v != %v", expect, actual)
+	require.NotNil(t, actual)
 	assert.EqualValues(t, expect.Entities, actual.Entities)
 }
