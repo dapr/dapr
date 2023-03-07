@@ -106,11 +106,14 @@ const (
 	ErrWorkflowNameMissing           = "workflow name is not configured"
 	ErrMissingOrEmptyInstance        = "no instance or empty instance was provided"
 	ErrMissingWorkflowType           = "missing workflow type"
+	ErrMissingWorkflowEventName      = "missing workflow event name"
 	ErrNoOrMissingWorkflowComponent  = "no component or empty component was provided"
-	ErWorkflowrComponentDoesNotExist = "provided component does not exist %s"
+	ErrWorkflowComponentDoesNotExist = "provided component does not exist %s"
 	ErrWorkflowGetResponse           = "error while getting workflow info %s"
 	ErrStartWorkflow                 = "error starting workflow %s"
 	ErrTerminateWorkflow             = "error terminating workflow %s"
+	ErrPurgeWorkflow                 = "error purging workflow %s"
+	ErrRaiseEventWorkflow            = "error raising event on workflow %s"
 	ErrTimerParse                    = "error parsing time - %s"
 )
 

@@ -152,6 +152,7 @@ const (
 	workflowComponent        = "workflowComponent"
 	workflowType             = "workflowType"
 	instanceID               = "instanceID"
+	eventName                = "eventName"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
 	pubsubnameparam          = "pubsubname"
@@ -277,6 +278,12 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceID}",
 			Version: apiVersionV1alpha1,
 			Handler: a.onGetWorkflow,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onRaiseEventWorkflow,
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
@@ -811,7 +818,7 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 	}
 	workflowRun := a.workflowComponents[component]
 	if workflowRun == nil {
-		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, component))
+		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist, component))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
@@ -886,7 +893,7 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	workflowRun := a.workflowComponents[component]
 	if workflowRun == nil {
-		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, component))
+		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist, component))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
@@ -932,7 +939,7 @@ func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	workflowRun := a.workflowComponents[component]
 	if workflowRun == nil {
-		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, component))
+		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist, component))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
@@ -945,6 +952,66 @@ func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 	err := workflowRun.Terminate(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_TERMINATE_WORKFLOW", fmt.Sprintf(messages.ErrTerminateWorkflow, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+}
+
+func (a *api) onRaiseEventWorkflow(reqCtx *fasthttp.RequestCtx) {
+	raiseEventReq := wfs.RaiseEventRequest{}
+
+	instance := reqCtx.UserValue(instanceID).(string)
+	if instance == "" {
+		msg := NewErrorResponse("ERR_NO_INSTANCE_ID_PROVIDED", messages.ErrMissingOrEmptyInstance)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	eventName := reqCtx.UserValue(eventName).(string)
+	if eventName == "" {
+		msg := NewErrorResponse("ERR_NO_EVENT_NAME_PROVIDED", messages.ErrMissingWorkflowEventName)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	component := reqCtx.UserValue(workflowComponent).(string)
+	if component == "" {
+		msg := NewErrorResponse("ERR_NO_WORKFLOW_COMPONENT_PROVIDED", messages.ErrNoOrMissingWorkflowComponent)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	workflowRun := a.workflowComponents[component]
+	if workflowRun == nil {
+		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist, component))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	if len(reqCtx.PostBody()) != 0 {
+		err := json.Unmarshal(reqCtx.PostBody(), &raiseEventReq)
+		if err != nil {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+			log.Debug(msg)
+			return
+		}
+	}
+
+	req := wfs.RaiseEventRequest{
+		InstanceID: instance,
+		EventName:  eventName,
+		Input:      raiseEventReq.Input,
+	}
+
+	err := workflowRun.RaiseEvent(reqCtx, &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_RAISE_EVENT_WORKFLOW", fmt.Sprintf(messages.ErrRaiseEventWorkflow, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return

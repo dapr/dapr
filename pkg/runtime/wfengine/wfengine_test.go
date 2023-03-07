@@ -671,6 +671,38 @@ func TestConcurrentTimerExecution(t *testing.T) {
 	}
 }
 
+// TestRaiseEvent verifies that a workflow can have an event raised against it to trigger specific functionality.
+func TestRaiseEvent(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("WorkflowForRaiseEvent", func(ctx *task.OrchestrationContext) (any, error) {
+		var nameInput string
+		if err := ctx.WaitForSingleEvent("NameOfEventBeingRaised", 30*time.Second).Await(&nameInput); err != nil {
+			// Timeout expired
+			return nil, err
+		}
+		return fmt.Sprintf("Hello, %s!", nameInput), nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "WorkflowForRaiseEvent")
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationStart(ctx, id)
+				if assert.NoError(t, err) {
+					assert.Equal(t, id, metadata.InstanceID)
+					client.RaiseEvent(ctx, id, "NameOfEventBeingRaised", "NameOfInput")
+					metadata, err = client.WaitForOrchestrationCompletion(ctx, id)
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `"Hello, NameOfInput!"`, metadata.SerializedOutput)
+					assert.Nil(t, metadata.FailureDetails)
+				}
+			}
+		})
+	}
+}
+
 func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
 	var client backend.TaskHubClient
 	engine := getEngine()

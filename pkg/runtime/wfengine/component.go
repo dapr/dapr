@@ -130,6 +130,40 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 	return nil
 }
 
+func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.WorkflowReference) error {
+
+	// Put logic for purging actor inside workflowstate and then call it from here.
+
+	if req.InstanceID == "" {
+		return fmt.Errorf("a workflow instance ID is required")
+	}
+
+	// RRL TODO: Add in purge logic
+	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
+		return fmt.Errorf("failed to terminate workflow %s: %w", req.InstanceID, err)
+	}
+
+	c.logger.Infof("purged workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows.RaiseEventRequest) error {
+	if req.InstanceID == "" {
+		return fmt.Errorf("a workflow instance ID is required")
+	}
+
+	if req.EventName == "" {
+		return fmt.Errorf("an event name is required")
+	}
+
+	if err := c.client.RaiseEvent(ctx, api.InstanceID(req.InstanceID), req.EventName, req.Input); err != nil {
+		return fmt.Errorf("failed to raise event %s on workflow %s: %w", req.EventName, req.InstanceID, err)
+	}
+
+	c.logger.Infof("raised event %s on workflow instance '%s'", req.EventName, req.InstanceID)
+	return nil
+}
+
 func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.WorkflowReference) (*workflows.StateResponse, error) {
 	if req.InstanceID == "" {
 		return nil, fmt.Errorf("a workflow instance ID is required")
