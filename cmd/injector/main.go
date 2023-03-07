@@ -62,8 +62,10 @@ func main() {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	inj := injector.NewInjector(uids, cfg, daprClient, kubeClient)
-
+	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient)
+	if err != nil {
+		log.Fatalf("could not create Injector, err: %s", err)
+	}
 	// Blocking call
 	inj.Run(ctx, func() {
 		healthzServer.Ready()
