@@ -159,6 +159,10 @@ spec:
         - name: ALLOWED_SERVICE_ACCOUNTS
           value: "{{ .Values.allowedServiceAccounts }}"
 {{- end }}
+{{- if .Values.allowedServiceAccountsPrefixNames }}
+        - name: ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES
+          value: "{{ .Values.allowedServiceAccountsPrefixNames }}"
+{{- end }}
         ports:
         - name: https
           containerPort: 4000

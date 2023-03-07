@@ -34,11 +34,11 @@ func ValidateKubernetesAppID(appID string) error {
 	if appID == "" {
 		return errors.New("value for the dapr.io/app-id annotation is empty")
 	}
-	r := isDNS1123Label(serviceName(appID))
-	if len(r) == 0 {
-		return nil
+	err := isDNS1123Label(serviceName(appID))
+	if err != nil {
+		return fmt.Errorf("invalid app id (input: '%s', service: '%s'): %w", appID, serviceName(appID), err)
 	}
-	return fmt.Errorf("invalid app id (input: %s, service: %s): %s", appID, serviceName(appID), strings.Join(r, ", "))
+	return nil
 }
 
 // ValidateSelfHostedAppID returns an error if the Dapr app id is not valid for self-hosted.
@@ -47,7 +47,7 @@ func ValidateSelfHostedAppID(appID string) error {
 		return errors.New("parameter app-id cannot be empty")
 	}
 	if strings.Contains(appID, ".") {
-		return errors.New("parameter app-id cannot contain a period (.)")
+		return errors.New("parameter app-id cannot contain dots")
 	}
 	return nil
 }
@@ -56,27 +56,22 @@ func serviceName(appID string) string {
 	return fmt.Sprintf("%s-dapr", appID)
 }
 
-// The function was taken as-is from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go
-func isDNS1123Label(value string) []string {
-	var errs []string
+// The function was adapted from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go
+func isDNS1123Label(value string) error {
+	var errs []error
 	if len(value) > dns1123LabelMaxLength {
-		errs = append(errs, maxLenError(dns1123LabelMaxLength))
+		errs = append(errs, fmt.Errorf("must be no more than %d characters", dns1123LabelMaxLength))
 	}
 	if !dns1123LabelRegexp.MatchString(value) {
 		errs = append(errs, regexError(dns1123LabelErrMsg, dns1123LabelFmt, "my-name", "123-abc"))
 	}
-	return errs
+	return errors.Join(errs...)
 }
 
-// The function was taken as-is from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go
-func maxLenError(length int) string {
-	return fmt.Sprintf("must be no more than %d characters", length)
-}
-
-// The function was taken as-is from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go
-func regexError(msg string, fmt string, examples ...string) string {
+// The function was adapted from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go
+func regexError(msg string, fmt string, examples ...string) error {
 	if len(examples) == 0 {
-		return msg + " (regex used for validation is '" + fmt + "')"
+		return errors.New(msg + " (regex used for validation is '" + fmt + "')")
 	}
 	msg += " (e.g. "
 	for i := range examples {
@@ -86,5 +81,5 @@ func regexError(msg string, fmt string, examples ...string) string {
 		msg += "'" + examples[i] + "', "
 	}
 	msg += "regex used for validation is '" + fmt + "')"
-	return msg
+	return errors.New(msg)
 }
