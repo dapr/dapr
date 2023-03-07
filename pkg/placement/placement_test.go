@@ -40,7 +40,8 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	serverStoped := make(chan struct{})
 	testServer := NewPlacementService(raftServer)
 
-	port, _ := freeport.GetFreePort()
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
 	go func() {
 		defer close(serverStoped)
 		assert.NoError(t, testServer.Run(ctx, strconv.Itoa(port), nil))
