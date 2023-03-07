@@ -76,8 +76,6 @@ jobs:
           version: v0.10.1 # Don't use latest since it broke our workflow once
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
-        with:
-          ref: 90246573ca2e9233211069e16f10be47f1278e87
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v3
@@ -265,8 +263,6 @@ jobs:
           version: ${{ env.HELMVER }}
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
-        with:
-          ref: 90246573ca2e9233211069e16f10be47f1278e87
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER

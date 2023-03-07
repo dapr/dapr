@@ -38,7 +38,7 @@ jobs:
         if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=0a293c598fb4d978898ae19aba114b5e698f2659" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
       - name: Parse event payload
         if: github.event_name == 'repository_dispatch'
