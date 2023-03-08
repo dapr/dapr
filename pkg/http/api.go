@@ -2606,7 +2606,7 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.outboundReadyStatus {
-		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
+		msg := NewErrorResponse("ERR_OUTBOUND_HEALTH_NOT_READY", messages.ErrOutboundHealthNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
