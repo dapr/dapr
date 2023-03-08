@@ -36,6 +36,26 @@ func convertToByGVK[T any](byObject map[client.Object]T) (map[schema.GroupVersio
 	return byGVK, nil
 }
 
+func getObjectTransformer(t *testing.T, o client.Object) cache2.TransformFunc {
+	transformers := getTransformerFunctions()
+	transformerByGVK, err := convertToByGVK[cache2.TransformFunc](transformers)
+	require.NoError(t, err)
+
+	gvk, err := apiutil.GVKForObject(o, scheme.Scheme)
+	require.NoError(t, err)
+
+	podTransformer, ok := transformerByGVK[gvk]
+	require.True(t, ok)
+	return podTransformer
+}
+
+func getNewTestStore() cache2.Store {
+	return cache2.NewStore(func(obj interface{}) (string, error) {
+		o := obj.(client.Object)
+		return o.GetNamespace() + "/" + o.GetName(), nil
+	})
+}
+
 func Test_podTransformer(t *testing.T) {
 	podTransformer := getObjectTransformer(t, &corev1.Pod{})
 
@@ -92,26 +112,6 @@ func Test_podTransformer(t *testing.T) {
 			require.NoError(t, store.Add(obj))
 		}
 		require.Len(t, store.List(), 2)
-	})
-}
-
-func getObjectTransformer(t *testing.T, o client.Object) cache2.TransformFunc {
-	transformers := getTransformerFunctions()
-	transformerByGVK, err := convertToByGVK[cache2.TransformFunc](transformers)
-	require.NoError(t, err)
-
-	gvk, err := apiutil.GVKForObject(o, scheme.Scheme)
-	require.NoError(t, err)
-
-	podTransformer, ok := transformerByGVK[gvk]
-	require.True(t, ok)
-	return podTransformer
-}
-
-func getNewTestStore() cache2.Store {
-	return cache2.NewStore(func(obj interface{}) (string, error) {
-		o := obj.(client.Object)
-		return o.GetNamespace() + "/" + o.GetName(), nil
 	})
 }
 

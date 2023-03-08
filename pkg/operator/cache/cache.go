@@ -3,10 +3,8 @@ package cache
 import (
 	v1 "k8s.io/api/apps/v1"
 	v13 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	v12 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -59,27 +57,19 @@ func GetFilteredCache(podSelector labels.Selector) cache.NewCacheFunc {
 func getTransformerFunctions() cache.TransformByObject {
 	return cache.TransformByObject{
 		&v13.Pod{}: func(i interface{}) (interface{}, error) {
-			obj, ok := i.(runtime.Object)
+			obj, ok := i.(*v13.Pod)
 			if !ok { // probably deletedfinalstateunknown
 				return i, nil
 			}
-			accessor, err := meta.Accessor(obj)
-			if err != nil {
-				return nil, err
-			}
-			accessor.SetManagedFields([]v12.ManagedFieldsEntry{})
 
-			switch t := i.(type) {
-			case *v13.Pod:
-				if operatormeta.IsAnnotatedForDapr(t.ObjectMeta.GetAnnotations()) && !operatormeta.IsSidecarPresent(t.ObjectMeta.GetLabels()) {
-					objClone := t.DeepCopy()
-					objClone.Status = podEmptyStatus
-					return objClone, nil
-				} else {
-					return podDevNull, nil
-				}
+			if operatormeta.IsAnnotatedForDapr(obj.ObjectMeta.GetAnnotations()) && !operatormeta.IsSidecarPresent(obj.ObjectMeta.GetLabels()) {
+				objClone := obj.DeepCopy()
+				objClone.ObjectMeta.ManagedFields = []v12.ManagedFieldsEntry{}
+				objClone.Status = podEmptyStatus
+				return objClone, nil
+			} else {
+				return podDevNull, nil
 			}
-			return i, nil
 		},
 		&v1.Deployment{}: func(i interface{}) (interface{}, error) {
 			obj, ok := i.(*v1.Deployment)

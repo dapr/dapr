@@ -8,7 +8,6 @@ import (
 	"go.uber.org/ratelimit"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
@@ -188,36 +187,25 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		LabelSelector: dw.podSelector,
 	}
 
-	podList := &metav1.PartialObjectMetadataList{}
-	podList.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
+	podList := &corev1.PodList{}
 	err = dw.client.List(ctx, podList, podListOpts)
 	if err != nil {
 		log.Errorf("Failed to list pods. Error: %v", err)
 		return false
 	}
 
-	podsMaybeMissingSidecar := make([]types.NamespacedName, 0, len(podList.Items))
-
-	for _, v := range podList.Items {
+	for _, pod := range podList.Items {
+		pod := pod
 		// Skip invalid pods
-		if v.Name == "" {
+		if pod.Name == "" {
 			continue
 		}
 
-		logName := v.Namespace + "/" + v.Name
+		logName := pod.Namespace + "/" + pod.Name
 
 		// Filter for pods with the dapr.io/enabled annotation
-		if daprEnabled, ok := v.Annotations[daprEnabledAnnotationKey]; !ok || !utils.IsTruthy(daprEnabled) {
+		if daprEnabled, ok := pod.Annotations[daprEnabledAnnotationKey]; !(ok && utils.IsTruthy(daprEnabled)) {
 			log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
-			continue
-		}
-		podsMaybeMissingSidecar = append(podsMaybeMissingSidecar, types.NamespacedName{Name: v.Name, Namespace: v.Namespace})
-	}
-
-	// let's now get more detail pod information from those pods with the annotation we found on our previous check
-	for _, podNamespaceName := range podsMaybeMissingSidecar {
-		pod := corev1.Pod{}
-		if err = dw.client.Get(ctx, podNamespaceName, &pod); err != nil {
 			continue
 		}
 
@@ -229,7 +217,6 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 				break
 			}
 		}
-		logName := pod.Namespace + "/" + pod.Name
 		if hasSidecar {
 			if dw.canPatchPodLabels {
 				log.Debugf("Found Dapr sidecar in pod %s, will patch the pod labels", logName)
@@ -243,7 +230,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 			continue
 		}
 
-		// Pod doesn't have a sidecar, so we need to kill it, so it can be restarted and have the sidecar injected
+		// Pod doesn't have a sidecar, so we need to delete it, so it can be restarted and have the sidecar injected
 		log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", logName)
 		err = dw.client.Delete(ctx, &pod)
 		if err != nil {
