@@ -685,7 +685,7 @@ message WorkflowReference {
 
 message GetWorkflowRequest {
   string instance_id  = 1;
-  string workflow_type = 2;
+  string workflow_name = 2;
   string workflow_component = 3;
 }
 

@@ -16,11 +16,7 @@ package universalapi
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
@@ -29,29 +25,29 @@ import (
 
 func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
 	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		err := messages.ErrMissingOrEmptyInstance
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		err := messages.ErrNoOrMissingWorkflowComponent
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
-	workflowRun := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist, in.WorkflowComponent))
+	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
+	if workflowComponent == nil {
+		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 	req := workflows.WorkflowReference{
 		InstanceID: in.InstanceId,
 	}
-	response, err := workflowRun.Get(ctx, &req)
+	response, err := workflowComponent.Get(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
-		a.Logger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
+		innerErr := messages.ErrWorkflowGetResponse.WithFormat(in.InstanceId, err)
+		a.Logger.Debug(innerErr)
+		return &runtimev1pb.GetWorkflowResponse{}, innerErr
 	}
 
 	id := &runtimev1pb.WorkflowReference{
@@ -60,9 +56,9 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 
 	t, err := time.Parse(time.RFC3339, response.StartTime)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTimerParse, err))
-		a.Logger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
+		innerErr := messages.ErrTimerParse.WithFormat(err)
+		a.Logger.Debug(innerErr)
+		return &runtimev1pb.GetWorkflowResponse{}, innerErr
 	}
 
 	res := &runtimev1pb.GetWorkflowResponse{
@@ -75,26 +71,26 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 
 func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error) {
 	if in.WorkflowName == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrWorkflowNameMissing)
+		err := messages.ErrWorkflowNameMissing
 		a.Logger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
 	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		err := messages.ErrNoOrMissingWorkflowComponent
 		a.Logger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
 	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		err := messages.ErrMissingOrEmptyInstance
 		a.Logger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
-	workflowRun := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist, in.WorkflowComponent))
+	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
+	if workflowComponent == nil {
+		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
@@ -112,11 +108,11 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 		Input:             inputMap,
 	}
 
-	resp, err := workflowRun.Start(ctx, &req)
+	resp, err := workflowComponent.Start(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrStartWorkflow, err))
+		innerErr := messages.ErrStartWorkflow.WithFormat(in.WorkflowName, err)
 		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
+		return &runtimev1pb.WorkflowReference{}, innerErr
 	}
 	ret := &runtimev1pb.WorkflowReference{
 		InstanceId: resp.InstanceID,
@@ -126,20 +122,20 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 
 func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
 	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		err := messages.ErrMissingOrEmptyInstance
 		a.Logger.Debug(err)
 		return &runtimev1pb.TerminateWorkflowResponse{}, err
 	}
 
 	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		err := messages.ErrNoOrMissingWorkflowComponent
 		a.Logger.Debug(err)
 		return &runtimev1pb.TerminateWorkflowResponse{}, err
 	}
 
-	workflowRun := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist, in.WorkflowComponent))
+	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
+	if workflowComponent == nil {
+		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.TerminateWorkflowResponse{}, err
 	}
@@ -148,9 +144,9 @@ func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev
 		InstanceID: in.InstanceId,
 	}
 
-	err := workflowRun.Terminate(ctx, &req)
+	err := workflowComponent.Terminate(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
+		err = messages.ErrTerminateWorkflow.WithFormat(in.InstanceId)
 		a.Logger.Debug(err)
 		return &runtimev1pb.TerminateWorkflowResponse{}, nil
 	}
@@ -159,41 +155,39 @@ func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev
 
 func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
 	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
+		err := messages.ErrMissingOrEmptyInstance
 		a.Logger.Debug(err)
 		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
 	}
 
 	if in.EventName == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingWorkflowEventName)
+		err := messages.ErrMissingWorkflowEventName
 		a.Logger.Debug(err)
 		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
 	}
 
 	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
+		err := messages.ErrNoOrMissingWorkflowComponent
 		a.Logger.Debug(err)
 		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
 	}
 
-	workflowRun := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist, in.WorkflowComponent))
+	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
+	if workflowComponent == nil {
+		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
 	}
 
-	var inputMap map[string]interface{}
-	json.Unmarshal(in.Input, &inputMap)
 	req := workflows.RaiseEventRequest{
 		InstanceID: in.InstanceId,
 		EventName:  in.EventName,
-		Input:      inputMap,
+		Input:      in.Input,
 	}
 
-	err := workflowRun.RaiseEvent(ctx, &req)
+	err := workflowComponent.RaiseEvent(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrRaiseEventWorkflow, err))
+		err = messages.ErrRaiseEventWorkflow.WithFormat(in.InstanceId)
 		a.Logger.Debug(err)
 		return &runtimev1pb.RaiseEventWorkflowResponse{}, nil
 	}
