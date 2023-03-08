@@ -435,8 +435,8 @@ github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 h1:Lg6BW0VPmCwcMl
 github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0/go.mod h1:9V2j0jn9jDEkCkv8w/bKTNppX/d0FVA1ud77xCIP4KA=
 github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v0.4.0 h1:X/ePaAG8guM7j5WORT5eEIw7cGUxe9Ah1jEQJKLmmSo=
 github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v0.4.0/go.mod h1:5dog28UP3dd1BnCPFYvyHfsmA+Phmoezt+KWT5cZnyc=
-github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.2.0 h1:2BE/tjVTT4SNWwI3dWiMqX9mt0cImxYoJIXtFeJ72t4=
-github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.2.0/go.mod h1:R6+0udeRV8iYSTVuT5RT7If4sc46K5Bz3ZKrmvZQF7U=
+github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.2.1 h1:ryVRjO3SrGrSM8PNlLuMbMYFz9vexPzvenNUEBfsgCo=
+github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.2.1/go.mod h1:R6+0udeRV8iYSTVuT5RT7If4sc46K5Bz3ZKrmvZQF7U=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventgrid/armeventgrid/v2 v2.0.0 h1:PcP4TC+0dC85A3i1p7CbD0FyrjnTvzQ3ipgSkJTIb7Y=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventgrid/armeventgrid/v2 v2.0.0/go.mod h1:rUn3oBeYkTxIsUzKxtXUPOt1ZO+bVHuZ3m5wauIfUHw=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventhub/armeventhub v1.0.0 h1:BWeAAEzkCnL0ABVJqs+4mYudNch7oFGPtTlSmIWL8ms=
@@ -716,8 +716,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.10.0-rc.9 h1:iHVmtJ1Tc4Y1XaxA+LMLpKEfAanwSudXRAD+/+kgG8Q=
-github.com/dapr/components-contrib v1.10.0-rc.9/go.mod h1:JM3xDSSDVb+ot246VZndZZK1K8Ft/6Ch2FtXW1Jbbhk=
+github.com/dapr/components-contrib v1.10.3 h1:9kNx++EmcOh+LeFqGD5VURBgNn2EFQX4sAsrPGKuywc=
+github.com/dapr/components-contrib v1.10.3/go.mod h1:21BqAjEn5hOjg2Y8/mu3nf/hD+9TSpQ45HdjesN24mQ=
 github.com/dapr/kit v0.0.4 h1:i+7TIN4crC1Mo0JFyWpIkwAE8orlliA0O6/ibvs2AaE=
 github.com/dapr/kit v0.0.4/go.mod h1:RFN6r5pZzhrelB0SUr8Dha44ckRBl7t+B01X5aw8WeE=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
