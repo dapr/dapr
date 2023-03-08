@@ -91,7 +91,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 	}
 
 	t.Run("successful dissemination", func(t *testing.T) {
-		teardown := setupEach(t)
+		t.Cleanup(setupEach(t))
 		// arrange
 		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
@@ -145,21 +145,17 @@ func TestMembershipChangeWorker(t *testing.T) {
 			"flushed all member updates and faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
-
-		teardown()
 	})
 
 	t.Run("faulty host detector", func(t *testing.T) {
 		// arrange
-		teardown := setupEach(t)
+		t.Cleanup(setupEach(t))
 		arrangeFakeMembers(t)
 
 		// faulty host detector removes all members if heartbeat does not happen
 		assert.Eventually(t, func() bool {
 			return len(testServer.raftNode.FSM().State().Members()) == 0
 		}, faultyHostDetectInitialDuration+100*time.Millisecond, 10*time.Millisecond)
-
-		teardown()
 	})
 }
 
