@@ -710,6 +710,7 @@ message TerminateWorkflowRequest {
 
 message TerminateWorkflowResponse {
 }
+
 message RaiseEventWorkflowRequest {
   string instance_id = 1;
   string workflow_component = 2;
@@ -718,4 +719,5 @@ message RaiseEventWorkflowRequest {
 }
 
 message RaiseEventWorkflowResponse {
+  // Empty
 }
