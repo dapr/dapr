@@ -220,3 +220,53 @@ func TestFilter(t *testing.T) {
 		assert.Equal(t, []string{}, out)
 	})
 }
+
+func TestContainsPrefixed(t *testing.T) {
+	tcs := []struct {
+		name     string
+		prefixes []string
+		v        string
+		want     bool
+	}{
+		{
+			name: "empty",
+			v:    "some-service-account-name",
+			want: false,
+		},
+		{
+			name:     "notFound",
+			v:        "some-service-account-name",
+			prefixes: []string{"service-account-name", "other-service-account-name"},
+			want:     false,
+		},
+		{
+			name:     "one",
+			v:        "some-service-account-name",
+			prefixes: []string{"service-account-name", "some-service-account-name"},
+			want:     true,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equalf(t, tc.want, ContainsPrefixed(tc.prefixes, tc.v), "ContainsPrefixed(%v, %v)", tc.prefixes, tc.v)
+		})
+	}
+}
+
+func TestMapToSlice(t *testing.T) {
+	t.Run("mapStringString", func(t *testing.T) {
+		m := map[string]string{"a": "b", "c": "d", "e": "f"}
+		got := MapToSlice(m)
+		assert.ElementsMatch(t, got, []string{"a", "c", "e"})
+	})
+	t.Run("mapStringStruct", func(t *testing.T) {
+		m := map[string]struct{}{"a": {}, "c": {}, "e": {}}
+		got := MapToSlice(m)
+		assert.ElementsMatch(t, got, []string{"a", "c", "e"})
+	})
+	t.Run("intStringStruct", func(t *testing.T) {
+		m := map[int]struct{}{1: {}, 2: {}, 3: {}}
+		got := MapToSlice(m)
+		assert.ElementsMatch(t, got, []int{1, 2, 3})
+	})
+}
