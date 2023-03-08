@@ -804,14 +804,11 @@ func TestInitNameResolution(t *testing.T) {
 		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
 			Name: resolverName,
 			Properties: map[string]string{
-				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
-				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
-				nameresolution.AppPort:             strconv.Itoa(rt.runtimeConfig.ApplicationPort),
-				nameresolution.HostAddress:         rt.hostAddress,
-				nameresolution.AppID:               rt.runtimeConfig.ID,
-				nameresolution.MDNSInstanceName:    rt.runtimeConfig.ID,
-				nameresolution.MDNSInstanceAddress: rt.hostAddress,
-				nameresolution.MDNSInstancePort:    strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
+				nameresolution.DaprHTTPPort: strconv.Itoa(rt.runtimeConfig.HTTPPort),
+				nameresolution.DaprPort:     strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
+				nameresolution.AppPort:      strconv.Itoa(rt.runtimeConfig.ApplicationPort),
+				nameresolution.HostAddress:  rt.hostAddress,
+				nameresolution.AppID:        rt.runtimeConfig.ID,
 			},
 		}}
 
