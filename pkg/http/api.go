@@ -846,7 +846,7 @@ func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
 				in.EventName = reqCtx.UserValue(eventName).(string)
 				return in, nil
 			},
-			SuccessStatusCode: fasthttp.StatusCreated,
+			SuccessStatusCode: fasthttp.StatusAccepted,
 		})
 }
 
