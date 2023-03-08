@@ -40,7 +40,8 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	serverStoped := make(chan struct{})
 	testServer := NewPlacementService(raftServer)
 
-	port, _ := freeport.GetFreePort()
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
 	go func() {
 		defer close(serverStoped)
 		assert.NoError(t, testServer.Run(ctx, strconv.Itoa(port), nil))
@@ -81,7 +82,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 
 	// arrange
 	conn, stream, err := newTestClient(serverAddress)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	host := &v1pb.Host{
 		Name:     "127.0.0.1:50102",
@@ -113,7 +114,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
 		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50102",
@@ -160,7 +161,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
 		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// act
 		host := &v1pb.Host{
@@ -209,7 +210,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	t.Run("non actor host", func(t *testing.T) {
 		// arrange
 		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// act
 		host := &v1pb.Host{
