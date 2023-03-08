@@ -809,6 +809,7 @@ func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
 			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
 		})
 }
 
@@ -833,6 +834,7 @@ func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
 			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
 		})
 }
 
