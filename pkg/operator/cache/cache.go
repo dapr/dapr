@@ -1,9 +1,9 @@
 package cache
 
 import (
-	v1 "k8s.io/api/apps/v1"
-	v13 "k8s.io/api/core/v1"
-	v12 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -14,21 +14,21 @@ import (
 var (
 	// create pseudo-unique name for empty resources
 	randomName    = "dapr-dev-null" + rand.String(20)
-	deployDevNull = &v1.Deployment{
-		ObjectMeta: v12.ObjectMeta{Name: randomName, Namespace: randomName},
+	deployDevNull = &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
 	}
-	stsDevNull = &v1.StatefulSet{
-		ObjectMeta: v12.ObjectMeta{Name: randomName, Namespace: randomName},
-	}
-
-	podDevNull = &v13.Pod{
-		ObjectMeta: v12.ObjectMeta{Name: randomName, Namespace: randomName},
+	stsDevNull = &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
 	}
 
-	podEmptyStatus    = v13.PodStatus{}
-	podEmptySpec      = v13.PodSpec{}
-	deployEmptyStatus = v1.DeploymentStatus{}
-	stsEmptyStatus    = v1.StatefulSetStatus{}
+	podDevNull = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
+	}
+
+	podEmptyStatus    = corev1.PodStatus{}
+	podEmptySpec      = corev1.PodSpec{}
+	deployEmptyStatus = appsv1.DeploymentStatus{}
+	stsEmptyStatus    = appsv1.StatefulSetStatus{}
 )
 
 // GetFilteredCache creates a cache that slims down resources to the minimum that is needed for processing and also acts
@@ -42,11 +42,11 @@ func GetFilteredCache(podSelector labels.Selector) cache.NewCacheFunc {
 	}
 	if podSelector != nil {
 		cacheOptions.SelectorsByObject = // The only pods we are interested are in watchdog. we don't need to list/watch pods that we are almost sure have dapr sidecar already
-			cache.SelectorsByObject{
-				&v13.Pod{}: {
-					Label: podSelector,
-				},
-			}
+		cache.SelectorsByObject{
+			&corev1.Pod{}: {
+				Label: podSelector,
+			},
+		}
 	}
 	return cache.BuilderWithOptions(cacheOptions)
 }
@@ -56,23 +56,23 @@ func GetFilteredCache(podSelector labels.Selector) cache.NewCacheFunc {
 // we set all these objects to store a single one, a sort of sinkhole
 func getTransformerFunctions() cache.TransformByObject {
 	return cache.TransformByObject{
-		&v13.Pod{}: func(i interface{}) (interface{}, error) {
-			obj, ok := i.(*v13.Pod)
+		&corev1.Pod{}: func(i interface{}) (interface{}, error) {
+			obj, ok := i.(*corev1.Pod)
 			if !ok { // probably deletedfinalstateunknown
 				return i, nil
 			}
 
 			if operatormeta.IsAnnotatedForDapr(obj.ObjectMeta.GetAnnotations()) && !operatormeta.IsSidecarPresent(obj.ObjectMeta.GetLabels()) {
 				objClone := obj.DeepCopy()
-				objClone.ObjectMeta.ManagedFields = []v12.ManagedFieldsEntry{}
+				objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
 				objClone.Status = podEmptyStatus
 				return objClone, nil
 			} else {
 				return podDevNull, nil
 			}
 		},
-		&v1.Deployment{}: func(i interface{}) (interface{}, error) {
-			obj, ok := i.(*v1.Deployment)
+		&appsv1.Deployment{}: func(i interface{}) (interface{}, error) {
+			obj, ok := i.(*appsv1.Deployment)
 			if !ok {
 				return i, nil
 			}
@@ -85,7 +85,7 @@ func getTransformerFunctions() cache.TransformByObject {
 			if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
 				// keep metadata but remove the rest
 				objClone := obj.DeepCopy()
-				objClone.ObjectMeta.ManagedFields = []v12.ManagedFieldsEntry{}
+				objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
 				objClone.Spec.Template.Spec = podEmptySpec
 				objClone.Status = deployEmptyStatus
 				return objClone, nil
@@ -93,15 +93,15 @@ func getTransformerFunctions() cache.TransformByObject {
 				return deployDevNull, nil
 			}
 		},
-		&v1.StatefulSet{}: func(i interface{}) (interface{}, error) {
-			obj, ok := i.(*v1.StatefulSet)
+		&appsv1.StatefulSet{}: func(i interface{}) (interface{}, error) {
+			obj, ok := i.(*appsv1.StatefulSet)
 			if !ok {
 				return i, nil
 			}
 			if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
 				// keep metadata but remove the rest
 				objClone := obj.DeepCopy()
-				objClone.ObjectMeta.ManagedFields = []v12.ManagedFieldsEntry{}
+				objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
 				objClone.Spec.Template.Spec = podEmptySpec
 				objClone.Status = stsEmptyStatus
 				return objClone, nil
