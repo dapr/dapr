@@ -49,6 +49,22 @@ func (c Component) LogName() string {
 	return utils.ComponentLogName(c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 }
 
+// IsAppScoped returns true if the appID is allowed in the scopes for the component.
+func (c Component) IsAppScoped(appID string) bool {
+	if len(c.Scopes) == 0 {
+		// If there are no scopes, then every app is allowed
+		return true
+	}
+
+	for _, s := range c.Scopes {
+		if s == appID {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ComponentSpec is the spec for a component.
 type ComponentSpec struct {
 	Type    string `json:"type"`
