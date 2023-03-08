@@ -206,13 +206,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2019]
+        os: [ubuntu-22.04, windows-2022]
         target_arch: [amd64]
         include:
           - os: ubuntu-22.04
             target_os: linux
-          - os: windows-2019
+          - os: windows-2022
             target_os: windows
+            windows_version: ltsc2022
           - target_arch: arm64
             target_os: linux
             os: ubuntu-latest
@@ -311,6 +312,7 @@ jobs:
           echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
         shell: bash
       - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''

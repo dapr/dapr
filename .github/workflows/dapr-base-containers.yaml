@@ -21,10 +21,17 @@ on:
     types: [windows-base]
 jobs:
   build:
+    strategy:
+      matrix:
+        include:
+          - os: "windows-2019"
+            windows-version: "1809"
+          - os: "windows-2022"
+            windows-version: "ltsc2022"
     name: Build base Windows images
-    runs-on: windows-2019
+    runs-on: ${{ matrix.os }}
     env:
-      WINDOWS_VERSION: 1809
+      WINDOWS_VERSION: ${{ matrix.windows-version }}
       TARGET_OS: windows
     steps:
       - name: Set up for manual runs
