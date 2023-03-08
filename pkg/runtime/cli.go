@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/acl"
-	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
@@ -54,8 +53,9 @@ func FromFlags() (*DaprRuntime, error) {
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
 	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
-	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
-	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
+	componentsPath := flag.String("components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
+	var resourcesPath stringSliceFlag
+	flag.Var(&resourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
@@ -88,6 +88,7 @@ func FromFlags() (*DaprRuntime, error) {
 
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
+	// Finally parse the CLI flags!
 	flag.Parse()
 
 	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
@@ -104,8 +105,8 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	if *resourcesPath != "" {
-		componentsPath = resourcesPath
+	if len(resourcesPath) == 0 && *componentsPath != "" {
+		resourcesPath = stringSliceFlag{*componentsPath}
 	}
 
 	if *runtimeVersion {
@@ -277,10 +278,9 @@ func FromFlags() (*DaprRuntime, error) {
 	runtimeConfig := NewRuntimeConfig(NewRuntimeConfigOpts{
 		ID:                           *appID,
 		PlacementAddresses:           placementAddresses,
-		controlPlaneAddress:          *controlPlaneAddress,
+		ControlPlaneAddress:          *controlPlaneAddress,
 		AllowedOrigins:               *allowedOrigins,
-		GlobalConfig:                 *config,
-		ComponentsPath:               *componentsPath,
+		ResourcesPath:                resourcesPath,
 		AppProtocol:                  appProtocol,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,
@@ -342,7 +342,7 @@ func FromFlags() (*DaprRuntime, error) {
 	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
 	if *mode == string(modes.KubernetesMode) {
-		log.Infof("Initializing the operator client (config: %s)", *config)
+		log.Info("Initializing the operator client")
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
 			return nil, clientErr
@@ -358,8 +358,10 @@ func FromFlags() (*DaprRuntime, error) {
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
+			log.Debug("Loading Kubernetes config resource: " + *config)
 			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
+			log.Debug("Loading config from file: " + *config)
 			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
 		}
 	}
@@ -391,16 +393,22 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	// Load Resiliency
-	var resiliencyConfigs []*resiliencyV1alpha.Resiliency
+	var resiliencyProvider *resiliencyConfig.Resiliency
 	switch modes.DaprMode(*mode) {
 	case modes.KubernetesMode:
-		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+		resiliencyConfigs := resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+		log.Debugf("Found %d resiliency configurations from Kubernetes", len(resiliencyConfigs))
+		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
 	case modes.StandaloneMode:
-		resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
+		if len(resourcesPath) > 0 {
+			resiliencyConfigs := resiliencyConfig.LoadLocalResiliency(log, *appID, resourcesPath...)
+			log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
+			resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+		} else {
+			resiliencyProvider = resiliencyConfig.FromConfigurations(log)
+		}
 	}
-	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-	resiliencyProvider := resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
-	log.Info("Resiliency configuration loaded.")
+	log.Info("Resiliency configuration loaded")
 
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
@@ -424,4 +432,22 @@ func parsePlacementAddr(val string) []string {
 		parsed = append(parsed, strings.TrimSpace(addr))
 	}
 	return parsed
+}
+
+// Flag type. Allows passing a flag multiple times to get a slice of strings.
+// It implements the flag.Value interface.
+type stringSliceFlag []string
+
+// String formats the flag value.
+func (f stringSliceFlag) String() string {
+	return strings.Join(f, ",")
+}
+
+// Set the flag value.
+func (f *stringSliceFlag) Set(value string) error {
+	if value == "" {
+		return errors.New("value is empty")
+	}
+	*f = append(*f, value)
+	return nil
 }

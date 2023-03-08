@@ -162,6 +162,7 @@ func (p *Service) Run(ctx context.Context, port string, certChain *daprCredentia
 	case err = <-stopErr:
 		// nop
 	}
+	log.Info("placement service stopped")
 	return err
 }
 

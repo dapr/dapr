@@ -44,7 +44,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	require.NoError(t, err)
 	go func() {
 		defer close(serverStoped)
-		assert.NoError(t, testServer.Run(ctx, strconv.Itoa(port), nil))
+		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port), nil))
 	}()
 
 	cleanUpFn := func() {
@@ -61,7 +61,9 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 }
 
 func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient, error) { //nolint:nosnakecase
-	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,6 +80,7 @@ func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_Repor
 func TestMemberRegistration_NoLeadership(t *testing.T) {
 	// set up
 	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
+	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(false)
 
 	// arrange
@@ -104,11 +107,11 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 
 	// tear down
 	conn.Close()
-	cleanup()
 }
 
 func TestMemberRegistration_Leadership(t *testing.T) {
 	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
+	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(true)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
@@ -236,6 +239,4 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
 		conn.Close()
 	})
-
-	cleanup()
 }
