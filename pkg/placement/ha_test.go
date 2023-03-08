@@ -114,11 +114,11 @@ func TestPlacementHA(t *testing.T) {
 		// There should be no leader
 		assert.Eventually(t, func() bool {
 			for _, srv := range raftServers {
-				if srv != nil {
-					return !srv.IsLeader()
+				if srv != nil && srv.IsLeader() {
+					return false
 				}
 			}
-			return false
+			return true
 		}, time.Second*5, time.Millisecond*100, "leader did not step down")
 	})
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
@@ -264,5 +264,6 @@ func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMem
 		return found && expect.Name == actual.Name &&
 			expect.AppID == actual.AppID
 	}, 5*time.Second, 100*time.Millisecond, "%v != %v", expect, actual)
+	require.NotNil(t, actual)
 	assert.EqualValues(t, expect.Entities, actual.Entities)
 }
