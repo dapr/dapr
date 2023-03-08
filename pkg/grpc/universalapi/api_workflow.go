@@ -148,7 +148,7 @@ func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev
 	if err != nil {
 		err = messages.ErrTerminateWorkflow.WithFormat(in.InstanceId)
 		a.Logger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, nil
+		return &runtimev1pb.TerminateWorkflowResponse{}, err
 	}
 	return &runtimev1pb.TerminateWorkflowResponse{}, nil
 }
@@ -189,7 +189,7 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 	if err != nil {
 		err = messages.ErrRaiseEventWorkflow.WithFormat(in.InstanceId)
 		a.Logger.Debug(err)
-		return &runtimev1pb.RaiseEventWorkflowResponse{}, nil
+		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
 	}
 	return &runtimev1pb.RaiseEventWorkflowResponse{}, nil
 }
