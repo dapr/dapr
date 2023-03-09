@@ -138,7 +138,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	if opts.ServiceReconcilerEnabled {
 		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, &handlers.Options{ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled})
 		if err := daprHandler.Init(ctx); err != nil {
-			return nil, fmt.Errorf("Unable to initialize handler, err: %s", err)
+			return nil, fmt.Errorf("unable to initialize handler, err: %s", err)
 		}
 	}
 
@@ -157,7 +157,7 @@ func (o *operator) prepareConfig() error {
 	var err error
 	o.config, err = LoadConfiguration(o.configName, o.client)
 	if err != nil {
-		return fmt.Errorf("Unable to load configuration, config: %s, err: %s", o.configName, err)
+		return fmt.Errorf("unable to load configuration, config: %s, err: %s", o.configName, err)
 	}
 	o.config.Credentials = credentials.NewTLSCredentials(o.certChainPath)
 	return nil
@@ -321,13 +321,13 @@ func (o *operator) Run(ctx context.Context) error {
 func (o *operator) patchCRDs(ctx context.Context, trustChain []byte, conf *rest.Config, crdNames ...string) error {
 	clientSet, err := apiextensionsclient.NewForConfig(conf)
 	if err != nil {
-		return fmt.Errorf("Could not get API extension client: %v", err)
+		return fmt.Errorf("could not get API extension client: %v", err)
 	}
 
 	crdClient := clientSet.ApiextensionsV1().CustomResourceDefinitions()
 	namespace := os.Getenv("NAMESPACE")
 	if namespace == "" {
-		return errors.New("Could not get dapr namespace")
+		return errors.New("could not get dapr namespace")
 	}
 
 	for _, crdName := range crdNames {
@@ -340,7 +340,7 @@ func (o *operator) patchCRDs(ctx context.Context, trustChain []byte, conf *rest.
 			crd.Spec.Conversion == nil ||
 			crd.Spec.Conversion.Webhook == nil ||
 			crd.Spec.Conversion.Webhook.ClientConfig == nil {
-			return fmt.Errorf("crd %q does not have an existing webhook client config. Applying resources of this type will fail.", crdName)
+			return fmt.Errorf("crd %q does not have an existing webhook client config. Applying resources of this type will fail", crdName)
 		}
 
 		if crd.Spec.Conversion.Webhook.ClientConfig.Service != nil &&
