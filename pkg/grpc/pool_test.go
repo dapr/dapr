@@ -19,20 +19,20 @@ import (
 	"testing"
 	"time"
 
-	clocklib "github.com/benbjohnson/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	kclock "k8s.io/utils/clock"
+	testingclock "k8s.io/utils/clock/testing"
 )
 
 func TestConnectionPoolConnection(t *testing.T) {
 	// Allow mocking time
-	clockMock := clocklib.NewMock()
-	clockMock.Set(time.Now())
+	clockMock := testingclock.NewFakeClock(time.Now())
 	clock = clockMock
 	defer func() {
 		// Reset time
-		clock = clocklib.New()
+		clock = &kclock.RealClock{}
 	}()
 
 	cpc := &connectionPoolConnection{}
@@ -48,24 +48,23 @@ func TestConnectionPoolConnection(t *testing.T) {
 		// Increase time by 1s, 10 times
 		for i := 0; i < 10; i++ {
 			assert.False(t, cpc.Expired(maxConnIdle))
-			clockMock.Add(time.Second)
+			clockMock.Step(time.Second)
 		}
 
 		// After 11s, should be expired
 		assert.False(t, cpc.Expired(maxConnIdle))
-		clockMock.Add(time.Second)
+		clockMock.Step(time.Second)
 		assert.True(t, cpc.Expired(maxConnIdle))
 	})
 }
 
 func TestConnectionPool(t *testing.T) {
 	// Allow mocking time
-	clockMock := clocklib.NewMock()
-	clockMock.Set(time.Now())
+	clockMock := testingclock.NewFakeClock(time.Now())
 	clock = clockMock
 	defer func() {
 		// Reset time
-		clock = clocklib.New()
+		clock = &kclock.RealClock{}
 	}()
 
 	cp := NewConnectionPool(10*time.Second, 0)
@@ -275,7 +274,7 @@ func TestConnectionPool(t *testing.T) {
 
 			// Wait 15 seconds (more than expiration time) and repeat
 			// Because the second connection is still in use, it won't be purged
-			clockMock.Add(15 * time.Second)
+			clockMock.Step(15 * time.Second)
 
 			require.Len(t, cp.connections, 2)
 			require.Equal(t, int32(100), cp.connections[0].referenceCount)
@@ -297,7 +296,7 @@ func TestConnectionPool(t *testing.T) {
 
 			// Wait 15 seconds (more than expiration time)
 			// Share should return nil because the first connection is full, and the second has expired
-			clockMock.Add(15 * time.Second)
+			clockMock.Step(15 * time.Second)
 			conn := cp.Share()
 			require.Nil(t, conn)
 			require.Equal(t, int32(0), cp.connections[1].referenceCount)
@@ -329,13 +328,13 @@ func TestConnectionPool(t *testing.T) {
 
 			// Wait 15 seconds (more than expiration time)
 			// Share should return nil because the connection has expired
-			clockMock.Add(15 * time.Second)
+			clockMock.Step(15 * time.Second)
 			conn = cp.Share()
 			require.Nil(t, conn)
 			require.Equal(t, int32(0), cp.connections[0].referenceCount)
 
 			// Now the first connection should be purged if minActiveConns == 0 only
-			clockMock.Add(15 * time.Second)
+			clockMock.Step(15 * time.Second)
 			cp.Purge()
 
 			if minActiveConns == 0 {
