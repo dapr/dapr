@@ -66,7 +66,6 @@ type Config struct {
 	ApplicationProtocol          Protocol
 	Mode                         modes.DaprMode
 	PlacementAddresses           []string
-	GlobalConfig                 string
 	AllowedOrigins               string
 	Standalone                   config.StandaloneConfig
 	Kubernetes                   config.KubernetesConfig
@@ -89,10 +88,9 @@ type Config struct {
 type NewRuntimeConfigOpts struct {
 	ID                           string
 	PlacementAddresses           []string
-	controlPlaneAddress          string
+	ControlPlaneAddress          string
 	AllowedOrigins               string
-	GlobalConfig                 string
-	ComponentsPath               string
+	ResourcesPath                []string
 	AppProtocol                  string
 	Mode                         string
 	HTTPPort                     int
@@ -144,13 +142,12 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		ApplicationProtocol: Protocol(opts.AppProtocol),
 		Mode:                modes.DaprMode(opts.Mode),
 		PlacementAddresses:  opts.PlacementAddresses,
-		GlobalConfig:        opts.GlobalConfig,
 		AllowedOrigins:      opts.AllowedOrigins,
 		Standalone: config.StandaloneConfig{
-			ComponentsPath: opts.ComponentsPath,
+			ResourcesPath: opts.ResourcesPath,
 		},
 		Kubernetes: config.KubernetesConfig{
-			ControlPlaneAddress: opts.controlPlaneAddress,
+			ControlPlaneAddress: opts.ControlPlaneAddress,
 		},
 		EnableProfiling:              opts.EnableProfiling,
 		MaxConcurrency:               opts.MaxConcurrency,

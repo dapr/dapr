@@ -19,8 +19,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	config "github.com/dapr/dapr/pkg/config/modes"
-
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,9 +34,7 @@ func writeTempConfig(path, content string) (delete func(), error error) {
 
 func TestLoadComponentsFromFile(t *testing.T) {
 	t.Run("valid yaml content", func(t *testing.T) {
-		request := NewStandaloneComponents(config.StandaloneConfig{
-			ComponentsPath: configPrefix,
-		})
+		request := NewLocalComponents(configPrefix)
 		filename := "test-component-valid.yaml"
 		yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -62,9 +58,7 @@ spec:
 	})
 
 	t.Run("invalid yaml head", func(t *testing.T) {
-		request := NewStandaloneComponents(config.StandaloneConfig{
-			ComponentsPath: configPrefix,
-		})
+		request := NewLocalComponents(configPrefix)
 
 		filename := "test-component-invalid.yaml"
 		yaml := `
@@ -82,9 +76,7 @@ name: statestore`
 	})
 
 	t.Run("load components file not exist", func(t *testing.T) {
-		request := NewStandaloneComponents(config.StandaloneConfig{
-			ComponentsPath: "test-path-no-exists",
-		})
+		request := NewLocalComponents("test-path-no-exists")
 
 		components, err := request.LoadComponents()
 		assert.NotNil(t, err)
