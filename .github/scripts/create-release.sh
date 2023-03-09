@@ -29,7 +29,7 @@ MAJOR_MINOR_VERSION=`echo $REL_VERSION | cut -d. -f1,2`
 RELEASE_BRANCH="release-$MAJOR_MINOR_VERSION"
 RELEASE_TAG="v$REL_VERSION"
 
-if [ `git rev-parse --verify $RELEASE_BRANCH 2>/dev/null` ]; then
+if [ `git rev-parse --verify origin/$RELEASE_BRANCH 2>/dev/null` ]; then
   echo "$RELEASE_BRANCH branch already exists, checking it out ..."
   git checkout $RELEASE_BRANCH
 else

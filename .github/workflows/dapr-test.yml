@@ -256,7 +256,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v3
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
       - name: Cache Go modules (Linux)
         if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
         uses: actions/cache@v3
@@ -439,7 +439,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v3
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
       - name: Cache Go modules (test)
         if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
         uses: actions/cache@v3
@@ -483,6 +483,7 @@ jobs:
           echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
         shell: bash
       - name: Enable tcpdump
         if: env.TCP_DUMPS == 'true'
