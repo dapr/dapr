@@ -150,9 +150,7 @@ func TestPendingActorCalls(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		testActor.unlock()
 
-		assert.Eventually(t, func() bool {
-			return channelClosed.Load()
-		}, time.Second, 10*time.Microsecond)
+		assert.Eventually(t, channelClosed.Load, time.Second, 10*time.Microsecond)
 	})
 
 	t.Run("multiple listeners", func(t *testing.T) {

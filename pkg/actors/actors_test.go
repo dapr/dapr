@@ -1440,7 +1440,8 @@ func Test_ReminderTTL(t *testing.T) {
 		},
 	}
 
-	for name, test := range tests {
+	for name, testT := range tests {
+		test := testT
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -2001,7 +2002,7 @@ func Test_TimerTTL(t *testing.T) {
 						assert.Equal(t, timer.Data, request.Data)
 						count++
 					case <-ticker.C():
-						//nop
+						// nop
 					}
 				}
 			}()
