@@ -396,11 +396,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target_os: [linux, windows]
+        target_os: [linux]
         target_arch: [amd64, arm64]
-        exclude:
+        include:
           - target_os: windows
-            target_arch: arm64
+            target_arch: amd64
+            windows_version: ltsc2022
     steps:
       - name: Set up log paths
         run: |
