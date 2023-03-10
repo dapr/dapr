@@ -564,8 +564,6 @@ func TestDeactivationTicker(t *testing.T) {
 	t.Parallel()
 
 	t.Run("actor is deactivated", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -590,8 +588,6 @@ func TestDeactivationTicker(t *testing.T) {
 	})
 
 	t.Run("actor is not deactivated", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -615,8 +611,6 @@ func TestDeactivationTicker(t *testing.T) {
 	})
 
 	t.Run("per-actor timeout", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -767,8 +761,6 @@ func TestGetReminderTrack(t *testing.T) {
 	t.Parallel()
 
 	t.Run("reminder doesn't exist", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 
@@ -778,8 +770,6 @@ func TestGetReminderTrack(t *testing.T) {
 	})
 
 	t.Run("reminder exists", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 
@@ -955,8 +945,6 @@ func TestOverrideReminder(t *testing.T) {
 
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 
@@ -973,8 +961,6 @@ func TestOverrideReminder(t *testing.T) {
 	})
 
 	t.Run("override dueTime", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 
@@ -991,8 +977,6 @@ func TestOverrideReminder(t *testing.T) {
 	})
 
 	t.Run("override period", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 
@@ -1009,8 +993,6 @@ func TestOverrideReminder(t *testing.T) {
 	})
 
 	t.Run("override TTL", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 
@@ -1038,8 +1020,6 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
-		t.Parallel()
-
 		requestC := make(chan testRequest, 10)
 		appChannel := mockAppChannel{
 			requestC: requestC,
@@ -1092,8 +1072,6 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
-		t.Parallel()
-
 		requestC := make(chan testRequest, 10)
 		appChannel := mockAppChannel{
 			requestC: requestC,
@@ -1294,11 +1272,8 @@ func Test_ReminderRepeats(t *testing.T) {
 		},
 	}
 
-	for name, testT := range tests {
-		test := testT
+	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			requestC := make(chan testRequest, 10)
 			appChannel := mockAppChannel{
 				requestC: requestC,
@@ -1440,11 +1415,8 @@ func Test_ReminderTTL(t *testing.T) {
 		},
 	}
 
-	for name, testT := range tests {
-		test := testT
+	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			requestC := make(chan testRequest)
 			appChannel := mockAppChannel{
 				requestC: requestC,
@@ -1601,8 +1573,6 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Parallel()
 
 	t.Run("test create timer with positive DueTime", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		actorType, actorID := getTestActorTypeAndID()
@@ -1614,8 +1584,6 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("test create timer with 0 DueTime", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		actorType, actorID := getTestActorTypeAndID()
@@ -1627,8 +1595,6 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("test create timer with no DueTime", func(t *testing.T) {
-		t.Parallel()
-
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		actorType, actorID := getTestActorTypeAndID()
@@ -1856,11 +1822,8 @@ func Test_TimerRepeats(t *testing.T) {
 		},
 	}
 
-	for name, testT := range tests {
-		test := testT
+	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			requestC := make(chan testRequest, 10)
 			appChannel := mockAppChannel{
 				requestC: requestC,
@@ -1954,11 +1917,8 @@ func Test_TimerTTL(t *testing.T) {
 		},
 	}
 
-	for name, testT := range tests {
-		test := testT
+	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			requestC := make(chan testRequest, 10)
 			appChannel := mockAppChannel{
 				requestC: requestC,

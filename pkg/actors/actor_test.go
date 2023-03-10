@@ -81,8 +81,6 @@ func TestDisposedActor(t *testing.T) {
 	t.Parallel()
 
 	t.Run("not disposed", func(t *testing.T) {
-		t.Parallel()
-
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 		testActor.lock(nil)
@@ -94,8 +92,6 @@ func TestDisposedActor(t *testing.T) {
 	})
 
 	t.Run("disposed", func(t *testing.T) {
-		t.Parallel()
-
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 		testActor.lock(nil)
@@ -114,8 +110,6 @@ func TestPendingActorCalls(t *testing.T) {
 	t.Parallel()
 
 	t.Run("no pending actor call with new actor object", func(t *testing.T) {
-		t.Parallel()
-
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 		channelClosed := false
 
@@ -131,8 +125,6 @@ func TestPendingActorCalls(t *testing.T) {
 	})
 
 	t.Run("close channel before timeout", func(t *testing.T) {
-		t.Parallel()
-
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 		testActor.lock(nil)
 
@@ -154,8 +146,6 @@ func TestPendingActorCalls(t *testing.T) {
 	})
 
 	t.Run("multiple listeners", func(t *testing.T) {
-		t.Parallel()
-
 		clock := clocktesting.NewFakeClock(time.Now())
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, clock)
 		testActor.lock(nil)
