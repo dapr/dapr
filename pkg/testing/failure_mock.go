@@ -18,11 +18,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/benbjohnson/clock"
+	"k8s.io/utils/clock"
 )
 
 func NewFailure(fails map[string]int, timeouts map[string]time.Duration, callCount map[string]int) Failure {
-	return newFailureWithClock(fails, timeouts, callCount, clock.New())
+	return newFailureWithClock(fails, timeouts, callCount, &clock.RealClock{})
 }
 
 func newFailureWithClock(fails map[string]int, timeouts map[string]time.Duration, callCount map[string]int, clock clock.Clock) Failure {
