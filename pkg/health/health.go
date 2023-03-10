@@ -18,8 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	clocklib "github.com/benbjohnson/clock"
 	"github.com/valyala/fasthttp"
+	kclock "k8s.io/utils/clock"
 )
 
 const (
@@ -39,7 +39,7 @@ type healthCheckOptions struct {
 	failureThreshold  int32
 	interval          time.Duration
 	successStatusCode int
-	clock             clocklib.Clock
+	clock             kclock.WithTicker
 }
 
 // StartEndpointHealthCheck starts a health check on the specified address with the given options.
@@ -54,11 +54,11 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 	}
 	signalChan := make(chan bool, 1)
 
+	ticker := options.clock.NewTicker(options.interval)
+	ch := ticker.C()
+
 	go func() {
 		failureCount := &atomic.Int32{}
-		if options.initialDelay > 0 {
-			options.clock.Sleep(options.initialDelay)
-		}
 
 		client := &fasthttp.Client{
 			MaxConnsPerHost:           5, // Limit Keep-Alive connections
@@ -66,11 +66,16 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 			MaxIdemponentCallAttempts: 1,
 		}
 
-		ticker := options.clock.Ticker(options.interval)
+		if options.initialDelay > 0 {
+			select {
+			case <-options.clock.After(options.initialDelay):
+			case <-ctx.Done():
+			}
+		}
 
 		for {
 			select {
-			case <-ticker.C:
+			case <-ch:
 				go doHealthCheck(client, endpointAddress, signalChan, failureCount, options)
 			case <-ctx.Done():
 				return
@@ -107,7 +112,7 @@ func applyDefaults(o *healthCheckOptions) {
 	o.requestTimeout = requestTimeout
 	o.successStatusCode = successStatusCode
 	o.interval = interval
-	o.clock = clocklib.New()
+	o.clock = &kclock.RealClock{}
 }
 
 // WithInitialDelay sets the initial delay for the health check.
@@ -146,7 +151,7 @@ func WithInterval(interval time.Duration) Option {
 }
 
 // WithClock sets a custom clock (for mocking time).
-func WithClock(clock clocklib.Clock) Option {
+func WithClock(clock kclock.WithTicker) Option {
 	return func(o *healthCheckOptions) {
 		o.clock = clock
 	}

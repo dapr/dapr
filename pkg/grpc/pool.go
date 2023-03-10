@@ -18,14 +18,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	clocklib "github.com/benbjohnson/clock"
 	"google.golang.org/grpc"
+	kclock "k8s.io/utils/clock"
 
 	"github.com/dapr/kit/ptr"
 )
 
 // Real-time clock (wrapper around time.Time) to allow mocking
-var clock = clocklib.New()
+var clock kclock.Clock = &kclock.RealClock{}
 
 // Maximum number of concurrent streams in a single gRPC connection
 // This is the default value used by gRPC servers and clients
