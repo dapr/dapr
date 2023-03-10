@@ -181,8 +181,8 @@ github.com/HdrHistogram/hdrhistogram-go v1.1.2/go.mod h1:yDgFjdqOqDEKOvasDdhWNXY
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Masterminds/semver/v3 v3.1.1 h1:hLg3sBzpNErnxhQtUy/mmLR2I9foDujNK030IGemrRc=
 github.com/Masterminds/semver/v3 v3.1.1/go.mod h1:VPu/7SZ7ePZ3QOrcuXROw5FAcLl4a0cBrbBpGY/8hQs=
-github.com/Meland-Inc/components-contrib v0.0.0-20230201093656-e44cec83812c h1:F4HzAe9tye6DHWzt3JtQBpQsOJ2eDfyvgIbvFxMieP0=
-github.com/Meland-Inc/components-contrib v0.0.0-20230201093656-e44cec83812c/go.mod h1:U0cjxEEbZR7sNN9i1ZdWnkIOZP8iRSvoyF2gRhBaHfc=
+github.com/Meland-Inc/components-contrib v0.0.0-20230310095252-ede2dc1facfa h1:u0zom2VIMjqBF7DXpONWSHGFsTVH+IfDwcjqwFJkchU=
+github.com/Meland-Inc/components-contrib v0.0.0-20230310095252-ede2dc1facfa/go.mod h1:U0cjxEEbZR7sNN9i1ZdWnkIOZP8iRSvoyF2gRhBaHfc=
 github.com/Microsoft/go-winio v0.4.11/go.mod h1:VhR8bwka0BXejwEJY73c50VrPtXAaKcyvVC4A4RozmA=
 github.com/Microsoft/go-winio v0.4.14/go.mod h1:qXqCSQ3Xa7+6tgxaGTIe4Kpcdsi+P8jBhyzoq1bpyYA=
 github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5/go.mod h1:tTuCMEN+UleMWgg9dVx4Hu52b1bJo+59jBh3ajtinzw=
