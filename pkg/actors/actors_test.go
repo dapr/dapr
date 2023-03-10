@@ -561,8 +561,6 @@ func advanceTickers(t *testing.T, clock *clocktesting.FakeClock, step time.Durat
 }
 
 func TestDeactivationTicker(t *testing.T) {
-	t.Parallel()
-
 	t.Run("actor is deactivated", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
@@ -639,8 +637,6 @@ func TestDeactivationTicker(t *testing.T) {
 }
 
 func TestStoreIsNotInitialized(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 	testActorsRuntime.store = nil
@@ -680,8 +676,6 @@ func TestStoreIsNotInitialized(t *testing.T) {
 }
 
 func TestTimerExecution(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -693,8 +687,6 @@ func TestTimerExecution(t *testing.T) {
 }
 
 func TestTimerExecutionZeroDuration(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -706,8 +698,6 @@ func TestTimerExecutionZeroDuration(t *testing.T) {
 }
 
 func TestReminderExecution(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -726,8 +716,6 @@ func TestReminderExecution(t *testing.T) {
 }
 
 func TestReminderExecutionZeroDuration(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -746,8 +734,6 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 }
 
 func TestSetReminderTrack(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -758,8 +744,6 @@ func TestSetReminderTrack(t *testing.T) {
 }
 
 func TestGetReminderTrack(t *testing.T) {
-	t.Parallel()
-
 	t.Run("reminder doesn't exist", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
@@ -785,8 +769,6 @@ func TestGetReminderTrack(t *testing.T) {
 }
 
 func TestCreateReminder(t *testing.T) {
-	t.Parallel()
-
 	numReminders := 100
 	appChannel := new(mockAppChannel)
 	testActorsRuntime := newTestActorsRuntimeWithMock(appChannel)
@@ -888,8 +870,6 @@ func TestCreateReminder(t *testing.T) {
 }
 
 func TestRenameReminder(t *testing.T) {
-	t.Parallel()
-
 	appChannel := new(mockAppChannel)
 	testActorsRuntime := newTestActorsRuntimeWithMock(appChannel)
 	defer testActorsRuntime.Stop()
@@ -941,8 +921,6 @@ func TestRenameReminder(t *testing.T) {
 }
 
 func TestOverrideReminder(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
@@ -1016,8 +994,6 @@ func TestOverrideReminder(t *testing.T) {
 }
 
 func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
 		requestC := make(chan testRequest, 10)
@@ -1068,8 +1044,6 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 }
 
 func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
 		requestC := make(chan testRequest, 10)
@@ -1129,8 +1103,6 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 }
 
 func TestDeleteReminder(t *testing.T) {
-	t.Parallel()
-
 	appChannel := new(mockAppChannel)
 	testActorsRuntime := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
 	defer testActorsRuntime.Stop()
@@ -1150,8 +1122,6 @@ func TestDeleteReminder(t *testing.T) {
 }
 
 func TestDeleteReminderWithPartitions(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -1170,8 +1140,6 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 }
 
 func Test_ReminderRepeats(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		dueTimeAny      any
 		period          string
@@ -1375,8 +1343,6 @@ func Test_ReminderRepeats(t *testing.T) {
 }
 
 func Test_ReminderTTL(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		dueTime    string
 		period     string
@@ -1490,8 +1456,6 @@ func Test_ReminderTTL(t *testing.T) {
 }
 
 func reminderValidation(ctx context.Context, t *testing.T, dueTime, period, ttl, msg string) {
-	t.Parallel()
-
 	requestC := make(chan testRequest, 10)
 	appChannel := mockAppChannel{
 		requestC: requestC,
@@ -1512,8 +1476,6 @@ func reminderValidation(ctx context.Context, t *testing.T, dueTime, period, ttl,
 }
 
 func TestReminderValidation(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("reminder dueTime invalid (1)", func(t *testing.T) {
 		reminderValidation(ctx, t, "invalid", "R5/PT2S", "1h", "error parsing reminder due time: unsupported time/duration format \"invalid\"")
@@ -1548,8 +1510,6 @@ func TestReminderValidation(t *testing.T) {
 }
 
 func TestGetReminder(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -1570,8 +1530,6 @@ func TestGetReminder(t *testing.T) {
 }
 
 func TestCreateTimerDueTimes(t *testing.T) {
-	t.Parallel()
-
 	t.Run("test create timer with positive DueTime", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
@@ -1607,8 +1565,6 @@ func TestCreateTimerDueTimes(t *testing.T) {
 }
 
 func TestDeleteTimer(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -1638,8 +1594,6 @@ func TestDeleteTimer(t *testing.T) {
 }
 
 func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
 		requestC := make(chan testRequest, 10)
@@ -1680,8 +1634,6 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 }
 
 func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
 		requestC := make(chan testRequest, 10)
@@ -1727,8 +1679,6 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 }
 
 func Test_TimerRepeats(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		dueTime         string
 		period          string
@@ -1904,8 +1854,6 @@ func Test_TimerRepeats(t *testing.T) {
 }
 
 func Test_TimerTTL(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		iso bool
 	}{
@@ -1981,8 +1929,6 @@ func Test_TimerTTL(t *testing.T) {
 }
 
 func timerValidation(ctx context.Context, t *testing.T, dueTime, period, ttl, msg string) {
-	t.Parallel()
-
 	requestC := make(chan testRequest, 10)
 	appChannel := mockAppChannel{
 		requestC: requestC,
@@ -1999,8 +1945,6 @@ func timerValidation(ctx context.Context, t *testing.T, dueTime, period, ttl, ms
 }
 
 func TestTimerValidation(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("timer dueTime invalid (1)", func(t *testing.T) {
 		timerValidation(ctx, t, "invalid", "R5/PT2S", "1h", "error parsing timer due time: unsupported time/duration format \"invalid\"")
@@ -2035,8 +1979,6 @@ func TestTimerValidation(t *testing.T) {
 }
 
 func TestReminderFires(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -2059,8 +2001,6 @@ func TestReminderFires(t *testing.T) {
 }
 
 func TestReminderDueDate(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -2087,8 +2027,6 @@ func TestReminderDueDate(t *testing.T) {
 }
 
 func TestReminderPeriod(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -2131,8 +2069,6 @@ func TestReminderPeriod(t *testing.T) {
 }
 
 func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -2151,8 +2087,6 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 }
 
 func TestConstructActorStateKey(t *testing.T) {
-	t.Parallel()
-
 	delim := "||"
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
@@ -2176,8 +2110,6 @@ func TestConstructActorStateKey(t *testing.T) {
 }
 
 func TestGetState(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -2217,8 +2149,6 @@ func TestGetState(t *testing.T) {
 }
 
 func TestDeleteState(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
@@ -2284,8 +2214,6 @@ func TestDeleteState(t *testing.T) {
 }
 
 func TestCallLocalActor(t *testing.T) {
-	t.Parallel()
-
 	const (
 		testActorType = "pet"
 		testActorID   = "dog"
@@ -2336,8 +2264,6 @@ func TestCallLocalActor(t *testing.T) {
 }
 
 func TestTransactionalState(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("Single set request succeeds", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
@@ -2435,8 +2361,6 @@ func TestTransactionalState(t *testing.T) {
 }
 
 func TestGetOrCreateActor(t *testing.T) {
-	t.Parallel()
-
 	const testActorType = "fakeActor"
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
@@ -2455,8 +2379,6 @@ func TestGetOrCreateActor(t *testing.T) {
 }
 
 func TestActiveActorsCount(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	t.Run("Actors Count", func(t *testing.T) {
 		expectedCounts := []ActiveActorsCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
@@ -2484,8 +2406,6 @@ func TestActiveActorsCount(t *testing.T) {
 }
 
 func TestActorsAppHealthCheck(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -2505,8 +2425,6 @@ func TestActorsAppHealthCheck(t *testing.T) {
 }
 
 func TestHostedActorsWithoutStateStore(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntimeWithoutStore()
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -2526,8 +2444,6 @@ func TestHostedActorsWithoutStateStore(t *testing.T) {
 }
 
 func TestNoHostedActorsWithoutStateStore(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntimeWithoutStore()
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
@@ -2548,8 +2464,6 @@ func TestNoHostedActorsWithoutStateStore(t *testing.T) {
 }
 
 func TestShutdown(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntime()
 
 	t.Run("no panic when placement is nil", func(t *testing.T) {
@@ -2560,8 +2474,6 @@ func TestShutdown(t *testing.T) {
 }
 
 func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
-	t.Parallel()
-
 	appID := "myapp"
 	actorType := "TestActor"
 	actorID := "abc123"
@@ -2572,8 +2484,6 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
-	t.Parallel()
-
 	appConfig := config.ApplicationConfig{
 		Entities:                   []string{"1"},
 		ActorScanInterval:          "1s",
@@ -2604,11 +2514,7 @@ func TestConfig(t *testing.T) {
 }
 
 func TestReentrancyConfig(t *testing.T) {
-	t.Parallel()
-
 	t.Run("Test empty reentrancy values", func(t *testing.T) {
-		t.Parallel()
-
 		appConfig := DefaultAppConfig
 		c := NewConfig(ConfigOpts{
 			HostAddress:        "localhost:5050",
@@ -2624,8 +2530,6 @@ func TestReentrancyConfig(t *testing.T) {
 	})
 
 	t.Run("Test per type reentrancy", func(t *testing.T) {
-		t.Parallel()
-
 		appConfig := DefaultAppConfig
 		appConfig.EntityConfigs = []config.EntityConfig{
 			{
@@ -2650,8 +2554,6 @@ func TestReentrancyConfig(t *testing.T) {
 	})
 
 	t.Run("Test minimum reentrancy values", func(t *testing.T) {
-		t.Parallel()
-
 		appConfig := DefaultAppConfig
 		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
 		c := NewConfig(ConfigOpts{
@@ -2668,8 +2570,6 @@ func TestReentrancyConfig(t *testing.T) {
 	})
 
 	t.Run("Test full reentrancy values", func(t *testing.T) {
-		t.Parallel()
-
 		appConfig := DefaultAppConfig
 		reentrancyLimit := 64
 		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}
@@ -2688,47 +2588,33 @@ func TestReentrancyConfig(t *testing.T) {
 }
 
 func TestHostValidation(t *testing.T) {
-	t.Parallel()
-
 	t.Run("kubernetes mode with mTLS, missing namespace", func(t *testing.T) {
-		t.Parallel()
-
 		err := ValidateHostEnvironment(true, modes.KubernetesMode, "")
 		assert.Error(t, err)
 	})
 
 	t.Run("kubernetes mode without mTLS, missing namespace", func(t *testing.T) {
-		t.Parallel()
-
 		err := ValidateHostEnvironment(false, modes.KubernetesMode, "")
 		assert.NoError(t, err)
 	})
 
 	t.Run("kubernetes mode with mTLS and namespace", func(t *testing.T) {
-		t.Parallel()
-
 		err := ValidateHostEnvironment(true, modes.KubernetesMode, "default")
 		assert.NoError(t, err)
 	})
 
 	t.Run("self hosted mode with mTLS, missing namespace", func(t *testing.T) {
-		t.Parallel()
-
 		err := ValidateHostEnvironment(true, modes.StandaloneMode, "")
 		assert.NoError(t, err)
 	})
 
 	t.Run("self hosted mode without mTLS, missing namespace", func(t *testing.T) {
-		t.Parallel()
-
 		err := ValidateHostEnvironment(false, modes.StandaloneMode, "")
 		assert.NoError(t, err)
 	})
 }
 
 func TestBasicReentrantActorLocking(t *testing.T) {
-	t.Parallel()
-
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
@@ -2762,8 +2648,6 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 }
 
 func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
-	t.Parallel()
-
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("other", "1")
@@ -2800,8 +2684,6 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 }
 
 func TestReentrancyStackLimit(t *testing.T) {
-	t.Parallel()
-
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 	defer req.Close()
 
@@ -2829,8 +2711,6 @@ func TestReentrancyStackLimit(t *testing.T) {
 }
 
 func TestReentrancyPerActor(t *testing.T) {
-	t.Parallel()
-
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
 	defer req.Close()
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrantActor", "1")
@@ -2872,8 +2752,6 @@ func TestReentrancyPerActor(t *testing.T) {
 }
 
 func TestReentrancyStackLimitPerActor(t *testing.T) {
-	t.Parallel()
-
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
 	defer req.Close()
 
@@ -2910,8 +2788,6 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 }
 
 func TestActorsRuntimeResiliency(t *testing.T) {
-	t.Parallel()
-
 	actorType := "failingActor"
 	actorID := "failingId"
 	failingState := &daprt.FailingStatestore{
@@ -3066,8 +2942,6 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 }
 
 func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
-	t.Parallel()
-
 	testActorsRuntime := newTestActorsRuntimeWithoutPlacement()
 	defer testActorsRuntime.Stop()
 

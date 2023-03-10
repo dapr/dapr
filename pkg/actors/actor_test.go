@@ -26,8 +26,6 @@ import (
 var reentrancyStackDepth = 32
 
 func TestIsBusy(t *testing.T) {
-	t.Parallel()
-
 	testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 	testActor.lock(nil)
@@ -36,8 +34,6 @@ func TestIsBusy(t *testing.T) {
 }
 
 func TestTurnBasedConcurrencyLocks(t *testing.T) {
-	t.Parallel()
-
 	testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 	// first lock
@@ -78,8 +74,6 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 }
 
 func TestDisposedActor(t *testing.T) {
-	t.Parallel()
-
 	t.Run("not disposed", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
@@ -107,8 +101,6 @@ func TestDisposedActor(t *testing.T) {
 }
 
 func TestPendingActorCalls(t *testing.T) {
-	t.Parallel()
-
 	t.Run("no pending actor call with new actor object", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 		channelClosed := false
