@@ -241,14 +241,11 @@ func (imr *InvokeMethodResponse) ContentType() string {
 
 // RawData returns the stream body.
 func (imr *InvokeMethodResponse) RawData() (r io.Reader) {
-	m := imr.r.Message
-	if m == nil {
-		return nil
-	}
 
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
-		return bytes.NewReader(m.Data.Value)
+		// HasMessageData() guarantees that the `imr.r.Message` and `imr.r.Message.Data` is not nil
+		return bytes.NewReader(imr.r.Message.Data.Value)
 	}
 
 	return imr.replayableRequest.RawData()
