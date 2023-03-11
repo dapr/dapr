@@ -241,7 +241,6 @@ func (imr *InvokeMethodResponse) ContentType() string {
 
 // RawData returns the stream body.
 func (imr *InvokeMethodResponse) RawData() (r io.Reader) {
-
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
 		// HasMessageData() guarantees that the `imr.r.Message` and `imr.r.Message.Data` is not nil
