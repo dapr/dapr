@@ -282,6 +282,19 @@ func TestResponseProto(t *testing.T) {
 }
 
 func TestResponseProtoWithData(t *testing.T) {
+	t.Run("not return error when status exist with empty message", func(t *testing.T) {
+		pb := internalv1pb.InternalInvokeResponse{
+			Status:  &internalv1pb.Status{Code: int32(codes.Unimplemented), Message: "method unimplemented"},
+			Message: &commonv1pb.InvokeResponse{},
+		}
+
+		ir, err := InternalInvokeResponse(&pb)
+		assert.NoError(t, err)
+		defer ir.Close()
+		_, err = ir.ProtoWithData()
+		assert.NoError(t, err)
+	})
+
 	t.Run("byte slice", func(t *testing.T) {
 		m := &commonv1pb.InvokeResponse{
 			Data:        &anypb.Any{Value: []byte("test")},
