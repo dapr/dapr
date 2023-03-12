@@ -15,7 +15,6 @@ package v1
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"strings"
 
@@ -158,10 +157,6 @@ func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 
 // ProtoWithData returns a copy of the internal InternalInvokeResponse Proto object with the entire data stream read into the Data property.
 func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeResponse, error) {
-	if imr.r == nil || imr.r.Message == nil {
-		return nil, errors.New("message is nil")
-	}
-
 	// If the data is already in-memory in the object, return the object directly.
 	// This doesn't copy the object, and that's fine because receivers are not expected to modify the received object.
 	// Only reason for cloning the object below is to make ProtoWithData concurrency-safe.
@@ -174,7 +169,7 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 
 	// Read the data and store it in the object
 	data, err := imr.RawDataFull()
-	if err != nil {
+	if err != nil || len(data) == 0 {
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{

@@ -148,7 +148,10 @@ func TestResponseRawData(t *testing.T) {
 			r: &internalv1pb.InternalInvokeResponse{},
 		}
 		r := req.RawData()
-		assert.Nil(t, r)
+		bData, err := io.ReadAll(r)
+
+		assert.NoError(t, err)
+		assert.Empty(t, bData)
 	})
 
 	t.Run("return data from stream", func(t *testing.T) {
@@ -193,7 +196,7 @@ func TestResponseRawDataFull(t *testing.T) {
 		}
 		data, err := req.RawDataFull()
 		assert.NoError(t, err)
-		assert.Nil(t, data)
+		assert.Empty(t, data)
 	})
 
 	t.Run("return data from stream", func(t *testing.T) {
