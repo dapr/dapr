@@ -188,7 +188,7 @@ func (o *operator) loadCertChain(ctx context.Context) (*credentials.CertChain, e
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
 				// Ignore context.Canceled
-				fserr <- fmt.Errorf("Error starting watch on filesystem: %s", err)
+				fserr <- fmt.Errorf("error starting watch on filesystem: %s", err)
 			} else {
 				fserr <- nil
 			}
@@ -371,10 +371,10 @@ func (o *operator) patchCRDs(ctx context.Context, trustChain []byte, conf *rest.
 
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			return fmt.Errorf("Could not marshal webhook spec: %v", err)
+			return fmt.Errorf("could not marshal webhook spec: %v", err)
 		}
 		if _, err := crdClient.Patch(ctx, crdName, types.JSONPatchType, payloadJSON, v1.PatchOptions{}); err != nil {
-			return fmt.Errorf("Failed to patch webhook in CRD %q: %v", crdName, err)
+			return fmt.Errorf("failed to patch webhook in CRD %q: %v", crdName, err)
 		}
 
 		log.Infof("Successfully patched webhook in CRD %q", crdName)
