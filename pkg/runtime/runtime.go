@@ -2734,8 +2734,10 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	log.Info("Initiating actor shutdown")
 	a.stopActor()
 
-	log.Info("Closing App Health")
-	a.appHealth.Close()
+	if a.appHealth != nil {
+		log.Info("Closing App Health")
+		a.appHealth.Close()
+	}
 
 	log.Infof("Holding shutdown for %s to allow graceful stop of outstanding operations", duration.String())
 	<-time.After(duration)
