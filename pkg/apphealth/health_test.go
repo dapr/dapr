@@ -131,13 +131,13 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 	require.False(t, h.ratelimitReports())
 
 	// Step and test
-	clock.Step(time.Duration(reportMinInterval+10) * time.Microsecond)
+	clock.Step(reportMinInterval)
 	require.True(t, h.ratelimitReports())
 	require.False(t, h.ratelimitReports())
 
 	// Run tests for 1 second, constantly
 	// Should succeed only 10 times.
-	clock.Step(time.Duration(reportMinInterval+10) * time.Microsecond)
+	clock.Step(reportMinInterval)
 	firehose := func(start time.Time, step time.Duration) (passed int64) {
 		for clock.Now().Sub(start) < time.Second*10 {
 			if h.ratelimitReports() {

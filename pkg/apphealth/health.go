@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"k8s.io/utils/clock"
 
@@ -29,8 +30,8 @@ const (
 	AppStatusUnhealthy uint8 = 0
 	AppStatusHealthy   uint8 = 1
 
-	// Minimum interval between reports, in microseconds.
-	reportMinInterval = 1e6
+	// reportMinInterval is the minimum interval between health reports.
+	reportMinInterval = time.Second
 )
 
 var log = logger.NewLogger("dapr.apphealth")
@@ -42,8 +43,10 @@ type AppHealth struct {
 	changeCb     ChangeCallback
 	report       chan uint8
 	failureCount atomic.Int32
-	lastReport   atomic.Int64
 	queue        chan struct{}
+
+	// lastReport is the last report as UNIX microseconds time.
+	lastReport atomic.Int64
 
 	clock   clock.WithTicker
 	wg      sync.WaitGroup
@@ -216,7 +219,7 @@ func (h *AppHealth) ratelimitReports() bool {
 
 		// If the last report was less than `reportMinInterval` ago, nothing to do here
 		prev := h.lastReport.Load()
-		if prev > now-reportMinInterval {
+		if prev > now-reportMinInterval.Microseconds() {
 			return false
 		}
 
