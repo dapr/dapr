@@ -114,12 +114,12 @@ var (
 	// Workflow.
 	ErrStartWorkflow                 = APIError{"error starting workflow %s with error %s", "ERR_START_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrWorkflowGetResponse           = APIError{"error while getting workflow info on instance %s with error %s", "ERR_GET_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrWorkflowNameMissing           = APIError{"workflow name is not configured", "ERR_NO_WORKFLOW_NAME_PROVIDED", http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrWorkflowComponentDoesNotExist = APIError{"provided component %s does not exist", "ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrMissingOrEmptyInstance        = APIError{"no instance or empty instance was provided", "ERR_NO_INSTANCE_ID_PROVIDED", http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrNoOrMissingWorkflowComponent  = APIError{"no component or empty component was provided", "ERR_NO_WORKFLOW_COMPONENT_PROVIDED", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrWorkflowNameMissing           = APIError{"workflow name is not configured", "ERR_WORKFLOW_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrWorkflowComponentDoesNotExist = APIError{"workflow component %s does not exist", "ERR_WORKFLOW_COMPONENT_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", "ERR_INSTANCE_ID_PROVIDED_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrNoOrMissingWorkflowComponent  = APIError{"no workflow component was provided", "ERR_WORKFLOW_COMPONENT_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrTerminateWorkflow             = APIError{"error terminating workflow %s", "ERR_TERMINATE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", "ERR_NO_EVENT_NAME_PROVIDED", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", "ERR_WORKFLOW_EVENT_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow %s", "ERR_RAISE_EVENT_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrTimerParse                    = APIError{"error parsing time - %s", "ERR_WORKFLOW_TIME_PARSE", http.StatusInternalServerError, grpcCodes.Internal}
 )

@@ -45,9 +45,9 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 	}
 	response, err := workflowComponent.Get(ctx, &req)
 	if err != nil {
-		innerErr := messages.ErrWorkflowGetResponse.WithFormat(in.InstanceId, err)
-		a.Logger.Debug(innerErr)
-		return &runtimev1pb.GetWorkflowResponse{}, innerErr
+		err := messages.ErrWorkflowGetResponse.WithFormat(in.InstanceId, err)
+		a.Logger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
 	id := &runtimev1pb.WorkflowReference{
@@ -56,9 +56,9 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 
 	t, err := time.Parse(time.RFC3339, response.StartTime)
 	if err != nil {
-		innerErr := messages.ErrTimerParse.WithFormat(err)
-		a.Logger.Debug(innerErr)
-		return &runtimev1pb.GetWorkflowResponse{}, innerErr
+		err := messages.ErrTimerParse.WithFormat(err)
+		a.Logger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
 	res := &runtimev1pb.GetWorkflowResponse{
@@ -95,17 +95,13 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
-	wf := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-
 	var inputMap map[string]interface{}
 	json.Unmarshal(in.Input, &inputMap)
 	req := workflows.StartRequest{
-		WorkflowReference: wf,
-		Options:           in.Options,
-		WorkflowName:      in.WorkflowName,
-		Input:             inputMap,
+		InstanceID:   in.InstanceId,
+		Options:      in.Options,
+		WorkflowName: in.WorkflowName,
+		Input:        inputMap,
 	}
 
 	resp, err := workflowComponent.Start(ctx, &req)

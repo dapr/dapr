@@ -3034,7 +3034,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NO_WORKFLOW_NAME_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_NAME_MISSING", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrWorkflowNameMissing.Message(), resp.ErrorBody["message"])
 	})
 
@@ -3052,7 +3052,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NO_WORKFLOW_COMPONENT_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
 	})
 
@@ -3070,7 +3070,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -3088,7 +3088,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NO_INSTANCE_ID_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
 	})
 
@@ -3105,7 +3105,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 202, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.ErrorBody)
@@ -3122,7 +3122,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NO_WORKFLOW_COMPONENT_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
 	})
 
@@ -3134,7 +3134,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -3161,7 +3161,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NO_INSTANCE_ID_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
 	})
 
@@ -3173,7 +3173,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NO_WORKFLOW_COMPONENT_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
 	})
 
@@ -3185,7 +3185,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -3196,7 +3196,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/terminate"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 202, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.ErrorBody)
@@ -3213,7 +3213,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NO_INSTANCE_ID_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
 	})
 
@@ -3233,7 +3233,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NO_WORKFLOW_COMPONENT_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
 	})
 
@@ -3253,7 +3253,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
