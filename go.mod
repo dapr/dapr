@@ -8,7 +8,7 @@ require (
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.10.0-rc.9.0.20230313201627-d5d6273ff278
+	github.com/dapr/components-contrib v1.10.0-rc.9.0.20230314182450-1d40321ac0be
 	github.com/dapr/kit v0.0.4
 	github.com/fasthttp/router v1.4.15
 	github.com/ghodss/yaml v1.0.0
@@ -188,7 +188,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.11.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
-	github.com/go-redis/redis/v9 v9.0.0-rc.2 // indirect
 	github.com/go-resty/resty/v2 v2.7.0 // indirect
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/go-zookeeper/zk v1.0.3 // indirect
