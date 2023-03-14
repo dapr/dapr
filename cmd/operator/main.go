@@ -121,7 +121,7 @@ func init() {
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
 	flag.BoolVar(&disableServiceReconciler, "disable-service-reconciler", false, "Disable the Service reconciler for Dapr-enabled Deployments and StatefulSets")
 	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
-	flag.BoolVar(&enableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for dapr-enabled Argo Rollouts")
+	flag.BoolVar(&enableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for Dapr-enabled Argo Rollouts")
 
 	flag.Parse()
 

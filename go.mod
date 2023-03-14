@@ -72,13 +72,6 @@ require (
 )
 
 require (
-	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3 // indirect
-	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.1.28 // indirect
-	github.com/imdario/mergo v0.3.13 // indirect
-)
-
-require (
 	cloud.google.com/go v0.107.0 // indirect
 	cloud.google.com/go/compute v1.18.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
@@ -223,6 +216,8 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/grafana/k6-operator v0.0.8
 	github.com/grandcat/zeroconf v1.0.0 // indirect
+	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/hamba/avro/v2 v2.5.0 // indirect
@@ -237,6 +232,8 @@ require (
 	github.com/hazelcast/hazelcast-go-client v0.0.0-20190530123621-6cf767c2f31a // indirect
 	github.com/http-wasm/http-wasm-host-go v0.3.4 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.22.11+incompatible // indirect
+	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.1.28 // indirect
+	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/influxdata/influxdb-client-go v1.4.0 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20210922203350-b1ad95c89adf // indirect
