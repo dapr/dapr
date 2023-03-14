@@ -249,7 +249,7 @@ func TestInit(t *testing.T) {
 
 		assert.Nil(t, err)
 
-		assert.Equal(t, 2, len(mgr.GetRunnables()))
+		assert.Equal(t, 3, len(mgr.GetRunnables()))
 
 		srv := &corev1.Service{}
 		val := mgr.GetIndexerFunc(&corev1.Service{})(srv)
@@ -276,6 +276,7 @@ func TestInit(t *testing.T) {
 	t.Run("test wrapper", func(t *testing.T) {
 		deploymentCtl := mgr.GetRunnables()[0]
 		statefulsetCtl := mgr.GetRunnables()[1]
+		rolloutCtl := mgr.GetRunnables()[2]
 
 		// the runnable is sigs.k8s.io/controller-runtime/pkg/internal/controller.Controller
 		reconciler := reflect.Indirect(reflect.ValueOf(deploymentCtl)).FieldByName("Do").Interface().(*Reconciler)
@@ -293,6 +294,14 @@ func TestInit(t *testing.T) {
 		assert.NotNil(t, wrapper)
 
 		assert.Equal(t, reflect.TypeOf(&appsv1.StatefulSet{}), reflect.TypeOf(wrapper.GetObject()))
+
+		reconciler = reflect.Indirect(reflect.ValueOf(rolloutCtl)).FieldByName("Do").Interface().(*Reconciler)
+
+		wrapper = reconciler.newWrapper()
+
+		assert.NotNil(t, wrapper)
+
+		assert.Equal(t, reflect.TypeOf(&argov1alpha1.Rollout{}), reflect.TypeOf(wrapper.GetObject()))
 	})
 }
 

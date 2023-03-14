@@ -105,6 +105,22 @@ func (h *DaprHandler) Init() error {
 		return err
 	}
 
+	err = ctrl.NewControllerManagedBy(h.mgr).
+		For(&appsv1.StatefulSet{}).
+		Owns(&corev1.Service{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 100,
+		}).
+		Complete(&Reconciler{
+			DaprHandler: h,
+			newWrapper: func() ObjectWrapper {
+				return &StatefulSetWrapper{}
+			},
+		})
+	if err != nil {
+		return err
+	}
+
 	if h.ArgoRolloutServiceReconcilerEnabled {
 		_ = argov1alpha1.AddToScheme(h.Scheme)
 		err = ctrl.NewControllerManagedBy(h.mgr).
@@ -122,22 +138,6 @@ func (h *DaprHandler) Init() error {
 		if err != nil {
 			return err
 		}
-	}
-
-	err = ctrl.NewControllerManagedBy(h.mgr).
-		For(&appsv1.StatefulSet{}).
-		Owns(&corev1.Service{}).
-		WithOptions(controller.Options{
-			MaxConcurrentReconciles: 100,
-		}).
-		Complete(&Reconciler{
-			DaprHandler: h,
-			newWrapper: func() ObjectWrapper {
-				return &StatefulSetWrapper{}
-			},
-		})
-	if err != nil {
-		return err
 	}
 
 	return nil
