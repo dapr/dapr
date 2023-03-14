@@ -70,8 +70,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.1
 )
 
-require github.com/redis/go-redis/v9 v9.0.2 // indirect
-
 require (
 	cloud.google.com/go v0.107.0 // indirect
 	cloud.google.com/go/compute v1.18.0 // indirect
@@ -315,6 +313,7 @@ require (
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect
 	github.com/rabbitmq/amqp091-go v1.7.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
+	github.com/redis/go-redis/v9 v9.0.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/rs/zerolog v1.25.0 // indirect
