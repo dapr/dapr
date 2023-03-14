@@ -1,3 +1,4 @@
+enabled: true
 replicaCount: 1
 logLevel: info
 component: sidecar-injector
@@ -21,7 +22,9 @@ sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
+sidecarDropALLCapabilities: false
 allowedServiceAccounts: ""
+allowedServiceAccountsPrefixNames: ""
 resources: {}
 kubeClusterDomain: cluster.local
 ignoreEntrypointTolerations: "[{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"alibabacloud.com/eci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"azure.com/aci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"aws\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"huawei.com/cci\\\"}]"

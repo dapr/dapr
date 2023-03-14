@@ -14,17 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
+	"github.com/dapr/components-contrib/bindings/dubbo"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/kit/logger"
 )
 
 func init() {
-	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
-		return servicebusqueues.NewAzureServiceBusQueues(l)
-	}, "azure.servicebusqueues")
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
-		return servicebusqueues.NewAzureServiceBusQueues(l)
-	}, "azure.servicebusqueues")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(dubbo.NewDubboOutput, "dubbo", "alicloud.dubbo")
 }

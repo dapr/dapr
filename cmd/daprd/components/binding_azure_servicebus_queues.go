@@ -15,16 +15,16 @@ package components
 
 import (
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/bindings/twitter"
+	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/kit/logger"
 )
 
 func init() {
 	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
-		return twitter.NewTwitter(l)
-	}, "twitter")
+		return servicebusqueues.NewAzureServiceBusQueues(l)
+	}, "azure.servicebus.queues", "azure.servicebusqueues")
 	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
-		return twitter.NewTwitter(l)
-	}, "twitter")
+		return servicebusqueues.NewAzureServiceBusQueues(l)
+	}, "azure.servicebus.queues", "azure.servicebusqueues")
 }

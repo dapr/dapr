@@ -25,9 +25,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	"github.com/dapr/components-contrib/lock"
-
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +43,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -59,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -307,13 +306,15 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 	interceptors := []grpc.UnaryServerInterceptor{
 		metadata.SetMetadataInContextUnary,
 	}
+	streamInterceptors := []grpc.StreamServerInterceptor{}
 	if token != "" {
-		interceptors = append(interceptors,
-			setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token"),
-		)
+		unary, stream := getAPIAuthenticationMiddlewares(token, "dapr-api-token")
+		interceptors = append(interceptors, unary)
+		streamInterceptors = append(streamInterceptors, stream)
 	}
 	opts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(interceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
 		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
 	}
 
@@ -385,30 +386,50 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
 		md := grpcMetadata.Pairs("dapr-api-token", token)
 		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
-		_, err := client.InvokeService(ctx, req)
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.NotFound, s.Code())
-		assert.Equal(t, "Not Found", s.Message())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
 
-		errInfo := s.Details()[0].(*epb.ErrorInfo)
-		assert.Equal(t, 1, len(s.Details()))
-		assert.Equal(t, "404", errInfo.Metadata["http.code"])
-		assert.Equal(t, "fakeDirectMessageResponse", errInfo.Metadata["http.error_message"])
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.NotFound, s.Code())
+			assert.Equal(t, "Not Found", s.Message())
+
+			errInfo := s.Details()[0].(*epb.ErrorInfo)
+			assert.Equal(t, 1, len(s.Details()))
+			assert.Equal(t, "404", errInfo.Metadata["http.code"])
+			assert.Equal(t, "fakeDirectMessageResponse", errInfo.Metadata["http.error_message"])
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// The request was invalid so we should get an error about the actor runtime (which means we passed the auth middleware and are hitting the API as expected)
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			assert.ErrorContains(t, err, "actor runtime")
+		})
 	})
 
 	t.Run("invalid token", func(t *testing.T) {
@@ -435,24 +456,46 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
-		md := grpcMetadata.Pairs("dapr-api-token", "4567")
+		md := grpcMetadata.Pairs("dapr-api-token", "bad, bad token")
 		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
-		_, err := client.InvokeService(ctx, req)
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.Unauthenticated, s.Code())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
+
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// We should get an Unauthenticated error
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
 	})
 
 	t.Run("missing token", func(t *testing.T) {
@@ -479,22 +522,45 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
-		_, err := client.InvokeService(context.Background(), req)
+		ctx := context.Background()
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.Unauthenticated, s.Code())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
+
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// We should get an Unauthenticated error
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
 	})
 }
 
@@ -673,7 +739,12 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 
 func TestSecretStoreNotConfigured(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	server := startDaprAPIServer(port, &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger: logger.NewLogger("grpc.api.test"),
+		},
+		id: "fakeAPI",
+	}, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -785,10 +856,13 @@ func TestGetSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                   "fakeAPI",
-		secretStores:         fakeStores,
-		secretsConfiguration: secretsConfiguration,
-		resiliency:           resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           resiliency.New(nil),
+			SecretStores:         fakeStores,
+			SecretsConfiguration: secretsConfiguration,
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -852,10 +926,13 @@ func TestGetBulkSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                   "fakeAPI",
-		secretStores:         fakeStores,
-		secretsConfiguration: secretsConfiguration,
-		resiliency:           resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           resiliency.New(nil),
+			SecretStores:         fakeStores,
+			SecretsConfiguration: secretsConfiguration,
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -3184,9 +3261,12 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:           "fakeAPI",
-		secretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
-		resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:       logger.NewLogger("grpc.api.test"),
+			Resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			SecretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -3356,7 +3436,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 
 type mockConfigStore struct{}
 
-func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
+func (m *mockConfigStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
 }
 

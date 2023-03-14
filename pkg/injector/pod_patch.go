@@ -114,6 +114,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
 		RunAsNonRoot:                 i.config.GetRunAsNonRoot(),
 		ReadOnlyRootFilesystem:       i.config.GetReadOnlyRootFilesystem(),
+		SidecarDropALLCapabilities:   i.config.GetDropCapabilities(),
 	})
 	if err != nil {
 		return nil, err
@@ -129,11 +130,13 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		})
 	}
 
-	patchOps = append(patchOps, sidecar.PatchOperation{
-		Op:    "add",
-		Path:  sidecar.PatchPathContainers + "/-",
-		Value: sidecarContainer,
-	})
+	patchOps = append(patchOps,
+		sidecar.PatchOperation{
+			Op:    "add",
+			Path:  sidecar.PatchPathContainers + "/-",
+			Value: sidecarContainer,
+		},
+		sidecar.AddDaprSideCarInjectedLabel(pod.Labels))
 	patchOps = append(patchOps,
 		sidecar.AddDaprEnvVarsToContainers(appContainers)...)
 	patchOps = append(patchOps,

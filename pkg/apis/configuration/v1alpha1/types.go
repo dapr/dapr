@@ -240,6 +240,11 @@ type APILoggingSpec struct {
 	// The default value is false.
 	// +optional
 	Enabled bool `json:"enabled" yaml:"enabled"`
+	// When enabled, obfuscates the values of URLs in HTTP API logs, logging the route name rather than the full path being invoked, which could contain PII.
+	// Default: false.
+	// This option has no effect if API logging is disabled.
+	// +optional
+	ObfuscateURLs bool `json:"obfuscateURLs" yaml:"obfuscateURLs"`
 	// If true, health checks are not reported in API logs. Default: false.
 	// This option has no effect if API logging is disabled.
 	// +optional

@@ -36,7 +36,7 @@ func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 }
 
 // InitLockStore mocks base method.
-func (m *MockStore) InitLockStore(metadata lock.Metadata) error {
+func (m *MockStore) InitLockStore(ctx context.Context, metadata lock.Metadata) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InitLockStore", metadata)
 	ret0, _ := ret[0].(error)
@@ -44,7 +44,7 @@ func (m *MockStore) InitLockStore(metadata lock.Metadata) error {
 }
 
 // InitLockStore indicates an expected call of InitLockStore.
-func (mr *MockStoreMockRecorder) InitLockStore(metadata interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) InitLockStore(ctx context.Context, metadata interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitLockStore", reflect.TypeOf((*MockStore)(nil).InitLockStore), metadata)
 }

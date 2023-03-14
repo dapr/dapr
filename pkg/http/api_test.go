@@ -58,6 +58,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -931,7 +932,11 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 }
 
 func getFakeDirectMessageResponse() *invokev1.InvokeMethodResponse {
-	return invokev1.NewInvokeMethodResponse(200, "OK", nil).
+	return getFakeDirectMessageResponseWithStatusCode(fasthttp.StatusOK)
+}
+
+func getFakeDirectMessageResponseWithStatusCode(code int) *invokev1.InvokeMethodResponse {
+	return invokev1.NewInvokeMethodResponse(int32(code), fasthttp.StatusMessage(code), nil).
 		WithRawDataString("fakeDirectMessageResponse").
 		WithContentType("application/json")
 }
@@ -975,6 +980,38 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging without querystring - 201 Created", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponseWithStatusCode(fasthttp.StatusCreated)
+		defer fakeDirectMessageResponse.Close()
+
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 201, resp.StatusCode)
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
@@ -1386,6 +1423,33 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		resiliency:      resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
+
+	t.Run("Test invoke direct message does not retry on 200", func(t *testing.T) {
+		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
+		fakeData := []byte("allgood")
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 1, failingDirectMessaging.Failure.CallCount("allgood"))
+	})
+
+	t.Run("Test invoke direct message does not retry on 2xx", func(t *testing.T) {
+		failingDirectMessaging.SuccessStatusCode = 201
+		defer func() {
+			failingDirectMessaging.SuccessStatusCode = 0
+		}()
+
+		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
+		fakeData := []byte("allgood2")
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		assert.Equal(t, 201, resp.StatusCode)
+		assert.Equal(t, 1, failingDirectMessaging.Failure.CallCount("allgood2"))
+	})
 
 	t.Run("Test invoke direct message retries with resiliency", func(t *testing.T) {
 		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
@@ -3940,7 +4004,7 @@ func (c fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bo
 	return false, nil, nil
 }
 
-func (c fakeStateStore) Init(metadata state.Metadata) error {
+func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
@@ -4025,10 +4089,18 @@ func TestV1SecretEndpoints(t *testing.T) {
 		},
 	}
 
+	l := logger.NewLogger("fakeLogger")
+	res := resiliency.FromConfigurations(l, testResiliency)
 	testAPI := &api{
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeStores,
-		resiliency:           resiliency.FromConfigurations(logger.NewLogger("fakeLogger"), testResiliency),
+		resiliency:           res,
+		universal: &universalapi.UniversalAPI{
+			Logger:               l,
+			SecretsConfiguration: secretsConfiguration,
+			SecretStores:         fakeStores,
+			Resiliency:           res,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
@@ -4036,7 +4108,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	restrictedStore := "store3"
 	unrestrictedStore := "store4" // No configuration defined for the store
 
-	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
+	t.Run("Get secret - 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -4121,14 +4193,17 @@ func TestV1SecretEndpoints(t *testing.T) {
 	t.Run("Get secret - 500 for secret store not congfigured", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
+		testAPI.universal.SecretStores = nil
 		testAPI.secretStores = nil
+		defer func() {
+			testAPI.secretStores = fakeStores
+			testAPI.universal.SecretStores = fakeStores
+		}()
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
-		assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
+		assert.Equal(t, 500, resp.StatusCode, "reading from not-configured secret store should fail with 500")
 		assert.Equal(t, "ERR_SECRET_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
-
-		testAPI.secretStores = fakeStores
 	})
 
 	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
@@ -4254,7 +4329,7 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 	return nil, errors.New("get key error: value not found")
 }
 
-func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
+func (c fakeConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
@@ -4276,7 +4351,7 @@ func (l fakeLockStore) Ping() error {
 	return nil
 }
 
-func (l *fakeLockStore) InitLockStore(metadata lock.Metadata) error {
+func (l *fakeLockStore) InitLockStore(ctx context.Context, metadata lock.Metadata) error {
 	return nil
 }
 
