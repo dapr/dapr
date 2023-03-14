@@ -106,9 +106,9 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 
 	resp, err := workflowComponent.Start(ctx, &req)
 	if err != nil {
-		innerErr := messages.ErrStartWorkflow.WithFormat(in.WorkflowName, err)
+		err := messages.ErrStartWorkflow.WithFormat(in.WorkflowName, err)
 		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, innerErr
+		return &runtimev1pb.WorkflowReference{}, err
 	}
 	ret := &runtimev1pb.WorkflowReference{
 		InstanceId: resp.InstanceID,

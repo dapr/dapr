@@ -3264,7 +3264,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/raiseEvent/fakeEvent"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		fmt.Println(resp)
 		assert.Equal(t, 202, resp.StatusCode)
 
 		// assert

@@ -693,7 +693,7 @@ func TestRaiseEvent(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, id, metadata.InstanceID)
 					client.RaiseEvent(ctx, id, "NameOfEventBeingRaised", "NameOfInput")
-					metadata, err = client.WaitForOrchestrationCompletion(ctx, id)
+					metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
 					assert.True(t, metadata.IsComplete())
 					assert.Equal(t, `"Hello, NameOfInput!"`, metadata.SerializedOutput)
 					assert.Nil(t, metadata.FailureDetails)
