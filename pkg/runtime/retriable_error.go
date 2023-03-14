@@ -13,23 +13,22 @@ limitations under the License.
 
 package runtime
 
-import (
-	"fmt"
-)
-
 type RetriableError struct {
 	err error
 }
 
 func (e *RetriableError) Error() string {
 	if e.err != nil {
-		return fmt.Sprintf("retriable error occurred: %s", e.err)
+		return "retriable error occurred: " + e.err.Error()
 	}
-
-	return fmt.Sprintf("retriable error occurred")
+	return "retriable error occurred"
 }
 
 func (e *RetriableError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+
 	return e.err
 }
 

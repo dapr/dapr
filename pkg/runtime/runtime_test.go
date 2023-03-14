@@ -3267,7 +3267,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			if tc.expectedError != nil {
 				assert.Equal(t, err.Error(), tc.expectedError.Error())
 			} else {
-				assert.Nil(t, err, "expected no error")
+				assert.NoError(t, err)
 			}
 		})
 	}
