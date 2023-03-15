@@ -15,7 +15,7 @@
         // "BIND_LOCALHOST_DOCKER": "true",
 
         // Necessary for components-contrib's certification tests
-        "GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "true"
+        "GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "ignore"
     },
     "extensions": [
         "davidanson.vscode-markdownlint",
