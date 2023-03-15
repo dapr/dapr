@@ -39,7 +39,7 @@ var (
 	disableServiceReconciler           bool
 	watchNamespace                     string
 	enableArgoRolloutServiceReconciler bool
-	watchdogCanPatchPodLabels bool
+	watchdogCanPatchPodLabels          bool
 )
 
 //nolint:gosec
@@ -70,7 +70,7 @@ func main() {
 		WatchNamespace:                      watchNamespace,
 		ServiceReconcilerEnabled:            !disableServiceReconciler,
 		ArgoRolloutServiceReconcilerEnabled: enableArgoRolloutServiceReconciler,
-		WatchdogCanPatchPodLabels: watchdogCanPatchPodLabels,
+		WatchdogCanPatchPodLabels:           watchdogCanPatchPodLabels,
 	}
 
 	switch strings.ToLower(watchInterval) {

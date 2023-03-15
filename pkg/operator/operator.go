@@ -61,7 +61,7 @@ type Options struct {
 	WatchNamespace                      string
 	ServiceReconcilerEnabled            bool
 	ArgoRolloutServiceReconcilerEnabled bool
-	WatchdogCanPatchPodLabels bool
+	WatchdogCanPatchPodLabels           bool
 }
 
 type operator struct {
