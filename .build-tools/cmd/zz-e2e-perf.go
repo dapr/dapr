@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/go-containerregistry/pkg/crane"
 	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/spf13/cobra"
 )
@@ -48,6 +49,7 @@ type cmdE2EPerfFlags struct {
 	IgnoreFile       string
 	CacheIncludeFile string
 	Name             string
+	WindowsVersion   string
 }
 
 // Returns the command for e2e or perf
@@ -90,6 +92,7 @@ If the "--cache-registry" option is set, it will be pushed to the cache too.
 	buildCmd.Flags().StringVar(&obj.flags.TargetArch, "target-arch", runtime.GOARCH, "Target architecture")
 	buildCmd.Flags().StringVar(&obj.flags.IgnoreFile, "ignore-file", ".gitignore", "Name of the file with files to exclude (in the format of .gitignore)")
 	buildCmd.Flags().StringVar(&obj.flags.CacheIncludeFile, "cache-include-file", ".cache-include", "Name of the file inside the app folder with additional files to include in checksumming (in the format of .gitignore)")
+	buildCmd.Flags().StringVar(&obj.flags.WindowsVersion, "windows-version", "", "Windows version to use for Windows containers")
 
 	// "push" sub-command
 	pushCmd := &cobra.Command{
@@ -131,6 +134,7 @@ If the "--cahce-registry" option is set and the image exists in the cache, it wi
 	buildAndPushCmd.Flags().StringVar(&obj.flags.TargetArch, "target-arch", runtime.GOARCH, "Target architecture")
 	buildAndPushCmd.Flags().StringVar(&obj.flags.IgnoreFile, "ignore-file", ".gitignore", "Name of the file with files to exclude (in the format of .gitignore)")
 	buildAndPushCmd.Flags().StringVar(&obj.flags.CacheIncludeFile, "cache-include-file", ".cache-include", "Name of the file inside the app folder with additional files to include in checksumming (in the format of .gitignore)")
+	buildAndPushCmd.Flags().StringVar(&obj.flags.WindowsVersion, "windows-version", "", "Windows version to use for Windows containers")
 
 	// Register the commands
 	cmd.AddCommand(buildCmd)
@@ -202,23 +206,22 @@ func (c *cmdE2EPerf) buildAndPushCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// TODO: temporarily disabling this, add it back once cache data is fixed.
 	// Try to copy the image between the cache and the target directly, without pulling first
 	// This will fail if the image is not in cache, and that's ok
-	// if c.flags.CacheRegistry != "" {
-	// 	fmt.Printf("Trying to copy image %s directly from cache %s\n", destImage, cachedImage)
-	// 	err = crane.Copy(cachedImage, destImage)
-	// 	if err == nil {
-	// 		// If there's no error, we're done
-	// 		fmt.Println("Image copied from cache directly! You're all set.")
-	// 		return nil
-	// 	}
+	if c.flags.CacheRegistry != "" {
+		fmt.Printf("Trying to copy image %s directly from cache %s\n", destImage, cachedImage)
+		err = crane.Copy(cachedImage, destImage)
+		if err == nil {
+			// If there's no error, we're done
+			fmt.Println("Image copied from cache directly! You're all set.")
+			return nil
+		}
 
-	// 	// Copying the image failed, so we'll resort to build + push
-	// 	fmt.Printf("Copying image directly from cache failed with error '%s'. Will build image.\n", err)
-	// } else {
-	// 	fmt.Println("Cache registry not set: will not use cache")
-	// }
+		// Copying the image failed, so we'll resort to build + push
+		fmt.Printf("Copying image directly from cache failed with error '%s'. Will build image.\n", err)
+	} else {
+		fmt.Println("Cache registry not set: will not use cache")
+	}
 
 	// Build the image
 	// It also pushes to the cache registry if needed
@@ -244,8 +247,13 @@ func (c *cmdE2EPerf) getCachedImage() (string, error) {
 		return "", err
 	}
 
-	// If cache is enable, try pulling from cache first
-	cachedImage := fmt.Sprintf("%s/%s-%s:%s-%s-%s", c.flags.CacheRegistry, c.cmdType, c.flags.Name, c.flags.TargetOS, c.flags.TargetArch, hashDir)
+	tag := fmt.Sprintf("%s-%s-%s", c.flags.TargetOS, c.flags.TargetArch, hashDir)
+
+	if c.flags.WindowsVersion != "" {
+		tag = fmt.Sprintf("%s-%s-%s-%s", c.flags.TargetOS, c.flags.WindowsVersion, c.flags.TargetArch, hashDir)
+	}
+
+	cachedImage := fmt.Sprintf("%s/%s-%s:%s", c.flags.CacheRegistry, c.cmdType, c.flags.Name, tag)
 	return cachedImage, nil
 }
 
@@ -324,6 +332,9 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
 	default:
 		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
+	}
+	if c.flags.WindowsVersion != "" {
+		args = append(args, "--build-arg", "WINDOWS_VERSION="+c.flags.WindowsVersion)
 	}
 
 	fmt.Printf("Running 'docker %s'\n", strings.Join(args, " "))
