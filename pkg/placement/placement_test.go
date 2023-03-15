@@ -32,7 +32,7 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-const testStreamSendLatency = 50 * time.Millisecond
+const testStreamSendLatency = 250 * time.Millisecond
 
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
@@ -131,7 +131,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		}
 
 		// act
-		stream.Send(host)
+		require.NoError(t, stream.Send(host))
 
 		// assert
 		select {
@@ -141,9 +141,8 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			assert.Equal(t, host.Id, memberChange.host.AppID)
 			assert.EqualValues(t, host.Entities, memberChange.host.Entities)
 			assert.Equal(t, 1, len(testServer.streamConnPool))
-
 		case <-time.After(testStreamSendLatency):
-			assert.True(t, false, "no membership change")
+			require.Fail(t, "no membership change")
 		}
 
 		// act

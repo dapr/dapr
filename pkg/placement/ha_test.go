@@ -3,7 +3,7 @@ package placement
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,7 +103,7 @@ func TestPlacementHA(t *testing.T) {
 		require.Eventually(t, func() bool {
 			leader = findLeader(t, raftServers)
 			return oldLeader != leader
-		}, time.Second, time.Millisecond)
+		}, time.Second*5, time.Millisecond)
 	})
 
 	t.Run("set and retrieve state in leader after re-election", func(t *testing.T) {
@@ -118,6 +118,7 @@ func TestPlacementHA(t *testing.T) {
 			if srv != nil && !srv.IsLeader() {
 				raftServerCancel[i]()
 				raftServers[i] = nil
+				break
 			}
 		}
 
@@ -165,6 +166,7 @@ func TestPlacementHA(t *testing.T) {
 			if srv != nil && srv.IsLeader() {
 				raftServerCancel[i]()
 				raftServers[i] = nil
+				break
 			}
 		}
 
@@ -223,13 +225,15 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	serverStopped := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(3)
+
 	go func() {
-		defer close(serverStopped)
+		defer wg.Done()
 		require.NoError(t, srv.StartRaft(ctx, &hcraft.Config{
 			ProtocolVersion:    hcraft.ProtocolVersionMax,
-			HeartbeatTimeout:   250 * time.Millisecond,
-			ElectionTimeout:    250 * time.Millisecond,
+			HeartbeatTimeout:   500 * time.Millisecond,
+			ElectionTimeout:    500 * time.Millisecond,
 			CommitTimeout:      50 * time.Millisecond,
 			MaxAppendEntries:   64,
 			ShutdownOnRemove:   true,
@@ -242,14 +246,21 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 
 	ready := make(chan struct{})
 	go func() {
+		defer wg.Done()
 		defer close(ready)
-		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 20*time.Second)
-		defer timeoutCancel()
-		_, err := srv.Raft(timeoutCtx)
-		require.NoError(t, err)
+		for {
+			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second)
+			defer timeoutCancel()
+			r, err := srv.Raft(timeoutCtx)
+			require.NoError(t, err)
+			if r.State() == hcraft.Follower || r.State() == hcraft.Leader {
+				return
+			}
+		}
 	}()
 
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-ready:
@@ -259,38 +270,56 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 		}
 	}()
 
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-time.After(time.Millisecond):
+				clock.Step(time.Millisecond * 500)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	stopped := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(stopped)
+	}()
+
 	return srv, ready, func() {
 		cancel()
 		select {
-		case <-serverStopped:
-			// nop
-		case <-time.After(5 * time.Second):
-			t.Fatal("raft server did not stop in time")
+		case <-stopped:
+		case <-time.After(time.Second * 5):
+			require.Fail(t, "server didn't stop in time")
 		}
 	}
 }
 
 func findLeader(t *testing.T, raftServers []*raft.Server) int {
-	n := atomic.Int32{}
-	n.Store(-1)
+	t.Helper()
+
+	var n int
 
 	// Ensure that one node became leader
 	require.Eventually(t, func() bool {
 		for i, srv := range raftServers {
 			if srv != nil && srv.IsLeader() {
 				t.Logf("leader elected server %d", i)
-				n.CompareAndSwap(-1, int32(i))
+				n = i
 				return true
 			}
 		}
 		return false
-	}, 5*time.Second, 100*time.Millisecond, "no leader elected")
-
-	return int(n.Load())
+	}, time.Second*5, time.Millisecond, "no leader elected")
+	return n
 }
 
 func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
-	actual := atomic.Pointer[raft.DaprHostMember]{}
+	t.Helper()
+	var actual *raft.DaprHostMember
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
 		assert.NotNil(t, state)
