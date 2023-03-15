@@ -19,13 +19,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -33,12 +34,14 @@ import (
 
 const testStreamSendLatency = 50 * time.Millisecond
 
-func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, context.CancelFunc) {
+func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	serverStoped := make(chan struct{})
 	testServer := NewPlacementService(raftServer)
+	clock := clocktesting.NewFakeClock(time.Now())
+	testServer.clock = clock
 
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
@@ -57,7 +60,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	}
 
 	serverAddress := "127.0.0.1:" + strconv.Itoa(port)
-	return serverAddress, testServer, cleanUpFn
+	return serverAddress, testServer, clock, cleanUpFn
 }
 
 func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient, error) { //nolint:nosnakecase
@@ -79,7 +82,7 @@ func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_Repor
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
 	// set up
-	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
+	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
 	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(false)
 
@@ -110,7 +113,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 }
 
 func TestMemberRegistration_Leadership(t *testing.T) {
-	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
+	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
 	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(true)
 
@@ -228,7 +231,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// assert
 		select {
 		case <-testServer.membershipCh:
-			require.True(t, false, "should not have any membership change")
+			require.Fail(t, "should not have any membership change")
 
 		case <-time.After(testStreamSendLatency):
 			require.True(t, true)
@@ -237,6 +240,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
-		conn.Close()
+		assert.NoError(t, conn.Close())
 	})
 }

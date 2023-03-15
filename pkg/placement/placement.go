@@ -27,12 +27,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/dapr/kit/logger"
+	"k8s.io/utils/clock"
 
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -113,6 +113,9 @@ type Service struct {
 	// streamConnGroup represents the number of stream connections.
 	// This waits until all stream connections are drained when revoking leadership.
 	streamConnGroup sync.WaitGroup
+
+	// clock keeps time. Mocked in tests.
+	clock clock.WithTicker
 }
 
 // NewPlacementService returns a new placement service.
@@ -125,6 +128,7 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
 		faultyHostDetectDuration: fhdd,
 		raftNode:                 raftNode,
+		clock:                    &clock.RealClock{},
 	}
 }
 
@@ -203,7 +207,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
-			p.lastHeartBeat.Store(req.Name, time.Now().UnixNano())
+			p.lastHeartBeat.Store(req.Name, p.clock.Now().UnixNano())
 
 			members := p.raftNode.FSM().State().Members()
 
@@ -223,7 +227,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						Name:      req.Name,
 						AppID:     req.Id,
 						Entities:  req.Entities,
-						UpdatedAt: time.Now().UnixNano(),
+						UpdatedAt: p.clock.Now().UnixNano(),
 					},
 				}
 			}

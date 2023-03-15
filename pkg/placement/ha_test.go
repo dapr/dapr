@@ -10,6 +10,7 @@ import (
 	hcraft "github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
@@ -102,7 +103,7 @@ func TestPlacementHA(t *testing.T) {
 		require.Eventually(t, func() bool {
 			leader = findLeader(t, raftServers)
 			return oldLeader != leader
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second, time.Millisecond)
 	})
 
 	t.Run("set and retrieve state in leader after re-election", func(t *testing.T) {
@@ -128,7 +129,7 @@ func TestPlacementHA(t *testing.T) {
 				}
 			}
 			return true
-		}, time.Second*5, time.Millisecond*100, "leader did not step down")
+		}, time.Second, time.Millisecond, "leader did not step down")
 	})
 
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
@@ -210,7 +211,14 @@ func TestPlacementHA(t *testing.T) {
 }
 
 func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Server, <-chan struct{}, context.CancelFunc) {
-	srv := raft.New(fmt.Sprintf("mynode-%d", nodeID), true, peers, "")
+	t.Helper()
+	srv := raft.New(raft.Options{
+		ID:           fmt.Sprintf("mynode-%d", nodeID),
+		InMem:        true,
+		Peers:        peers,
+		LogStorePath: "",
+		Clock:        &clock.RealClock{},
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	serverStopped := make(chan struct{})
@@ -276,15 +284,11 @@ func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMem
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
 		assert.NotNil(t, state)
-		val, found := state.Members()[expect.Name]
-		if found && expect.Name == val.Name &&
-			expect.AppID == val.AppID {
-			actual.CompareAndSwap(nil, val)
-			return true
-		}
-		return false
-	}, 5*time.Second, 100*time.Millisecond, "%v != %v", expect, actual.Load())
-
-	require.NotNil(t, actual.Load())
-	assert.EqualValues(t, expect.Entities, actual.Load().Entities)
+		var found bool
+		actual, found = state.Members()[expect.Name]
+		return found && expect.Name == actual.Name &&
+			expect.AppID == actual.AppID
+	}, time.Second*5, time.Millisecond, "%v != %v", expect, actual)
+	require.NotNil(t, actual)
+	assert.EqualValues(t, expect.Entities, actual.Entities)
 }

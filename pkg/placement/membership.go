@@ -159,9 +159,9 @@ func (p *Service) cleanupHeartbeats() {
 // membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) membershipChangeWorker(ctx context.Context) {
-	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
+	faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
 	defer faultyHostDetectTimer.Stop()
-	disseminateTimer := time.NewTicker(disseminateTimerInterval)
+	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
 	defer disseminateTimer.Stop()
 
 	p.memberUpdateCount.Store(0)
@@ -180,7 +180,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case t := <-disseminateTimer.C:
+		case t := <-disseminateTimer.C():
 			// Earlier stop when leadership is lost.
 			if !p.hasLeadership.Load() {
 				continue
@@ -194,7 +194,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 				}
 			}
 
-		case t := <-faultyHostDetectTimer.C:
+		case t := <-faultyHostDetectTimer.C():
 			// Earlier stop when leadership is lost.
 			if !p.hasLeadership.Load() {
 				continue
@@ -217,7 +217,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					// of placement servers.
 					// Before all runtimes connect to the leader of placements, it will record the current
 					// time as heartbeat timestamp.
-					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, time.Now().UnixNano())
+					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, p.clock.Now().UnixNano())
 
 					elapsed := t.UnixNano() - heartbeat.(int64)
 					if elapsed < p.faultyHostDetectDuration.Load() {
@@ -242,7 +242,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 	// of raft apply command.
 	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)
 
-	processingTicker := time.NewTicker(10 * time.Second)
+	processingTicker := p.clock.NewTicker(10 * time.Second)
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -252,7 +252,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case <-processingTicker.C:
+		case <-processingTicker.C():
 			log.Debugf("Process Raft state command: nothing happened...")
 			continue
 
@@ -287,7 +287,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 							// disseminateNextTime will be updated whenever apply is done, so that
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.
-							p.disseminateNextTime.Store(time.Now().Add(disseminateTimeout).UnixNano())
+							p.disseminateNextTime.Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
 						}
 					}
 					<-logApplyConcurrency
@@ -346,7 +346,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables) error {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
-	startedAt := time.Now()
+	startedAt := p.clock.Now()
 
 	var (
 		wg   sync.WaitGroup
@@ -383,7 +383,7 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 		return fmt.Errorf("dissemination failed: %s", strings.Join(errs, ", "))
 	}
 
-	log.Debugf("performTablesUpdate succeed %v", time.Since(startedAt))
+	log.Debugf("performTablesUpdate succeed %v", p.clock.Since(startedAt))
 	return nil
 }
 
