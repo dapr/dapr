@@ -282,6 +282,12 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 				return &s.tlsCert, nil
 			},
 		}
+
+		// In the internal server, enforce minimum version TLS 1.2
+		if s.kind == internalServer {
+			tlsConfig.MinVersion = tls.VersionTLS12
+		}
+
 		ta := credentials.NewTLS(&tlsConfig)
 
 		opts = append(opts, grpcGo.Creds(ta))

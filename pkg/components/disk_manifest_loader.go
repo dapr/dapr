@@ -29,23 +29,43 @@ const yamlSeparator = "\n---"
 
 // manifestLoader loads a specific manifest kind from a folder.
 type DiskManifestLoader[T kubernetesManifest] struct {
-	zv   func() T
-	kind string
-	path string
+	zvFn  func() T
+	kind  string
+	paths []string
 }
 
-// NewDiskManifestLoader creates a new manifest loader for the given path and kind.
-func NewDiskManifestLoader[T kubernetesManifest](path string, zeroValue func() T) DiskManifestLoader[T] {
+// NewDiskManifestLoader creates a new manifest loader for the given paths and kind.
+func NewDiskManifestLoader[T kubernetesManifest](paths ...string) DiskManifestLoader[T] {
+	var zero T
 	return DiskManifestLoader[T]{
-		path: path,
-		kind: zeroValue().Kind(),
-		zv:   zeroValue,
+		paths: paths,
+		kind:  zero.Kind(),
 	}
+}
+
+// SetZeroValueFn sets the function that returns the "zero" object of the given type.
+// This can be used to set default values before unmarshalling.
+func (m *DiskManifestLoader[T]) SetZeroValueFn(zvFn func() T) {
+	m.zvFn = zvFn
 }
 
 // load loads manifests for the given directory.
 func (m DiskManifestLoader[T]) Load() ([]T, error) {
-	files, err := os.ReadDir(m.path)
+	manifests := []T{}
+	for _, path := range m.paths {
+		loaded, err := m.loadManifestsFromPath(path)
+		if err != nil {
+			return nil, err
+		}
+		if len(loaded) > 0 {
+			manifests = append(manifests, loaded...)
+		}
+	}
+	return manifests, nil
+}
+
+func (m DiskManifestLoader[T]) loadManifestsFromPath(path string) ([]T, error) {
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +79,7 @@ func (m DiskManifestLoader[T]) Load() ([]T, error) {
 				log.Warnf("A non-YAML %s file %s was detected, it will not be loaded", m.kind, fileName)
 				continue
 			}
-			fileManifests := m.loadManifestsFromFile(filepath.Join(m.path, fileName))
+			fileManifests := m.loadManifestsFromFile(filepath.Join(path, fileName))
 			manifests = append(manifests, fileManifests...)
 		}
 	}
@@ -73,12 +93,12 @@ func (m DiskManifestLoader[T]) loadManifestsFromFile(manifestPath string) []T {
 	manifests := make([]T, 0)
 	b, err := os.ReadFile(manifestPath)
 	if err != nil {
-		log.Warnf("daprd load %s error when reading file %s : %s", m.kind, manifestPath, err)
+		log.Warnf("daprd load %s error when reading file %s: %v", m.kind, manifestPath, err)
 		return manifests
 	}
 	manifests, errors = m.decodeYaml(b)
 	for _, err := range errors {
-		log.Warnf("daprd load %s error when parsing manifests yaml resource in %s : %s", m.kind, manifestPath, err)
+		log.Warnf("daprd load %s error when parsing manifests yaml resource in %s: %v", m.kind, manifestPath, err)
 	}
 	return manifests
 }
@@ -99,7 +119,6 @@ func (m DiskManifestLoader[T]) decodeYaml(b []byte) ([]T, []error) {
 			err := scanner.Err()
 			if err != nil {
 				errors = append(errors, err)
-
 				continue
 			}
 
@@ -110,7 +129,6 @@ func (m DiskManifestLoader[T]) decodeYaml(b []byte) ([]T, []error) {
 		var ti typeInfo
 		if err := yaml.Unmarshal(scannerBytes, &ti); err != nil {
 			errors = append(errors, err)
-
 			continue
 		}
 
@@ -118,13 +136,14 @@ func (m DiskManifestLoader[T]) decodeYaml(b []byte) ([]T, []error) {
 			continue
 		}
 
-		manifest := m.zv()
+		var manifest T
+		if m.zvFn != nil {
+			manifest = m.zvFn()
+		}
 		if err := yaml.Unmarshal(scannerBytes, &manifest); err != nil {
 			errors = append(errors, err)
-
 			continue
 		}
-
 		list = append(list, manifest)
 	}
 

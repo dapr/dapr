@@ -173,7 +173,7 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 
 func TestPoliciesForTargets(t *testing.T) {
 	ctx := context.Background()
-	configs := LoadStandaloneResiliency(log, "default", "./testdata")
+	configs := LoadLocalResiliency(log, "default", "./testdata")
 	assert.Len(t, configs, 1)
 	r := FromConfigurations(log, configs...)
 
@@ -246,7 +246,7 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 
 func TestLoadStandaloneResiliency(t *testing.T) {
 	t.Run("test load resiliency", func(t *testing.T) {
-		configs := LoadStandaloneResiliency(log, "app1", "./testdata")
+		configs := LoadLocalResiliency(log, "app1", "./testdata")
 		assert.NotNil(t, configs)
 		assert.Len(t, configs, 2)
 		assert.Equal(t, "Resiliency", configs[0].Kind)
@@ -256,7 +256,7 @@ func TestLoadStandaloneResiliency(t *testing.T) {
 	})
 
 	t.Run("test load resiliency skips other types", func(t *testing.T) {
-		configs := LoadStandaloneResiliency(log, "app1", "../components")
+		configs := LoadLocalResiliency(log, "app1", "../components")
 		assert.NotNil(t, configs)
 		assert.Len(t, configs, 0)
 	})
@@ -299,7 +299,7 @@ func TestParseActorCircuitBreakerScope(t *testing.T) {
 }
 
 func TestParseMaxRetries(t *testing.T) {
-	configs := LoadStandaloneResiliency(log, "app1", "./testdata")
+	configs := LoadLocalResiliency(log, "app1", "./testdata")
 	require.NotNil(t, configs)
 	require.Len(t, configs, 2)
 	require.NotNil(t, configs[0])
@@ -336,16 +336,16 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	resiliencies := LoadStandaloneResiliency(log, "app1", "./testdata")
+	resiliencies := LoadLocalResiliency(log, "app1", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
 	resiliencies = LoadKubernetesResiliency(log, "app2", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadStandaloneResiliency(log, "app2", "./testdata")
+	resiliencies = LoadLocalResiliency(log, "app2", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadStandaloneResiliency(log, "app3", "./testdata")
+	resiliencies = LoadLocalResiliency(log, "app3", "./testdata")
 	assert.Len(t, resiliencies, 1)
 }
 

@@ -16,7 +16,7 @@ name: dapr
 on:
   workflow_dispatch:
   schedule:
-    - cron: '00 22 * * *'
+    - cron: "00 22 * * *"
   push:
     branches:
       - master
@@ -34,8 +34,7 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: "^1.19.2"
-      GOLANGCILINT_VER: "v1.51.1"
+      GOLANGCILINT_VER: "v1.51.2"
       PROTOC_VERSION: "21.12"
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
@@ -45,27 +44,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2019, macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
         target_arch: [arm, arm64, amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
           - os: windows-2019
             target_os: windows
+            target_arch: amd64
+            windows_version: "1809"
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
           - os: macOS-latest
             target_os: darwin
         exclude:
-          - os: windows-2019
-            target_arch: arm
-          - os: windows-2019
-            target_arch: arm64
           - os: macOS-latest
             target_arch: arm
     steps:
-      - name: Set up Go ${{ env.GOVER }}
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ env.GOVER }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
@@ -78,7 +75,12 @@ jobs:
         with:
           version: v0.10.1 # Don't use latest since it broke our workflow once
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -114,9 +116,9 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Cache Go modules (Windows)
         if: matrix.target_os == 'windows'
         uses: actions/cache@v3
@@ -124,9 +126,9 @@ jobs:
           path: |
             ~\AppData\Local\go-build
             ~\go\pkg\mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Cache Go modules (macOS)
         if: matrix.target_os == 'darwin'
         uses: actions/cache@v3
@@ -134,9 +136,9 @@ jobs:
           path: |
             ~/Library/Caches/go-build
             ~/go/pkg/mod
-          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Check for disallowed changes in go.mod
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: node ./.github/scripts/check_go_mod.mjs
@@ -191,7 +193,7 @@ jobs:
           path: ./grafana/*.json
       - name: Docker Hub Login
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
         with:
@@ -199,7 +201,7 @@ jobs:
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -211,6 +213,7 @@ jobs:
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
           TARGET_OS: ${{ matrix.target_os }}
           TARGET_ARCH: ${{ matrix.target_arch }}
+          WINDOWS_VERSION: ${{ matrix.windows_version }}
         run: |
           echo "Build Docker images and push to Docker Hub..."
           DAPR_TAG=${{ env.REL_VERSION }} make docker-push
@@ -226,6 +229,7 @@ jobs:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
           TARGET_OS: ${{ matrix.target_os }}
           TARGET_ARCH: ${{ matrix.target_arch }}
+          WINDOWS_VERSION: ${{ matrix.windows_version }}
         run: |
           echo "Build Docker images and push to GHCR..."
           DAPR_TAG=${{ env.REL_VERSION }} make docker-push
@@ -258,7 +262,7 @@ jobs:
         with:
           version: ${{ env.HELMVER }}
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -361,13 +365,13 @@ jobs:
             ${RELEASE_ARTIFACT[*]}
         shell: bash
       - name: Docker Hub Login
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
         with:
           username: ${{ secrets.DOCKER_REGISTRY_ID }}
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         if: matrix.target_os != 'darwin'
         with:
           registry: ghcr.io
@@ -389,11 +393,19 @@ jobs:
           DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
           LATEST_TAG=latest-mariner \
             make docker-publish
+
+          # Publish the `-windows-amd64` manifest.
+          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
+          LATEST_TAG=latest-windows-amd64 \
+          MANIFEST_TAG="${{ env.REL_VERSION }}" \
+          MANIFEST_LATEST_TAG="latest" \
+            make docker-publish
         shell: bash
       - name: Build and push Docker multiarch manifest to GHCR
         if: matrix.target_os != 'darwin'
         env:
-           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
+          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           echo "Build Docker multiarch manifest and push to GHCR"
           DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
@@ -405,6 +417,14 @@ jobs:
           DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
           LATEST_TAG=latest-mariner \
             make docker-publish
+
+          # Publish the `-windows-amd64` manifest.
+          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
+          LATEST_TAG=latest-windows-amd64 \
+          MANIFEST_TAG="${{ env.REL_VERSION }}" \
+          MANIFEST_LATEST_TAG="latest" \
+            make docker-publish
         shell: bash
       - name: Save release version
         run: |
@@ -413,7 +433,7 @@ jobs:
       - name: Package Helm chart
         if: ${{ env.LATEST_RELEASE }} == "true" && env.DOCKER_REGISTRY != ''
         env:
-              HELM_CHARTS_DIR: charts/dapr
+          HELM_CHARTS_DIR: charts/dapr
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
           helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
@@ -446,10 +466,10 @@ jobs:
           name: dapr_helm_charts_package
           path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
       - name: Checkout Helm Charts Repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         env:
-              DAPR_HELM_REPO: dapr/helm-charts
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
+          DAPR_HELM_REPO: dapr/helm-charts
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
         with:
           repository: ${{ env.DAPR_HELM_REPO }}
           ref: refs/heads/master
@@ -457,24 +477,24 @@ jobs:
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         env:
-              DAPR_HELM_REPO_CODE_PATH: helm-charts
-              DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
+          DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
         run: |
-            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
-            cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-            cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
-            git config --global user.email "daprweb@microsoft.com"
-            git config --global user.name "dapr-bot"
-            git add --all
-            # Check if the dapr-${daprVersion}.tgz file is modified.
-            if git diff --name-only --staged | grep -q ${daprVersion}; then
-              # If it is, we update the Helm chart, since this is an intentional update.
-              git commit -m "Release - $daprVersion"
-              git push
-            else
-              # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
-              echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
-              exit -1
-            fi
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
+          git config --global user.email "daprweb@microsoft.com"
+          git config --global user.name "dapr-bot"
+          git add --all
+          # Check if the dapr-${daprVersion}.tgz file is modified.
+          if git diff --name-only --staged | grep -q ${daprVersion}; then
+            # If it is, we update the Helm chart, since this is an intentional update.
+            git commit -m "Release - $daprVersion"
+            git push
+          else
+            # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
+            echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
+            exit -1
+          fi

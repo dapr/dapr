@@ -39,6 +39,11 @@ rules:
     resources: ["components", "configurations", "subscriptions", "resiliencies"]
     verbs: [ "get", "list", "watch"]
 {{- end }}
+{{- if .Values.global.argoRolloutServiceReconciler.enabled }}
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts"]
+    verbs: ["get", "list", "watch"]
+{{- end }}
 ---
 {{- if not .Values.global.rbac.namespaced }}
 kind: ClusterRoleBinding
@@ -106,6 +111,11 @@ rules:
   - apiGroups: ["dapr.io"]
     resources: ["components", "configurations", "subscriptions", "resiliencies"]
     verbs: [ "get", "list", "watch"]
+{{- end }}
+{{- if .Values.global.argoRolloutServiceReconciler.enabled }}
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts"]
+    verbs: ["get", "list", "watch"]
 {{- end }}
 ---
 kind: RoleBinding

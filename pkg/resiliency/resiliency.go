@@ -184,8 +184,19 @@ type (
 // Ensure `*Resiliency` satisfies the `Provider` interface.
 var _ = (Provider)((*Resiliency)(nil))
 
-// LoadStandaloneResiliency loads resiliency configurations from a file path.
-func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resiliencyV1alpha.Resiliency {
+// LoadLocalResiliency loads resiliency configurations from local folders.
+func LoadLocalResiliency(log logger.Logger, runtimeID string, paths ...string) []*resiliencyV1alpha.Resiliency {
+	configs := []*resiliencyV1alpha.Resiliency{}
+	for _, path := range paths {
+		loaded := loadLocalResiliencyPath(log, runtimeID, path)
+		if len(loaded) > 0 {
+			configs = append(configs, loaded...)
+		}
+	}
+	return configs
+}
+
+func loadLocalResiliencyPath(log logger.Logger, runtimeID string, path string) []*resiliencyV1alpha.Resiliency {
 	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -193,7 +204,7 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 
 	files, err := os.ReadDir(path)
 	if err != nil {
-		log.Errorf("failed to read resiliency files from path %s: %s", path, err)
+		log.Errorf("Failed to read resiliency files from path %s: %v", path, err)
 		return nil
 	}
 
@@ -211,13 +222,13 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 		filePath := filepath.Join(path, file.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Errorf("Could not read resiliency file %s: %w", file.Name(), err)
+			log.Errorf("Could not read resiliency file %s: %v", file.Name(), err)
 			continue
 		}
 
 		var ti typeInfo
 		if err = yaml.Unmarshal(b, &ti); err != nil {
-			log.Errorf("Could not determine resource type: %s", err.Error())
+			log.Errorf("Could not determine resource type: %v", err)
 			continue
 		}
 
@@ -227,7 +238,7 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 
 		var resiliency resiliencyV1alpha.Resiliency
 		if err = yaml.Unmarshal(b, &resiliency); err != nil {
-			log.Errorf("Could not parse resiliency file %s: %w", file.Name(), err)
+			log.Errorf("Could not parse resiliency file %s: %v", file.Name(), err)
 			continue
 		}
 		configs = append(configs, &resiliency)
@@ -242,12 +253,12 @@ func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, op
 		Namespace: namespace,
 	}, grpcRetry.WithMax(operatorRetryCount), grpcRetry.WithPerRetryTimeout(operatorTimePerRetry))
 	if err != nil {
-		log.Errorf("Error listing resiliences: %s", err.Error())
+		log.Errorf("Error listing resiliency policies: %v", err)
 		return nil
 	}
 
 	if resp.GetResiliencies() == nil {
-		log.Debug("No resiliencies found.")
+		log.Debug("No resiliency policies found")
 		return nil
 	}
 
@@ -256,7 +267,7 @@ func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, op
 	for _, b := range resp.GetResiliencies() {
 		var resiliency resiliencyV1alpha.Resiliency
 		if err = yaml.Unmarshal(b, &resiliency); err != nil {
-			log.Errorf("Could not parse resiliency: %w", err)
+			log.Errorf("Could not parse resiliency: %v", err)
 			continue
 		}
 
@@ -277,7 +288,7 @@ func FromConfigurations(log logger.Logger, c ...*resiliencyV1alpha.Resiliency) *
 		log.Infof("Loading Resiliency configuration: %s", config.Name)
 		log.Debugf("Resiliency configuration (%s): %+v", config.Name, config)
 		if err := r.DecodeConfiguration(config); err != nil {
-			log.Errorf("Could not read resiliency %s: %w", &config.ObjectMeta.Name, err)
+			log.Errorf("Could not read resiliency policy %s: %w", &config.ObjectMeta.Name, err)
 			continue
 		}
 		diag.DefaultResiliencyMonitoring.PolicyLoaded(config.Name, config.Namespace)
