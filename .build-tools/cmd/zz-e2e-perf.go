@@ -26,7 +26,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/go-containerregistry/pkg/crane"
 	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/spf13/cobra"
 )
@@ -203,22 +202,23 @@ func (c *cmdE2EPerf) buildAndPushCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// TODO: temporarily disabling this, add it back once cache data is fixed.
 	// Try to copy the image between the cache and the target directly, without pulling first
 	// This will fail if the image is not in cache, and that's ok
-	if c.flags.CacheRegistry != "" {
-		fmt.Printf("Trying to copy image %s directly from cache %s\n", destImage, cachedImage)
-		err = crane.Copy(cachedImage, destImage)
-		if err == nil {
-			// If there's no error, we're done
-			fmt.Println("Image copied from cache directly! You're all set.")
-			return nil
-		}
+	// if c.flags.CacheRegistry != "" {
+	// 	fmt.Printf("Trying to copy image %s directly from cache %s\n", destImage, cachedImage)
+	// 	err = crane.Copy(cachedImage, destImage)
+	// 	if err == nil {
+	// 		// If there's no error, we're done
+	// 		fmt.Println("Image copied from cache directly! You're all set.")
+	// 		return nil
+	// 	}
 
-		// Copying the image failed, so we'll resort to build + push
-		fmt.Printf("Copying image directly from cache failed with error '%s'. Will build image.\n", err)
-	} else {
-		fmt.Println("Cache registry not set: will not use cache")
-	}
+	// 	// Copying the image failed, so we'll resort to build + push
+	// 	fmt.Printf("Copying image directly from cache failed with error '%s'. Will build image.\n", err)
+	// } else {
+	// 	fmt.Println("Cache registry not set: will not use cache")
+	// }
 
 	// Build the image
 	// It also pushes to the cache registry if needed
