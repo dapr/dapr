@@ -309,6 +309,10 @@ func (s *Server) Raft(ctx context.Context) (*raft.Raft, error) {
 
 // IsLeader returns true if the current node is leader.
 func (s *Server) IsLeader() bool {
+	if s == nil {
+		return false
+	}
+
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	return s.raft != nil && s.raft.State() == raft.Leader
