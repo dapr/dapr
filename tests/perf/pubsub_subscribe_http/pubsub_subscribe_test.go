@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v2"
 )
 
@@ -76,16 +77,6 @@ func getAppDescription(pubsubComponent Component, pubsubType string) kube.AppDes
 	return appDescription
 }
 
-func contains(items []string, item string) bool {
-	for _, value := range items {
-		if value == item {
-			return true
-		}
-	}
-
-	return false
-}
-
 func TestMain(m *testing.M) {
 	utils.SetupLogs(testLabel)
 
@@ -103,13 +94,13 @@ func TestMain(m *testing.M) {
 
 	for _, pubsubComponent := range configs.Components {
 		//normal pubsub app
-		if contains(pubsubComponent.Operations, normalPubsubType) {
+		if slices.Contains(pubsubComponent.Operations, normalPubsubType) {
 			fmt.Println("image used: ", pubsubComponent.ImageName, pubsubComponent.TestAppName, pubsubComponent.Name, normalPubsubType)
 			testApps = append(testApps, getAppDescription(pubsubComponent, normalPubsubType))
 		}
 
 		//bulk pubsub app
-		if contains(pubsubComponent.Operations, bulkPubsubType) {
+		if slices.Contains(pubsubComponent.Operations, bulkPubsubType) {
 			fmt.Println("image used: ", pubsubComponent.ImageName, pubsubComponent.TestAppName, pubsubComponent.Name, bulkPubsubType)
 			testApps = append(testApps, getAppDescription(pubsubComponent, bulkPubsubType))
 		}
@@ -163,7 +154,7 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 
 func TestPubsubBulkPublishSubscribeHttpPerformance(t *testing.T) {
 	for _, component := range configs.Components {
-		if !contains(component.Operations, normalPubsubType) {
+		if !slices.Contains(component.Operations, normalPubsubType) {
 			t.Logf("Normal pubsub test is not added in operations, skipping %s test for normal pubsub", component.Name)
 			continue
 		}
@@ -192,7 +183,7 @@ func TestPubsubBulkPublishSubscribeHttpPerformance(t *testing.T) {
 func TestPubsubBulkPublishBulkSubscribeHttpPerformance(t *testing.T) {
 
 	for _, component := range configs.Components {
-		if !contains(component.Operations, bulkPubsubType) {
+		if !slices.Contains(component.Operations, bulkPubsubType) {
 			t.Logf("Bulk pubsub test is not added in operations, skipping %s test for bulk pubsub", component.Name)
 			continue
 		}

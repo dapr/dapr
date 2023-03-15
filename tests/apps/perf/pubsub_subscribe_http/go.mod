@@ -1,4 +1,4 @@
-module github.com/dapr/dapr/tests/apps/perf/pubsub_susbcribe_app
+module github.com/dapr/dapr/tests/apps/perf/pubsub_susbcribe_http
 
 go 1.19
 

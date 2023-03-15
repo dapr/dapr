@@ -27,7 +27,7 @@ spec:
   - name: authRequired
     value: "false"
   - name: initialOffset
-    value: oldest
+    value: newest
 
 ---
 

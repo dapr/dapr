@@ -21,7 +21,7 @@ components:
     testLabel: pubsub_subscribe_kafka
     subscribeHttpThresholdMs: 1500
     bulkSubscribeHttpThresholdMs: 500
-    imageName: perf-pubsub_subscribe_app
+    imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
   - name: rabbitmq-messagebus
@@ -32,7 +32,7 @@ components:
     testLabel: pubsub_subscribe_rabbitmq
     subscribeHttpThresholdMs: 1500
     bulkSubscribeHttpThresholdMs: 500
-    imageName: perf-pubsub_subscribe_app
+    imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
   - name: mqtt-messagebus
@@ -43,7 +43,7 @@ components:
     testLabel: pubsub_subscribe_mqtt
     subscribeHttpThresholdMs: 1500
     bulkSubscribeHttpThresholdMs: 500
-    imageName: perf-pubsub_subscribe_app
+    imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
   - name: pulsar-messagebus
@@ -54,7 +54,7 @@ components:
     testLabel: pubsub_subscribe_pulsar
     subscribeHttpThresholdMs: 1500
     bulkSubscribeHttpThresholdMs: 500
-    imageName: perf-pubsub_subscribe_app
+    imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
   - name: redis-messagebus
@@ -65,5 +65,5 @@ components:
     testLabel: pubsub_subscribe_redis
     subscribeHttpThresholdMs: 1500
     bulkSubscribeHttpThresholdMs: 500
-    imageName: perf-pubsub_subscribe_app
+    imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]

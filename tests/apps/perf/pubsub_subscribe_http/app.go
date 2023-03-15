@@ -89,8 +89,9 @@ func notify(msgRecvCh chan string, notifySendCh chan struct{}) {
 }
 
 func main() {
-	errMsg := readPubsubEnvVar()
-	if errMsg != nil {
+	err := readPubsubEnvVar()
+	if err != nil {
+		log.Fatalf("Error reading environment variables : %s", err.Error())
 		return
 	}
 

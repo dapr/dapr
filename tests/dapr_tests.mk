@@ -55,7 +55,7 @@ pluggable_kafka-bindings \
 tracingapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_app
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -462,7 +462,7 @@ setup-test-env-zipkin:
 delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
-# Install redis and kafka to test cluster
+# Setup the test environment by installing components
 setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt setup-test-env-pulsar
 
 save-dapr-control-plane-k8s-resources:
