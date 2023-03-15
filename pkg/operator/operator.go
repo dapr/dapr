@@ -51,14 +51,15 @@ type Operator interface {
 
 // Options contains the options for `NewOperator`.
 type Options struct {
-	Config                    string
-	CertChainPath             string
-	LeaderElection            bool
-	WatchdogEnabled           bool
-	WatchdogInterval          time.Duration
-	WatchdogMaxRestartsPerMin int
-	WatchNamespace            string
-	ServiceReconcilerEnabled  bool
+	Config                              string
+	CertChainPath                       string
+	LeaderElection                      bool
+	WatchdogEnabled                     bool
+	WatchdogInterval                    time.Duration
+	WatchdogMaxRestartsPerMin           int
+	WatchNamespace                      string
+	ServiceReconcilerEnabled            bool
+	ArgoRolloutServiceReconcilerEnabled bool
 }
 
 type operator struct {
@@ -120,7 +121,7 @@ func NewOperator(opts Options) Operator {
 	}
 
 	if opts.ServiceReconcilerEnabled {
-		daprHandler := handlers.NewDaprHandler(mgr)
+		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, &handlers.Options{ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled})
 		err = daprHandler.Init()
 		if err != nil {
 			log.Fatalf("Unable to initialize handler, err: %s", err)
