@@ -1,3 +1,4 @@
+{{- if eq .Values.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -146,11 +147,21 @@ spec:
 {{- end }}
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: "{{ .Values.sidecarRunAsNonRoot }}"
+        - name: SIDECAR_DROP_ALL_CAPABILITIES
+          value: "{{ .Values.sidecarDropALLCapabilities }}"
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
           value: "{{ .Values.sidecarReadOnlyRootFilesystem }}"
 {{- if .Values.allowedServiceAccounts }}
         - name: ALLOWED_SERVICE_ACCOUNTS
           value: "{{ .Values.allowedServiceAccounts }}"
+{{- end }}
+{{- if .Values.allowedServiceAccounts }}
+        - name: ALLOWED_SERVICE_ACCOUNTS
+          value: "{{ .Values.allowedServiceAccounts }}"
+{{- end }}
+{{- if .Values.allowedServiceAccountsPrefixNames }}
+        - name: ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES
+          value: "{{ .Values.allowedServiceAccountsPrefixNames }}"
 {{- end }}
         ports:
         - name: https
@@ -215,4 +226,5 @@ spec:
 {{- if .Values.global.tolerations }}
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
 {{- end }}

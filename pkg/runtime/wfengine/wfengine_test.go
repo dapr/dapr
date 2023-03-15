@@ -72,7 +72,7 @@ func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
 	}
 }
 
-func (f *fakeStateStore) Init(metadata state.Metadata) error {
+func (f *fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	return nil
 }
 
@@ -639,6 +639,43 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.True(t, metadata.IsComplete())
 					assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
+				}
+			}
+		})
+	}
+}
+
+func TestConcurrentTimerExecution(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("TimerFanOut", func(ctx *task.OrchestrationContext) (any, error) {
+		tasks := []task.Task{}
+		for i := 0; i < 2; i++ {
+			tasks = append(tasks, ctx.CreateTimer(1*time.Second))
+		}
+		for _, t := range tasks {
+			if err := t.Await(nil); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "TimerFanOut")
+			if assert.NoError(t, err) {
+				// Add a 5 second timeout so that the test doesn't take forever if something isn't working
+				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+
+				metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+				if assert.NoError(t, err) {
+					assert.True(t, metadata.IsComplete())
+
+					// Because all the timers run in parallel, they should complete very quickly
+					assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
 				}
 			}
 		})

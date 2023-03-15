@@ -188,6 +188,12 @@ spec:
         - "--watch-namespace"
         - "{{ .Values.watchNamespace }}"
 {{- end }}
+{{- if not .Values.serviceReconciler.enabled }}
+        - "--disable-service-reconciler"
+{{- end }}
+{{- if .Values.global.argoRolloutServiceReconciler.enabled }}
+        - "--enable-argo-rollout-service-reconciler"
+{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: credentials

@@ -19,5 +19,5 @@ import (
 )
 
 func init() {
-	configurationLoader.DefaultRegistry.RegisterComponent(configPostgres.NewPostgresConfigurationStore, "postgres")
+	configurationLoader.DefaultRegistry.RegisterComponent(configPostgres.NewPostgresConfigurationStore, "postgres", "postgresql")
 }

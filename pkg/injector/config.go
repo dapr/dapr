@@ -24,16 +24,18 @@ import (
 
 // Config represents configuration options for the Dapr Sidecar Injector webhook server.
 type Config struct {
-	TLSCertFile                 string `envconfig:"TLS_CERT_FILE" required:"true"`
-	TLSKeyFile                  string `envconfig:"TLS_KEY_FILE" required:"true"`
-	SidecarImage                string `envconfig:"SIDECAR_IMAGE" required:"true"`
-	SidecarImagePullPolicy      string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
-	Namespace                   string `envconfig:"NAMESPACE" required:"true"`
-	KubeClusterDomain           string `envconfig:"KUBE_CLUSTER_DOMAIN"`
-	AllowedServiceAccounts      string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
-	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
-	RunAsNonRoot                string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
-	ReadOnlyRootFilesystem      string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
+	TLSCertFile                       string `envconfig:"TLS_CERT_FILE" required:"true"`
+	TLSKeyFile                        string `envconfig:"TLS_KEY_FILE" required:"true"`
+	SidecarImage                      string `envconfig:"SIDECAR_IMAGE" required:"true"`
+	SidecarImagePullPolicy            string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
+	Namespace                         string `envconfig:"NAMESPACE" required:"true"`
+	KubeClusterDomain                 string `envconfig:"KUBE_CLUSTER_DOMAIN"`
+	AllowedServiceAccounts            string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
+	AllowedServiceAccountsPrefixNames string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES"`
+	IgnoreEntrypointTolerations       string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
+	RunAsNonRoot                      string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
+	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
+	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }
@@ -103,6 +105,11 @@ func (c *Config) GetReadOnlyRootFilesystem() bool {
 		return true
 	}
 	return utils.IsTruthy(c.ReadOnlyRootFilesystem)
+}
+
+func (c *Config) GetDropCapabilities() bool {
+	// Default is false if empty
+	return utils.IsTruthy(c.SidecarDropALLCapabilities)
 }
 
 func (c *Config) parseTolerationsJSON() {

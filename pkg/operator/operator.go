@@ -51,18 +51,19 @@ type Operator interface {
 
 // Options contains the options for `NewOperator`.
 type Options struct {
-	Config                    string
-	CertChainPath             string
-	LeaderElection            bool
-	WatchdogEnabled           bool
-	WatchdogInterval          time.Duration
-	WatchdogMaxRestartsPerMin int
-	WatchNamespace            string
+	Config                              string
+	CertChainPath                       string
+	LeaderElection                      bool
+	WatchdogEnabled                     bool
+	WatchdogInterval                    time.Duration
+	WatchdogMaxRestartsPerMin           int
+	WatchNamespace                      string
+	ServiceReconcilerEnabled            bool
+	ArgoRolloutServiceReconcilerEnabled bool
 }
 
 type operator struct {
-	daprHandler *handlers.DaprHandler
-	apiServer   api.Server
+	apiServer api.Server
 
 	configName    string
 	certChainPath string
@@ -119,14 +120,15 @@ func NewOperator(opts Options) Operator {
 		log.Infof("Dapr Watchdog is not enabled")
 	}
 
-	daprHandler := handlers.NewDaprHandler(mgr)
-	err = daprHandler.Init()
-	if err != nil {
-		log.Fatalf("Unable to initialize handler, err: %s", err)
+	if opts.ServiceReconcilerEnabled {
+		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, &handlers.Options{ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled})
+		err = daprHandler.Init()
+		if err != nil {
+			log.Fatalf("Unable to initialize handler, err: %s", err)
+		}
 	}
 
 	o := &operator{
-		daprHandler:   daprHandler,
 		mgr:           mgr,
 		client:        mgrClient,
 		configName:    opts.Config,
@@ -139,14 +141,14 @@ func NewOperator(opts Options) Operator {
 	cancel()
 	if err != nil {
 		log.Fatalf("Unable to get setup components informer, err: %s", err)
-	} else {
-		componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: o.syncComponent,
-			UpdateFunc: func(_, newObj interface{}) {
-				o.syncComponent(newObj)
-			},
-		})
 	}
+
+	componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: o.syncComponent,
+		UpdateFunc: func(_, newObj any) {
+			o.syncComponent(newObj)
+		},
+	})
 
 	return o
 }
@@ -160,7 +162,7 @@ func (o *operator) prepareConfig() {
 	o.config.Credentials = credentials.NewTLSCredentials(o.certChainPath)
 }
 
-func (o *operator) syncComponent(obj interface{}) {
+func (o *operator) syncComponent(obj any) {
 	c, ok := obj.(*componentsapi.Component)
 	if ok {
 		log.Debugf("Observed component to be synced, %s/%s", c.Namespace, c.Name)

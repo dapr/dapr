@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/pubsub/hazelcast"
-	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	"github.com/dapr/components-contrib/bindings/dubbo"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(hazelcast.NewHazelcastPubSub, "hazelcast")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(dubbo.NewDubboOutput, "dubbo", "alicloud.dubbo")
 }
