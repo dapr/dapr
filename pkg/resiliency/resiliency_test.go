@@ -173,7 +173,7 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 
 func TestPoliciesForTargets(t *testing.T) {
 	ctx := context.Background()
-	configs := LoadStandaloneResiliency(log, "default", "./testdata")
+	configs := LoadLocalResiliency(log, "default", "./testdata")
 	assert.Len(t, configs, 1)
 	r := FromConfigurations(log, configs...)
 
@@ -246,7 +246,7 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 
 func TestLoadStandaloneResiliency(t *testing.T) {
 	t.Run("test load resiliency", func(t *testing.T) {
-		configs := LoadStandaloneResiliency(log, "app1", "./testdata")
+		configs := LoadLocalResiliency(log, "app1", "./testdata")
 		assert.NotNil(t, configs)
 		assert.Len(t, configs, 2)
 		assert.Equal(t, "Resiliency", configs[0].Kind)
@@ -256,7 +256,7 @@ func TestLoadStandaloneResiliency(t *testing.T) {
 	})
 
 	t.Run("test load resiliency skips other types", func(t *testing.T) {
-		configs := LoadStandaloneResiliency(log, "app1", "../components")
+		configs := LoadLocalResiliency(log, "app1", "../components")
 		assert.NotNil(t, configs)
 		assert.Len(t, configs, 0)
 	})
@@ -299,7 +299,7 @@ func TestParseActorCircuitBreakerScope(t *testing.T) {
 }
 
 func TestParseMaxRetries(t *testing.T) {
-	configs := LoadStandaloneResiliency(log, "app1", "./testdata")
+	configs := LoadLocalResiliency(log, "app1", "./testdata")
 	require.NotNil(t, configs)
 	require.Len(t, configs, 2)
 	require.NotNil(t, configs[0])
@@ -336,16 +336,16 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	resiliencies := LoadStandaloneResiliency(log, "app1", "./testdata")
+	resiliencies := LoadLocalResiliency(log, "app1", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
 	resiliencies = LoadKubernetesResiliency(log, "app2", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadStandaloneResiliency(log, "app2", "./testdata")
+	resiliencies = LoadLocalResiliency(log, "app2", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadStandaloneResiliency(log, "app3", "./testdata")
+	resiliencies = LoadLocalResiliency(log, "app3", "./testdata")
 	assert.Len(t, resiliencies, 1)
 }
 
@@ -416,34 +416,16 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 	}
 	config := FromConfigurations(log, r)
 
-	assert.Nil(t, config.GetPolicy("badApp", &EndpointPolicy{}))
-	assert.Nil(t, config.GetPolicy("badActor", &ActorPolicy{}))
-	assert.Nil(t, config.GetPolicy("badComponent", &ComponentInboundPolicy))
-	assert.Nil(t, config.GetPolicy("badComponent", &ComponentOutboundPolicy))
+	assert.False(t, config.PolicyDefined("badApp", EndpointPolicy{}))
+	assert.False(t, config.PolicyDefined("badActor", ActorPolicy{}))
+	assert.False(t, config.PolicyDefined("badComponent", ComponentInboundPolicy))
+	assert.False(t, config.PolicyDefined("badComponent", ComponentOutboundPolicy))
 
-	endpointPolicy := config.GetPolicy("definedApp", &EndpointPolicy{})
-	assert.NotNil(t, endpointPolicy)
-	assert.Equal(t, endpointPolicy.TimeoutPolicy, 2*time.Second)
-	assert.Equal(t, endpointPolicy.CircuitBreaker.MaxRequests, uint32(1))
-	assert.Nil(t, endpointPolicy.RetryPolicy)
-
-	actorPolicy := config.GetPolicy("definedActor", &ActorPolicy{})
-	assert.NotNil(t, actorPolicy)
-	assert.Equal(t, actorPolicy.TimeoutPolicy, 2*time.Second)
-	assert.Nil(t, actorPolicy.CircuitBreaker)
-	assert.Nil(t, actorPolicy.RetryPolicy)
-
-	componentOutboundPolicy := config.GetPolicy("definedComponent", &ComponentOutboundPolicy)
-	assert.NotNil(t, componentOutboundPolicy)
-	assert.Equal(t, componentOutboundPolicy.TimeoutPolicy, 2*time.Second)
-	assert.Equal(t, componentOutboundPolicy.CircuitBreaker.MaxRequests, uint32(2))
-	assert.Equal(t, componentOutboundPolicy.RetryPolicy.MaxRetries, int64(3))
-
-	componentInboundPolicy := config.GetPolicy("definedComponent", &ComponentInboundPolicy)
-	assert.NotNil(t, componentInboundPolicy)
-	assert.Equal(t, componentInboundPolicy.TimeoutPolicy, 2*time.Second)
-	assert.Equal(t, componentInboundPolicy.CircuitBreaker.MaxRequests, uint32(1))
-	assert.Nil(t, componentInboundPolicy.RetryPolicy)
+	assert.True(t, config.PolicyDefined("definedApp", EndpointPolicy{}))
+	assert.True(t, config.PolicyDefined("definedActor", ActorPolicy{}))
+	assert.True(t, config.PolicyDefined("definedComponent", ComponentPolicy{}))
+	assert.True(t, config.PolicyDefined("definedComponent", ComponentOutboundPolicy))
+	assert.True(t, config.PolicyDefined("definedComponent", ComponentInboundPolicy))
 }
 
 func TestResiliencyHasBuiltInPolicy(t *testing.T) {

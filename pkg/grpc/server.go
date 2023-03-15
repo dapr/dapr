@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
@@ -61,7 +63,7 @@ type server struct {
 	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
 	servers            []*grpcGo.Server
-	renewMutex         *sync.Mutex
+	renewMutex         sync.Mutex
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
@@ -72,6 +74,7 @@ type server struct {
 	authToken          string
 	apiSpec            config.APISpec
 	proxy              messaging.Proxy
+	workflowEngine     *wfengine.WorkflowEngine
 }
 
 var (
@@ -81,19 +84,20 @@ var (
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
-		api:         api,
-		config:      config,
-		tracingSpec: tracingSpec,
-		metricSpec:  metricSpec,
-		kind:        apiServer,
-		logger:      apiServerLogger,
-		infoLogger:  apiServerInfoLogger,
-		authToken:   auth.GetAPIToken(),
-		apiSpec:     apiSpec,
-		proxy:       proxy,
+		api:            api,
+		config:         config,
+		tracingSpec:    tracingSpec,
+		metricSpec:     metricSpec,
+		kind:           apiServer,
+		logger:         apiServerLogger,
+		infoLogger:     apiServerInfoLogger,
+		authToken:      auth.GetAPIToken(),
+		apiSpec:        apiSpec,
+		proxy:          proxy,
+		workflowEngine: workflowEngine,
 	}
 }
 
@@ -105,7 +109,6 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		tracingSpec:      tracingSpec,
 		metricSpec:       metricSpec,
 		authenticator:    authenticator,
-		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
 		logger:           internalServerLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
@@ -127,13 +130,16 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
+		s.logger.Infof("gRPC server listening on UNIX socket: %s", socket)
 		listeners = append(listeners, l)
 	} else {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
-			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
+			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
+			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.Port, err)
+				s.logger.Debugf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
 			} else {
+				s.logger.Infof("gRPC server listening on TCP address: %s", addr)
 				listeners = append(listeners, l)
 			}
 		}
@@ -156,6 +162,9 @@ func (s *server) StartNonBlocking() error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
+			if s.workflowEngine != nil {
+				s.workflowEngine.ConfigureGrpc(server)
+			}
 		}
 
 		go func(server *grpcGo.Server, l net.Listener) {
@@ -203,28 +212,34 @@ func (s *server) generateWorkloadCert() error {
 
 func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	intr := make([]grpcGo.UnaryServerInterceptor, 0, 6)
-	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 3)
+	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 5)
 
 	intr = append(intr, metadata.SetMetadataInContextUnary)
 
 	if len(s.apiSpec.Allowed) > 0 {
-		s.logger.Info("enabled API access list on gRPC server")
-		intr = append(intr, setAPIEndpointsMiddlewareUnary(s.apiSpec.Allowed))
+		s.logger.Info("Enabled API access list on gRPC server")
+		unary, stream := setAPIEndpointsMiddlewares(s.apiSpec.Allowed)
+		if unary != nil && stream != nil {
+			intr = append(intr, unary)
+			intrStream = append(intrStream, stream)
+		}
 	}
 
 	if s.authToken != "" {
-		s.logger.Info("enabled token authentication on gRPC server")
-		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, authConsts.APITokenHeader))
+		s.logger.Info("Enabled token authentication on gRPC server")
+		unary, stream := getAPIAuthenticationMiddlewares(s.authToken, authConsts.APITokenHeader)
+		intr = append(intr, unary)
+		intrStream = append(intrStream, stream)
 	}
 
 	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
-		s.logger.Info("enabled gRPC tracing middleware")
+		s.logger.Info("Enabled gRPC tracing middleware")
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
 		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
 	if s.metricSpec.Enabled {
-		s.logger.Info("enabled gRPC metrics middleware")
+		s.logger.Info("Enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 
 		if s.kind == apiServer {
@@ -235,7 +250,9 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	}
 
 	if s.config.EnableAPILogging && s.infoLogger != nil {
-		intr = append(intr, s.getGRPCAPILoggingInfo())
+		unary, stream := s.getGRPCAPILoggingMiddlewares()
+		intr = append(intr, unary)
+		intrStream = append(intrStream, stream)
 	}
 
 	return []grpcGo.ServerOption{
@@ -265,6 +282,12 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 				return &s.tlsCert, nil
 			},
 		}
+
+		// In the internal server, enforce minimum version TLS 1.2
+		if s.kind == internalServer {
+			tlsConfig.MinVersion = tls.VersionTLS12
+		}
+
 		ta := credentials.NewTLS(&tlsConfig)
 
 		opts = append(opts, grpcGo.Creds(ta))
@@ -316,18 +339,31 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 	return percentagePassed >= renewWhenPercentagePassed
 }
 
-func (s *server) getGRPCAPILoggingInfo() grpcGo.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (interface{}, error) {
-		if s.infoLogger != nil && info != nil {
-			fields := make(map[string]any, 2)
-			fields["method"] = info.FullMethod
-			if meta, ok := metadata.FromIncomingContext(ctx); ok {
-				if val, ok := meta["user-agent"]; ok && len(val) > 0 {
-					fields["useragent"] = val[0]
-				}
-			}
-			s.infoLogger.WithFields(fields).Info("gRPC API Called")
-		}
-		return handler(ctx, req)
+func (s *server) getGRPCAPILoggingMiddlewares() (grpcGo.UnaryServerInterceptor, grpcGo.StreamServerInterceptor) {
+	if s.infoLogger == nil {
+		return nil, nil
 	}
+	return func(ctx context.Context, req any, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (any, error) {
+			if info != nil {
+				s.printAPILog(ctx, info.FullMethod)
+			}
+			return handler(ctx, req)
+		},
+		func(srv any, stream grpcGo.ServerStream, info *grpcGo.StreamServerInfo, handler grpcGo.StreamHandler) error {
+			if info != nil {
+				s.printAPILog(stream.Context(), info.FullMethod)
+			}
+			return handler(srv, stream)
+		}
+}
+
+func (s *server) printAPILog(ctx context.Context, method string) {
+	fields := make(map[string]any, 2)
+	fields["method"] = method
+	if meta, ok := metadata.FromIncomingContext(ctx); ok {
+		if val, ok := meta["user-agent"]; ok && len(val) > 0 {
+			fields["useragent"] = val[0]
+		}
+	}
+	s.infoLogger.WithFields(fields).Info("gRPC API Called")
 }

@@ -127,7 +127,7 @@ func TestOutputBindingCalls(t *testing.T) {
 			}()
 
 			conn := outputFromConnector(testLogger, connector)
-			err = conn.Init(bindings.Metadata{
+			err = conn.Init(context.Background(), bindings.Metadata{
 				Base: contribMetadata.Base{},
 			})
 

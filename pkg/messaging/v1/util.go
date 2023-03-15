@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -35,12 +36,17 @@ import (
 )
 
 const (
+	// Maximum size, in bytes, for the buffer used by CallLocalStream: 2KB.
+	StreamBufferSize = 2 << 10
+
 	// GRPCContentType is the MIME media type for grpc.
 	GRPCContentType = "application/grpc"
 	// JSONContentType is the MIME media type for JSON.
 	JSONContentType = "application/json"
 	// ProtobufContentType is the MIME media type for Protobuf.
 	ProtobufContentType = "application/x-protobuf"
+	// OctetStreamContentType is the MIME media type for arbitrary binary data.
+	OctetStreamContentType = "application/octet-stream"
 
 	// ContentTypeHeader is the header key of content-type.
 	ContentTypeHeader = "content-type"
@@ -69,6 +75,16 @@ const (
 	CallerIDHeader = DaprHeaderPrefix + "caller-app-id"
 	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
 )
+
+// BufPool is a pool of *[]byte used by direct messaging (for sending on both the server and client). Their size is fixed at StreamBufferSize.
+var BufPool = sync.Pool{
+	New: func() any {
+		// Return a pointer here
+		// See https://github.com/dominikh/go-tools/issues/1336 for explanation
+		b := make([]byte, StreamBufferSize)
+		return &b
+	},
+}
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
 // from user app to Dapr.

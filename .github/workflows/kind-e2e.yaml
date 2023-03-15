@@ -26,7 +26,6 @@ on:
 defaults:
   run:
     shell: bash
-    working-directory: ./src/github.com/dapr/dapr
 
 jobs:
   # This workflow runs our e2e tests in a local KinD cluster. Since it
@@ -51,7 +50,6 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      GOVER: "^1.19.2"
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
@@ -59,10 +57,9 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.21.12
-        - v1.22.9
-        - v1.23.6
-        - v1.24.0
+        - v1.23.13
+        - v1.24.7
+        - v1.25.3
         mode:
         - ha
         - non-ha
@@ -70,34 +67,26 @@ jobs:
         # This is attempting to make it a bit clearer what's being tested.
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
         include:
-        - k8s-version: v1.21.12
-          kind-version: v0.14.0
-          kind-image-sha: sha256:f316b33dd88f8196379f38feb80545ef3ed44d9197dca1bfd48bcb1583210207
-        - k8s-version: v1.22.9
-          kind-version: v0.14.0
-          kind-image-sha: sha256:8135260b959dfe320206eb36b3aeda9cffcb262f4b44cda6b33f7bb73f453105
-        - k8s-version: v1.23.6
-          kind-version: v0.14.0
-          kind-image-sha: sha256:b1fa224cc6c7ff32455e0b1fd9cbfd3d3bc87ecaa8fcb06961ed1afb3db0f9ae
-        - k8s-version: v1.24.0
-          kind-version: v0.14.0
-          kind-image-sha: sha256:0866296e693efe1fed79d5e6c7af8df71fc73ae45e3679af05342239cdc5bc8e
+        - k8s-version: v1.23.13
+          kind-version: v0.17.0
+          kind-image-sha: sha256:ef453bb7c79f0e3caba88d2067d4196f427794086a7d0df8df4f019d5e336b61
+        - k8s-version: v1.24.7
+          kind-version: v0.17.0
+          kind-image-sha: sha256:577c630ce8e509131eab1aea12c022190978dd2f745aac5eb1fe65c0807eb315
+        - k8s-version: v1.25.3
+          kind-version: v0.17.0
+          kind-image-sha: sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
         exclude:
-        - k8s-version: v1.21.12
-          mode: non-ha
-        - k8s-version: v1.22.9
-          mode: non-ha
-        - k8s-version: v1.23.6
+        - k8s-version: v1.23.13
           mode: non-ha
     steps:
-    - name: Set up Go ${{ env.GOVER }}
-      uses: actions/setup-go@v2
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Set up Go
+      id: setup-go
+      uses: actions/setup-go@v3
       with:
-        go-version: ${{ env.GOVER }}
-    - name: Check out code onto GOPATH
-      uses: actions/checkout@v2
-      with:
-        path: ./src/github.com/dapr/dapr
+        go-version-file: 'go.mod'
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
       # (a) a couple of worker nodes: this is needed to run both
@@ -106,7 +95,6 @@ jobs:
       #     https://github.com/kubernetes-sigs/kind/issues/1165, using
       #     a local repository speeds up the image pushes into KinD
       #     significantly.
-      working-directory: ./
       run: |
         cat > kind.yaml <<EOF
         apiVersion: kind.x-k8s.io/v1alpha4
@@ -134,7 +122,7 @@ jobs:
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
     - name: Create KinD Cluster
-      uses: helm/kind-action@v1.0.0
+      uses: helm/kind-action@v1.5.0
       with:
         config: kind.yaml
         cluster_name: kind
@@ -200,10 +188,6 @@ jobs:
     - name: Setup MongoDB
       run: |
         make setup-test-env-mongodb
-
-    - name: Setup Temporal
-      run: |
-        make setup-test-env-temporal
 
     - name: Setup Zipkin
       run: |

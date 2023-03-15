@@ -11,17 +11,17 @@ jobs:
     steps:
       - 
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - # ghcr logins for pushing image after testing
         name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_REGISTRY_ID }}
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
@@ -67,3 +67,10 @@ jobs:
           src: openzipkin/zipkin:latest
           dst: |
             ghcr.io/${{ github.repository_owner }}/3rdparty/zipkin:latest
+      - # copy 3rd party cassandra image from dockerhub to ghcr
+        name: Push Image (cassandra) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: cassandra:3.11.3
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/cassandra:3.11.3

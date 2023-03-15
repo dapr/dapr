@@ -55,7 +55,7 @@ pluggable_kafka-bindings \
 tracingapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -72,7 +72,9 @@ service_invocation_grpc \
 state_get_grpc \
 state_get_http \
 pubsub_publish_grpc \
+pubsub_publish_http \
 pubsub_bulk_publish_grpc \
+pubsub_bulk_subscribe_http \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
@@ -233,7 +235,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -350,7 +352,7 @@ ifeq ($(DAPR_PERF_TEST),)
 		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 		--format standard-quiet \
 		-- \
-			-p 1 -count=1 -v -tags=perf ./tests/perf/...
+			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
 	for app in $(DAPR_PERF_TEST); do \
@@ -367,7 +369,7 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
+				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
 endif
@@ -391,8 +393,14 @@ endif
 
 # install k6 loadtesting to the cluster
 setup-test-env-k6:
+	$(KUBECTL) apply -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
 	export IMG=ghcr.io/grafana/operator:controller-v0.0.8 && rm -rf /tmp/.k6-operator >/dev/null && git clone --depth 1 --branch v0.0.8 https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
 delete-test-env-k6:
+	$(KUBECTL) delete -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) delete -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) delete -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
 	rm -rf /tmp/.k6-operator >/dev/null && git clone https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make delete && cd - && rm -rf /tmp/.k6-operator
 
 # install redis to the cluster without password
@@ -409,20 +417,6 @@ setup-test-env-kafka:
 # delete kafka from cluster
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
-
-# install temporal to the cluster
-setup-test-env-temporal:
-	$(HELM) install --set server.replicaCount=1 \
-					--set cassandra.config.cluster_size=1 \
-					--set prometheus.enabled=false \
-					--set grafana.enabled=false \
-					--set elasticsearch.enabled=false \
-					dapr-temporal wener/temporal -f ./tests/config/temporal_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 15m0s
-
-# delete temporal from cluster
-delete-test-env-temporal:
-	$(HELM) del dapr-temporal --namespace $(DAPR_TEST_NAMESPACE) 
-
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:

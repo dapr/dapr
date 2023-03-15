@@ -131,10 +131,17 @@ HELM_REGISTRY?=daprio.azurecr.io
 BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
-DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.gitcommit=$(GIT_COMMIT) \
-  -X $(BASE_PACKAGE_NAME)/pkg/version.gitversion=$(GIT_VERSION) \
-  -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION) \
+# Comma-separated list of features to enable
+ENABLED_FEATURES ?= 
+
+DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
+  -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \
+  -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.version=$(DAPR_VERSION) \
   -X $(LOGGER_PACKAGE_NAME).DaprVersion=$(DAPR_VERSION)
+
+ifneq ($(ENABLED_FEATURES),)
+  DEFAULT_LDFLAGS += -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.features=$(ENABLED_FEATURES)
+endif
 
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
@@ -256,7 +263,7 @@ docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) upgrade --install \
 		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s \
-		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
+		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(BUILD_TAG) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
 		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
@@ -316,7 +323,8 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/placement/... \
 ./pkg/proto/... \
 ./pkg/resiliency/... \
-./pkg/runtime/...
+./pkg/runtime/... \
+./pkg/signals/...
 
 .PHONY: test-race
 test-race:
@@ -326,8 +334,8 @@ test-race:
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.50.1 , otherwise you might encounter errors.
-# You can download version v1.50.1 at https://github.com/golangci/golangci-lint/releases/tag/v1.50.1
+# Please use golangci-lint version v1.51.2 , otherwise you might encounter errors.
+# You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
@@ -340,7 +348,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); go mod tidy -compat=1.19; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.20; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -409,6 +417,7 @@ gen-proto: check-proto-version $(GEN_PROTOS) modtidy
 .PHONY: get-components-contrib
 get-components-contrib:
 	go get github.com/dapr/components-contrib@master
+	make modtidy-all
 
 ################################################################################
 # Target: check-diff                                                           #
@@ -455,6 +464,37 @@ compile-build-tools:
 ifeq (,$(wildcard $(BUILD_TOOLS)))
 	cd .build-tools; CGO_ENABLED=$(CGO) GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go build -o $(BUILD_TOOLS_BIN) .
 endif
+
+################################################################################
+# Prettier                                                                     #
+################################################################################
+.PHONY: prettier-install prettier-check prettier-format me prettier
+prettier-install:
+	npm install --global prettier
+
+prettier-check:
+	npx prettier --check "*/**/*.{ts,js,mjs,json}"
+
+prettier-format:
+	npx prettier --write "*/**/*.{ts,js,mjs,json}"
+
+# "make me prettier"
+me:
+	@echo "🪄💄🪄💄🪄💄"
+
+prettier:
+	@npx prettier --write "*/**/*.{ts,js,mjs,json}"
+
+################################################################################
+# Targets for components-contrib                                               #
+################################################################################
+.PHONY: update-components-contrib
+# Branch or tag to pin
+COMPONENTS_CONTRIB_BRANCH ?= master
+COMPONENTS_CONTRIB_REPO ?= github.com/dapr/components-contrib
+update-components-contrib:
+	go get -u $(COMPONENTS_CONTRIB_REPO)@$(COMPONENTS_CONTRIB_BRANCH)
+	make modtidy-all
 
 ################################################################################
 # Target: codegen                                                              #

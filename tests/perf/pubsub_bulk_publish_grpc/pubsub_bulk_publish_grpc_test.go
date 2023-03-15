@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/perf/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/dapr/dapr/tests/runner/summary"
 )
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
@@ -93,7 +94,12 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			p := perf.Params()
+			p := perf.Params(
+				perf.WithQPS(200),
+				perf.WithConnections(16),
+				perf.WithDuration("1m"),
+				perf.WithPayloadSize(1024),
+			)
 			t.Logf("running pubsub bulk publish grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 			// Get the ingress external url of tester app
@@ -169,13 +175,34 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 				t.Logf("reduced latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 			}
 			avg := (baselineResult.DurationHistogram.Avg - bulkResult.DurationHistogram.Avg) * 1000
-			t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineResult.DurationHistogram.Avg*1000))
-			t.Logf("bulk latency avg: %sms", fmt.Sprintf("%.2f", bulkResult.DurationHistogram.Avg*1000))
-			t.Logf("reduced latency avg: %sms", fmt.Sprintf("%.2f", avg))
+			baselineLatency := baselineResult.DurationHistogram.Avg * 1000
+			bulkLatencyMS := fmt.Sprintf("%.2f", bulkResult.DurationHistogram.Avg*1000)
+			reducedLatencyMS := fmt.Sprintf("%.2f", avg)
+			t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineLatency))
+			t.Logf("bulk latency avg: %sms", bulkLatencyMS)
+			t.Logf("reduced latency avg: %sms", reducedLatencyMS)
 
 			t.Logf("baseline QPS: %v", baselineResult.ActualQPS)
 			t.Logf("bulk QPS: %v", bulkResult.ActualQPS)
-			t.Logf("increase in QPS: %v", (bulkResult.ActualQPS-baselineResult.ActualQPS)/baselineResult.ActualQPS*100)
+			increaseQPS := (bulkResult.ActualQPS - baselineResult.ActualQPS) / baselineResult.ActualQPS * 100
+			t.Logf("increase in QPS: %v", increaseQPS)
+
+			summary.ForTest(t).
+				Service("tester").
+				CPU(appUsage.CPUm).
+				Memory(appUsage.MemoryMb).
+				SidecarCPU(sidecarUsage.CPUm).
+				SidecarMemory(sidecarUsage.MemoryMb).
+				Restarts(restarts).
+				BaselineLatency(baselineLatency).
+				Outputf("Bulk latency avg", "%sms", bulkLatencyMS).
+				Outputf("Reduced latency avg", "%sms", reducedLatencyMS).
+				OutputFloat64("Baseline QPS", baselineResult.ActualQPS).
+				OutputFloat64("Increase in QPS", increaseQPS).
+				ActualQPS(bulkResult.ActualQPS).
+				Params(p).
+				OutputFortio(bulkResult).
+				Flush()
 
 			report := perf.NewTestReport(
 				[]perf.TestResult{baselineResult, bulkResult},

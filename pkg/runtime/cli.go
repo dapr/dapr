@@ -23,14 +23,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/phayes/freeport"
-
 	"github.com/dapr/dapr/pkg/acl"
-	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -38,7 +37,6 @@ import (
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -54,9 +52,10 @@ func FromFlags() (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
-	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
-	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
-	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
+	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
+	componentsPath := flag.String("components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
+	var resourcesPath stringSliceFlag
+	flag.Var(&resourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
@@ -89,6 +88,7 @@ func FromFlags() (*DaprRuntime, error) {
 
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
+	// Finally parse the CLI flags!
 	flag.Parse()
 
 	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
@@ -105,17 +105,17 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	if *resourcesPath != "" {
-		componentsPath = resourcesPath
+	if len(resourcesPath) == 0 && *componentsPath != "" {
+		resourcesPath = stringSliceFlag{*componentsPath}
 	}
 
 	if *runtimeVersion {
-		fmt.Println(version.Version())
+		fmt.Println(buildinfo.Version())
 		os.Exit(0)
 	}
 
 	if *buildInfo {
-		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", version.Version(), version.Commit(), version.GitVersion())
+		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", buildinfo.Version(), buildinfo.Commit(), buildinfo.GitVersion())
 		os.Exit(0)
 	}
 
@@ -136,7 +136,7 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	// Initialize dapr metrics exporter
@@ -166,7 +166,9 @@ func FromFlags() (*DaprRuntime, error) {
 			return nil, fmt.Errorf("error parsing dapr-internal-grpc-port: %w", err)
 		}
 	} else {
-		daprInternalGRPC, err = freeport.GetFreePort()
+		// Get a "stable random" port in the range 47300-49,347 if it can be acquired using a deterministic algorithm that returns the same value if the same app is restarted
+		// Otherwise, the port will be random.
+		daprInternalGRPC, err = utils.GetStablePort(47300, *appID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
 		}
@@ -228,9 +230,18 @@ func FromFlags() (*DaprRuntime, error) {
 		concurrency = *appMaxConcurrency
 	}
 
-	appPrtcl := string(HTTPProtocol)
-	if *appProtocol != string(HTTPProtocol) {
-		appPrtcl = *appProtocol
+	var appProtocol string
+	{
+		p := strings.ToLower(*appProtocolPtr)
+		switch p {
+		case string(HTTPProtocol),
+			string(GRPCProtocol):
+			appProtocol = p
+		case "":
+			appProtocol = string(HTTPProtocol)
+		default:
+			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocolPtr)
+		}
 	}
 
 	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
@@ -267,11 +278,10 @@ func FromFlags() (*DaprRuntime, error) {
 	runtimeConfig := NewRuntimeConfig(NewRuntimeConfigOpts{
 		ID:                           *appID,
 		PlacementAddresses:           placementAddresses,
-		controlPlaneAddress:          *controlPlaneAddress,
+		ControlPlaneAddress:          *controlPlaneAddress,
 		AllowedOrigins:               *allowedOrigins,
-		GlobalConfig:                 *config,
-		ComponentsPath:               *componentsPath,
-		AppProtocol:                  appPrtcl,
+		ResourcesPath:                resourcesPath,
+		AppProtocol:                  appProtocol,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,
 		InternalGRPCPort:             daprInternalGRPC,
@@ -332,7 +342,7 @@ func FromFlags() (*DaprRuntime, error) {
 	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
 	if *mode == string(modes.KubernetesMode) {
-		log.Infof("Initializing the operator client (config: %s)", *config)
+		log.Info("Initializing the operator client")
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
 			return nil, clientErr
@@ -348,8 +358,10 @@ func FromFlags() (*DaprRuntime, error) {
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
+			log.Debug("Loading Kubernetes config resource: " + *config)
 			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
+			log.Debug("Loading config from file: " + *config)
 			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
 		}
 	}
@@ -362,30 +374,41 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
 
+	globalConfig.LoadFeatures()
+	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
+		log.Info("Enabled features: " + strings.Join(enabledFeatures, " "))
+	}
+
 	// TODO: Remove once AppHealthCheck feature is finalized
-	if !daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
+	if !globalConfig.IsFeatureEnabled(daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
 		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
 		runtimeConfig.AppHealthCheck = nil
 	}
 
-	resiliencyEnabled := daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.Resiliency)
-	var resiliencyProvider resiliencyConfig.Provider
-
-	if resiliencyEnabled {
-		var resiliencyConfigs []*resiliencyV1alpha.Resiliency
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
-			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
-		case modes.StandaloneMode:
-			resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
+	// Initialize metrics only if MetricSpec is enabled.
+	if globalConfig.Spec.MetricSpec.Enabled {
+		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
 		}
-		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
-		log.Info("Resiliency configuration loaded.")
-	} else {
-		log.Debug("Resiliency is not enabled.")
-		resiliencyProvider = &resiliencyConfig.NoOp{}
 	}
+
+	// Load Resiliency
+	var resiliencyProvider *resiliencyConfig.Resiliency
+	switch modes.DaprMode(*mode) {
+	case modes.KubernetesMode:
+		resiliencyConfigs := resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+		log.Debugf("Found %d resiliency configurations from Kubernetes", len(resiliencyConfigs))
+		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+	case modes.StandaloneMode:
+		if len(resourcesPath) > 0 {
+			resiliencyConfigs := resiliencyConfig.LoadLocalResiliency(log, *appID, resourcesPath...)
+			log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
+			resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+		} else {
+			resiliencyProvider = resiliencyConfig.FromConfigurations(log)
+		}
+	}
+	log.Info("Resiliency configuration loaded")
 
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
@@ -409,4 +432,22 @@ func parsePlacementAddr(val string) []string {
 		parsed = append(parsed, strings.TrimSpace(addr))
 	}
 	return parsed
+}
+
+// Flag type. Allows passing a flag multiple times to get a slice of strings.
+// It implements the flag.Value interface.
+type stringSliceFlag []string
+
+// String formats the flag value.
+func (f stringSliceFlag) String() string {
+	return strings.Join(f, ",")
+}
+
+// Set the flag value.
+func (f *stringSliceFlag) Set(value string) error {
+	if value == "" {
+		return errors.New("value is empty")
+	}
+	*f = append(*f, value)
+	return nil
 }

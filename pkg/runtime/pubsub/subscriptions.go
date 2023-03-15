@@ -9,9 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/ghodss/yaml"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/retry"
 )
 
 const (
@@ -49,11 +46,18 @@ type (
 		Metadata        map[string]string `json:"metadata,omitempty"`
 		Route           string            `json:"route"`  // Single route from v1alpha1
 		Routes          RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
+		BulkSubscribe   BulkSubscribeJSON `json:"bulkSubscribe,omitempty"`
 	}
 
 	RoutesJSON struct {
 		Rules   []*RuleJSON `json:"rules,omitempty"`
 		Default string      `json:"default,omitempty"`
+	}
+
+	BulkSubscribeJSON struct {
+		Enabled            bool  `json:"enabled"`
+		MaxMessagesCount   int32 `json:"maxMessagesCount,omitempty"`
+		MaxAwaitDurationMs int32 `json:"maxAwaitDurationMs,omitempty"`
 	}
 
 	RuleJSON struct {
@@ -62,36 +66,29 @@ type (
 	}
 )
 
-func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
+func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
 		WithHTTPExtension(http.MethodGet, "").
-		WithRawData(nil, invokev1.JSONContentType)
+		WithContentType(invokev1.JSONContentType)
+	defer req.Close()
 
-	var (
-		resp *invokev1.InvokeMethodResponse
-		err  error
-	)
-
-	// TODO: Use only resiliency once it is no longer a preview feature.
-	if resiliencyEnabled {
-		policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](context.TODO(),
-			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
-		)
-		resp, err = policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			return channel.InvokeMethod(ctx, req)
-		})
-	} else {
-		backoff := getSubscriptionsBackoff()
-		resp, err = retry.NotifyRecoverWithData(func() (*invokev1.InvokeMethodResponse, error) {
-			return channel.InvokeMethod(context.TODO(), req)
-		}, backoff, func(err error, d time.Duration) {
-			log.Debug("failed getting http subscriptions, starting retry")
-		}, func() {})
+	policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
+	if policyDef != nil && policyDef.HasRetries() {
+		req.WithReplay(true)
 	}
 
+	policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
+	)
+	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+		return channel.InvokeMethod(ctx, req)
+	})
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Close()
 
 	var (
 		subscriptions     []Subscription
@@ -100,8 +97,8 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 
 	switch resp.Status().Code {
 	case http.StatusOK:
-		_, body := resp.RawData()
-		if err := json.Unmarshal(body, &subscriptionItems); err != nil {
+		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
+		if err != nil {
 			log.Errorf(deserializeTopicsError, err)
 			return nil, fmt.Errorf(deserializeTopicsError, err)
 		}
@@ -135,13 +132,18 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 				}
 				n++
 			}
-
+			bulkSubscribe := &BulkSubscribe{
+				Enabled:            si.BulkSubscribe.Enabled,
+				MaxMessagesCount:   si.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: si.BulkSubscribe.MaxAwaitDurationMs,
+			}
 			subscriptions[i] = Subscription{
 				PubsubName:      si.PubsubName,
 				Topic:           si.Topic,
 				Metadata:        si.Metadata,
 				DeadLetterTopic: si.DeadLetterTopic,
 				Rules:           rules[:n],
+				BulkSubscribe:   bulkSubscribe,
 			}
 		}
 
@@ -170,57 +172,24 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 	return subscriptions[:i]
 }
 
-func getSubscriptionsBackoff() backoff.BackOff {
-	config := retry.DefaultConfig()
-	config.MaxRetries = 3
-	config.Duration = time.Second * 2
-	config.MaxElapsedTime = time.Second * 10
-	config.Policy = retry.PolicyExponential
-	return config.NewBackOff()
-}
-
-func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
-	var (
-		err  error
-		resp *runtimev1pb.ListTopicSubscriptionsResponse
+func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
+	policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
+		r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
 	)
+	resp, err := policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+		rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
 
-	// TODO: Use only resiliency once it is no longer a preview feature.
-	if resiliencyEnabled {
-		policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](context.TODO(),
-			r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
-		)
-		resp, err = policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-			rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
-
-			if rErr != nil {
-				s, ok := status.FromError(rErr)
-				if ok && s != nil {
-					if s.Code() == codes.Unimplemented {
-						return rResp, backoff.Permanent(rErr)
-					}
+		if rErr != nil {
+			s, ok := status.FromError(rErr)
+			if ok && s != nil {
+				if s.Code() == codes.Unimplemented {
+					log.Infof("pubsub subscriptions: gRPC app does not implement ListTopicSubscriptions")
+					return new(runtimev1pb.ListTopicSubscriptionsResponse), nil
 				}
 			}
-			return rResp, rErr
-		})
-	} else {
-		bo := getSubscriptionsBackoff()
-
-		resp, err = retry.NotifyRecoverWithData(func() (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-			rResp, rErr := channel.ListTopicSubscriptions(context.TODO(), &emptypb.Empty{})
-
-			if rErr != nil {
-				s, ok := status.FromError(rErr)
-				if ok && s != nil && s.Code() == codes.Unimplemented {
-					return rResp, backoff.Permanent(rErr)
-				}
-			}
-			return rResp, rErr
-		}, bo, func(err error, d time.Duration) {
-			log.Debug("failed getting gRPC subscriptions, starting retry")
-		}, func() {})
-	}
-
+		}
+		return rResp, rErr
+	})
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
 		log.Errorf(getTopicsError, err)
@@ -237,12 +206,21 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			if err != nil {
 				return nil, err
 			}
+			var bulkSubscribe *BulkSubscribe
+			if s.BulkSubscribe != nil {
+				bulkSubscribe = &BulkSubscribe{
+					Enabled:            s.BulkSubscribe.Enabled,
+					MaxMessagesCount:   s.BulkSubscribe.MaxMessagesCount,
+					MaxAwaitDurationMs: s.BulkSubscribe.MaxAwaitDurationMs,
+				}
+			}
 			subscriptions[i] = Subscription{
 				PubsubName:      s.PubsubName,
 				Topic:           s.GetTopic(),
 				Metadata:        s.GetMetadata(),
 				DeadLetterTopic: s.DeadLetterTopic,
 				Rules:           rules,
+				BulkSubscribe:   bulkSubscribe,
 			}
 		}
 	}
@@ -250,15 +228,26 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 	return subscriptions, nil
 }
 
-// DeclarativeSelfHosted loads subscriptions from the given components path.
-func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Subscription) {
-	if _, err := os.Stat(componentsPath); os.IsNotExist(err) {
+// DeclarativeLocal loads subscriptions from the given local resources path.
+func DeclarativeLocal(resourcesPaths []string, log logger.Logger) (subs []Subscription) {
+	for _, path := range resourcesPaths {
+		res := declarativeFile(path, log)
+		if len(res) > 0 {
+			subs = append(subs, res...)
+		}
+	}
+	return subs
+}
+
+// Used by DeclarativeLocal to load a single path.
+func declarativeFile(resourcesPath string, log logger.Logger) (subs []Subscription) {
+	if _, err := os.Stat(resourcesPath); os.IsNotExist(err) {
 		return subs
 	}
 
-	files, err := os.ReadDir(componentsPath)
+	files, err := os.ReadDir(resourcesPath)
 	if err != nil {
-		log.Errorf("failed to read subscriptions from path %s: %s", componentsPath, err)
+		log.Errorf("failed to read subscriptions from path %s: %s", resourcesPath, err)
 		return subs
 	}
 
@@ -271,10 +260,11 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Sub
 			log.Warnf("A non-YAML pubsub file %s was detected, it will not be loaded", f.Name())
 			continue
 		}
-		filePath := filepath.Join(componentsPath, f.Name())
+
+		filePath := filepath.Join(resourcesPath, f.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Warnf("failed to read file %s: %s", filePath, err)
+			log.Warnf("failed to read file %s: %v", f.Name(), err)
 			continue
 		}
 
@@ -282,7 +272,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Sub
 		for _, item := range bytesArray {
 			subs, err = appendSubscription(subs, item)
 			if err != nil {
-				log.Warnf("failed to add subscription from file %s: %s", filePath, err)
+				log.Warnf("failed to add subscription from file %s: %v", f.Name(), err)
 				continue
 			}
 		}
@@ -327,6 +317,11 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Metadata:        sub.Spec.Metadata,
 			Scopes:          sub.Scopes,
 			DeadLetterTopic: sub.Spec.DeadLetterTopic,
+			BulkSubscribe: &BulkSubscribe{
+				Enabled:            sub.Spec.BulkSubscribe.Enabled,
+				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
+			},
 		}, nil
 
 	default:
@@ -348,6 +343,11 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Metadata:        sub.Spec.Metadata,
 			Scopes:          sub.Scopes,
 			DeadLetterTopic: sub.Spec.DeadLetterTopic,
+			BulkSubscribe: &BulkSubscribe{
+				Enabled:            sub.Spec.BulkSubscribe.Enabled,
+				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
+			},
 		}, nil
 	}
 }

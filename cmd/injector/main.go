@@ -19,6 +19,7 @@ import (
 
 	"k8s.io/client-go/util/homedir"
 
+	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
@@ -26,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/signals"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
@@ -37,7 +37,7 @@ var (
 )
 
 func main() {
-	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
 	ctx := signals.Context()
 	cfg, err := injector.GetConfig()
@@ -62,8 +62,10 @@ func main() {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	inj := injector.NewInjector(uids, cfg, daprClient, kubeClient)
-
+	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient)
+	if err != nil {
+		log.Fatalf("could not create Injector, err: %s", err)
+	}
 	// Blocking call
 	inj.Run(ctx, func() {
 		healthzServer.Ready()

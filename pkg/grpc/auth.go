@@ -7,29 +7,41 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/grpc/metadata"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
-func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		md, ok := metadata.FromIncomingContext(ctx)
-		if !ok {
-			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "missing metadata in request")
-			return nil, err
+func getAPIAuthenticationMiddlewares(apiToken, authHeader string) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+			err := checkAPITokenInContext(ctx, apiToken, authHeader)
+			if err != nil {
+				return nil, err
+			}
+			return handler(ctx, req)
+		},
+		func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			err := checkAPITokenInContext(stream.Context(), apiToken, authHeader)
+			if err != nil {
+				return err
+			}
+			return handler(srv, stream)
 		}
+}
 
-		token, ok := md[authHeader]
-		if !ok || len(token) == 0 {
-			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "missing api token in request metadata")
-			return nil, err
-		}
-
-		if token[0] != apiToken {
-			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "authentication error: api token mismatch")
-			return nil, err
-		}
-
-		md.Set(authHeader, "")
-		return handler(ctx, req)
+// Checks if the API token in the gRPC request's context is valid; returns an error otherwise.
+func checkAPITokenInContext(ctx context.Context, apiToken, authHeader string) error {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return invokev1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "missing metadata in request")
 	}
+
+	if len(md[authHeader]) == 0 {
+		return invokev1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "missing api token in request metadata")
+	}
+
+	if md[authHeader][0] != apiToken {
+		return invokev1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "authentication error: api token mismatch")
+	}
+
+	md.Set(authHeader, "")
+	return nil
 }

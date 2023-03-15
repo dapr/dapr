@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/perf/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/dapr/dapr/tests/runner/summary"
 )
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
@@ -63,7 +64,12 @@ func TestMain(m *testing.M) {
 }
 
 func TestStateGetGrpcPerformance(t *testing.T) {
-	p := perf.Params()
+	p := perf.Params(
+		perf.WithQPS(1000),
+		perf.WithConnections(16),
+		perf.WithDuration("1m"),
+		perf.WithPayloadSize(0),
+	)
 	t.Logf("running state get grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 	// Get the ingress external url of tester app
@@ -139,9 +145,26 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
 	avg := (daprResult.DurationHistogram.Avg - baselineResult.DurationHistogram.Avg) * 1000
-	t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineResult.DurationHistogram.Avg*1000))
-	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprResult.DurationHistogram.Avg*1000))
+	baselineLatency := baselineResult.DurationHistogram.Avg * 1000
+	daprLatency := daprResult.DurationHistogram.Avg * 1000
+	t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineLatency))
+	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprLatency))
 	t.Logf("added latency avg: %sms", fmt.Sprintf("%.2f", avg))
+
+	summary.ForTest(t).
+		Service("tester").
+		CPU(appUsage.CPUm).
+		Memory(appUsage.MemoryMb).
+		SidecarCPU(sidecarUsage.CPUm).
+		SidecarMemory(sidecarUsage.MemoryMb).
+		Restarts(restarts).
+		BaselineLatency(baselineLatency).
+		DaprLatency(daprLatency).
+		AddedLatency(avg).
+		ActualQPS(daprResult.ActualQPS).
+		Params(p).
+		OutputFortio(daprResult).
+		Flush()
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{baselineResult, daprResult},

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,8 +47,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "1",
 			},
-			renewMutex: &sync.Mutex{},
-			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.NewLogger("dapr.runtime.grpc.test"),
 		}
 
 		serverOption := fakeServer.getMiddlewareOptions()
@@ -63,8 +61,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
-			renewMutex: &sync.Mutex{},
-			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.NewLogger("dapr.runtime.grpc.test"),
 		}
 
 		serverOption := fakeServer.getMiddlewareOptions()
@@ -78,13 +75,13 @@ func TestGetMiddlewareOptions(t *testing.T) {
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
-			renewMutex: &sync.Mutex{},
-			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			logger: logger.NewLogger("dapr.runtime.grpc.test"),
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "state",
-						Version: "v1",
+						Name:     "state",
+						Version:  "v1",
+						Protocol: "grpc",
 					},
 				},
 			},
@@ -112,7 +109,7 @@ func TestClose(t *testing.T) {
 			EnableAPILogging:     true,
 		}
 		a := &api{}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
@@ -133,14 +130,14 @@ func TestClose(t *testing.T) {
 			EnableAPILogging:     false,
 		}
 		a := &api{}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
 	})
 }
 
-func Test_server_getGRPCAPILoggingInfo(t *testing.T) {
+func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog := logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
@@ -157,7 +154,7 @@ func Test_server_getGRPCAPILoggingInfo(t *testing.T) {
 		return nil, nil
 	}
 
-	logInterceptor := s.getGRPCAPILoggingInfo()
+	logInterceptor, _ := s.getGRPCAPILoggingMiddlewares()
 
 	runTest := func(userAgent string) func(t *testing.T) {
 		md := grpcMetadata.MD{}

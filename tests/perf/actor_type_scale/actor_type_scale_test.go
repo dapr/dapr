@@ -26,12 +26,13 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
+	"github.com/dapr/dapr/tests/runner/summary"
 	"github.com/stretchr/testify/require"
 )
 
 const (
 	numHealthChecks        = 60 // Number of times to check for endpoint health per app.
-	serviceApplicationName = "perf-actorfeatures"
+	serviceApplicationName = "perf-actor-type"
 	numberOfActors         = 100
 )
 
@@ -89,13 +90,11 @@ func TestActorIdStress(t *testing.T) {
 	// defer k6Test.Dispose()
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
-	summary, err := loadtest.K6ResultDefault(k6Test)
+	sm, err := loadtest.K6ResultDefault(k6Test)
 	require.NoError(t, err)
-	require.NotNil(t, summary)
-	bts, err := json.MarshalIndent(summary, "", " ")
+	require.NotNil(t, sm)
+	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
-	require.True(t, summary.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
-	t.Logf("test summary `%s`", string(bts))
 
 	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
@@ -106,8 +105,21 @@ func TestActorIdStress(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts(serviceApplicationName)
 	require.NoError(t, err)
 
+	summary.ForTest(t).
+		Service(serviceApplicationName).
+		CPU(appUsage.CPUm).
+		Memory(appUsage.MemoryMb).
+		SidecarCPU(sidecarUsage.CPUm).
+		SidecarMemory(sidecarUsage.MemoryMb).
+		Restarts(restarts).
+		OutputK6(sm.RunnersResults).
+		Flush()
+
 	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
 	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 	t.Logf("target dapr app or sidecar restarted %v times", restarts)
+
+	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
 	require.Equal(t, 0, restarts)
+	t.Logf("test summary `%s`", string(bts))
 }

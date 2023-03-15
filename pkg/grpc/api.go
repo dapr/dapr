@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
@@ -40,6 +41,7 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -49,6 +51,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -58,7 +61,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -68,55 +70,21 @@ const (
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
-//
-//nolint:interfacebloat
 type API interface {
 	// DaprInternal Service methods
-	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
-	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+	internalv1pb.ServiceInvocationServer
 
 	// Dapr Service methods
-	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
-	BulkPublishEventAlpha1(ctx context.Context, req *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error)
-	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
-	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
-	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
-	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
-	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
-	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
-	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
-	SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error
-	UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error)
-	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
-	QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error)
-	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
-	DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error)
-	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error)
+	runtimev1pb.DaprServer
+
+	// Methods internal to the object
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
-	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error)
-	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error)
-	RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error)
-	UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error)
-	RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error)
-	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
-	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
-	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
-	TryLockAlpha1(ctx context.Context, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error)
-	UnlockAlpha1(ctx context.Context, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error)
-	// Gets metadata of the sidecar
-	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
-	// Sets value in extended metadata of the sidecar
-	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
-	GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error)
-	StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error)
-	TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error)
-	// Shutdown the sidecar
-	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
 
 type api struct {
+	*universalapi.UniversalAPI
 	actor                      actors.Actors
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
@@ -124,8 +92,6 @@ type api struct {
 	stateStores                map[string]state.Store
 	workflowComponents         map[string]workflows.Workflow
 	transactionalStateStores   map[string]state.TransactionalStore
-	secretStores               map[string]secretstores.SecretStore
-	secretsConfiguration       map[string]config.SecretsScope
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
@@ -306,6 +272,12 @@ func NewAPI(opts APIOpts) API {
 		}
 	}
 	return &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           opts.Resiliency,
+			SecretStores:         opts.SecretStores,
+			SecretsConfiguration: opts.SecretsConfiguration,
+		},
 		directMessaging:            opts.DirectMessaging,
 		actor:                      opts.Actor,
 		id:                         opts.AppID,
@@ -314,12 +286,10 @@ func NewAPI(opts APIOpts) API {
 		pubsubAdapter:              opts.PubsubAdapter,
 		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
-		secretStores:               opts.SecretStores,
 		workflowComponents:         opts.WorkflowComponents,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
-		secretsConfiguration:       opts.SecretsConfiguration,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
 		tracingSpec:                opts.TracingSpec,
 		accessControlList:          opts.AccessControlList,
@@ -328,7 +298,7 @@ func NewAPI(opts APIOpts) API {
 		getComponentsFn:            opts.GetComponentsFn,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		getSubscriptionsFn:         opts.GetSubscriptionsFn,
-		daprRunTimeVersion:         version.Version(),
+		daprRunTimeVersion:         buildinfo.Version(),
 	}
 }
 
@@ -389,7 +359,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
-		})
+		}, in.Metadata)
 		if err != nil {
 			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 			apiServerLogger.Debug(err)
@@ -442,24 +412,52 @@ type invokeServiceResp struct {
 	trailers metadata.MD
 }
 
-func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
-	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
-	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
-		req.WithMetadata(incomingMD)
-	}
+// These flags are used to make sure that we are printing the deprecation warning log messages in "InvokeService" just once.
+// By using "CompareAndSwap(false, true)" we replace the value "false" with "true" only if it's not already "true".
+// "CompareAndSwap" returns true if the swap happened (i.e. if the value was not already "true"), so we can use that as a flag to make sure we only run the code once.
+// Why not using "sync.Once"? In our tests (https://github.com/dapr/dapr/pull/5740), that seems to be causing a regression in the perf tests. This is probably because when using "sync.Once" and the callback needs to be executed for the first time, all concurrent requests are blocked too. Additionally, the use of closures in this case _could_ have an impact on the GC as well.
+var (
+	invokeServiceDeprecationNoticeShown     = atomic.Bool{}
+	invokeServiceHTTPDeprecationNoticeShown = atomic.Bool{}
+)
 
+// Deprecated: Use proxy mode service invocation instead.
+func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx,
-		a.resiliency.EndpointPolicy(in.Id, in.Id+":"+req.Message().Method),
-	)
+	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
+		apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
+	}
+	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
+
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
+	defer req.Close()
+
+	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		req.WithMetadata(incomingMD)
+	}
+
+	policyRunner := resiliency.NewRunner[*invokeServiceResp](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*invokeServiceResp, error) {
 		rResp := &invokeServiceResp{}
 		imr, rErr := a.directMessaging.Invoke(ctx, in.Id, req)
 		if imr != nil {
-			rResp.message = imr.Message()
+			// Read the entire message in memory then close imr
+			pd, pdErr := imr.ProtoWithData()
+			imr.Close()
+			if pd != nil {
+				rResp.message = pd.Message
+			}
+
+			// If we have an error, set it only if rErr is not already set
+			if pdErr != nil && rErr == nil {
+				rErr = pdErr
+			}
 		}
 		if rErr != nil {
 			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
@@ -468,10 +466,12 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
 
 		if imr.IsHTTPResponse() {
-			errorMessage := ""
-			if imr != nil {
-				_, b := imr.RawData()
-				errorMessage = string(b)
+			if invokeServiceHTTPDeprecationNoticeShown.CompareAndSwap(false, true) {
+				apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
+			}
+			var errorMessage string
+			if rResp.message != nil && rResp.message.Data != nil {
+				errorMessage = string(rResp.message.Data.Value)
 			}
 			code := int(imr.Status().Code)
 			// If the status is OK, will be nil
@@ -532,14 +532,17 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	features := thepubsub.Features()
+	entryIdSet := make(map[string]struct{}, len(in.Entries)) //nolint:stylecheck
 
 	entries := make([]pubsub.BulkMessageEntry, len(in.Entries))
 	for i, entry := range in.Entries {
-		if entry.EntryId == "" {
-			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "missing entryId")
+		// Validate entry_id
+		if _, ok := entryIdSet[entry.EntryId]; ok || entry.EntryId == "" {
+			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "entryId is duplicated or not present for entry")
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.BulkPublishResponse{}, err
 		}
+		entryIdSet[entry.EntryId] = struct{}{}
 		entries[i].EntryId = entry.EntryId
 		entries[i].ContentType = entry.ContentType
 		entries[i].Event = entry.Event
@@ -556,8 +559,6 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
-			var envelope map[string]interface{}
-
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				ID:              a.id,
 				Topic:           topic,
@@ -566,7 +567,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				TraceID:         corID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
-			})
+			}, entries[i].Metadata)
 			if err != nil {
 				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 				apiServerLogger.Debug(err)
@@ -628,8 +629,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 	bulkRes.FailedEntries = make([]*runtimev1pb.BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
 	for _, r := range res.FailedEntries {
-		resEntry := runtimev1pb.BulkPublishResponseFailedEntry{}
-		resEntry.EntryId = r.EntryId
+		resEntry := runtimev1pb.BulkPublishResponseFailedEntry{EntryId: r.EntryId}
 		if r.Error != nil {
 			resEntry.Error = r.Error.Error()
 		}
@@ -1108,118 +1108,6 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	return empty, nil
 }
 
-func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
-	response := &runtimev1pb.GetSecretResponse{}
-
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	secretStoreName := in.StoreName
-
-	if a.secretStores[secretStoreName] == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	if !a.isSecretAllowed(in.StoreName, in.Key) {
-		err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, in.Key, in.StoreName)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	req := secretstores.GetSecretRequest{
-		Name:     in.Key,
-		Metadata: in.Metadata,
-	}
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*secretstores.GetSecretResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
-	)
-	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.GetSecretResponse, error) {
-		rResp, rErr := a.secretStores[secretStoreName].GetSecret(ctx, req)
-		return &rResp, rErr
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
-
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	if getResponse != nil {
-		response.Data = getResponse.Data
-	}
-	return response, nil
-}
-
-func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error) {
-	response := &runtimev1pb.GetBulkSecretResponse{}
-
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	secretStoreName := in.StoreName
-
-	if a.secretStores[secretStoreName] == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	req := secretstores.BulkGetSecretRequest{
-		Metadata: in.Metadata,
-	}
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*secretstores.BulkGetSecretResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
-	)
-	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.BulkGetSecretResponse, error) {
-		rResp, rErr := a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
-		return &rResp, rErr
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
-
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
-		apiServerLogger.Debug(err)
-		return response, err
-	}
-
-	if getResponse == nil {
-		return response, nil
-	}
-	filteredSecrets := map[string]map[string]string{}
-	for key, v := range getResponse.Data {
-		if a.isSecretAllowed(secretStoreName, key) {
-			filteredSecrets[key] = v
-		} else {
-			apiServerLogger.Debugf(messages.ErrPermissionDenied, key, in.StoreName)
-		}
-	}
-
-	if getResponse.Data != nil {
-		response.Data = map[string]*runtimev1pb.SecretResponse{}
-		for key, v := range filteredSecrets {
-			response.Data[key] = &runtimev1pb.SecretResponse{Secrets: v}
-		}
-	}
-	return response, nil
-}
-
 func extractEtag(req *commonv1pb.StateItem) (bool, string) {
 	if req.Etag != nil {
 		return true, req.Etag.Value
@@ -1571,14 +1459,20 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	req := invokev1.NewInvokeMethodRequest(in.Method)
-	req.WithActor(in.ActorType, in.ActorId)
-	req.WithRawData(in.Data, "")
-	reqMetadata := map[string][]string{}
+	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+
+	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
 		reqMetadata[k] = []string{v}
 	}
-	req.WithMetadata(reqMetadata)
+	req := invokev1.NewInvokeMethodRequest(in.Method).
+		WithActor(in.ActorType, in.ActorId).
+		WithRawDataBytes(in.Data).
+		WithMetadata(reqMetadata)
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
+	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1587,8 +1481,10 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](ctx,
-		a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId),
+	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.actor.Call(ctx, req)
@@ -1602,16 +1498,13 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	if resp == nil {
 		resp = invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
 	}
-	_, response.Data = resp.RawData()
-	return response, nil
-}
+	defer resp.Close()
 
-func (a *api) isSecretAllowed(storeName, key string) bool {
-	if config, ok := a.secretsConfiguration[storeName]; ok {
-		return config.IsSecretAllowed(key)
+	response.Data, err = resp.RawDataFull()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response data: %w", err)
 	}
-	// By default, if a configuration is not defined for a secret store, return true.
-	return true
+	return response, nil
 }
 
 func (a *api) SetAppChannel(appChannel channel.AppChannel) {
@@ -1787,11 +1680,14 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	wf := workflows.WorkflowReference{
 		InstanceID: in.InstanceId,
 	}
+
+	var inputMap map[string]interface{}
+	json.Unmarshal(in.Input, &inputMap)
 	req := workflows.StartRequest{
 		WorkflowReference: wf,
 		Options:           in.Options,
 		WorkflowName:      in.WorkflowName,
-		Input:             in.Input,
+		Input:             inputMap,
 	}
 
 	resp, err := workflowRun.Start(ctx, &req)

@@ -25,9 +25,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	"github.com/dapr/components-contrib/lock"
-
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -46,13 +43,13 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -60,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -74,12 +72,11 @@ import (
 )
 
 const (
-	maxGRPCServerUptime = 100 * time.Millisecond
-	goodStoreKey        = "fakeAPI||good-key"
-	errorStoreKey       = "fakeAPI||error-key"
-	goodKey             = "good-key"
-	goodKey2            = "good-key2"
-	mockSubscribeID     = "mockId"
+	goodStoreKey    = "fakeAPI||good-key"
+	errorStoreKey   = "fakeAPI||error-key"
+	goodKey         = "good-key"
+	goodKey2        = "good-key2"
+	mockSubscribeID = "mockId"
 )
 
 var testResiliency = &v1alpha1.Resiliency{
@@ -148,15 +145,45 @@ var testResiliency = &v1alpha1.Resiliency{
 type mockGRPCAPI struct{}
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
-	return resp.Proto(), nil
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(ctx)).
+		WithContentType("text/plain")
+	defer resp.Close()
+	return resp.ProtoWithData()
+}
+
+func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(stream.Context())).
+		WithContentType("text/plain")
+	defer resp.Close()
+
+	var data []byte
+	pd, err := resp.ProtoWithData()
+	if err != nil {
+		return err
+	}
+	if pd.Message != nil && pd.Message.Data != nil {
+		data = pd.Message.Data.Value
+	}
+
+	stream.Send(&internalv1pb.InternalInvokeResponseStream{
+		Response: resp.Proto(),
+		Payload: &commonv1pb.StreamPayload{
+			Data: data,
+			Seq:  0,
+		},
+	})
+
+	return nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
-	return resp.Proto(), nil
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataBytes(ExtractSpanContext(ctx)).
+		WithContentType("text/plain")
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -240,9 +267,6 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server, &buffer
 }
 
@@ -259,9 +283,6 @@ func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server
 }
 
@@ -276,9 +297,6 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server
 }
 
@@ -288,13 +306,15 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 	interceptors := []grpc.UnaryServerInterceptor{
 		metadata.SetMetadataInContextUnary,
 	}
+	streamInterceptors := []grpc.StreamServerInterceptor{}
 	if token != "" {
-		interceptors = append(interceptors,
-			setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token"),
-		)
+		unary, stream := getAPIAuthenticationMiddlewares(token, "dapr-api-token")
+		interceptors = append(interceptors, unary)
+		streamInterceptors = append(streamInterceptors, stream)
 	}
 	opts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(interceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
 		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
 	}
 
@@ -306,124 +326,22 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 		}
 	}()
 
-	// wait until server starts
-	time.Sleep(maxGRPCServerUptime)
-
 	return server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(
+		ctx,
 		fmt.Sprintf("localhost:%d", port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
 	)
 	if err != nil {
 		panic(err)
 	}
 	return conn
-}
-
-func TestCallActorWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := internalv1pb.NewServiceInvocationClient(clientConn)
-
-	request := invokev1.NewInvokeMethodRequest("method")
-	request.WithActor("test-actor", "actor-1")
-
-	resp, err := client.CallActor(context.Background(), request.Proto())
-	assert.NoError(t, err)
-	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with actor call")
-}
-
-func TestCallRemoteAppWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := internalv1pb.NewServiceInvocationClient(clientConn)
-	request := invokev1.NewInvokeMethodRequest("method").Proto()
-
-	resp, err := client.CallLocal(context.Background(), request)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with app call")
-}
-
-func TestCallLocal(t *testing.T) {
-	t.Run("appchannel is not ready", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: nil,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
-
-		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.Internal, status.Code(err))
-	})
-
-	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: mockAppChannel,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := &internalv1pb.InternalInvokeRequest{
-			Message: nil,
-		}
-
-		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	})
-
-	t.Run("invokemethod returns error", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		mockAppChannel.On("InvokeMethod",
-			mock.MatchedBy(matchContextInterface),
-			mock.AnythingOfType("*v1.InvokeMethodRequest"),
-		).Return(nil, status.Error(codes.Unknown, "unknown error"))
-		fakeAPI := &api{
-			id:         "fakeAPI",
-			appChannel: mockAppChannel,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
-
-		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.Internal, status.Code(err))
-	})
 }
 
 func mustMarshalAny(msg proto.Message) *anypb.Any {
@@ -447,8 +365,10 @@ func TestAPIToken(t *testing.T) {
 	t.Run("valid token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -466,37 +386,59 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
 		md := grpcMetadata.Pairs("dapr-api-token", token)
 		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
-		_, err := client.InvokeService(ctx, req)
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.NotFound, s.Code())
-		assert.Equal(t, "Not Found", s.Message())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
 
-		errInfo := s.Details()[0].(*epb.ErrorInfo)
-		assert.Equal(t, 1, len(s.Details()))
-		assert.Equal(t, "404", errInfo.Metadata["http.code"])
-		assert.Equal(t, "fakeDirectMessageResponse", errInfo.Metadata["http.error_message"])
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.NotFound, s.Code())
+			assert.Equal(t, "Not Found", s.Message())
+
+			errInfo := s.Details()[0].(*epb.ErrorInfo)
+			assert.Equal(t, 1, len(s.Details()))
+			assert.Equal(t, "404", errInfo.Metadata["http.code"])
+			assert.Equal(t, "fakeDirectMessageResponse", errInfo.Metadata["http.error_message"])
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// The request was invalid so we should get an error about the actor runtime (which means we passed the auth middleware and are hitting the API as expected)
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			assert.ErrorContains(t, err, "actor runtime")
+		})
 	})
 
 	t.Run("invalid token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -514,31 +456,55 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
-		md := grpcMetadata.Pairs("dapr-api-token", "4567")
+		md := grpcMetadata.Pairs("dapr-api-token", "bad, bad token")
 		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
-		_, err := client.InvokeService(ctx, req)
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.Unauthenticated, s.Code())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
+
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// We should get an Unauthenticated error
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
 	})
 
 	t.Run("missing token", func(t *testing.T) {
 		token := "1234"
 
-		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -556,22 +522,45 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
-		_, err := client.InvokeService(context.Background(), req)
+		ctx := context.Background()
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.Unauthenticated, s.Code())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
+
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// We should get an Unauthenticated error
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
 	})
 }
 
@@ -629,8 +618,10 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 
 	for _, tt := range httpResponseTests {
 		t.Run(fmt.Sprintf("handle http %d response code", tt.status), func(t *testing.T) {
-			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil)
-			fakeResp.WithRawData([]byte(tt.errHTTPMessage), "application/json")
+			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil).
+				WithRawDataString(tt.errHTTPMessage).
+				WithContentType("application/json")
+			defer fakeResp.Close()
 
 			// Set up direct messaging mock
 			mockDirectMessaging.Calls = nil // reset call count
@@ -699,8 +690,10 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 					Owner:        "Dapr",
 				}),
 			},
-		)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		).
+			WithRawDataString("fakeDirectMessageResponse").
+			WithContentType("application/json")
+		defer fakeResp.Close()
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -746,7 +739,12 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 
 func TestSecretStoreNotConfigured(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	server := startDaprAPIServer(port, &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger: logger.NewLogger("grpc.api.test"),
+		},
+		id: "fakeAPI",
+	}, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -858,10 +856,13 @@ func TestGetSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                   "fakeAPI",
-		secretStores:         fakeStores,
-		secretsConfiguration: secretsConfiguration,
-		resiliency:           resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           resiliency.New(nil),
+			SecretStores:         fakeStores,
+			SecretsConfiguration: secretsConfiguration,
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -925,10 +926,13 @@ func TestGetBulkSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                   "fakeAPI",
-		secretStores:         fakeStores,
-		secretsConfiguration: secretsConfiguration,
-		resiliency:           resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:               apiServerLogger,
+			Resiliency:           resiliency.New(nil),
+			SecretStores:         fakeStores,
+			SecretsConfiguration: secretsConfiguration,
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -1915,69 +1919,152 @@ func TestPublishTopic(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
-	_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
+	t.Run("err: empty publish event request", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
+	t.Run("err: publish event request with empty topic", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+		})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Nil(t, err)
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
+	t.Run("no err: publish event request with topic and pubsub alone", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+		})
+		assert.Nil(t, err)
 	})
-	assert.Equal(t, codes.Internal, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-found",
+	t.Run("no err: publish event request with topic, pubsub and ce metadata override", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Metadata: map[string]string{
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+			},
+		})
+		assert.Nil(t, err)
 	})
-	assert.Equal(t, codes.NotFound, status.Code(err))
 
-	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-allowed",
+	t.Run("err: publish event request with error-topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+		})
+		assert.Equal(t, codes.Internal, status.Code(err))
 	})
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
+	t.Run("err: publish event request with err-not-found topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-found",
+		})
+		assert.Equal(t, codes.NotFound, status.Code(err))
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
+	t.Run("err: publish event request with err-not-allowed topic and pubsub", func(t *testing.T) {
+		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-allowed",
+		})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
-	assert.Nil(t, err)
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
+	t.Run("err: empty bulk publish event request", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Equal(t, codes.Internal, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-found",
+	t.Run("err: bulk publish event request with duplicate entry Ids", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries: []*runtimev1pb.BulkPublishRequestEntry{
+				{
+					Event:       []byte("data"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+				{
+					Event:       []byte("data 2"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+			},
+		})
+		assert.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		assert.Contains(t, err.Error(), "entryId is duplicated")
 	})
-	assert.Equal(t, codes.NotFound, status.Code(err))
 
-	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "err-not-allowed",
+	t.Run("err: bulk publish event request with missing entry Ids", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries: []*runtimev1pb.BulkPublishRequestEntry{
+				{
+					Event:       []byte("data"),
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+				{
+					Event:       []byte("data 2"),
+					EntryId:     "1",
+					ContentType: "text/plain",
+					Metadata:    map[string]string{},
+				},
+			},
+		})
+		assert.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		assert.Contains(t, err.Error(), "not present for entry")
 	})
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	t.Run("err: bulk publish event request with pubsub and empty topic", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+		})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("no err: bulk publish event request with pubsub, topic and empty entries", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+		})
+		assert.Nil(t, err)
+	})
+
+	t.Run("err: bulk publish event request with error-topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+		})
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("err: bulk publish event request with err-not-found topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-found",
+		})
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("err: bulk publish event request with err-not-allowed topic and pubsub", func(t *testing.T) {
+		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "err-not-allowed",
+		})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	})
 }
 
 func TestBulkPublish(t *testing.T) {
@@ -2033,33 +2120,55 @@ func TestBulkPublish(t *testing.T) {
 		{EntryId: "4", Event: []byte("data4")},
 	}
 
-	res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "topic",
-		Entries:    sampleEntries,
+	t.Run("no failures", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries:    sampleEntries,
+		})
+		assert.Nil(t, err)
+		assert.Empty(t, res.FailedEntries)
 	})
-	assert.Nil(t, err)
-	assert.Empty(t, res.FailedEntries)
 
-	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
-		Entries:    sampleEntries,
+	t.Run("no failures with ce metadata override", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "topic",
+			Entries:    sampleEntries,
+			Metadata: map[string]string{
+				"cloudevent.source": "unit-test",
+				"cloudevent.topic":  "overridetopic",  // noop -- if this modified the envelope the test would fail
+				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
+			},
+		})
+		assert.Nil(t, err)
+		assert.Empty(t, res.FailedEntries)
 	})
-	t.Log(res)
-	// Partial failure, so expecting no error
-	assert.Nil(t, err)
-	assert.NotNil(t, res)
-	assert.Equal(t, 4, len(res.FailedEntries))
-	res, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
-		PubsubName: "pubsub",
-		Topic:      "even-error-topic",
-		Entries:    sampleEntries,
+
+	t.Run("all failures from component", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+			Entries:    sampleEntries,
+		})
+		t.Log(res)
+		// Full failure from component, so expecting no error
+		assert.Nil(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 4, len(res.FailedEntries))
 	})
-	// Partial failure, so expecting no error
-	assert.Nil(t, err)
-	assert.NotNil(t, res)
-	assert.Equal(t, 2, len(res.FailedEntries))
+
+	t.Run("partial failures from component", func(t *testing.T) {
+		res, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "even-error-topic",
+			Entries:    sampleEntries,
+		})
+		// Partial failure, so expecting no error
+		assert.Nil(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 2, len(res.FailedEntries))
+	})
 }
 
 func TestShutdownEndpoints(t *testing.T) {
@@ -3152,9 +3261,12 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:           "fakeAPI",
-		secretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
-		resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:       logger.NewLogger("grpc.api.test"),
+			Resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			SecretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
+		},
+		id: "fakeAPI",
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -3324,7 +3436,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 
 type mockConfigStore struct{}
 
-func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
+func (m *mockConfigStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
 }
 

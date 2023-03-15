@@ -18,38 +18,10 @@ import (
 	"os"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestToISO8601DateTimeString(t *testing.T) {
-	t.Run("succeed to convert time.Time to ISO8601 datetime string", func(t *testing.T) {
-		testDateTime, err := time.Parse(time.RFC3339, "2020-01-02T15:04:05.123Z")
-		assert.NoError(t, err)
-		isoString := ToISO8601DateTimeString(testDateTime)
-		assert.Equal(t, "2020-01-02T15:04:05.123Z", isoString)
-	})
-
-	t.Run("succeed to parse generated iso8601 string to time.Time using RFC3339 Parser", func(t *testing.T) {
-		currentTime := time.Unix(1623306411, 123000)
-		assert.Equal(t, 123000, currentTime.UTC().Nanosecond())
-		isoString := ToISO8601DateTimeString(currentTime)
-		assert.Equal(t, "2021-06-10T06:26:51.000123Z", isoString)
-		parsed, err := time.Parse(time.RFC3339, isoString)
-
-		// assert
-		assert.NoError(t, err)
-		assert.Equal(t, currentTime.UTC().Year(), parsed.Year())
-		assert.Equal(t, currentTime.UTC().Month(), parsed.Month())
-		assert.Equal(t, currentTime.UTC().Day(), parsed.Day())
-		assert.Equal(t, currentTime.UTC().Hour(), parsed.Hour())
-		assert.Equal(t, currentTime.UTC().Minute(), parsed.Minute())
-		assert.Equal(t, currentTime.UTC().Second(), parsed.Second())
-		assert.Equal(t, currentTime.UTC().Nanosecond()/1000, parsed.Nanosecond()/1000)
-	})
-}
 
 func TestContains(t *testing.T) {
 	type customType struct {
@@ -114,41 +86,30 @@ func TestIsYaml(t *testing.T) {
 	}
 }
 
-func TestGetIntOrDefault(t *testing.T) {
-	testMap := map[string]string{"key1": "1", "key2": "2", "key3": "3"}
+func TestGetIntValFromStringVal(t *testing.T) {
 	tcs := []struct {
 		name     string
-		m        map[string]string
-		key      string
+		val      int
 		def      int
 		expected int
 	}{
 		{
-			name:     "key exists in the map",
-			m:        testMap,
-			key:      "key2",
-			def:      0,
-			expected: 2,
+			name:     "value is not provided by user, default value is used",
+			val:      0,
+			def:      5,
+			expected: 5,
 		},
 		{
-			name:     "key does not exist in the map, default value is used",
-			m:        testMap,
-			key:      "key4",
-			def:      4,
-			expected: 4,
-		},
-		{
-			name:     "empty map, default value is used",
-			m:        map[string]string{},
-			key:      "key1",
-			def:      100,
-			expected: 100,
+			name:     "val is provided by user",
+			val:      91,
+			def:      5,
+			expected: 91,
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			actual := GetIntOrDefault(tc.m, tc.key, tc.def)
+			actual := GetIntValOrDefault(tc.val, tc.def)
 			if actual != tc.expected {
 				t.Errorf("expected %d, actual %d", tc.expected, actual)
 			}
@@ -236,5 +197,76 @@ func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
 		assert.Equal(t, "val2", resMeta["key2"], "expected val to be equal")
 		assert.Contains(t, resMeta, "ttl", "expected key to be present")
 		assert.Equal(t, "22s", resMeta["ttl"], "expected val to be equal")
+	})
+}
+
+func TestFilter(t *testing.T) {
+	t.Run("should filter out empty values", func(t *testing.T) {
+		in := []string{"", "a", "", "b", "", "c"}
+		out := Filter(in, func(s string) bool {
+			return s != ""
+		})
+		assert.Equal(t, 6, cap(in))
+		assert.Equal(t, 3, cap(out))
+		assert.Equal(t, []string{"a", "b", "c"}, out)
+	})
+	t.Run("should filter out empty values and return empty collection if all values are filtered out", func(t *testing.T) {
+		in := []string{"", "", ""}
+		out := Filter(in, func(s string) bool {
+			return s != ""
+		})
+		assert.Equal(t, 3, cap(in))
+		assert.Equal(t, 0, cap(out))
+		assert.Equal(t, []string{}, out)
+	})
+}
+
+func TestContainsPrefixed(t *testing.T) {
+	tcs := []struct {
+		name     string
+		prefixes []string
+		v        string
+		want     bool
+	}{
+		{
+			name: "empty",
+			v:    "some-service-account-name",
+			want: false,
+		},
+		{
+			name:     "notFound",
+			v:        "some-service-account-name",
+			prefixes: []string{"service-account-name", "other-service-account-name"},
+			want:     false,
+		},
+		{
+			name:     "one",
+			v:        "some-service-account-name",
+			prefixes: []string{"service-account-name", "some-service-account-name"},
+			want:     true,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equalf(t, tc.want, ContainsPrefixed(tc.prefixes, tc.v), "ContainsPrefixed(%v, %v)", tc.prefixes, tc.v)
+		})
+	}
+}
+
+func TestMapToSlice(t *testing.T) {
+	t.Run("mapStringString", func(t *testing.T) {
+		m := map[string]string{"a": "b", "c": "d", "e": "f"}
+		got := MapToSlice(m)
+		assert.ElementsMatch(t, got, []string{"a", "c", "e"})
+	})
+	t.Run("mapStringStruct", func(t *testing.T) {
+		m := map[string]struct{}{"a": {}, "c": {}, "e": {}}
+		got := MapToSlice(m)
+		assert.ElementsMatch(t, got, []string{"a", "c", "e"})
+	})
+	t.Run("intStringStruct", func(t *testing.T) {
+		m := map[int]struct{}{1: {}, 2: {}, 3: {}}
+		got := MapToSlice(m)
+		assert.ElementsMatch(t, got, []int{1, 2, 3})
 	})
 }

@@ -1,6 +1,7 @@
 replicaCount: 1
 logLevel: info
 watchInterval: "0"
+watchNamespace: ""
 maxPodRestartsPerMinute: 20
 component: operator
 
@@ -14,6 +15,9 @@ nameOverride: ""
 fullnameOverride: ""
 
 runAsNonRoot: true
+
+serviceReconciler:
+  enabled: true
 
 ports:
   protocol: TCP

@@ -210,6 +210,9 @@ spec:
                       enabled:
                         description: Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly. The default value is false.
                         type: boolean
+                      obfuscateURLs:
+                        description: 'When enabled, obfuscates the values of URLs in HTTP API logs, logging the route name rather than the full path being invoked, which could contain PII. Default: false. This option has no effect if API logging is disabled.'
+                        type: boolean
                       omitHealthChecks:
                         description: 'If true, health checks are not reported in API logs. Default: false. This option has no effect if API logging is disabled.'
                         type: boolean
@@ -222,6 +225,72 @@ spec:
                 properties:
                   enabled:
                     type: boolean
+                  rules:
+                    items:
+                      description: MetricsRule defines configuration options for a
+                        metric.
+                      properties:
+                        labels:
+                          items:
+                            description: MetricsLabel defines an object that allows
+                              to set regex expressions for a label.
+                            properties:
+                              name:
+                                type: string
+                              regex:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            required:
+                            - name
+                            - regex
+                            type: object
+                          type: array
+                        name:
+                          type: string
+                      required:
+                      - labels
+                      - name
+                      type: object
+                    type: array
+                required:
+                - enabled
+                type: object
+              metrics:
+                default:
+                  enabled: true
+                description: MetricSpec defines metrics configuration.
+                properties:
+                  enabled:
+                    type: boolean
+                  rules:
+                    items:
+                      description: MetricsRule defines configuration options for a
+                        metric.
+                      properties:
+                        labels:
+                          items:
+                            description: MetricsLabel defines an object that allows
+                              to set regex expressions for a label.
+                            properties:
+                              name:
+                                type: string
+                              regex:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            required:
+                            - name
+                            - regex
+                            type: object
+                          type: array
+                        name:
+                          type: string
+                      required:
+                      - labels
+                      - name
+                      type: object
+                    type: array
                 required:
                 - enabled
                 type: object

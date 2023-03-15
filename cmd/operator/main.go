@@ -20,23 +20,25 @@ import (
 
 	"k8s.io/klog"
 
-	"github.com/dapr/kit/logger"
-
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
-	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/logger"
 )
 
 var (
-	log                     = logger.NewLogger("dapr.operator")
-	config                  string
-	certChainPath           string
-	watchInterval           string
-	maxPodRestartsPerMinute int
-	disableLeaderElection   bool
+	log                                = logger.NewLogger("dapr.operator")
+	config                             string
+	certChainPath                      string
+	watchInterval                      string
+	maxPodRestartsPerMinute            int
+	disableLeaderElection              bool
+	disableServiceReconciler           bool
+	watchNamespace                     string
+	enableArgoRolloutServiceReconciler bool
 )
 
 //nolint:gosec
@@ -55,15 +57,18 @@ const (
 )
 
 func main() {
-	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Operator -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
 	operatorOpts := operator.Options{
-		Config:                    config,
-		CertChainPath:             certChainPath,
-		LeaderElection:            !disableLeaderElection,
-		WatchdogEnabled:           false,
-		WatchdogInterval:          0,
-		WatchdogMaxRestartsPerMin: maxPodRestartsPerMinute,
+		Config:                              config,
+		CertChainPath:                       certChainPath,
+		LeaderElection:                      !disableLeaderElection,
+		WatchdogEnabled:                     false,
+		WatchdogInterval:                    0,
+		WatchdogMaxRestartsPerMin:           maxPodRestartsPerMinute,
+		WatchNamespace:                      watchNamespace,
+		ServiceReconcilerEnabled:            !disableServiceReconciler,
+		ArgoRolloutServiceReconcilerEnabled: enableArgoRolloutServiceReconciler,
 	}
 
 	switch strings.ToLower(watchInterval) {
@@ -112,7 +117,11 @@ func init() {
 
 	flag.StringVar(&watchInterval, "watch-interval", defaultWatchInterval, "Interval for polling pods' state, e.g. '2m'. Set to '0' to disable, or 'once' to only run once when the operator starts")
 	flag.IntVar(&maxPodRestartsPerMinute, "max-pod-restarts-per-minute", defaultMaxPodRestartsPerMinute, "Maximum number of pods in an invalid state that can be restarted per minute")
+
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
+	flag.BoolVar(&disableServiceReconciler, "disable-service-reconciler", false, "Disable the Service reconciler for Dapr-enabled Deployments and StatefulSets")
+	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
+	flag.BoolVar(&enableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for Dapr-enabled Argo Rollouts")
 
 	flag.Parse()
 

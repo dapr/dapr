@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/pluggable_redis-statestore
 
-go 1.19
+go 1.20
 
 require (
 	github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff

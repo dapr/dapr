@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install dependencies
         run: pip install PyGithub
       - name: Automerge and update
@@ -37,13 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Prune Stale
-      uses: actions/stale@v3.0.14
+      uses: actions/stale@v7.0.0
       with:
         repo-token: ${{ secrets.DAPR_BOT_TOKEN }}
-        # Different amounts of days for issues/PRs are not currently supported but there is a PR
-        # open for it: https://github.com/actions/stale/issues/214
-        days-before-stale: 60
-        days-before-close: 7
+        days-before-pr-stale: 60
+        days-before-pr-close: 7
+        days-before-issue-stale: 60
+        days-before-issue-close: 7
         stale-issue-message: >
           This issue has been automatically marked as stale because it has not had activity in the
           last 60 days. It will be closed in the next 7 days unless it is tagged (pinned, good first issue, help wanted or triaged/resolved) or other activity
