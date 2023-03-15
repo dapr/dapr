@@ -434,20 +434,6 @@ setup-test-env-pulsar:
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
 
-# install temporal to the cluster
-setup-test-env-temporal:
-	$(HELM) upgrade --install --set server.replicaCount=1 \
-					--set cassandra.config.cluster_size=1 \
-					--set prometheus.enabled=false \
-					--set grafana.enabled=false \
-					--set elasticsearch.enabled=false \
-					dapr-temporal wener/temporal -f ./tests/config/temporal_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 15m0s
-
-# delete temporal from cluster
-delete-test-env-temporal:
-	$(HELM) del dapr-temporal --namespace $(DAPR_TEST_NAMESPACE) 
-
-
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
 	$(HELM) upgrade --install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
