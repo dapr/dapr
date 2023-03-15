@@ -11,7 +11,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/dapr/components-contrib v1.10.0-rc.9.0.20230313201627-d5d6273ff278
 	github.com/dapr/kit v0.0.4
-	github.com/fasthttp/router v1.4.15
+	github.com/fasthttp/router v1.4.17
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.2.3
 	github.com/gogo/protobuf v1.3.2
@@ -317,7 +317,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/rs/zerolog v1.25.0 // indirect
-	github.com/savsgio/gotils v0.0.0-20220530130905-52f3993e8d6d // indirect
+	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.12.0+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.22.2 // indirect
