@@ -240,7 +240,9 @@ func TestInit(t *testing.T) {
 
 	_ = scheme.AddToScheme(mgr.GetScheme())
 
-	handler := NewDaprHandler(mgr, true)
+	handler := NewDaprHandlerWithOptions(mgr, &Options{
+		ArgoRolloutServiceReconcilerEnabled: true,
+	})
 
 	t.Run("test init dapr handler", func(t *testing.T) {
 		assert.NotNil(t, handler)

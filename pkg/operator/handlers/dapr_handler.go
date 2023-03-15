@@ -44,13 +44,21 @@ const (
 
 var log = logger.NewLogger("dapr.operator.handlers")
 
+var defaultOptions = &Options{
+	ArgoRolloutServiceReconcilerEnabled: false,
+}
+
+type Options struct {
+	ArgoRolloutServiceReconcilerEnabled bool
+}
+
 // DaprHandler handles the lifetime for Dapr CRDs.
 type DaprHandler struct {
 	mgr ctrl.Manager
 
 	client.Client
 	Scheme                              *runtime.Scheme
-	ArgoRolloutServiceReconcilerEnabled bool
+	argoRolloutServiceReconcilerEnabled bool
 }
 
 type Reconciler struct {
@@ -60,13 +68,18 @@ type Reconciler struct {
 
 // NewDaprHandler returns a new Dapr handler.
 // This is a reconciler that watches all Deployment and StatefulSet resources and ensures that a matching Service resource is deployed to allow Dapr sidecar-to-sidecar communication and access to other ports.
-func NewDaprHandler(mgr ctrl.Manager, argoRolloutServiceReconcilerEnabled bool) *DaprHandler {
+func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
+	return NewDaprHandlerWithOptions(mgr, defaultOptions)
+}
+
+// NewDaprHandlerWithOptions returns a new Dapr handler with options.
+func NewDaprHandlerWithOptions(mgr ctrl.Manager, opts *Options) *DaprHandler {
 	return &DaprHandler{
 		mgr: mgr,
 
 		Client:                              mgr.GetClient(),
 		Scheme:                              mgr.GetScheme(),
-		ArgoRolloutServiceReconcilerEnabled: argoRolloutServiceReconcilerEnabled,
+		argoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled,
 	}
 }
 
@@ -121,7 +134,7 @@ func (h *DaprHandler) Init() error {
 		return err
 	}
 
-	if h.ArgoRolloutServiceReconcilerEnabled {
+	if h.argoRolloutServiceReconcilerEnabled {
 		_ = argov1alpha1.AddToScheme(h.Scheme)
 		err = ctrl.NewControllerManagedBy(h.mgr).
 			For(&argov1alpha1.Rollout{}).
@@ -348,7 +361,7 @@ func (h *DaprHandler) isReconciled(owner *metaV1.OwnerReference) bool {
 	case appsv1.SchemeGroupVersion.String():
 		return owner.Kind == "Deployment" || owner.Kind == "StatefulSet"
 	case argov1alpha1.SchemeGroupVersion.String():
-		return h.ArgoRolloutServiceReconcilerEnabled && owner.Kind == rollouts.RolloutKind
+		return h.argoRolloutServiceReconcilerEnabled && owner.Kind == rollouts.RolloutKind
 	}
 
 	return false
