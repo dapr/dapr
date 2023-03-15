@@ -87,6 +87,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 			}
 			return s.certificate, nil
 		},
+		MinVersion: tls.VersionTLS12,
 	}
 	return grpc.Creds(credentials.NewTLS(config))
 }
