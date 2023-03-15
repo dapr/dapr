@@ -74,6 +74,7 @@ func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeli
 	if sslEnabled {
 		tlsConfig = &tls.Config{
 			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
 		}
 		scheme = httpsScheme
 	}
