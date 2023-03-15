@@ -70,7 +70,6 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOption {
 	cp := trustBundler.GetTrustAnchors()
 
-	//nolint:gosec
 	config := &tls.Config{
 		ClientCAs: cp,
 		// Require cert verification
