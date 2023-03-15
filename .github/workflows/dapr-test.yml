@@ -33,8 +33,6 @@ on:
   repository_dispatch:
     types: [e2e-test]
 env:
-  # Version of Go
-  GOVER: "^1.19.2"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
@@ -101,7 +99,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -208,13 +206,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2019]
+        os: [ubuntu-22.04, windows-2022]
         target_arch: [amd64]
         include:
           - os: ubuntu-22.04
             target_os: linux
-          - os: windows-2019
+          - os: windows-2022
             target_os: windows
+            windows_version: ltsc2022
           - target_arch: arm64
             target_os: linux
             os: ubuntu-latest
@@ -247,17 +246,17 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           rm.exe "C:/WINDOWS/system32/bash.EXE"
-      - name: Set up Go ${{ env.GOVER }}
-        if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GOVER }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
       - name: Cache Go modules (Linux)
         if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
         uses: actions/cache@v3
@@ -313,6 +312,7 @@ jobs:
           echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
         shell: bash
       - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
@@ -396,11 +396,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target_os: [linux, windows]
+        target_os: [linux]
         target_arch: [amd64, arm64]
-        exclude:
+        include:
           - target_os: windows
-            target_arch: arm64
+            target_arch: amd64
+            windows_version: ltsc2022
     steps:
       - name: Set up log paths
         run: |
@@ -429,17 +430,17 @@ jobs:
                 `PR_NUMBER=${testPayload.issue.number}`
               );
             }
-      - name: Set up Go ${{ env.GOVER }}
-        if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GOVER }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
       - name: Cache Go modules (test)
         if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
         uses: actions/cache@v3
@@ -483,6 +484,7 @@ jobs:
           echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
         shell: bash
       - name: Enable tcpdump
         if: env.TCP_DUMPS == 'true'

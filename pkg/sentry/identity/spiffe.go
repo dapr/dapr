@@ -19,8 +19,8 @@ func CreateSPIFFEID(trustDomain, namespace, appID string) (string, error) {
 	}
 
 	// Validate according to the SPIFFE spec
-	if strings.Contains(trustDomain, ":") {
-		return "", errors.New("trust domain cannot contain the : character")
+	if strings.ContainsRune(trustDomain, ':') {
+		return "", errors.New("trust domain cannot contain the ':' character")
 	}
 	if len([]byte(trustDomain)) > 255 {
 		return "", errors.New("trust domain cannot exceed 255 bytes")

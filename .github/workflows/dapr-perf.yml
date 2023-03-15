@@ -33,8 +33,6 @@ on:
     types: [perf-test]
 
 env:
-  # Version of Go
-  GOVER: "^1.19.2"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
@@ -94,7 +92,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -217,17 +215,17 @@ jobs:
                 `PR_NUMBER=${testPayload.issue.number}`
               );
             }
-      - name: Set up Go ${{ env.GOVER }}
-        if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GOVER }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
       - name: Cache Go modules (perf)
         if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
         uses: actions/cache@v3
@@ -371,17 +369,17 @@ jobs:
                 `PR_NUMBER=${testPayload.issue.number}`
               );
             }
-      - name: Set up Go ${{ env.GOVER }}
-        if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GOVER }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
       - name: Cache Go modules (perf-test)
         if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
         uses: actions/cache@v3

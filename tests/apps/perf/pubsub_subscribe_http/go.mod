@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/perf/pubsub_susbcribe_http
 
-go 1.19
+go 1.20
 
 require (
 	github.com/cloudevents/sdk-go v1.2.0
