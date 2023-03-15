@@ -100,6 +100,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
 | `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
 | `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
+| `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts         | `false` |
 
 ### Dapr Dashboard options:
 | Parameter                               | Description                                                                                                                                                            | Default            |
