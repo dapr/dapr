@@ -235,7 +235,7 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 	}
 
 	// Loading from the state store is only expected in process failure recovery scenarios.
-	wfLogger.Infof("%s: loading activity state", actorID)
+	wfLogger.Debugf("%s: loading activity state", actorID)
 	req := actors.GetStateRequest{
 		ActorType: ActivityActorType,
 		ActorID:   actorID,
