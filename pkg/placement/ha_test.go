@@ -10,7 +10,7 @@ import (
 	hcraft "github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/utils/clock"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
@@ -212,12 +212,14 @@ func TestPlacementHA(t *testing.T) {
 
 func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Server, <-chan struct{}, context.CancelFunc) {
 	t.Helper()
+	clock := clocktesting.NewFakeClock(time.Now())
+
 	srv := raft.New(raft.Options{
 		ID:           fmt.Sprintf("mynode-%d", nodeID),
 		InMem:        true,
 		Peers:        peers,
 		LogStorePath: "",
-		Clock:        &clock.RealClock{},
+		Clock:        clock,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -247,7 +249,17 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 		require.NoError(t, err)
 	}()
 
-	stopFn := func() {
+	go func() {
+		for {
+			select {
+			case <-ready:
+			case <-time.After(time.Millisecond):
+				clock.Step(time.Second * 2)
+			}
+		}
+	}()
+
+	return srv, ready, func() {
 		cancel()
 		select {
 		case <-serverStopped:
@@ -256,8 +268,6 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 			t.Fatal("raft server did not stop in time")
 		}
 	}
-
-	return srv, ready, stopFn
 }
 
 func findLeader(t *testing.T, raftServers []*raft.Server) int {
