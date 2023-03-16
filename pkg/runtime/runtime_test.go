@@ -2050,7 +2050,33 @@ func TestInitSecretStores(t *testing.T) {
 	})
 }
 
+// Used to override log.Fatal/log.Fatalf so it doesn't cause the app to exit
+type loggerNoPanic struct {
+	logger.Logger
+	fatalCalled int
+}
+
+func (l *loggerNoPanic) Fatal(args ...interface{}) {
+	l.fatalCalled++
+	l.Error(args...)
+}
+
+func (l *loggerNoPanic) Fatalf(format string, args ...interface{}) {
+	l.fatalCalled++
+	l.Errorf(format, args...)
+}
+
 func TestMiddlewareBuildPipeline(t *testing.T) {
+	// Change the logger for these tests so it doesn't panic
+	lnp := &loggerNoPanic{
+		Logger: log,
+	}
+	oldLog := log
+	log = lnp
+	defer func() {
+		log = oldLog
+	}()
+
 	t.Run("build when no global config are set", func(t *testing.T) {
 		rt := &DaprRuntime{}
 
@@ -2058,13 +2084,15 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, pipeline.Handlers)
 	})
-	t.Run("build when component does not exists", func(t *testing.T) {
+
+	t.Run("ignore component that does not exists", func(t *testing.T) {
 		rt := &DaprRuntime{
 			globalConfig:   &config.Configuration{},
 			componentsLock: &sync.RWMutex{},
+			runtimeConfig:  &Config{},
 		}
 
-		_, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
 			Handlers: []config.HandlerSpec{
 				{
 					Name:         "not_exists",
@@ -2074,29 +2102,36 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 				},
 			},
 		}, "test")
-		require.NotNil(t, err)
+		require.NoError(t, err)
+		assert.Len(t, pipeline.Handlers, 0)
 	})
-	t.Run("build when component exists", func(t *testing.T) {
-		const name = "fake"
-		typ := fmt.Sprintf("middleware.http.%s", name)
+
+	t.Run("all components exists", func(t *testing.T) {
 		rt := &DaprRuntime{
 			globalConfig:           &config.Configuration{},
 			componentsLock:         &sync.RWMutex{},
 			httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
 			components: []componentsV1alpha1.Component{
 				{
-					TypeMeta: metaV1.TypeMeta{},
 					ObjectMeta: metaV1.ObjectMeta{
-						Name: name,
+						Name: "mymw1",
 					},
 					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    typ,
+						Type:    "middleware.http.fakemw",
 						Version: "v1",
 					},
-					Auth:   componentsV1alpha1.Auth{},
-					Scopes: []string{},
+				},
+				{
+					ObjectMeta: metaV1.ObjectMeta{
+						Name: "mymw2",
+					},
+					Spec: componentsV1alpha1.ComponentSpec{
+						Type:    "middleware.http.fakemw",
+						Version: "v1",
+					},
 				},
 			},
+			runtimeConfig: &Config{},
 		}
 		called := 0
 		rt.httpMiddlewareRegistry.RegisterComponent(
@@ -2108,22 +2143,110 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 					}, nil
 				}
 			},
-			name,
+			"fakemw",
 		)
 
 		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
 			Handlers: []config.HandlerSpec{
 				{
-					Name:         name,
-					Type:         typ,
-					Version:      "v1",
-					SelectorSpec: config.SelectorSpec{},
+					Name:    "mymw1",
+					Type:    "middleware.http.fakemw",
+					Version: "v1",
+				},
+				{
+					Name:    "mymw2",
+					Type:    "middleware.http.fakemw",
+					Version: "v1",
 				},
 			},
 		}, "test")
 		require.NoError(t, err)
-		assert.Len(t, pipeline.Handlers, 1)
+		assert.Len(t, pipeline.Handlers, 2)
+		assert.Equal(t, 2, called)
 	})
+
+	testInitFail := func(ignoreErrors bool) func(t *testing.T) {
+		return func(t *testing.T) {
+			rt := &DaprRuntime{
+				globalConfig:           &config.Configuration{},
+				componentsLock:         &sync.RWMutex{},
+				httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
+				components: []componentsV1alpha1.Component{
+					{
+						ObjectMeta: metaV1.ObjectMeta{
+							Name: "mymw",
+						},
+						Spec: componentsV1alpha1.ComponentSpec{
+							Type:    "middleware.http.fakemw",
+							Version: "v1",
+						},
+					},
+					{
+						ObjectMeta: metaV1.ObjectMeta{
+							Name: "failmw",
+						},
+						Spec: componentsV1alpha1.ComponentSpec{
+							Type:         "middleware.http.fakemw",
+							Version:      "v1",
+							IgnoreErrors: ignoreErrors,
+							Metadata: []componentsV1alpha1.MetadataItem{
+								{Name: "fail", Value: componentsV1alpha1.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
+							},
+						},
+					},
+				},
+				runtimeConfig: &Config{},
+			}
+			called := 0
+			rt.httpMiddlewareRegistry.RegisterComponent(
+				func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
+					called++
+					return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+						if metadata.Properties["fail"] == "true" {
+							return nil, errors.New("simulated failure")
+						}
+
+						return func(next http.Handler) http.Handler {
+							return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+						}, nil
+					}
+				},
+				"fakemw",
+			)
+
+			pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+				Handlers: []config.HandlerSpec{
+					{
+						Name:    "mymw",
+						Type:    "middleware.http.fakemw",
+						Version: "v1",
+					},
+					{
+						Name:    "failmw",
+						Type:    "middleware.http.fakemw",
+						Version: "v1",
+					},
+				},
+			}, "test")
+
+			assert.Equal(t, 2, called)
+
+			if ignoreErrors {
+				require.NoError(t, err)
+				assert.Len(t, pipeline.Handlers, 1)
+			} else {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, "dapr panicked")
+				assert.Equal(t, 1, lnp.fatalCalled)
+
+				// Reset
+				lnp.fatalCalled = 0
+			}
+		}
+	}
+
+	t.Run("one components fails to init", testInitFail(false))
+	t.Run("one components fails to init but ignoreErrors is true", testInitFail(true))
 }
 
 func TestMetadataItemsToPropertiesConversion(t *testing.T) {
