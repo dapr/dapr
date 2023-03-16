@@ -225,6 +225,13 @@ func opDenyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(appResponse{Message: response})
 }
 
+func opRedirectHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Location", "http://localhost:3500/v1.0/invoke/serviceinvocation-callee-1/method/opAllow")
+	w.WriteHeader(http.StatusTemporaryRedirect)
+	response := "opRedirect is called"
+	json.NewEncoder(w).Encode(appResponse{Message: response})
+}
+
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Enter testHandler")
 	var commandBody testCommandRequest
@@ -347,6 +354,8 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/opAllow", opAllowHandler).Methods("POST")
 	router.HandleFunc("/opDeny", opDenyHandler).Methods("POST")
+
+	router.PathPrefix("/opRedirect").Handler(http.HandlerFunc(opRedirectHandler)).Methods("POST")
 
 	router.HandleFunc("/tests/invoke_test", testHandler)
 

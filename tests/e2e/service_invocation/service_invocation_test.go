@@ -26,9 +26,10 @@ import (
 
 	guuid "github.com/google/uuid"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -213,6 +214,22 @@ var serviceinvocationPathTests = []struct {
 	},
 }
 
+var serviceInvocationRedirectTests = []struct {
+	in                 string
+	remoteApp          string
+	appMethod          string
+	expectedResponse   string
+	expectedStatusCode int
+}{
+	{
+		"Test call redirect 307 Api",
+		"serviceinvocation-callee",
+		"opRedirect",
+		"opRedirect is called",
+		307,
+	},
+}
+
 var moreServiceinvocationTests = []struct {
 	in               string
 	path             string
@@ -383,6 +400,32 @@ func TestServiceInvocation(t *testing.T) {
 			err = json.Unmarshal(resp, &appResp)
 			require.NoError(t, err)
 			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
+
+	// test redirect
+	for _, tt := range serviceInvocationRedirectTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			t.Logf("url is '%s'\n", url)
+			resp, code, err := utils.HTTPPostWithStatus(
+				url,
+				body)
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+			require.Equal(t, tt.expectedStatusCode, code)
 		})
 	}
 }
