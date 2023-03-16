@@ -118,7 +118,6 @@ func main() {
 }
 
 func readPubsubEnvVar() error {
-
 	pubSubName = os.Getenv("PUB_SUB_COMPONENT_NAME")
 	topic = os.Getenv("PUB_SUB_TOPIC_NAME")
 	route = os.Getenv("PUB_SUB_ROUTE_NAME")
