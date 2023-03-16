@@ -23,7 +23,7 @@
 name: dapr-perf
 
 on:
-  # Run every 12 hours
+  # Run every 6 hours
   schedule:
     - cron: "0 */6 * * *"
   # Manual trigger
