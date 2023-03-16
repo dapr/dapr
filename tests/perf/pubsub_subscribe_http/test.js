@@ -23,7 +23,7 @@ const subscribeType = __ENV.SUBSCRIBE_TYPE
 const publishType = __ENV.PUBLISH_TYPE || "bulk"
 const httpReqDurationThreshold = __ENV.HTTP_REQ_DURATION_THRESHOLD
 
-const defaultTopic = __ENV.PUB_SUB_TOPIC_NAME
+const defaultTopic = __ENV.PERF_PUBSUB_HTTP_TOPIC_NAME
 const defaultCount = 100
 const hundredBytesMessage = "a".repeat(100)
 

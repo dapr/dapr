@@ -67,9 +67,9 @@ func getAppDescription(pubsubComponent Component, pubsubType string) kube.AppDes
 			"daprtest": pubsubComponent.TestLabel + "-" + pubsubType,
 		},
 		AppEnv: map[string]string{
-			"PUB_SUB_COMPONENT_NAME": pubsubComponent.Name,
-			"PUB_SUB_TOPIC_NAME":     pubsubComponent.Topic,
-			"PUB_SUB_ROUTE_NAME":     pubsubComponent.Route,
+			"PERF_PUBSUB_HTTP_COMPONENT_NAME": pubsubComponent.Name,
+			"PERF_PUBSUB_HTTP_TOPIC_NAME":     pubsubComponent.Topic,
+			"PERF_PUBSUB_HTTP_ROUTE_NAME":     pubsubComponent.Route,
 			"SUBSCRIBE_TYPE":         pubsubType,
 		},
 	}
@@ -121,7 +121,7 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 		loadtest.WithRunnerEnvVar("PUBLISH_TYPE", publishType),
 		loadtest.WithRunnerEnvVar("SUBSCRIBE_TYPE", subscribeType),
 		loadtest.WithRunnerEnvVar("HTTP_REQ_DURATION_THRESHOLD", httpReqDurationThresholdMs),
-		loadtest.WithRunnerEnvVar("PUB_SUB_TOPIC_NAME", component.Topic),
+		loadtest.WithRunnerEnvVar("PERF_PUBSUB_HTTP_TOPIC_NAME", component.Topic),
 	)
 	defer k6Test.Dispose()
 

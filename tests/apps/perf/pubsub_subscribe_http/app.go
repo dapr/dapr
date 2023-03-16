@@ -119,20 +119,20 @@ func main() {
 
 func readPubsubEnvVar() error {
 
-	pubSubName = os.Getenv("PUB_SUB_COMPONENT_NAME")
-	topic = os.Getenv("PUB_SUB_TOPIC_NAME")
-	route = os.Getenv("PUB_SUB_ROUTE_NAME")
+	pubSubName = os.Getenv("PERF_PUBSUB_HTTP_COMPONENT_NAME")
+	topic = os.Getenv("PERF_PUBSUB_HTTP_TOPIC_NAME")
+	route = os.Getenv("PERF_PUBSUB_HTTP_ROUTE_NAME")
 
-	if !validateEnvVar("PUB_SUB_COMPONENT_NAME", pubSubName) {
-		return errors.New("Invalid PUB_SUB_COMPONENT_NAME")
+	if !validateEnvVar("PERF_PUBSUB_HTTP_COMPONENT_NAME", pubSubName) {
+		return errors.New("Invalid PERF_PUBSUB_HTTP_COMPONENT_NAME")
 	}
 
-	if !validateEnvVar("PUB_SUB_TOPIC_NAME", topic) {
-		return errors.New("Invalid PUB_SUB_TOPIC_NAME")
+	if !validateEnvVar("PERF_PUBSUB_HTTP_TOPIC_NAME", topic) {
+		return errors.New("Invalid PERF_PUBSUB_HTTP_TOPIC_NAME")
 	}
 
-	if !validateEnvVar("PUB_SUB_ROUTE_NAME", route) {
-		return errors.New("Invalid PUB_SUB_ROUTE_NAME")
+	if !validateEnvVar("PERF_PUBSUB_HTTP_ROUTE_NAME", route) {
+		return errors.New("Invalid PERF_PUBSUB_HTTP_ROUTE_NAME")
 	}
 
 	return nil
