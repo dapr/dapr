@@ -217,7 +217,7 @@ func (i *injector) Run(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		log.Info("Sidecar injector is shutting down")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err = i.server.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("error while shutting down injector: %v; %v", err, <-errCh)
