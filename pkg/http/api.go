@@ -1718,7 +1718,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			} else {
 				resStatus.Code = statusCode
 			}
-		} else if resStatus.Code < 200 || resStatus.Code > 299 {
+		} else if resStatus.Code < 200 || resStatus.Code > 399 {
 			// We are not returning an `invokeError` here on purpose.
 			// Returning an error that is not an `invokeError` will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned so the "received non-successful status code" is "swallowed" (will appear in logs but won't be returned to the app).
 			return rResp, fmt.Errorf("received non-successful status code: %d", resStatus.Code)
@@ -2302,7 +2302,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			ID:              a.id,
+			Source:          a.id,
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
@@ -2463,7 +2463,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			spanMap[i] = childSpan
 
 			envelope, envelopeErr := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				ID:              a.id,
+				Source:          a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
