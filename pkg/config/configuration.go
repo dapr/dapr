@@ -41,6 +41,8 @@ const (
 	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
 	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
+	// Enables the use of TLS below 1.2, which is insecure
+	AllowInsecureTLS Feature = "AllowInsecureTLS"
 )
 
 // end feature flags section

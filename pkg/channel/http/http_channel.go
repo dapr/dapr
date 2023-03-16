@@ -70,11 +70,14 @@ type Channel struct {
 //nolint:gosec
 func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySizeMB, readBufferSizeKB int) (channel.AppChannel, error) {
 	var tlsConfig *tls.Config
+	var globalConfig *config.Configuration
 	scheme := httpScheme
 	if sslEnabled {
 		tlsConfig = &tls.Config{
 			InsecureSkipVerify: true,
-			MinVersion:         tls.VersionTLS12,
+		}
+		if !globalConfig.IsFeatureEnabled(config.AllowInsecureTLS) {
+			tlsConfig.MinVersion = tls.VersionTLS12
 		}
 		scheme = httpsScheme
 	}
