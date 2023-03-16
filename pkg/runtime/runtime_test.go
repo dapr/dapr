@@ -2941,7 +2941,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent["id"].(string))
+		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), NewRetriableError(nil))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3037,7 +3037,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		expectedError := fmt.Errorf("error from app channel while sending pub/sub event to app: %w", invokeError)
+		expectedError := fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", NewRetriableError(invokeError))
 		assert.Equal(t, expectedError.Error(), err.Error(), "expected errors to match")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3078,7 +3078,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := fmt.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
+		errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
+		expectedClientError := NewRetriableError(errors.New(errMsg))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3131,7 +3132,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		name                        string
 		message                     *pubsubSubscribedMessage
 		responseStatus              runtimev1pb.TopicEventResponse_TopicEventResponseStatus
-		errorExpected               bool
+		expectedError               error
 		noResponseStatus            bool
 		responseError               error
 		validateCloudEventExtension *map[string]interface{}
@@ -3141,14 +3142,17 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			message:          testPubSubMessage,
 			noResponseStatus: true,
 			responseError:    status.Errorf(codes.Unimplemented, "unimplemented method"),
-			errorExpected:    false, // should be dropped with no error
 		},
 		{
 			name:             "failed to publish message to user app with response error",
 			message:          testPubSubMessage,
 			noResponseStatus: true,
 			responseError:    assert.AnError,
-			errorExpected:    true,
+			expectedError: fmt.Errorf(
+				"error returned from app while processing pub/sub event %v: %w",
+				testPubSubMessage.cloudEvent[pubsub.IDField],
+				NewRetriableError(status.Error(codes.Unknown, assert.AnError.Error())),
+			),
 		},
 		{
 			name:             "succeeded to publish message to user app with empty response",
@@ -3169,7 +3173,11 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			name:           "succeeded to publish message to user app with retry",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_RETRY,
-			errorExpected:  true,
+			expectedError: fmt.Errorf(
+				"RETRY status returned from app while processing pub/sub event %v: %w",
+				testPubSubMessage.cloudEvent[pubsub.IDField],
+				NewRetriableError(nil),
+			),
 		},
 		{
 			name:           "succeeded to publish message to user app with drop",
@@ -3180,7 +3188,12 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			name:           "succeeded to publish message to user app with invalid response",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
-			errorExpected:  true,
+			expectedError: fmt.Errorf(
+				"unknown status returned from app while processing pub/sub event %v, status: %v, err: %w",
+				testPubSubMessage.cloudEvent[pubsub.IDField],
+				runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
+				NewRetriableError(nil),
+			),
 		},
 		{
 			name:           "succeeded to publish message to user app and validated cloud event extension attributes",
@@ -3251,10 +3264,10 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			err = rt.publishMessageGRPC(context.Background(), tc.message)
 
 			// assert
-			if tc.errorExpected {
-				assert.Error(t, err, "expected an error")
+			if tc.expectedError != nil {
+				assert.Equal(t, err.Error(), tc.expectedError.Error())
 			} else {
-				assert.Nil(t, err, "expected no error")
+				assert.NoError(t, err)
 			}
 		})
 	}
