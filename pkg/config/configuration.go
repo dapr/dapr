@@ -41,6 +41,9 @@ const (
 	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
 	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
+	// TODO: Remove this feature flag in Dapr 1.13
+	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure
+	AllowInsecureTLSForAppChannel Feature = "AllowInsecureTLSForAppChannel"
 )
 
 // end feature flags section
