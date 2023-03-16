@@ -158,7 +158,7 @@ func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 
 // ProtoWithData returns a copy of the internal InternalInvokeResponse Proto object with the entire data stream read into the Data property.
 func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeResponse, error) {
-	if imr.r == nil || imr.r.Message == nil {
+	if imr.r == nil {
 		return nil, errors.New("message is nil")
 	}
 
@@ -174,7 +174,7 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 
 	// Read the data and store it in the object
 	data, err := imr.RawDataFull()
-	if err != nil {
+	if err != nil || len(data) == 0 {
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{
@@ -241,14 +241,10 @@ func (imr *InvokeMethodResponse) ContentType() string {
 
 // RawData returns the stream body.
 func (imr *InvokeMethodResponse) RawData() (r io.Reader) {
-	m := imr.r.Message
-	if m == nil {
-		return nil
-	}
-
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
-		return bytes.NewReader(m.Data.Value)
+		// HasMessageData() guarantees that the `imr.r.Message` and `imr.r.Message.Data` is not nil
+		return bytes.NewReader(imr.r.Message.Data.Value)
 	}
 
 	return imr.replayableRequest.RawData()

@@ -79,7 +79,6 @@ func (s *server) Run(ctx context.Context, port int, trustBundler ca.TrustRootBun
 func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOption {
 	cp := trustBundler.GetTrustAnchors()
 
-	//nolint:gosec
 	config := &tls.Config{
 		ClientCAs: cp,
 		// Require cert verification
@@ -96,6 +95,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 			}
 			return s.certificate, nil
 		},
+		MinVersion: tls.VersionTLS12,
 	}
 	return grpc.Creds(credentials.NewTLS(config))
 }
