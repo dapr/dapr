@@ -559,7 +559,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
 		// We can't just pass "a.appChannel.HealthProbe" because appChannel may be re-created
-		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
+		a.appHealth = apphealth.New(*a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
 			return a.appChannel.HealthProbe(ctx)
 		})
 		a.appHealth.OnHealthChange(a.appHealthChanged)
@@ -2733,6 +2733,11 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 
 	log.Info("Initiating actor shutdown")
 	a.stopActor()
+
+	if a.appHealth != nil {
+		log.Info("Closing App Health")
+		a.appHealth.Close()
+	}
 
 	log.Infof("Holding shutdown for %s to allow graceful stop of outstanding operations", duration.String())
 	<-time.After(duration)
