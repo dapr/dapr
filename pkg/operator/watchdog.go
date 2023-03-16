@@ -109,6 +109,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	case <-ctx.Done(): // in case context Done, as first iteration can get stuck, and the channel would not be closed
 		return nil
 	case <-firstCompleteCh:
+		// nop
 	}
 
 	// If we only run once, exit when it's done

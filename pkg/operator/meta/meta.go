@@ -6,16 +6,12 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-// IsAnnotatedForDapr whether the dapr enabled annotation is present and true
+// IsAnnotatedForDapr whether the dapr enabled annotation is present and true.
 func IsAnnotatedForDapr(a map[string]string) bool {
-	if v, ok := a[annotations.KeyEnabled]; !ok {
-		return false
-	} else {
-		return utils.IsTruthy(v)
-	}
+	return utils.IsTruthy(a[annotations.KeyEnabled])
 }
 
-// IsSidecarPresent whether the daprd sidecar is present, either because injector added it or because the user did
+// IsSidecarPresent whether the daprd sidecar is present, either because injector added it or because the user did.
 func IsSidecarPresent(labels map[string]string) bool {
 	if _, ok := labels[sidecar.SidecarInjectedLabel]; ok {
 		return true

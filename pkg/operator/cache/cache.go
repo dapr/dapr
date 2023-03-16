@@ -40,9 +40,10 @@ func GetFilteredCache(podSelector labels.Selector) cache.NewCacheFunc {
 	cacheOptions := cache.Options{
 		TransformByObject: getTransformerFunctions(),
 	}
+
 	if podSelector != nil {
-		cacheOptions.SelectorsByObject = // The only pods we are interested are in watchdog. we don't need to list/watch pods that we are almost sure have dapr sidecar already
-		cache.SelectorsByObject{
+		// The only pods we are interested are in watchdog. we don't need to list/watch pods that we are almost sure have dapr sidecar already
+		cacheOptions.SelectorsByObject = cache.SelectorsByObject{
 			&corev1.Pod{}: {
 				Label: podSelector,
 			},
@@ -56,7 +57,7 @@ func GetFilteredCache(podSelector labels.Selector) cache.NewCacheFunc {
 // we set all these objects to store a single one, a sort of sinkhole
 func getTransformerFunctions() cache.TransformByObject {
 	return cache.TransformByObject{
-		&corev1.Pod{}: func(i interface{}) (interface{}, error) {
+		&corev1.Pod{}: func(i any) (any, error) {
 			obj, ok := i.(*corev1.Pod)
 			if !ok { // probably deletedfinalstateunknown
 				return i, nil
@@ -67,17 +68,18 @@ func getTransformerFunctions() cache.TransformByObject {
 				objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
 				objClone.Status = podEmptyStatus
 				return objClone, nil
-			} else {
-				return podDevNull, nil
 			}
+
+			return podDevNull, nil
 		},
-		&appsv1.Deployment{}: func(i interface{}) (interface{}, error) {
+		&appsv1.Deployment{}: func(i any) (any, error) {
 			obj, ok := i.(*appsv1.Deployment)
 			if !ok {
 				return i, nil
 			}
+
 			// store injector deployment as is
-			if v, ok := obj.GetLabels()["app"]; ok && v == operatormeta.SidecarInjectorDeploymentName {
+			if obj.GetLabels()["app"] == operatormeta.SidecarInjectorDeploymentName {
 				return i, nil
 			}
 
@@ -89,15 +91,16 @@ func getTransformerFunctions() cache.TransformByObject {
 				objClone.Spec.Template.Spec = podEmptySpec
 				objClone.Status = deployEmptyStatus
 				return objClone, nil
-			} else {
-				return deployDevNull, nil
 			}
+
+			return deployDevNull, nil
 		},
-		&appsv1.StatefulSet{}: func(i interface{}) (interface{}, error) {
+		&appsv1.StatefulSet{}: func(i any) (any, error) {
 			obj, ok := i.(*appsv1.StatefulSet)
 			if !ok {
 				return i, nil
 			}
+
 			if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
 				// keep metadata but remove the rest
 				objClone := obj.DeepCopy()
@@ -105,9 +108,9 @@ func getTransformerFunctions() cache.TransformByObject {
 				objClone.Spec.Template.Spec = podEmptySpec
 				objClone.Status = stsEmptyStatus
 				return objClone, nil
-			} else {
-				return stsDevNull, nil
 			}
+
+			return stsDevNull, nil
 		},
 	}
 }

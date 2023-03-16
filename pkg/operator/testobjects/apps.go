@@ -18,7 +18,7 @@ type resourceOpts struct {
 func (r resourceOpts) updateMetadata(m *metaV1.ObjectMeta) {
 	if len(r.additionalLabels) != 0 {
 		if m.Labels == nil {
-			m.Labels = make(map[string]string)
+			m.Labels = make(map[string]string, len(r.additionalLabels))
 		}
 		for k, v := range r.additionalLabels {
 			m.Labels[k] = v
@@ -26,7 +26,7 @@ func (r resourceOpts) updateMetadata(m *metaV1.ObjectMeta) {
 	}
 	if len(r.additionalAnnotations) != 0 {
 		if m.Annotations == nil {
-			m.Annotations = make(map[string]string)
+			m.Annotations = make(map[string]string, len(r.additionalAnnotations))
 		}
 		for k, v := range r.additionalAnnotations {
 			m.Annotations[k] = v

@@ -38,7 +38,7 @@ func convertToByGVK[T any](byObject map[client.Object]T) (map[schema.GroupVersio
 
 func getObjectTransformer(t *testing.T, o client.Object) cache2.TransformFunc {
 	transformers := getTransformerFunctions()
-	transformerByGVK, err := convertToByGVK[cache2.TransformFunc](transformers)
+	transformerByGVK, err := convertToByGVK(transformers)
 	require.NoError(t, err)
 
 	gvk, err := apiutil.GVKForObject(o, scheme.Scheme)
@@ -50,7 +50,7 @@ func getObjectTransformer(t *testing.T, o client.Object) cache2.TransformFunc {
 }
 
 func getNewTestStore() cache2.Store {
-	return cache2.NewStore(func(obj interface{}) (string, error) {
+	return cache2.NewStore(func(obj any) (string, error) {
 		o := obj.(client.Object)
 		return o.GetNamespace() + "/" + o.GetName(), nil
 	})
@@ -68,8 +68,8 @@ func Test_podTransformer(t *testing.T) {
 			testobjects.GetPod("test", "true", testobjects.NameNamespace("pod3", "ns3")),
 		}
 
-		for _, p := range pods {
-			p := p
+		for i := range pods {
+			p := pods[i]
 			obj, err := podTransformer(&p)
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
@@ -86,8 +86,8 @@ func Test_podTransformer(t *testing.T) {
 			testobjects.GetPod("test", "no", testobjects.NameNamespace("pod3", "ns3")),
 		}
 
-		for _, p := range pods {
-			p := p
+		for i := range pods {
+			p := pods[i]
 			obj, err := podTransformer(&p)
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
@@ -105,8 +105,8 @@ func Test_podTransformer(t *testing.T) {
 			testobjects.GetPod("test", "no", testobjects.NameNamespace("pod3", "ns3")),
 		}
 
-		for _, p := range pods {
-			p := p // gosec
+		for i := range pods {
+			p := pods[i]
 			obj, err := podTransformer(&p)
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
@@ -127,8 +127,8 @@ func Test_deployTransformer(t *testing.T) {
 			testobjects.GetDeployment("test", "true", testobjects.NameNamespace("pod3", "ns3")),
 		}
 
-		for _, p := range deployments {
-			p := p
+		for i := range deployments {
+			p := deployments[i]
 			obj, err := deployTransformer(&p)
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
@@ -151,8 +151,8 @@ func Test_deployTransformer(t *testing.T) {
 			testobjects.GetDeployment("test", "false", testobjects.NameNamespace("pod3", "ns3")),
 		}
 
-		for _, p := range deployments {
-			p := p
+		for i := range deployments {
+			p := deployments[i]
 			obj, err := deployTransformer(&p)
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
@@ -170,8 +170,8 @@ func Test_deployTransformer(t *testing.T) {
 				testobjects.AddLabels(map[string]string{"app": operatormeta.SidecarInjectorDeploymentName})),
 		}
 
-		for _, p := range deployments {
-			p := p
+		for i := range deployments {
+			p := deployments[i]
 			obj, err := deployTransformer(&p)
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
@@ -192,8 +192,8 @@ func Test_stsTransformer(t *testing.T) {
 			testobjects.GetStatefulSet("test", "true", testobjects.NameNamespace("pod3", "ns3")),
 		}
 
-		for _, p := range statefulsets {
-			p := p
+		for i := range statefulsets {
+			p := statefulsets[i]
 			obj, err := stsTransformer(&p)
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
@@ -216,8 +216,8 @@ func Test_stsTransformer(t *testing.T) {
 			testobjects.GetStatefulSet("test", "false", testobjects.NameNamespace("pod3", "ns3")),
 		}
 
-		for _, p := range statefulsets {
-			p := p
+		for i := range statefulsets {
+			p := statefulsets[i]
 			obj, err := stsTransformer(&p)
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
