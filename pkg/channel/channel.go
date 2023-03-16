@@ -15,6 +15,7 @@ package channel
 
 import (
 	"context"
+	"crypto/tls"
 
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
@@ -24,6 +25,8 @@ import (
 const (
 	// DefaultChannelAddress is the address that user application listen to.
 	DefaultChannelAddress = "127.0.0.1"
+	// AppChannelMinTlsVersion is the minimum TLS version that the app channel will use.
+	AppChannelMinTlsVersion = tls.VersionTLS12
 )
 
 // AppChannel is an abstraction over communications with user code.
