@@ -263,7 +263,7 @@ docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) upgrade --install \
 		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s \
-		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
+		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(BUILD_TAG) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
 		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
@@ -323,7 +323,8 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/placement/... \
 ./pkg/proto/... \
 ./pkg/resiliency/... \
-./pkg/runtime/...
+./pkg/runtime/... \
+./pkg/signals/...
 
 .PHONY: test-race
 test-race:
@@ -347,7 +348,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); go mod tidy -compat=1.19; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.20; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -463,6 +464,37 @@ compile-build-tools:
 ifeq (,$(wildcard $(BUILD_TOOLS)))
 	cd .build-tools; CGO_ENABLED=$(CGO) GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go build -o $(BUILD_TOOLS_BIN) .
 endif
+
+################################################################################
+# Prettier                                                                     #
+################################################################################
+.PHONY: prettier-install prettier-check prettier-format me prettier
+prettier-install:
+	npm install --global prettier
+
+prettier-check:
+	npx prettier --check "*/**/*.{ts,js,mjs,json}"
+
+prettier-format:
+	npx prettier --write "*/**/*.{ts,js,mjs,json}"
+
+# "make me prettier"
+me:
+	@echo "🪄💄🪄💄🪄💄"
+
+prettier:
+	@npx prettier --write "*/**/*.{ts,js,mjs,json}"
+
+################################################################################
+# Targets for components-contrib                                               #
+################################################################################
+.PHONY: update-components-contrib
+# Branch or tag to pin
+COMPONENTS_CONTRIB_BRANCH ?= master
+COMPONENTS_CONTRIB_REPO ?= github.com/dapr/components-contrib
+update-components-contrib:
+	go get -u $(COMPONENTS_CONTRIB_REPO)@$(COMPONENTS_CONTRIB_BRANCH)
+	make modtidy-all
 
 ################################################################################
 # Target: codegen                                                              #

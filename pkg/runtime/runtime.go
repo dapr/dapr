@@ -349,14 +349,16 @@ func (a *DaprRuntime) getPodName() string {
 }
 
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
-	if a.runtimeConfig.Mode == modes.KubernetesMode {
-		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
-		if err != nil {
-			return nil, fmt.Errorf("error creating operator client: %w", err)
-		}
-		return client, nil
+	// Get the operator client only if we're running in Kubernetes and if we need it
+	if a.runtimeConfig.Mode != modes.KubernetesMode {
+		return nil, nil
 	}
-	return nil, nil
+
+	client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
+	if err != nil {
+		return nil, fmt.Errorf("error creating operator client: %w", err)
+	}
+	return client, nil
 }
 
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
@@ -406,6 +408,10 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 			return err
 		}
 		tpStore.RegisterExporter(otelExporter)
+	}
+
+	if !tpStore.HasExporter() && tracingSpec.SamplingRate != "" {
+		tpStore.RegisterExporter(diagUtils.NewNullExporter())
 	}
 
 	// Register a resource
@@ -553,7 +559,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
 		// We can't just pass "a.appChannel.HealthProbe" because appChannel may be re-created
-		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
+		a.appHealth = apphealth.New(*a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
 			return a.appChannel.HealthProbe(ctx)
 		})
 		a.appHealth.OnHealthChange(a.appHealthChanged)
@@ -901,6 +907,12 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			default:
 				pErr = backoff.Permanent(errors.New("invalid application protocol"))
 			}
+			var rErr *RetriableError
+			if errors.As(pErr, &rErr) {
+				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, rErr.Unwrap())
+			} else if pErr != nil {
+				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
+			}
 			return nil, pErr
 		})
 		if err != nil && err != context.Canceled {
@@ -1036,7 +1048,7 @@ func (a *DaprRuntime) initProxy() {
 
 // begin components updates for kubernetes mode.
 func (a *DaprRuntime) beginComponentsUpdates() error {
-	if a.runtimeConfig.Mode != modes.KubernetesMode {
+	if a.operatorClient == nil {
 		return nil
 	}
 
@@ -1605,7 +1617,7 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
-	err = binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
+	err = binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)
@@ -1632,7 +1644,7 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	}
 
 	if binding != nil {
-		err := binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
+		err := binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			return NewInitError(InitComponentFailure, fName, err)
@@ -1652,7 +1664,7 @@ func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		err := store.Init(configuration.Metadata{Base: a.toBaseMetadata(s)})
+		err := store.Init(context.TODO(), configuration.Metadata{Base: a.toBaseMetadata(s)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			return NewInitError(InitComponentFailure, fName, err)
@@ -1679,7 +1691,7 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	// initialization
 	baseMetadata := a.toBaseMetadata(s)
 	props := baseMetadata.Properties
-	err = store.InitLockStore(lock.Metadata{Base: baseMetadata})
+	err = store.InitLockStore(context.TODO(), lock.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)
@@ -1752,7 +1764,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 
 		baseMetadata := a.toBaseMetadata(s)
 		props := baseMetadata.Properties
-		err = store.Init(state.Metadata{Base: baseMetadata})
+		err = store.Init(context.TODO(), state.Metadata{Base: baseMetadata})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			return NewInitError(InitComponentFailure, fName, err)
@@ -1794,7 +1806,7 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription
 	case modes.KubernetesMode:
 		subs = runtimePubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
 	case modes.StandaloneMode:
-		subs = runtimePubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
+		subs = runtimePubsub.DeclarativeLocal(a.runtimeConfig.Standalone.ResourcesPath, log)
 	}
 
 	// only return valid subscriptions for this app id
@@ -1942,7 +1954,7 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	}
 	properties["consumerID"] = consumerID
 
-	err = pubSub.Init(pubsub.Metadata{Base: baseMetadata})
+	err = pubSub.Init(context.TODO(), pubsub.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)
@@ -2111,10 +2123,6 @@ func (a *DaprRuntime) initNameResolution() error {
 		nr.AppPort:      strconv.Itoa(a.runtimeConfig.ApplicationPort),
 		nr.HostAddress:  a.hostAddress,
 		nr.AppID:        a.runtimeConfig.ID,
-		// TODO - change other nr components to use above properties (specifically MDNS component)
-		nr.MDNSInstanceName:    a.runtimeConfig.ID,
-		nr.MDNSInstanceAddress: a.hostAddress,
-		nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
 	}
 
 	if err != nil {
@@ -2145,8 +2153,12 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		WithCustomHTTPMetadata(msg.metadata)
 	defer req.Close()
 
-	if cloudEvent[pubsub.TraceIDField] != nil {
-		traceID := cloudEvent[pubsub.TraceIDField].(string)
+	iTraceID := cloudEvent[pubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[pubsub.TraceIDField]
+	}
+	if iTraceID != nil {
+		traceID := iTraceID.(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.topic, sc, a.globalConfig.Spec.TracingSpec)
 	}
@@ -2157,7 +2169,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 
 	if err != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
+		return fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", NewRetriableError(err))
 	}
 	defer resp.Close()
 
@@ -2189,7 +2201,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 			return nil
 		case pubsub.Retry:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], NewRetriableError(nil))
 		case pubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
@@ -2197,7 +2209,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		}
 		// Consider unknown status field as error and retry
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
+		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[pubsub.IDField], appResponse.Status, NewRetriableError(nil))
 	}
 
 	body, _ := resp.RawDataFull()
@@ -2214,7 +2226,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
 	log.Warnf(errMsg)
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return errors.New(errMsg)
+	return NewRetriableError(errors.New(errMsg))
 }
 
 func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
@@ -2238,13 +2250,13 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
 
-				return decodeErr
+				return fmt.Errorf("error returned from app while processing pub/sub event: %w", NewRetriableError(decodeErr))
 			}
 
 			envelope.Data = decoded
 		} else {
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-			return ErrUnexpectedEnvelopeData
+			return fmt.Errorf("error returned from app while processing pub/sub event: %w", NewRetriableError(ErrUnexpectedEnvelopeData))
 		}
 	} else if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
@@ -2257,7 +2269,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 				envelope.Data = v
 			default:
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-				return ErrUnexpectedEnvelopeData
+				return fmt.Errorf("error returned from app while processing pub/sub event: %w", NewRetriableError(ErrUnexpectedEnvelopeData))
 			}
 		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
 			envelope.Data, _ = json.Marshal(data)
@@ -2265,7 +2277,11 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	var span trace.Span
-	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
+	iTraceID := cloudEvent[pubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[pubsub.TraceIDField]
+	}
+	if iTraceID != nil {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
@@ -2317,7 +2333,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 			return nil
 		}
 
-		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], err)
+		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], NewRetriableError(err))
 		log.Debug(err)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 
@@ -2333,7 +2349,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		return nil
 	case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], NewRetriableError(nil))
 	case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
@@ -2343,7 +2359,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 	// Consider unknown status field as error and retry
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], res.GetStatus())
+	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[pubsub.IDField], res.GetStatus(), NewRetriableError(nil))
 }
 
 func extractCloudEventExtensions(cloudEvent map[string]interface{}) (*structpb.Struct, error) {
@@ -2443,17 +2459,8 @@ func (a *DaprRuntime) isComponentAuthorized(component componentsV1alpha1.Compone
 }
 
 func (a *DaprRuntime) namespaceComponentAuthorizer(component componentsV1alpha1.Component) bool {
-	if a.namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
-		if len(component.Scopes) == 0 {
-			return true
-		}
-
-		// scopes are defined, make sure this runtime ID is authorized
-		for _, s := range component.Scopes {
-			if s == a.runtimeConfig.ID {
-				return true
-			}
-		}
+	if a.namespace == "" || component.ObjectMeta.Namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
+		return component.IsAppScoped(a.runtimeConfig.ID)
 	}
 
 	return false
@@ -2466,19 +2473,15 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	case modes.KubernetesMode:
 		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.namespace, a.operatorClient, a.podName)
 	case modes.StandaloneMode:
-		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
+		loader = components.NewLocalComponents(a.runtimeConfig.Standalone.ResourcesPath...)
 	default:
-		return fmt.Errorf("components loader for mode %s not found", a.runtimeConfig.Mode)
+		return nil
 	}
 
-	log.Info("loading components")
+	log.Info("Loading components…")
 	comps, err := loader.LoadComponents()
 	if err != nil {
 		return err
-	}
-
-	for _, comp := range comps {
-		log.Debugf("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
 	}
 
 	authorizedComps := a.getAuthorizedComponents(comps)
@@ -2492,11 +2495,13 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	// Sure, we could sort the list of authorizedComps... but this is simpler and most certainly faster
 	for _, comp := range authorizedComps {
 		if strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
+			log.Debug("Found component: " + comp.LogName())
 			a.pendingComponents <- comp
 		}
 	}
 	for _, comp := range authorizedComps {
 		if !strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
+			log.Debug("Found component: " + comp.LogName())
 			a.pendingComponents <- comp
 		}
 	}
@@ -2541,7 +2546,7 @@ func (a *DaprRuntime) processComponents() {
 		if err != nil {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
-				log.Warnf("error processing component, daprd process will exit gracefully")
+				log.Warnf("Error processing component, daprd process will exit gracefully")
 				a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 				log.Fatalf(e)
 			}
@@ -2551,15 +2556,15 @@ func (a *DaprRuntime) processComponents() {
 }
 
 func (a *DaprRuntime) flushOutstandingComponents() {
-	log.Info("waiting for all outstanding components to be processed")
+	log.Info("Waiting for all outstanding components to be processed")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
 	a.pendingComponents <- componentsV1alpha1.Component{}
-	log.Info("all outstanding components processed")
+	log.Info("All outstanding components processed")
 }
 
 func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Component) error {
-	log.Debugf("loading component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+	log.Debug("Loading component: " + comp.LogName())
 	res := a.preprocessOneComponent(&comp)
 	if res.unreadyDependency != "" {
 		a.pendingComponentDependents[res.unreadyDependency] = append(a.pendingComponentDependents[res.unreadyDependency], comp)
@@ -2594,7 +2599,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 		return NewInitError(InitComponentFailure, comp.LogName(), err)
 	}
 
-	log.Infof("component loaded. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+	log.Info("Component loaded: " + comp.LogName())
 	a.appendOrReplaceComponents(comp)
 	diag.DefaultMonitoring.ComponentLoaded()
 
@@ -2711,7 +2716,7 @@ func (a *DaprRuntime) ShutdownWithWait() {
 	// Another shutdown signal causes an instant shutdown and interrupts the graceful shutdown
 	go func() {
 		<-ShutdownSignal()
-		log.Info("Received another shutdown signal - shutting down right away")
+		log.Warn("Received another shutdown signal - shutting down right away")
 		os.Exit(0)
 	}()
 
@@ -2746,13 +2751,18 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	log.Info("Initiating actor shutdown")
 	a.stopActor()
 
+	if a.appHealth != nil {
+		log.Info("Closing App Health")
+		a.appHealth.Close()
+	}
+
 	log.Infof("Holding shutdown for %s to allow graceful stop of outstanding operations", duration.String())
 	<-time.After(duration)
 
 	log.Info("Stopping Dapr APIs")
 	for _, closer := range a.apiClosers {
 		if err := closer.Close(); err != nil {
-			log.Warnf("error closing API: %v", err)
+			log.Warnf("Error closing API: %v", err)
 		}
 	}
 	a.stopTrace()
@@ -2785,19 +2795,19 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		secretStoreName := a.authSecretStoreOrDefault(component)
 
-		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
+		// If running in Kubernetes and have an operator client, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
-		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == secretstoresLoader.BuiltinKubernetesSecretStore {
+		if a.operatorClient != nil && secretStoreName == secretstoresLoader.BuiltinKubernetesSecretStore {
 			var jsonVal string
 			err := json.Unmarshal(m.Value.Raw, &jsonVal)
 			if err != nil {
-				log.Errorf("error decoding secret: %s", err)
+				log.Errorf("Error decoding secret: %v", err)
 				continue
 			}
 
 			dec, err := base64.StdEncoding.DecodeString(jsonVal)
 			if err != nil {
-				log.Errorf("error decoding secret: %s", err)
+				log.Errorf("Error decoding secret: %v", err)
 				continue
 			}
 
@@ -2813,7 +2823,7 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		secretStore := a.getSecretStore(secretStoreName)
 		if secretStore == nil {
-			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
+			log.Warnf("Component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
 			return component, secretStoreName
 		}
 
@@ -2827,7 +2837,7 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 				},
 			})
 			if err != nil {
-				log.Errorf("error getting secret: %s", err)
+				log.Errorf("Error getting secret: %v", err)
 				continue
 			}
 			resp = r
@@ -2915,7 +2925,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 
 	if appConfig != nil {
 		a.appConfig = *appConfig
-		log.Info("application configuration loaded")
+		log.Info("Application configuration loaded")
 	}
 }
 
@@ -2979,7 +2989,7 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	err = secretStore.Init(secretstores.Metadata{Base: a.toBaseMetadata(c)})
+	err = secretStore.Init(context.TODO(), secretstores.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return NewInitError(InitComponentFailure, fName, err)

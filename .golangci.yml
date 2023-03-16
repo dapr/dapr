@@ -132,6 +132,7 @@ linters-settings:
       - "github.com/cenkalti/backoff": "must use github.com/cenkalti/backoff/v4"
       - "github.com/cenkalti/backoff/v2": "must use github.com/cenkalti/backoff/v4"
       - "github.com/cenkalti/backoff/v3": "must use github.com/cenkalti/backoff/v4"
+      - "github.com/benbjohnson/clock": "must use k8s.io/utils/clock"
   misspell:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.

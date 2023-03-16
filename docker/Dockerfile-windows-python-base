@@ -1,5 +1,5 @@
 ARG WINDOWS_VERSION=1809
-FROM python:3.7-windowsservercore-$WINDOWS_VERSION as python-servercore
+FROM python:3.9-windowsservercore-$WINDOWS_VERSION as python-servercore
 
 FROM mcr.microsoft.com/windows/nanoserver:$WINDOWS_VERSION
 COPY --from=python-servercore C:\\Python C:\\Python

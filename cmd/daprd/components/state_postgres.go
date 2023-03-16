@@ -14,17 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/bindings/twitter"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/kit/logger"
+	"github.com/dapr/components-contrib/state/postgresql"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
-		return twitter.NewTwitter(l)
-	}, "twitter")
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
-		return twitter.NewTwitter(l)
-	}, "twitter")
+	stateLoader.DefaultRegistry.RegisterComponent(postgresql.NewPostgreSQLStateStore, "postgres", "postgresql")
 }

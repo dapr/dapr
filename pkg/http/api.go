@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -53,6 +53,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -74,6 +75,7 @@ type API interface {
 }
 
 type api struct {
+	universal                  *universalapi.UniversalAPI
 	endpoints                  []Endpoint
 	publicEndpoints            []Endpoint
 	directMessaging            messaging.DirectMessaging
@@ -215,6 +217,12 @@ func NewAPI(opts APIOpts) API {
 		configurationSubscribe:     make(map[string]chan struct{}),
 		isStreamingEnabled:         opts.IsStreamingEnabled,
 		daprRunTimeVersion:         buildinfo.Version(),
+		universal: &universalapi.UniversalAPI{
+			Logger:               log,
+			Resiliency:           opts.Resiliency,
+			SecretStores:         opts.SecretStores,
+			SecretsConfiguration: opts.SecretsConfiguration,
+		},
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -1392,8 +1400,9 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	key := reqCtx.UserValue(secretNameParam).(string)
 
 	if !a.isSecretAllowed(secretStoreName, key) {
-		msg := NewErrorResponse("ERR_PERMISSION_DENIED", fmt.Sprintf(messages.ErrPermissionDenied, key, secretStoreName))
-		respond(reqCtx, withError(fasthttp.StatusForbidden, msg))
+		apiErr := messages.ErrSecretPermissionDenied.WithFormat(key, secretStoreName)
+		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
+		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
 		return
 	}
 
@@ -1415,9 +1424,9 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.SecretInvoked(context.Background(), secretStoreName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse("ERR_SECRET_GET",
-			fmt.Sprintf(messages.ErrSecretGet, req.Name, secretStoreName, err.Error()))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		apiErr := messages.ErrSecretGet.WithFormat(req.Name, secretStoreName, err.Error())
+		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
+		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
 		log.Debug(msg)
 		return
 	}
@@ -1457,9 +1466,9 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.SecretInvoked(context.Background(), secretStoreName, diag.BulkGet, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse("ERR_SECRET_GET",
-			fmt.Sprintf(messages.ErrBulkSecretGet, secretStoreName, err.Error()))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		apiErr := messages.ErrBulkSecretGet.WithFormat(secretStoreName, err.Error())
+		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
+		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
 		log.Debug(msg)
 		return
 	}
@@ -1474,7 +1483,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		if a.isSecretAllowed(secretStoreName, key) {
 			filteredSecrets[key] = v
 		} else {
-			log.Debugf(messages.ErrPermissionDenied, key, secretStoreName)
+			log.Debugf(messages.ErrSecretPermissionDenied.WithFormat(key, secretStoreName).String())
 		}
 	}
 
@@ -1484,16 +1493,18 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getSecretStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (secretstores.SecretStore, string, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
-		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		apiErr := messages.ErrSecretStoreNotConfigured
+		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
+		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
 		return nil, "", errors.New(msg.Message)
 	}
 
 	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
 
 	if a.secretStores[secretStoreName] == nil {
-		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
-		respond(reqCtx, withError(fasthttp.StatusUnauthorized, msg))
+		apiErr := messages.ErrSecretStoreNotFound.WithFormat(secretStoreName)
+		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
+		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
 		return nil, "", errors.New(msg.Message)
 	}
 	return a.secretStores[secretStoreName], secretStoreName, nil
@@ -2595,7 +2606,7 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.outboundReadyStatus {
-		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
+		msg := NewErrorResponse("ERR_OUTBOUND_HEALTH_NOT_READY", messages.ErrOutboundHealthNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {

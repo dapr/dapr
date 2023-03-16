@@ -34,7 +34,7 @@ jobs:
       FOSSA_API_KEY: b88e1f4287c3108c8751bf106fb46db6 # This is a push-only token that is safe to be exposed.
     steps:
       - name: "Checkout code"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: "Run FOSSA Scan"
         uses: fossas/fossa-action@v1.1.0 # Use a specific version if locking is preferred
