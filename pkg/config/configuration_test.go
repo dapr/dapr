@@ -14,6 +14,7 @@ limitations under the License.
 package config
 
 import (
+	"bytes"
 	"os"
 	"reflect"
 	"sort"
@@ -206,15 +207,21 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
 
 		// Spec part encoded as YAML
-		f, err := os.ReadFile("./testdata/override_spec_gen.yaml")
-		require.NoError(t, err)
-		assert.Equal(t, string(f), config.Spec.String())
+		compareWithFile(t, "./testdata/override_spec_gen.yaml", config.Spec.String())
 
 		// Complete YAML
-		f, err = os.ReadFile("./testdata/override_gen.yaml")
-		require.NoError(t, err)
-		assert.Equal(t, string(f), config.String())
+		compareWithFile(t, "./testdata/override_gen.yaml", config.String())
 	})
+}
+
+func compareWithFile(t *testing.T, file string, expect string) {
+	f, err := os.ReadFile(file)
+	require.NoError(t, err)
+
+	// Replace all "\r\n" with "\n" because (*wave hands*, *lesigh*) ... Windows
+	bytes.ReplaceAll(f, []byte{'\r', '\n'}, []byte{'\n'})
+
+	assert.Equal(t, string(f), expect)
 }
 
 func TestSortAndValidateSecretsConfigration(t *testing.T) {
