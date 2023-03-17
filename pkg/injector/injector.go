@@ -15,6 +15,7 @@ package injector
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -115,6 +116,9 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
+			TLSConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
 		},
 		kubeClient: kubeClient,
 		daprClient: daprClient,
