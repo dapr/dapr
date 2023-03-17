@@ -1,0 +1,65 @@
+#
+# Copyright 2023 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: dapr-standalone-validation
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - release-*
+      - feature/*
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - master
+      - release-*
+      - feature/*
+
+jobs:
+  validate-virt-mem:
+    name: Standalone validations
+    runs-on: ubuntu-latest
+    env:
+      GOOS: linux
+      GOARCH: amd64
+      DAPR_INSTALL_URL: https://raw.githubusercontent.com/dapr/cli/master/install/install.sh
+    steps:
+      # This is a good example where we want to always compare against the latest stable release.
+      # Pinning to a given Dapr version does not add any value in this workflow.
+      - name: Install latest Dapr CLI
+        run: wget -q ${{ env.DAPR_INSTALL_URL }} -O - | /bin/bash
+      - name: Initialize with latest Dapr runtime
+        run: dapr init --slim
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+      - name: Build Dapr's sidecar
+        run: make ./dist/${GOOS}_${GOARCH}/release/daprd
+      - name: Validate sidecar's basic resource utilization
+        env:
+          SECONDS_FOR_PROCESS_TO_RUN: 30
+          LIMIT_DELTA_BINARY_SIZE: 1024  # KB
+          LIMIT_DELTA_VIRT_MEM: 3200  # KB
+          LIMIT_DELTA_GO_ROUTINES: 0  # Does not accept any extra Go routines
+        run: ./.github/scripts/validate-sidecar-resources.sh
