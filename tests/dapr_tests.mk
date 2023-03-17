@@ -173,7 +173,7 @@ build-push-e2e-app-$(1): check-e2e-env check-e2e-cache
 		--dockerfile "$(DOCKERFILE)" \
 		--target-os "$(TARGET_OS)" \
 		--target-arch "$(TARGET_ARCH)" \
-		--cache-registry "$(DAPR_CACHE_REGISTRY)"
+		--cache-registry "$(DAPR_CACHE_REGISTRY)" \
 		--windows-version "$(WINDOWS_VERSION)"
 endef
 
