@@ -31,7 +31,7 @@ on:
       - feature/*
 jobs:
   build:
-    name: "Build and test on ${{ job_name }}"
+    name: "Build and test on ${{ matrix.job_name }}"
     runs-on: "${{ matrix.os }}"
     env:
       GOLANGCILINT_VER: "v1.51.2"
