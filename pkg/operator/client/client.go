@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -46,6 +47,7 @@ func GetOperatorClient(address, serverName string, certChain *daprCredentials.Ce
 	}
 
 	config, err := daprCredentials.TLSConfigFromCertAndKey(certChain.Cert, certChain.Key, serverName, cp)
+	config.MinVersion = tls.VersionTLS12
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create tls config from cert and key: %w", err)
 	}

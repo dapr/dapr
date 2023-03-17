@@ -31,6 +31,7 @@ func GetServerOptions(certChain *CertChain) ([]grpc.ServerOption, error) {
 		// Require cert verification
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
 	}
 	opts = append(opts, grpc.Creds(credentials.NewTLS(config)))
 
@@ -46,6 +47,7 @@ func GetClientOptions(certChain *CertChain, serverName string) ([]grpc.DialOptio
 			return nil, errors.New("failed to append PEM root cert to x509 CertPool")
 		}
 		config, err := TLSConfigFromCertAndKey(certChain.Cert, certChain.Key, serverName, cp)
+		config.MinVersion = tls.VersionTLS12
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tls config from cert and key: %w", err)
 		}
