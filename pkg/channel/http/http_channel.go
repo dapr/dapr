@@ -78,6 +78,8 @@ type ChannelConfiguration struct {
 }
 
 // CreateLocalChannel creates an HTTP AppChannel.
+//
+//nolint:gosec
 func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error) {
 	var tlsConfig *tls.Config
 	scheme := httpScheme
