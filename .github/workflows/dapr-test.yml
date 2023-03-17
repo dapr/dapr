@@ -24,9 +24,10 @@
 name: dapr-test
 
 on:
-  # Run every 2 hours
+  # Run every 4 hours on weekdays, and every 12 hours on weekends
   schedule:
-    - cron: "0 */2 * * *"
+    - cron: "11 3,7,11,15,19,23 * * 1-5"
+    - cron: "11 11,23 * * 0,6"
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
