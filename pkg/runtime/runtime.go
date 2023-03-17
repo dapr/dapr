@@ -2943,7 +2943,8 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 		if err != nil {
 			return err
 		}
-		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, pipeline, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		config := a.getAppHTTPChannelConfig(pipeline)
+		ch, err = httpChannel.CreateLocalChannel(config)
 		if err != nil {
 			return err
 		}
@@ -2955,6 +2956,19 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 	a.appChannel = ch
 
 	return nil
+}
+
+func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) httpChannel.ChannelConfiguration {
+	return httpChannel.ChannelConfiguration{
+		Port:                 a.runtimeConfig.ApplicationPort,
+		MaxConcurrency:       a.runtimeConfig.MaxConcurrency,
+		Pipeline:             pipeline,
+		TracingSpec:          a.globalConfig.Spec.TracingSpec,
+		SslEnabled:           a.runtimeConfig.AppSSL,
+		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
+		ReadBufferSizeKB:     a.runtimeConfig.ReadBufferSize,
+		AllowInsecureTLS:     a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS),
+	}
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
@@ -3201,6 +3215,7 @@ func createGRPCManager(runtimeConfig *Config, globalConfig *config.Configuration
 	grpcAppChannelConfig := &grpc.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.Spec.TracingSpec
+		grpcAppChannelConfig.AllowInsecureTLS = globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS)
 	}
 	if runtimeConfig != nil {
 		grpcAppChannelConfig.Port = runtimeConfig.ApplicationPort
