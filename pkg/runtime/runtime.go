@@ -682,30 +682,37 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (httpMiddleware.Pipeline, error) {
-	var handlers []httpMiddleware.Middleware
-
+func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (pipeline httpMiddleware.Pipeline, err error) {
 	if a.globalConfig != nil {
+		pipeline.Handlers = make([]func(next nethttp.Handler) nethttp.Handler, 0, len(spec.Handlers))
 		for i := 0; i < len(spec.Handlers); i++ {
 			middlewareSpec := spec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
-				err := fmt.Errorf(
-					"couldn't find middleware component with name %s and type %s/%s",
-					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version,
-				)
-				return httpMiddleware.Pipeline{}, err
+				// Log the error but continue with initializing the pipeline
+				log.Error("couldn't find middleware component defined in configuration with name %s and type %s/%s",
+					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version)
+				continue
 			}
 			md := middleware.Metadata{Base: a.toBaseMetadata(component)}
 			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
 			if err != nil {
-				return httpMiddleware.Pipeline{}, err
+				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
+				if !component.Spec.IgnoreErrors {
+					log.Warn("error processing middleware component, daprd process will exit gracefully")
+					a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
+					log.Fatal(e)
+					// This error is only caught by tests, since during normal execution we panic
+					return pipeline, errors.New("dapr panicked")
+				}
+				log.Error(e)
+				continue
 			}
 			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
-			handlers = append(handlers, handler)
+			pipeline.Handlers = append(pipeline.Handlers, handler)
 		}
 	}
-	return httpMiddleware.Pipeline{Handlers: handlers}, nil
+	return pipeline, nil
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {

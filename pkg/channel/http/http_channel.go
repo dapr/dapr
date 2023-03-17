@@ -104,6 +104,9 @@ func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error)
 				MaxIdleConnsPerHost:    64,
 				TLSClientConfig:        tlsConfig,
 			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 		baseAddress:           fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, config.Port),
 		tracingSpec:           config.TracingSpec,

@@ -447,9 +447,20 @@ func TestContinueAsNewWorkflow(t *testing.T) {
 			if err := ctx.CreateTimer(0).Await(nil); err != nil {
 				return nil, err
 			}
-			ctx.ContinueAsNew(input + 1)
+			var nextInput int32
+			if err := ctx.CallActivity("PlusOne", input).Await(&nextInput); err != nil {
+				return nil, err
+			}
+			ctx.ContinueAsNew(nextInput)
 		}
 		return input, nil
+	})
+	r.AddActivityN("PlusOne", func(ctx task.ActivityContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input + 1, nil
 	})
 
 	ctx := context.Background()
