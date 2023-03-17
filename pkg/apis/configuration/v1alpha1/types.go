@@ -36,31 +36,31 @@ type Configuration struct {
 // ConfigurationSpec is the spec for an configuration.
 type ConfigurationSpec struct {
 	// +optional
-	AppHTTPPipelineSpec PipelineSpec `json:"appHttpPipeline,omitempty"`
+	AppHTTPPipelineSpec *PipelineSpec `json:"appHttpPipeline,omitempty"`
 	// +optional
-	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
+	HTTPPipelineSpec *PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
-	TracingSpec TracingSpec `json:"tracing,omitempty"`
+	TracingSpec *TracingSpec `json:"tracing,omitempty"`
 	// +kubebuilder:default={enabled:true}
-	MetricSpec MetricSpec `json:"metric,omitempty"`
+	MetricSpec *MetricSpec `json:"metric,omitempty"`
 	// +kubebuilder:default={enabled:true}
-	MetricsSpec MetricSpec `json:"metrics,omitempty"`
+	MetricsSpec *MetricSpec `json:"metrics,omitempty"`
 	// +optional
-	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
+	MTLSSpec *MTLSSpec `json:"mtls,omitempty"`
 	// +optional
-	Secrets SecretsSpec `json:"secrets,omitempty"`
+	Secrets *SecretsSpec `json:"secrets,omitempty"`
 	// +optional
-	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty"`
+	AccessControlSpec *AccessControlSpec `json:"accessControl,omitempty"`
 	// +optional
-	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty"`
+	NameResolutionSpec *NameResolutionSpec `json:"nameResolution,omitempty"`
 	// +optional
 	Features []FeatureSpec `json:"features,omitempty"`
 	// +optional
-	APISpec APISpec `json:"api,omitempty"`
+	APISpec *APISpec `json:"api,omitempty"`
 	// +optional
-	ComponentsSpec ComponentsSpec `json:"components,omitempty"`
+	ComponentsSpec *ComponentsSpec `json:"components,omitempty"`
 	// +optional
-	LoggingSpec LoggingSpec `json:"logging,omitempty"`
+	LoggingSpec *LoggingSpec `json:"logging,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -70,29 +70,29 @@ type APISpec struct {
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
 type APIAccessRule struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name    string `json:"name,omitempty"`
+	Version string `json:"version,omitempty"`
 	// +optional
-	Protocol string `json:"protocol"`
+	Protocol string `json:"protocol,omitempty"`
 }
 
 // NameResolutionSpec is the spec for name resolution configuration.
 type NameResolutionSpec struct {
-	Component     string       `json:"component"`
-	Version       string       `json:"version"`
-	Configuration DynamicValue `json:"configuration"`
+	Component     string        `json:"component,omitempty"`
+	Version       string        `json:"version,omitempty"`
+	Configuration *DynamicValue `json:"configuration,omitempty"`
 }
 
 // SecretsSpec is the spec for secrets configuration.
 type SecretsSpec struct {
-	Scopes []SecretsScope `json:"scopes"`
+	Scopes []SecretsScope `json:"scopes,omitempty"`
 }
 
 // SecretsScope defines the scope for secrets.
 type SecretsScope struct {
 	// +optional
 	DefaultAccess string `json:"defaultAccess,omitempty"`
-	StoreName     string `json:"storeName"`
+	StoreName     string `json:"storeName,omitempty"`
 	// +optional
 	AllowedSecrets []string `json:"allowedSecrets,omitempty"`
 	// +optional
@@ -101,107 +101,107 @@ type SecretsScope struct {
 
 // PipelineSpec defines the middleware pipeline.
 type PipelineSpec struct {
-	Handlers []HandlerSpec `json:"handlers"`
+	Handlers []HandlerSpec `json:"handlers,omitempty"`
 }
 
 // HandlerSpec defines a request handlers.
 type HandlerSpec struct {
-	Name         string       `json:"name"`
-	Type         string       `json:"type"`
-	SelectorSpec SelectorSpec `json:"selector,omitempty"`
+	Name         string        `json:"name,omitempty"`
+	Type         string        `json:"type,omitempty"`
+	SelectorSpec *SelectorSpec `json:"selector,omitempty"`
 }
 
 // MTLSSpec defines mTLS configuration.
 type MTLSSpec struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled,omitempty"`
 	// +optional
-	WorkloadCertTTL string `json:"workloadCertTTL"`
+	WorkloadCertTTL string `json:"workloadCertTTL,omitempty"`
 	// +optional
-	AllowedClockSkew string `json:"allowedClockSkew"`
+	AllowedClockSkew string `json:"allowedClockSkew,omitempty"`
 }
 
 // SelectorSpec selects target services to which the handler is to be applied.
 type SelectorSpec struct {
-	Fields []SelectorField `json:"fields"`
+	Fields []SelectorField `json:"fields,omitempty"`
 }
 
 // SelectorField defines a selector fields.
 type SelectorField struct {
-	Field string `json:"field"`
-	Value string `json:"value"`
+	Field string `json:"field,omitempty"`
+	Value string `json:"value,omitempty"`
 }
 
 // TracingSpec defines distributed tracing configuration.
 type TracingSpec struct {
-	SamplingRate string `json:"samplingRate"`
+	SamplingRate string `json:"samplingRate,omitempty"`
 	// +optional
-	Stdout bool `json:"stdout"`
+	Stdout bool `json:"stdout,omitempty"`
 	// +optional
-	Zipkin ZipkinSpec `json:"zipkin"`
+	Zipkin *ZipkinSpec `json:"zipkin,omitempty"`
 	// +optional
-	Otel OtelSpec `json:"otel"`
+	Otel *OtelSpec `json:"otel,omitempty"`
 }
 
 // OtelSpec defines Otel exporter configurations.
 type OtelSpec struct {
-	Protocol        string `json:"protocol" yaml:"protocol"`
-	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
-	IsSecure        bool   `json:"isSecure" yaml:"isSecure"`
+	Protocol        string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	IsSecure        bool   `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
 type ZipkinSpec struct {
-	EndpointAddresss string `json:"endpointAddress"`
+	EndpointAddresss string `json:"endpointAddress,omitempty"`
 }
 
 // MetricSpec defines metrics configuration.
 type MetricSpec struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled,omitempty"`
 	// +optional
-	Rules []MetricsRule `json:"rules"`
+	Rules []MetricsRule `json:"rules,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.
 type MetricsRule struct {
-	Name   string        `json:"name"`
-	Labels []MetricLabel `json:"labels"`
+	Name   string        `json:"name,omitempty"`
+	Labels []MetricLabel `json:"labels,omitempty"`
 }
 
 // MetricsLabel defines an object that allows to set regex expressions for a label.
 type MetricLabel struct {
-	Name  string            `json:"name"`
-	Regex map[string]string `json:"regex"`
+	Name  string            `json:"name,omitempty"`
+	Regex map[string]string `json:"regex,omitempty"`
 }
 
 // AppPolicySpec defines the policy data structure for each app.
 type AppPolicySpec struct {
-	AppName string `json:"appId" yaml:"appId"`
+	AppName string `json:"appId,omitempty" yaml:"appId,omitempty"`
 	// +optional
-	DefaultAction string `json:"defaultAction" yaml:"defaultAction"`
+	DefaultAction string `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
 	// +optional
-	TrustDomain string `json:"trustDomain" yaml:"trustDomain"`
+	TrustDomain string `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
 	// +optional
-	Namespace string `json:"namespace" yaml:"namespace"`
+	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	// +optional
-	AppOperationActions []AppOperationAction `json:"operations" yaml:"operations"`
+	AppOperationActions []AppOperationAction `json:"operations,omitempty" yaml:"operations,omitempty"`
 }
 
 // AppOperationAction defines the data structure for each app operation.
 type AppOperationAction struct {
-	Operation string `json:"name" yaml:"name"`
+	Operation string `json:"name,omitempty" yaml:"name,omitempty"`
 	// +optional
-	HTTPVerb []string `json:"httpVerb" yaml:"httpVerb"`
-	Action   string   `json:"action" yaml:"action"`
+	HTTPVerb []string `json:"httpVerb,omitempty" yaml:"httpVerb,omitempty"`
+	Action   string   `json:"action,omitempty" yaml:"action,omitempty"`
 }
 
 // AccessControlSpec is the spec object in ConfigurationSpec.
 type AccessControlSpec struct {
 	// +optional
-	DefaultAction string `json:"defaultAction" yaml:"defaultAction"`
+	DefaultAction string `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
 	// +optional
-	TrustDomain string `json:"trustDomain" yaml:"trustDomain"`
+	TrustDomain string `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
 	// +optional
-	AppPolicies []AppPolicySpec `json:"policies" yaml:"policies"`
+	AppPolicies []AppPolicySpec `json:"policies,omitempty" yaml:"policies,omitempty"`
 }
 
 // FeatureSpec defines the features that are enabled/disabled.
@@ -231,7 +231,7 @@ type ConfigurationList struct {
 type LoggingSpec struct {
 	// Configure API logging.
 	// +optional
-	APILogging APILoggingSpec `json:"apiLogging" yaml:"apiLogging"`
+	APILogging *APILoggingSpec `json:"apiLogging,omitempty" yaml:"apiLogging,omitempty"`
 }
 
 // APILoggingSpec defines the configuration for API logging.
@@ -239,16 +239,16 @@ type APILoggingSpec struct {
 	// Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly.
 	// The default value is false.
 	// +optional
-	Enabled bool `json:"enabled" yaml:"enabled"`
+	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	// When enabled, obfuscates the values of URLs in HTTP API logs, logging the route name rather than the full path being invoked, which could contain PII.
 	// Default: false.
 	// This option has no effect if API logging is disabled.
 	// +optional
-	ObfuscateURLs bool `json:"obfuscateURLs" yaml:"obfuscateURLs"`
+	ObfuscateURLs bool `json:"obfuscateURLs,omitempty" yaml:"obfuscateURLs,omitempty"`
 	// If true, health checks are not reported in API logs. Default: false.
 	// This option has no effect if API logging is disabled.
 	// +optional
-	OmitHealthChecks bool `json:"omitHealthChecks" yaml:"omitHealthChecks"`
+	OmitHealthChecks bool `json:"omitHealthChecks,omitempty" yaml:"omitHealthChecks,omitempty"`
 }
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value.

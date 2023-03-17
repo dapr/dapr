@@ -387,8 +387,9 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	// Initialize metrics only if MetricSpec is enabled.
-	if globalConfig.Spec.MetricSpec.Enabled {
-		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+	metricsSpec := globalConfig.GetMetricsSpec()
+	if metricsSpec.GetEnabled() {
+		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, metricsSpec.Rules); mErr != nil {
 			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
 		}
 	}
@@ -420,7 +421,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if enableAPILogging != nil {
 		runtimeConfig.EnableAPILogging = *enableAPILogging
 	} else {
-		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.Enabled
+		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec != nil && globalConfig.Spec.LoggingSpec.APILogging != nil && globalConfig.Spec.LoggingSpec.APILogging.Enabled
 	}
 
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil

@@ -4,7 +4,7 @@ metadata:
   name: daprConfig
 spec:
   features:
-  - name: Actor.Reentrancy
-    enabled: true
-  - name: Test.Feature
-    enabled: false
+    - name: Actor.Reentrancy
+      enabled: true
+    - name: Test.Feature
+      enabled: false

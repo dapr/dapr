@@ -18,28 +18,16 @@ metadata:
     managedfields: []
 spec:
     tracing:
-        samplingRate: ""
-        stdout: false
-        zipkin:
-            endpointAddress: ""
         otel:
-            protocol: ""
-            endpointAddress: ""
             isSecure: true
     mtls:
-        enabled: false
         workloadCertTTL: 25s
         allowedClockSkew: 1h
     metric:
         enabled: true
-        rules: []
-    metrics:
-        enabled: true
-        rules: []
     accessControl:
         defaultAction: allow
         trustDomain: public
-        policies: []
     features:
         - name: Test.Feature
           enabled: true

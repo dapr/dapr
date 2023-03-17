@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestLoadStandaloneConfiguration(t *testing.T) {
@@ -99,7 +100,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				config, err := LoadStandaloneConfiguration(tc.confFile)
 				assert.NoError(t, err)
-				assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
+				assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.GetEnabled())
 			})
 		}
 	})
@@ -166,9 +167,10 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	t.Run("mTLS spec", func(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/mtls_config.yaml")
 		require.NoError(t, err)
-		assert.True(t, config.Spec.MTLSSpec.Enabled)
-		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
-		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
+		mtlsSpec := config.GetMTLSSpec()
+		assert.True(t, mtlsSpec.Enabled)
+		assert.Equal(t, "25s", mtlsSpec.WorkloadCertTTL)
+		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
 	})
 
 	t.Run("multiple configurations", func(t *testing.T) {
@@ -181,9 +183,10 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.False(t, config.IsFeatureEnabled("Test.Feature"))
 
 		// From mtls_config.yaml
-		assert.True(t, config.Spec.MTLSSpec.Enabled)
-		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
-		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
+		mtlsSpec := config.GetMTLSSpec()
+		assert.True(t, mtlsSpec.Enabled)
+		assert.Equal(t, "25s", mtlsSpec.WorkloadCertTTL)
+		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
 	})
 
 	t.Run("multiple configurations with overriding", func(t *testing.T) {
@@ -197,12 +200,18 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.True(t, config.IsFeatureEnabled("Test.Feature"))
 
 		// From mtls_config.yaml
-		assert.False(t, config.Spec.MTLSSpec.Enabled) // Overridden
-		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
-		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
+		mtlsSpec := config.GetMTLSSpec()
+		assert.False(t, mtlsSpec.Enabled) // Overridden
+		assert.Equal(t, "25s", mtlsSpec.WorkloadCertTTL)
+		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
+
+		// Spec part encoded as YAML
+		f, err := os.ReadFile("./testdata/override_spec_gen.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, string(f), config.Spec.String())
 
 		// Complete YAML
-		f, err := os.ReadFile("./testdata/override_gen.yaml")
+		f, err = os.ReadFile("./testdata/override_gen.yaml")
 		require.NoError(t, err)
 		assert.Equal(t, string(f), config.String())
 	})
@@ -222,7 +231,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 			name: "incorrect default access",
 			config: Configuration{
 				Spec: ConfigurationSpec{
-					Secrets: SecretsSpec{
+					Secrets: &SecretsSpec{
 						Scopes: []SecretsScope{
 							{
 								StoreName:     "testStore",
@@ -238,7 +247,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 			name: "empty default access",
 			config: Configuration{
 				Spec: ConfigurationSpec{
-					Secrets: SecretsSpec{
+					Secrets: &SecretsSpec{
 						Scopes: []SecretsScope{
 							{
 								StoreName: "testStore",
@@ -253,7 +262,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 			name: "repeated store Name",
 			config: Configuration{
 				Spec: ConfigurationSpec{
-					Secrets: SecretsSpec{
+					Secrets: &SecretsSpec{
 						Scopes: []SecretsScope{
 							{
 								StoreName:     "testStore",
@@ -273,7 +282,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 			name: "simple secrets config",
 			config: Configuration{
 				Spec: ConfigurationSpec{
-					Secrets: SecretsSpec{
+					Secrets: &SecretsSpec{
 						Scopes: []SecretsScope{
 							{
 								StoreName:      "testStore",
@@ -290,7 +299,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 			name: "case-insensitive default access",
 			config: Configuration{
 				Spec: ConfigurationSpec{
-					Secrets: SecretsSpec{
+					Secrets: &SecretsSpec{
 						Scopes: []SecretsScope{
 							{
 								StoreName:      "testStore",
@@ -309,7 +318,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 			err := tc.config.sortAndValidateSecretsConfiguration()
 			if tc.errorExpected {
 				assert.Error(t, err, "expected validation to fail")
-			} else {
+			} else if tc.config.Spec.Secrets != nil {
 				for _, scope := range tc.config.Spec.Secrets.Scopes {
 					assert.True(t, sort.StringsAreSorted(scope.AllowedSecrets), "expected sorted slice")
 					assert.True(t, sort.StringsAreSorted(scope.DeniedSecrets), "expected sorted slice")
@@ -437,25 +446,67 @@ func TestFeatureEnabled(t *testing.T) {
 }
 
 func TestSortMetrics(t *testing.T) {
-	t.Run("metrics overrides metric", func(t *testing.T) {
+	t.Run("metrics overrides metric - enabled false", func(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
-				MetricSpec: MetricSpec{
-					Enabled: true,
+				MetricSpec: &MetricSpec{
+					Enabled: ptr.Of(true),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
 						},
 					},
 				},
-				MetricsSpec: MetricSpec{
-					Enabled: false,
+				MetricsSpec: &MetricSpec{
+					Enabled: ptr.Of(false),
 				},
 			},
 		}
 
 		config.sortMetricsSpec()
-		assert.False(t, config.Spec.MetricSpec.Enabled)
+		assert.False(t, config.Spec.MetricSpec.GetEnabled())
+		assert.Equal(t, "rule", config.Spec.MetricSpec.Rules[0].Name)
+	})
+
+	t.Run("metrics overrides metric - enabled true", func(t *testing.T) {
+		config := &Configuration{
+			Spec: ConfigurationSpec{
+				MetricSpec: &MetricSpec{
+					Enabled: ptr.Of(false),
+					Rules: []MetricsRule{
+						{
+							Name: "rule",
+						},
+					},
+				},
+				MetricsSpec: &MetricSpec{
+					Enabled: ptr.Of(true),
+				},
+			},
+		}
+
+		config.sortMetricsSpec()
+		assert.True(t, config.Spec.MetricSpec.GetEnabled())
+		assert.Equal(t, "rule", config.Spec.MetricSpec.Rules[0].Name)
+	})
+
+	t.Run("nil metrics enabled doesn't overrides", func(t *testing.T) {
+		config := &Configuration{
+			Spec: ConfigurationSpec{
+				MetricSpec: &MetricSpec{
+					Enabled: ptr.Of(true),
+					Rules: []MetricsRule{
+						{
+							Name: "rule",
+						},
+					},
+				},
+				MetricsSpec: &MetricSpec{},
+			},
+		}
+
+		config.sortMetricsSpec()
+		assert.True(t, config.Spec.MetricSpec.GetEnabled())
 		assert.Equal(t, "rule", config.Spec.MetricSpec.Rules[0].Name)
 	})
 }

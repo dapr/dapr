@@ -35,7 +35,7 @@ const (
 )
 
 func initializeAccessControlList(protocol string) (*config.AccessControlList, error) {
-	inputSpec := config.AccessControlSpec{
+	inputSpec := &config.AccessControlSpec{
 		DefaultAction: config.DenyAccess,
 		TrustDomain:   "abcd",
 		AppPolicies: []config.AppPolicySpec{
@@ -237,7 +237,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 	})
 
 	t.Run("test when no trust domain and namespace specified in app policy", func(t *testing.T) {
-		invalidAccessControlSpec := config.AccessControlSpec{
+		invalidAccessControlSpec := &config.AccessControlSpec{
 			DefaultAction: config.DenyAccess,
 			TrustDomain:   "public",
 			AppPolicies: []config.AppPolicySpec{
@@ -300,7 +300,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 	})
 
 	t.Run("test when no trust domain is specified for the app", func(t *testing.T) {
-		accessControlSpec := config.AccessControlSpec{
+		accessControlSpec := &config.AccessControlSpec{
 			DefaultAction: config.DenyAccess,
 			TrustDomain:   "",
 			AppPolicies: []config.AppPolicySpec{
@@ -330,18 +330,23 @@ func TestParseAccessControlSpec(t *testing.T) {
 	})
 
 	t.Run("test when no access control policy has been specified", func(t *testing.T) {
-		invalidAccessControlSpec := config.AccessControlSpec{
+		accessControlList, err := ParseAccessControlSpec(nil, "http")
+		assert.NoError(t, err)
+		assert.Nil(t, accessControlList)
+
+		invalidAccessControlSpec := &config.AccessControlSpec{
 			DefaultAction: "",
 			TrustDomain:   "",
 			AppPolicies:   []config.AppPolicySpec{},
 		}
 
-		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec, "http")
+		accessControlList, err = ParseAccessControlSpec(invalidAccessControlSpec, "http")
+		assert.NoError(t, err)
 		assert.Nil(t, accessControlList)
 	})
 
 	t.Run("test when no default global action has been specified", func(t *testing.T) {
-		invalidAccessControlSpec := config.AccessControlSpec{
+		invalidAccessControlSpec := &config.AccessControlSpec{
 			TrustDomain: "public",
 			AppPolicies: []config.AppPolicySpec{
 				{
