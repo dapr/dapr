@@ -56,7 +56,8 @@ func FromFlags() (*DaprRuntime, error) {
 	componentsPath := flag.String("components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
 	var resourcesPath stringSliceFlag
 	flag.Var(&resourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
-	config := flag.String("config", "", "Path to config file, or name of a configuration object")
+	var config stringSliceFlag
+	flag.Var(&config, "config", "Path to config file, or name of a configuration object. Can be passed multiple times")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
 	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
@@ -329,9 +330,6 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	var globalConfig *daprGlobalConfig.Configuration
-	var configErr error
-
 	if *enableMTLS || *mode == string(modes.KubernetesMode) {
 		runtimeConfig.CertChain, err = security.GetCertChain()
 		if err != nil {
@@ -351,18 +349,21 @@ func FromFlags() (*DaprRuntime, error) {
 		operatorClient = client
 	}
 
-	var accessControlList *daprGlobalConfig.AccessControlList
 	namespace := os.Getenv("NAMESPACE")
 	podName := os.Getenv("POD_NAME")
 
-	if *config != "" {
+	var (
+		globalConfig *daprGlobalConfig.Configuration
+		configErr    error
+	)
+	if len(config) > 0 {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			log.Debug("Loading Kubernetes config resource: " + *config)
-			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
+			log.Debug("Loading Kubernetes config resources: " + strings.Join(config, ", "))
+			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
-			log.Debug("Loading config from file: " + *config)
-			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
+			log.Debug("Loading config from files: " + strings.Join(config, ", "))
+			globalConfig, configErr = daprGlobalConfig.LoadStandaloneConfiguration(config...)
 		}
 	}
 
@@ -410,7 +411,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 	log.Info("Resiliency configuration loaded")
 
-	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
+	accessControlList, err := acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}

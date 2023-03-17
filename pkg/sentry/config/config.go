@@ -136,7 +136,7 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 
 func getSelfhostedConfig(configName string) (SentryConfig, error) {
 	defaultConfig := getDefaultConfig()
-	daprConfig, _, err := daprGlobalConfig.LoadStandaloneConfiguration(configName)
+	daprConfig, err := daprGlobalConfig.LoadStandaloneConfiguration(configName)
 	if err != nil {
 		return defaultConfig, err
 	}

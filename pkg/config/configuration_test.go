@@ -14,12 +14,15 @@ limitations under the License.
 package config
 
 import (
+	"os"
 	"reflect"
 	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/buildinfo"
 )
 
 func TestLoadStandaloneConfiguration(t *testing.T) {
@@ -47,7 +50,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			config, _, err := LoadStandaloneConfiguration(tc.path)
+			config, err := LoadStandaloneConfiguration(tc.path)
 			if tc.errorExpected {
 				assert.Error(t, err, "Expected an error")
 				assert.Nil(t, config, "Config should not be loaded")
@@ -58,72 +61,151 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		})
 	}
 
-	t.Run("Parse environment variables", func(t *testing.T) {
+	t.Run("parse environment variables", func(t *testing.T) {
 		t.Setenv("DAPR_SECRET", "keepitsecret")
-		config, _, err := LoadStandaloneConfiguration("./testdata/env_variables_config.yaml")
+		config, err := LoadStandaloneConfiguration("./testdata/env_variables_config.yaml")
 		assert.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
 		assert.Equal(t, "keepitsecret", config.Spec.Secrets.Scopes[0].AllowedSecrets[0])
 	})
-}
 
-func TestLoadStandaloneConfigurationKindName(t *testing.T) {
-	t.Run("test Kind and Name", func(t *testing.T) {
-		config, _, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+	t.Run("Kind and Name", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
 		assert.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
 		assert.Equal(t, "secretappconfig", config.ObjectMeta.Name)
 		assert.Equal(t, "Configuration", config.TypeMeta.Kind)
 	})
-}
 
-func TestMetricSpecForStandAlone(t *testing.T) {
-	testCases := []struct {
-		name          string
-		confFile      string
-		metricEnabled bool
-	}{
-		{
-			name:          "metric is enabled by default",
-			confFile:      "./testdata/config.yaml",
-			metricEnabled: true,
-		},
-		{
-			name:          "metric is disabled by config",
-			confFile:      "./testdata/metric_disabled.yaml",
-			metricEnabled: false,
-		},
-	}
+	t.Run("metrics spec", func(t *testing.T) {
+		testCases := []struct {
+			name          string
+			confFile      string
+			metricEnabled bool
+		}{
+			{
+				name:          "metric is enabled by default",
+				confFile:      "./testdata/config.yaml",
+				metricEnabled: true,
+			},
+			{
+				name:          "metric is disabled by config",
+				confFile:      "./testdata/metric_disabled.yaml",
+				metricEnabled: false,
+			},
+		}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			config, _, err := LoadStandaloneConfiguration(tc.confFile)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
-		})
-	}
-}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				config, err := LoadStandaloneConfiguration(tc.confFile)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
+			})
+		}
+	})
 
-func TestComponentsSpecForStandAlone(t *testing.T) {
-	testCases := []struct {
-		name           string
-		confFile       string
-		componentsDeny []string
-	}{
-		{
-			name:           "component deny list",
-			confFile:       "./testdata/components_config.yaml",
-			componentsDeny: []string{"foo.bar", "hello.world/v1"},
-		},
-	}
+	t.Run("components spec", func(t *testing.T) {
+		testCases := []struct {
+			name           string
+			confFile       string
+			componentsDeny []string
+		}{
+			{
+				name:           "component deny list",
+				confFile:       "./testdata/components_config.yaml",
+				componentsDeny: []string{"foo.bar", "hello.world/v1"},
+			},
+		}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			config, _, err := LoadStandaloneConfiguration(tc.confFile)
-			assert.NoError(t, err)
-			assert.True(t, reflect.DeepEqual(tc.componentsDeny, config.Spec.ComponentsSpec.Deny))
-		})
-	}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				config, err := LoadStandaloneConfiguration(tc.confFile)
+				assert.NoError(t, err)
+				assert.True(t, reflect.DeepEqual(tc.componentsDeny, config.Spec.ComponentsSpec.Deny))
+			})
+		}
+	})
+
+	t.Run("features spec", func(t *testing.T) {
+		testCases := []struct {
+			name           string
+			confFile       string
+			featureName    Feature
+			featureEnabled bool
+		}{
+			{
+				name:           "feature is enabled",
+				confFile:       "./testdata/feature_config.yaml",
+				featureName:    Feature("Actor.Reentrancy"),
+				featureEnabled: true,
+			},
+			{
+				name:           "feature is disabled",
+				confFile:       "./testdata/feature_config.yaml",
+				featureName:    Feature("Test.Feature"),
+				featureEnabled: false,
+			},
+			{
+				name:           "feature is disabled if missing",
+				confFile:       "./testdata/feature_config.yaml",
+				featureName:    Feature("Test.Missing"),
+				featureEnabled: false,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				config, err := LoadStandaloneConfiguration(tc.confFile)
+				require.NoError(t, err)
+				config.LoadFeatures()
+				assert.Equal(t, tc.featureEnabled, config.IsFeatureEnabled(tc.featureName))
+			})
+		}
+	})
+
+	t.Run("mTLS spec", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/mtls_config.yaml")
+		require.NoError(t, err)
+		assert.True(t, config.Spec.MTLSSpec.Enabled)
+		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
+		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
+	})
+
+	t.Run("multiple configurations", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/feature_config.yaml", "./testdata/mtls_config.yaml")
+		require.NoError(t, err)
+
+		// From feature_config.yaml
+		config.LoadFeatures()
+		assert.True(t, config.IsFeatureEnabled("Actor.Reentrancy"))
+		assert.False(t, config.IsFeatureEnabled("Test.Feature"))
+
+		// From mtls_config.yaml
+		assert.True(t, config.Spec.MTLSSpec.Enabled)
+		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
+		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
+	})
+
+	t.Run("multiple configurations with overriding", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/feature_config.yaml", "./testdata/mtls_config.yaml", "./testdata/override.yaml")
+		require.NoError(t, err)
+
+		// From feature_config.yaml
+		// Should both be overridden
+		config.LoadFeatures()
+		assert.False(t, config.IsFeatureEnabled("Actor.Reentrancy"))
+		assert.True(t, config.IsFeatureEnabled("Test.Feature"))
+
+		// From mtls_config.yaml
+		assert.False(t, config.Spec.MTLSSpec.Enabled) // Overridden
+		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
+		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
+
+		// Complete YAML
+		f, err := os.ReadFile("./testdata/override_gen.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, string(f), config.String())
+	})
 }
 
 func TestSortAndValidateSecretsConfigration(t *testing.T) {
@@ -224,7 +306,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := sortAndValidateSecretsConfiguration(&tc.config)
+			err := tc.config.sortAndValidateSecretsConfiguration()
 			if tc.errorExpected {
 				assert.Error(t, err, "expected validation to fail")
 			} else {
@@ -340,56 +422,18 @@ func TestFeatureEnabled(t *testing.T) {
 		},
 	}
 	config.LoadFeatures()
+
 	assert.True(t, config.IsFeatureEnabled("testEnabled"))
 	assert.False(t, config.IsFeatureEnabled("testDisabled"))
 	assert.False(t, config.IsFeatureEnabled("testMissing"))
-}
 
-func TestFeatureSpecForStandAlone(t *testing.T) {
-	testCases := []struct {
-		name           string
-		confFile       string
-		featureName    Feature
-		featureEnabled bool
-	}{
-		{
-			name:           "Feature is enabled",
-			confFile:       "./testdata/feature_config.yaml",
-			featureName:    Feature("Actor.Reentrancy"),
-			featureEnabled: true,
-		},
-		{
-			name:           "Feature is disabled",
-			confFile:       "./testdata/feature_config.yaml",
-			featureName:    Feature("Test.Feature"),
-			featureEnabled: false,
-		},
-		{
-			name:           "Feature is disabled if missing",
-			confFile:       "./testdata/feature_config.yaml",
-			featureName:    Feature("Test.Missing"),
-			featureEnabled: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			config, _, err := LoadStandaloneConfiguration(tc.confFile)
-			require.NoError(t, err)
-			config.LoadFeatures()
-			assert.Equal(t, tc.featureEnabled, config.IsFeatureEnabled(tc.featureName))
-		})
-	}
-}
-
-func TestMTLSSpecForStandAlone(t *testing.T) {
-	t.Run("test mtls spec config", func(t *testing.T) {
-		config, _, err := LoadStandaloneConfiguration("./testdata/mtls_config.yaml")
-		require.NoError(t, err)
-		assert.True(t, config.Spec.MTLSSpec.Enabled)
-		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
-		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
-	})
+	// Test config.EnabledFeatures
+	// We sort the values before comparing because order isn't guaranteed (and doesn't matter)
+	actual := config.EnabledFeatures()
+	expect := append([]string{"testEnabled"}, buildinfo.Features()...)
+	sort.Strings(actual)
+	sort.Strings(expect)
+	assert.EqualValues(t, actual, expect)
 }
 
 func TestSortMetrics(t *testing.T) {
@@ -410,7 +454,7 @@ func TestSortMetrics(t *testing.T) {
 			},
 		}
 
-		sortMetricsSpec(config)
+		config.sortMetricsSpec()
 		assert.False(t, config.Spec.MetricSpec.Enabled)
 		assert.Equal(t, "rule", config.Spec.MetricSpec.Rules[0].Name)
 	})

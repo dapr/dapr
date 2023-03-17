@@ -23,7 +23,7 @@ import (
 	"time"
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	yaml "gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -298,95 +298,70 @@ func LoadDefaultConfiguration() *Configuration {
 }
 
 // LoadStandaloneConfiguration gets the path to a config file and loads it into a configuration.
-func LoadStandaloneConfiguration(config string) (*Configuration, string, error) {
-	_, err := os.Stat(config)
-	if err != nil {
-		return nil, "", err
-	}
-
-	b, err := os.ReadFile(config)
-	if err != nil {
-		return nil, "", err
-	}
-
-	// Parse environment variables from yaml
-	b = []byte(os.ExpandEnv(string(b)))
-
+func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 	conf := LoadDefaultConfiguration()
-	err = yaml.Unmarshal(b, conf)
-	if err != nil {
-		return nil, string(b), err
-	}
-	err = sortAndValidateSecretsConfiguration(conf)
-	if err != nil {
-		return nil, string(b), err
+
+	// Load all config files and apply them on top of the default config
+	for _, config := range configs {
+		_, err := os.Stat(config)
+		if err != nil {
+			return nil, err
+		}
+
+		b, err := os.ReadFile(config)
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse environment variables from yaml
+		b = []byte(os.ExpandEnv(string(b)))
+
+		err = yaml.Unmarshal(b, conf)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	sortMetricsSpec(conf)
-	return conf, string(b), nil
-}
-
-// LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
-func LoadKubernetesConfiguration(config, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
-	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
-		Name:      config,
-		Namespace: namespace,
-		PodName:   podName,
-	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
-	if err != nil {
-		return nil, err
-	}
-	if resp.GetConfiguration() == nil {
-		return nil, fmt.Errorf("configuration %s not found", config)
-	}
-	conf := LoadDefaultConfiguration()
-	err = json.Unmarshal(resp.GetConfiguration(), conf)
+	err := conf.sortAndValidateSecretsConfiguration()
 	if err != nil {
 		return nil, err
 	}
 
-	err = sortAndValidateSecretsConfiguration(conf)
-	if err != nil {
-		return nil, err
-	}
-
-	sortMetricsSpec(conf)
+	conf.sortMetricsSpec()
 	return conf, nil
 }
 
-// Apply .metrics if set. If not, retain .metric.
-func sortMetricsSpec(conf *Configuration) {
-	if !conf.Spec.MetricsSpec.Enabled {
-		conf.Spec.MetricSpec.Enabled = false
-	}
+// LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
+func LoadKubernetesConfiguration(configs []string, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+	conf := LoadDefaultConfiguration()
 
-	if len(conf.Spec.MetricsSpec.Rules) > 0 {
-		conf.Spec.MetricSpec.Rules = conf.Spec.MetricsSpec.Rules
-	}
-}
-
-// Validate the secrets configuration and sort to the allowed and denied lists if present.
-func sortAndValidateSecretsConfiguration(conf *Configuration) error {
-	scopes := conf.Spec.Secrets.Scopes
-	set := sets.NewString()
-	for _, scope := range scopes {
-		// validate scope
-		if set.Has(scope.StoreName) {
-			return fmt.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
+	// Load all config objects and apply them on top of the default config
+	for _, config := range configs {
+		resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
+			Name:      config,
+			Namespace: namespace,
+			PodName:   podName,
+		}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
+		if err != nil {
+			return nil, err
 		}
-		if scope.DefaultAccess != "" &&
-			!strings.EqualFold(scope.DefaultAccess, AllowAccess) &&
-			!strings.EqualFold(scope.DefaultAccess, DenyAccess) {
-			return fmt.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
+		if resp.GetConfiguration() == nil {
+			return nil, fmt.Errorf("configuration %s not found", config)
 		}
-		set.Insert(scope.StoreName)
 
-		// modify scope
-		sort.Strings(scope.AllowedSecrets)
-		sort.Strings(scope.DeniedSecrets)
+		err = json.Unmarshal(resp.GetConfiguration(), conf)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return nil
+	err := conf.sortAndValidateSecretsConfiguration()
+	if err != nil {
+		return nil, err
+	}
+
+	conf.sortMetricsSpec()
+	return conf, nil
 }
 
 // IsSecretAllowed Check if the secret is allowed to be accessed.
@@ -453,4 +428,56 @@ func (c Configuration) EnabledFeatures() []string {
 		i++
 	}
 	return features[:i]
+}
+
+// ToYAML returns the Configuration represented as YAML.
+func (c *Configuration) ToYAML() (string, error) {
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// String implements fmt.Stringer and is used for debugging. It returns the Configuration object encoded as YAML.
+func (c *Configuration) String() string {
+	enc, err := c.ToYAML()
+	if err != nil {
+		return "Failed to marshal Configuration object to YAML: " + err.Error()
+	}
+	return enc
+}
+
+// Apply .metrics if set. If not, retain .metric.
+func (c *Configuration) sortMetricsSpec() {
+	if !c.Spec.MetricsSpec.Enabled {
+		c.Spec.MetricSpec.Enabled = false
+	}
+
+	if len(c.Spec.MetricsSpec.Rules) > 0 {
+		c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
+	}
+}
+
+// Validate the secrets configuration and sort to the allowed and denied lists if present.
+func (c *Configuration) sortAndValidateSecretsConfiguration() error {
+	set := sets.NewString()
+	for _, scope := range c.Spec.Secrets.Scopes {
+		// validate scope
+		if set.Has(scope.StoreName) {
+			return fmt.Errorf("%s storeName is repeated in secrets configuration", scope.StoreName)
+		}
+		if scope.DefaultAccess != "" &&
+			!strings.EqualFold(scope.DefaultAccess, AllowAccess) &&
+			!strings.EqualFold(scope.DefaultAccess, DenyAccess) {
+			return fmt.Errorf("defaultAccess %s can be either allow or deny", scope.DefaultAccess)
+		}
+		set.Insert(scope.StoreName)
+
+		// modify scope
+		sort.Strings(scope.AllowedSecrets)
+		sort.Strings(scope.DeniedSecrets)
+	}
+
+	return nil
 }
