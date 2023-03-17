@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub_subscribe_http
+package PubsubSubscribeHTTP
 
 import (
 	"encoding/json"
@@ -172,7 +172,7 @@ func TestPubsubBulkPublishSubscribeHttpPerformance(t *testing.T) {
 
 			threshold := os.Getenv("DAPR_PERF_PUBSUB_SUBSCRIBE_HTTP_THRESHOLD")
 			if threshold == "" {
-				threshold = strconv.Itoa(component.SubscribeHttpThresholdMs)
+				threshold = strconv.Itoa(component.SubscribeHTTPThresholdMs)
 			}
 
 			runTest(t, testAppURL, bulkPubsubType, normalPubsubType, threshold, component)
@@ -200,7 +200,7 @@ func TestPubsubBulkPublishBulkSubscribeHttpPerformance(t *testing.T) {
 
 			threshold := os.Getenv("DAPR_PERF_PUBSUB_BULK_SUBSCRIBE_HTTP_THRESHOLD")
 			if threshold == "" {
-				threshold = strconv.Itoa(component.BulkSubscribeHttpThresholdMs)
+				threshold = strconv.Itoa(component.BulkSubscribeHTTPThresholdMs)
 			}
 
 			runTest(t, bulkTestAppURL, bulkPubsubType, bulkPubsubType, threshold, component)

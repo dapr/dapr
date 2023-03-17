@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub_subscribe_http
+package PubsubSubscribeHTTP
 
 type PubsubComponentConfig struct {
 	Name       string      `yaml:"name"`
@@ -25,8 +25,8 @@ type Component struct {
 	NumHealthChecks              int               `yaml:"numHealthChecks"`
 	TestAppName                  string            `yaml:"testAppName"`
 	TestLabel                    string            `yaml:"testLabel"`
-	SubscribeHttpThresholdMs     int               `yaml:"subscribeHttpThresholdMs"`
-	BulkSubscribeHttpThresholdMs int               `yaml:"bulkSubscribeHttpThresholdMs"`
+	SubscribeHTTPThresholdMs     int               `yaml:"subscribeHTTPThresholdMs"`
+	BulkSubscribeHTTPThresholdMs int               `yaml:"bulkSubscribeHTTPThresholdMs"`
 	ImageName                    string            `yaml:"imageName"`
 	Metadata                     map[string]string `yaml:"metadata,omitempty"`
 	Operations                   []string          `yaml:"operations"`
