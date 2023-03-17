@@ -79,7 +79,7 @@ type api struct {
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
 	getComponentsFn            func() []componentsV1alpha1.Component
-	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
+	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
 	workflowComponents         map[string]wfs.Workflow
@@ -165,7 +165,7 @@ type APIOpts struct {
 	AppChannel                  channel.AppChannel
 	DirectMessaging             messaging.DirectMessaging
 	GetComponentsFn             func() []componentsV1alpha1.Component
-	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 	Resiliency                  resiliency.Provider
 	StateStores                 map[string]state.Store
 	WorkflowsComponents         map[string]wfs.Workflow
@@ -2187,13 +2187,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions, err := a.getSubscriptionsFn()
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_GET_SUBSCRIPTIONS", fmt.Sprintf(messages.ErrPubsubGetSubscriptions, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
+	subscriptions := a.getSubscriptionsFn()
 	ps := []pubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, pubsubSubscription{

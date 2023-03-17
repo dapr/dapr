@@ -2292,7 +2292,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+		getSubscriptionsFn: func() []runtimePubsub.Subscription {
 			return []runtimePubsub.Subscription{
 				{
 					PubsubName:      "test",
@@ -2306,7 +2306,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 						},
 					},
 				},
-			}, nil
+			}
 		},
 	}
 	// PutMetadata only stroes string(request body)
