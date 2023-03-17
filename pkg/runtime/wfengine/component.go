@@ -132,18 +132,18 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 
 func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows.RaiseEventRequest) error {
 	if req.InstanceID == "" {
-		return fmt.Errorf("a workflow instance ID is required")
+		return errors.New("a workflow instance ID is required")
 	}
 
 	if req.EventName == "" {
-		return fmt.Errorf("an event name is required")
+		return errors.New("an event name is required")
 	}
 
 	if err := c.client.RaiseEvent(ctx, api.InstanceID(req.InstanceID), req.EventName, req.Input); err != nil {
 		return fmt.Errorf("failed to raise event %s on workflow %s: %w", req.EventName, req.InstanceID, err)
 	}
 
-	c.logger.Infof("raised event %s on workflow instance '%s'", req.EventName, req.InstanceID)
+	c.logger.Infof("Raised event %s on workflow instance '%s'", req.EventName, req.InstanceID)
 	return nil
 }
 
