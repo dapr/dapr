@@ -104,7 +104,7 @@ const (
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
 	TestLockName         = "testlock"
-	componentsDir        = "./components"
+	resourcesDir         = "./components"
 	maxGRPCServerUptime  = 200 * time.Millisecond
 )
 
@@ -231,7 +231,7 @@ func TestNewRuntime(t *testing.T) {
 
 // writeComponentToDisk the given content into a file inside components directory.
 func writeComponentToDisk(content any, fileName string) (cleanup func(), error error) {
-	filePath := fmt.Sprintf("%s/%s", componentsDir, fileName)
+	filePath := fmt.Sprintf("%s/%s", resourcesDir, fileName)
 	b, err := yaml.Marshal(content)
 	if err != nil {
 		return nil, err
@@ -804,14 +804,11 @@ func TestInitNameResolution(t *testing.T) {
 		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
 			Name: resolverName,
 			Properties: map[string]string{
-				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
-				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
-				nameresolution.AppPort:             strconv.Itoa(rt.runtimeConfig.ApplicationPort),
-				nameresolution.HostAddress:         rt.hostAddress,
-				nameresolution.AppID:               rt.runtimeConfig.ID,
-				nameresolution.MDNSInstanceName:    rt.runtimeConfig.ID,
-				nameresolution.MDNSInstanceAddress: rt.hostAddress,
-				nameresolution.MDNSInstancePort:    strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
+				nameresolution.DaprHTTPPort: strconv.Itoa(rt.runtimeConfig.HTTPPort),
+				nameresolution.DaprPort:     strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
+				nameresolution.AppPort:      strconv.Itoa(rt.runtimeConfig.ApplicationPort),
+				nameresolution.HostAddress:  rt.hostAddress,
+				nameresolution.AppID:        rt.runtimeConfig.ID,
 			},
 		}}
 
@@ -900,6 +897,12 @@ func TestSetupTracing(t *testing.T) {
 		name:          "no trace exporter",
 		tracingConfig: config.TracingSpec{},
 	}, {
+		name: "sampling rate 1 without trace exporter",
+		tracingConfig: config.TracingSpec{
+			SamplingRate: "1",
+		},
+		expectedExporters: []sdktrace.SpanExporter{&diagUtils.NullExporter{}},
+	}, {
 		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
 			Zipkin: config.ZipkinSpec{
@@ -971,7 +974,10 @@ func TestSetupTracing(t *testing.T) {
 			if err := rt.setupTracing(rt.hostAddress, tpStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
-				assert.Nil(t, err)
+				assert.NoError(t, err)
+			}
+			if len(tc.expectedExporters) > 0 {
+				assert.True(t, tpStore.HasExporter())
 			}
 			for i, exporter := range tpStore.exporters {
 				// Exporter types don't expose internals, so we can only validate that
@@ -1032,15 +1038,15 @@ func TestMetadataUUID(t *testing.T) {
 		metadata := args.Get(0).(pubsub.Metadata)
 		consumerID := metadata.Properties["consumerID"]
 		uuid0, err := uuid.Parse(consumerID)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		twoUUIDs := metadata.Properties["twoUUIDs"]
 		uuids := strings.Split(twoUUIDs, " ")
 		assert.Equal(t, 2, len(uuids))
 		uuid1, err := uuid.Parse(uuids[0])
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		uuid2, err := uuid.Parse(uuids[1])
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		assert.NotEqual(t, uuid0, uuid1)
 		assert.NotEqual(t, uuid0, uuid2)
@@ -1048,7 +1054,7 @@ func TestMetadataUUID(t *testing.T) {
 	})
 
 	err := rt.processComponentAndDependents(pubsubComponent)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestMetadataPodName(t *testing.T) {
@@ -1094,7 +1100,7 @@ func TestMetadataPodName(t *testing.T) {
 	})
 
 	err := rt.processComponentAndDependents(pubsubComponent)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestMetadataNamespace(t *testing.T) {
@@ -1141,7 +1147,7 @@ func TestMetadataNamespace(t *testing.T) {
 	})
 
 	err := rt.processComponentAndDependents(pubsubComponent)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestMetadataAppID(t *testing.T) {
@@ -1189,7 +1195,7 @@ func TestMetadataAppID(t *testing.T) {
 	})
 
 	err := rt.processComponentAndDependents(pubsubComponent)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestOnComponentUpdated(t *testing.T) {
@@ -1340,7 +1346,7 @@ func TestConsumerID(t *testing.T) {
 	})
 
 	err := rt.processComponentAndDependents(pubsubComponent)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestInitPubSub(t *testing.T) {
@@ -1436,7 +1442,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		rt.startSubscriptions()
@@ -1468,7 +1474,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		rt.startSubscriptions()
@@ -1494,7 +1500,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		rt.startSubscriptions()
@@ -1528,7 +1534,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		rts.appChannel = nil
 		routes, err := rts.getTopicRoutes()
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 0, len(routes))
 	})
 
@@ -1536,16 +1542,16 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(componentsDir, 0o777))
-		defer os.RemoveAll(componentsDir)
+		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
+		defer os.RemoveAll(resourcesDir)
 
 		s := testDeclarativeSubscription()
 
 		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1560,17 +1566,17 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(componentsDir, 0o777))
-		defer os.RemoveAll(componentsDir)
+		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
+		defer os.RemoveAll(resourcesDir)
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{TestRuntimeConfigID}
 
 		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1586,17 +1592,17 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(componentsDir, 0o777))
-		defer os.RemoveAll(componentsDir)
+		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
+		defer os.RemoveAll(resourcesDir)
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
 
 		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		assert.Len(t, subs, 0)
 	})
@@ -1618,7 +1624,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		rt.startSubscriptions()
@@ -1648,7 +1654,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		rt.startSubscriptions()
@@ -1678,7 +1684,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		// assert
@@ -1707,7 +1713,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		rt.startSubscriptions()
@@ -1726,7 +1732,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
@@ -1746,7 +1752,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 		})
 
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 
 		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
@@ -1767,7 +1773,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 		})
 
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 	})
 
@@ -1841,7 +1847,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		}
 
 		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
@@ -1853,7 +1859,7 @@ func TestInitPubSub(t *testing.T) {
 			Metadata:   md,
 		})
 
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		err = rt.Publish(&pubsub.PublishRequest{
@@ -1861,7 +1867,7 @@ func TestInitPubSub(t *testing.T) {
 			Topic:      "topic1",
 		})
 
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("test publish, topic not allowed", func(t *testing.T) {
@@ -2044,7 +2050,33 @@ func TestInitSecretStores(t *testing.T) {
 	})
 }
 
+// Used to override log.Fatal/log.Fatalf so it doesn't cause the app to exit
+type loggerNoPanic struct {
+	logger.Logger
+	fatalCalled int
+}
+
+func (l *loggerNoPanic) Fatal(args ...interface{}) {
+	l.fatalCalled++
+	l.Error(args...)
+}
+
+func (l *loggerNoPanic) Fatalf(format string, args ...interface{}) {
+	l.fatalCalled++
+	l.Errorf(format, args...)
+}
+
 func TestMiddlewareBuildPipeline(t *testing.T) {
+	// Change the logger for these tests so it doesn't panic
+	lnp := &loggerNoPanic{
+		Logger: log,
+	}
+	oldLog := log
+	log = lnp
+	defer func() {
+		log = oldLog
+	}()
+
 	t.Run("build when no global config are set", func(t *testing.T) {
 		rt := &DaprRuntime{}
 
@@ -2052,13 +2084,15 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, pipeline.Handlers)
 	})
-	t.Run("build when component does not exists", func(t *testing.T) {
+
+	t.Run("ignore component that does not exists", func(t *testing.T) {
 		rt := &DaprRuntime{
 			globalConfig:   &config.Configuration{},
 			componentsLock: &sync.RWMutex{},
+			runtimeConfig:  &Config{},
 		}
 
-		_, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
 			Handlers: []config.HandlerSpec{
 				{
 					Name:         "not_exists",
@@ -2068,29 +2102,36 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 				},
 			},
 		}, "test")
-		require.NotNil(t, err)
+		require.NoError(t, err)
+		assert.Len(t, pipeline.Handlers, 0)
 	})
-	t.Run("build when component exists", func(t *testing.T) {
-		const name = "fake"
-		typ := fmt.Sprintf("middleware.http.%s", name)
+
+	t.Run("all components exists", func(t *testing.T) {
 		rt := &DaprRuntime{
 			globalConfig:           &config.Configuration{},
 			componentsLock:         &sync.RWMutex{},
 			httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
 			components: []componentsV1alpha1.Component{
 				{
-					TypeMeta: metaV1.TypeMeta{},
 					ObjectMeta: metaV1.ObjectMeta{
-						Name: name,
+						Name: "mymw1",
 					},
 					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    typ,
+						Type:    "middleware.http.fakemw",
 						Version: "v1",
 					},
-					Auth:   componentsV1alpha1.Auth{},
-					Scopes: []string{},
+				},
+				{
+					ObjectMeta: metaV1.ObjectMeta{
+						Name: "mymw2",
+					},
+					Spec: componentsV1alpha1.ComponentSpec{
+						Type:    "middleware.http.fakemw",
+						Version: "v1",
+					},
 				},
 			},
+			runtimeConfig: &Config{},
 		}
 		called := 0
 		rt.httpMiddlewareRegistry.RegisterComponent(
@@ -2102,22 +2143,110 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 					}, nil
 				}
 			},
-			name,
+			"fakemw",
 		)
 
 		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
 			Handlers: []config.HandlerSpec{
 				{
-					Name:         name,
-					Type:         typ,
-					Version:      "v1",
-					SelectorSpec: config.SelectorSpec{},
+					Name:    "mymw1",
+					Type:    "middleware.http.fakemw",
+					Version: "v1",
+				},
+				{
+					Name:    "mymw2",
+					Type:    "middleware.http.fakemw",
+					Version: "v1",
 				},
 			},
 		}, "test")
 		require.NoError(t, err)
-		assert.Len(t, pipeline.Handlers, 1)
+		assert.Len(t, pipeline.Handlers, 2)
+		assert.Equal(t, 2, called)
 	})
+
+	testInitFail := func(ignoreErrors bool) func(t *testing.T) {
+		return func(t *testing.T) {
+			rt := &DaprRuntime{
+				globalConfig:           &config.Configuration{},
+				componentsLock:         &sync.RWMutex{},
+				httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
+				components: []componentsV1alpha1.Component{
+					{
+						ObjectMeta: metaV1.ObjectMeta{
+							Name: "mymw",
+						},
+						Spec: componentsV1alpha1.ComponentSpec{
+							Type:    "middleware.http.fakemw",
+							Version: "v1",
+						},
+					},
+					{
+						ObjectMeta: metaV1.ObjectMeta{
+							Name: "failmw",
+						},
+						Spec: componentsV1alpha1.ComponentSpec{
+							Type:         "middleware.http.fakemw",
+							Version:      "v1",
+							IgnoreErrors: ignoreErrors,
+							Metadata: []componentsV1alpha1.MetadataItem{
+								{Name: "fail", Value: componentsV1alpha1.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
+							},
+						},
+					},
+				},
+				runtimeConfig: &Config{},
+			}
+			called := 0
+			rt.httpMiddlewareRegistry.RegisterComponent(
+				func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
+					called++
+					return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+						if metadata.Properties["fail"] == "true" {
+							return nil, errors.New("simulated failure")
+						}
+
+						return func(next http.Handler) http.Handler {
+							return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+						}, nil
+					}
+				},
+				"fakemw",
+			)
+
+			pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+				Handlers: []config.HandlerSpec{
+					{
+						Name:    "mymw",
+						Type:    "middleware.http.fakemw",
+						Version: "v1",
+					},
+					{
+						Name:    "failmw",
+						Type:    "middleware.http.fakemw",
+						Version: "v1",
+					},
+				},
+			}, "test")
+
+			assert.Equal(t, 2, called)
+
+			if ignoreErrors {
+				require.NoError(t, err)
+				assert.Len(t, pipeline.Handlers, 1)
+			} else {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, "dapr panicked")
+				assert.Equal(t, 1, lnp.fatalCalled)
+
+				// Reset
+				lnp.fatalCalled = 0
+			}
+		}
+	}
+
+	t.Run("one components fails to init", testInitFail(false))
+	t.Run("one components fails to init but ignoreErrors is true", testInitFail(true))
 }
 
 func TestMetadataItemsToPropertiesConversion(t *testing.T) {
@@ -2286,33 +2415,6 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
-		assert.Empty(t, unready)
-	})
-
-	t.Run("Kubernetes Mode - no value without operator", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = componentsV1alpha1.DynamicValue{
-			JSON: v1.JSON{Raw: []byte("")},
-		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = componentsV1alpha1.SecretKeyRef{
-			Key:  "key1",
-			Name: "name1",
-		}
-
-		rt := NewTestDaprRuntime(modes.KubernetesMode)
-		defer stopRuntime(t, rt)
-		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.RegisterComponent(
-			func(_ logger.Logger) secretstores.SecretStore {
-				return m
-			},
-			secretstoresLoader.BuiltinKubernetesSecretStore,
-		)
-
-		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		assertBuiltInSecretStore(t, rt)
-
-		mod, unready := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "", mod.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
 	})
 
@@ -2595,7 +2697,7 @@ func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
 	go func() {
 		for comp := range rt.pendingComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			if comp.Name == secretstoresLoader.BuiltinKubernetesSecretStore {
 				wg.Done()
 			}
@@ -2820,7 +2922,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "", []byte("Test Message"), "", "")
 	b, err := json.Marshal(envelope)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	testPubSubMessage := &pubsubSubscribedMessage{
 		cloudEvent: envelope,
@@ -2860,7 +2962,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -2878,7 +2980,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			[]byte("Test Message"), "", "")
 		delete(envelopeNoTraceID, pubsub.TraceIDField)
 		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		message := &pubsubSubscribedMessage{
 			cloudEvent: envelopeNoTraceID,
@@ -2900,7 +3002,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err = rt.publishMessageHTTP(context.Background(), message)
 
 		// assert
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -2920,7 +3022,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -2940,7 +3042,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -2962,7 +3064,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent["id"].(string))
+		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), NewRetriableError(nil))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -2983,7 +3085,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -3058,7 +3160,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		expectedError := fmt.Errorf("error from app channel while sending pub/sub event to app: %w", invokeError)
+		expectedError := fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", NewRetriableError(invokeError))
 		assert.Equal(t, expectedError.Error(), err.Error(), "expected errors to match")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3099,7 +3201,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := fmt.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
+		errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
+		expectedClientError := NewRetriableError(errors.New(errMsg))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3118,7 +3221,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
 	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	b, err := json.Marshal(envelope)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	testPubSubMessage := &pubsubSubscribedMessage{
 		cloudEvent: envelope,
@@ -3138,7 +3241,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
 	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	base64, err := json.Marshal(envelope)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	testPubSubMessageBase64 := &pubsubSubscribedMessage{
 		cloudEvent: envelope,
@@ -3152,7 +3255,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		name                        string
 		message                     *pubsubSubscribedMessage
 		responseStatus              runtimev1pb.TopicEventResponse_TopicEventResponseStatus
-		errorExpected               bool
+		expectedError               error
 		noResponseStatus            bool
 		responseError               error
 		validateCloudEventExtension *map[string]interface{}
@@ -3162,14 +3265,17 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			message:          testPubSubMessage,
 			noResponseStatus: true,
 			responseError:    status.Errorf(codes.Unimplemented, "unimplemented method"),
-			errorExpected:    false, // should be dropped with no error
 		},
 		{
 			name:             "failed to publish message to user app with response error",
 			message:          testPubSubMessage,
 			noResponseStatus: true,
 			responseError:    assert.AnError,
-			errorExpected:    true,
+			expectedError: fmt.Errorf(
+				"error returned from app while processing pub/sub event %v: %w",
+				testPubSubMessage.cloudEvent[pubsub.IDField],
+				NewRetriableError(status.Error(codes.Unknown, assert.AnError.Error())),
+			),
 		},
 		{
 			name:             "succeeded to publish message to user app with empty response",
@@ -3190,7 +3296,11 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			name:           "succeeded to publish message to user app with retry",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_RETRY,
-			errorExpected:  true,
+			expectedError: fmt.Errorf(
+				"RETRY status returned from app while processing pub/sub event %v: %w",
+				testPubSubMessage.cloudEvent[pubsub.IDField],
+				NewRetriableError(nil),
+			),
 		},
 		{
 			name:           "succeeded to publish message to user app with drop",
@@ -3201,7 +3311,12 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			name:           "succeeded to publish message to user app with invalid response",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
-			errorExpected:  true,
+			expectedError: fmt.Errorf(
+				"unknown status returned from app while processing pub/sub event %v, status: %v, err: %w",
+				testPubSubMessage.cloudEvent[pubsub.IDField],
+				runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
+				NewRetriableError(nil),
+			),
 		},
 		{
 			name:           "succeeded to publish message to user app and validated cloud event extension attributes",
@@ -3272,10 +3387,10 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			err = rt.publishMessageGRPC(context.Background(), tc.message)
 
 			// assert
-			if tc.errorExpected {
-				assert.Error(t, err, "expected an error")
+			if tc.expectedError != nil {
+				assert.Equal(t, err.Error(), tc.expectedError.Error())
 			} else {
-				assert.Nil(t, err, "expected no error")
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -3333,11 +3448,11 @@ func TestPubsubLifecycle(t *testing.T) {
 	}, "mockPubSubBeta")
 
 	err := rt.processComponentAndDependents(comp1)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	err = rt.processComponentAndDependents(comp2)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	err = rt.processComponentAndDependents(comp3)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	forEachPubSub := func(f func(name string, comp *daprt.InMemoryPubsub)) int {
 		i := 0
@@ -3863,7 +3978,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Topic:      "topic0",
 			Data:       []byte(`{"id":"1"}`),
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
 		// Ensure the message is sent to dead letter topic.
@@ -3910,7 +4025,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Topic:      "topic0",
 			Data:       []byte(`{"id":"1"}`),
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
 		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
 		assert.True(t, pubsubIns.pubCount["topic0"] >= 1)
@@ -4059,10 +4174,8 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int)
 	return NewRuntimeConfig(NewRuntimeConfigOpts{
 		ID:                           TestRuntimeConfigID,
 		PlacementAddresses:           []string{"10.10.10.12"},
-		controlPlaneAddress:          "10.10.10.11",
+		ControlPlaneAddress:          "10.10.10.11",
 		AllowedOrigins:               cors.DefaultAllowedOrigins,
-		GlobalConfig:                 "globalConfig",
-		ComponentsPath:               "",
 		AppProtocol:                  protocol,
 		Mode:                         string(mode),
 		HTTPPort:                     DefaultDaprHTTPPort,
@@ -4103,11 +4216,11 @@ func TestMTLS(t *testing.T) {
 		t.Setenv(sentryConsts.CertKeyEnvVar, "b")
 
 		certChain, err := security.GetCertChain()
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		rt.runtimeConfig.CertChain = certChain
 
 		err = rt.establishSecurity(rt.runtimeConfig.SentryServiceAddress)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, rt.authenticator)
 	})
 
@@ -4116,7 +4229,7 @@ func TestMTLS(t *testing.T) {
 		defer stopRuntime(t, rt)
 
 		err := rt.establishSecurity(rt.runtimeConfig.SentryServiceAddress)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Nil(t, rt.authenticator)
 	})
 
@@ -4193,7 +4306,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			Data:      []byte(""),
 			Operation: bindings.CreateOperation,
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("output binding invalid operation", func(t *testing.T) {
@@ -4721,7 +4834,7 @@ func TestBindingTracingHttp(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
 		req := mockAppChannel.Calls[0].Arguments.Get(1).(*invokev1.InvokeMethodRequest)
@@ -4735,7 +4848,7 @@ func TestBindingTracingHttp(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
 		req := mockAppChannel.Calls[0].Arguments.Get(1).(*invokev1.InvokeMethodRequest)
@@ -4749,7 +4862,7 @@ func TestBindingTracingHttp(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "I am not a traceparent"})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
 	})
@@ -4811,7 +4924,7 @@ func TestBindingResiliency(t *testing.T) {
 		}
 		_, err := r.sendToOutputBinding("failOutput", req)
 
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputFailingKey"))
 	})
 

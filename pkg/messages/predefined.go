@@ -85,7 +85,8 @@ const (
 	ErrMetadataGet = "failed deserializing metadata: %s"
 
 	// Healthz.
-	ErrHealthNotReady = "dapr is not ready"
+	ErrHealthNotReady         = "dapr is not ready"
+	ErrOutboundHealthNotReady = "dapr outbound is not ready"
 
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
@@ -106,17 +107,6 @@ const (
 	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
 	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
 	ErrLockStoreNotFound          = "lock store %s not found"
-
-	// Workflow
-	ErrWorkflowNameMissing           = "workflow name is not configured"
-	ErrMissingOrEmptyInstance        = "no instance or empty instance was provided"
-	ErrMissingWorkflowType           = "missing workflow type"
-	ErrNoOrMissingWorkflowComponent  = "no component or empty component was provided"
-	ErWorkflowrComponentDoesNotExist = "provided component does not exist %s"
-	ErrWorkflowGetResponse           = "error while getting workflow info %s"
-	ErrStartWorkflow                 = "error starting workflow %s"
-	ErrTerminateWorkflow             = "error terminating workflow %s"
-	ErrTimerParse                    = "error parsing time - %s"
 )
 
 var (
@@ -126,4 +116,16 @@ var (
 	ErrSecretPermissionDenied   = APIError{"access denied by policy to get %q from %q", "ERR_PERMISSION_DENIED", http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrSecretGet                = APIError{"failed getting secret with key %s from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrBulkSecretGet            = APIError{"failed getting secrets from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
+
+	// Workflow.
+	ErrStartWorkflow                 = APIError{"error starting workflow %s with error %s", "ERR_START_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrWorkflowGetResponse           = APIError{"error while getting workflow info on instance %s with error %s", "ERR_GET_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrWorkflowNameMissing           = APIError{"workflow name is not configured", "ERR_WORKFLOW_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrWorkflowComponentDoesNotExist = APIError{"workflow component %s does not exist", "ERR_WORKFLOW_COMPONENT_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", "ERR_INSTANCE_ID_PROVIDED_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrNoOrMissingWorkflowComponent  = APIError{"no workflow component was provided", "ERR_WORKFLOW_COMPONENT_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrTerminateWorkflow             = APIError{"error terminating workflow %s", "ERR_TERMINATE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", "ERR_WORKFLOW_EVENT_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow %s", "ERR_RAISE_EVENT_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrTimerParse                    = APIError{"error parsing time - %s", "ERR_WORKFLOW_TIME_PARSE", http.StatusInternalServerError, grpcCodes.Internal}
 )

@@ -59,6 +59,10 @@ func NewHTTPClient(allowHTTP2 bool) *http.Client {
 					return net.Dial(network, addr)
 				},
 			},
+			// disable test app client auto redirect handle
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		}
 	}
 	return &http.Client{
@@ -66,6 +70,10 @@ func NewHTTPClient(allowHTTP2 bool) *http.Client {
 		Transport: &http.Transport{
 			MaxIdleConns:        2,
 			MaxIdleConnsPerHost: 1,
+		},
+		// disable test app client auto redirect handle
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
 	}
 }

@@ -141,6 +141,9 @@ service Dapr {
   // Terminate Workflow
   rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
 
+  // Raise Event for a Workflow
+  rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (RaiseEventWorkflowResponse) {}
+
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
@@ -672,7 +675,6 @@ message TryLockRequest {
   int32 expiryInSeconds = 4;
 }
 
-
 message TryLockResponse {
   bool success = 1;
 }
@@ -870,7 +872,7 @@ message WorkflowReference {
 
 message GetWorkflowRequest {
   string instance_id  = 1;
-  string workflow_type = 2;
+  string workflow_name = 2;
   string workflow_component = 3;
 }
 
@@ -894,4 +896,16 @@ message TerminateWorkflowRequest {
 }
 
 message TerminateWorkflowResponse {
+  // Empty
+}
+
+message RaiseEventWorkflowRequest {
+  string instance_id = 1;
+  string workflow_component = 2;
+  string event_name = 3;
+  bytes input = 4;
+}
+
+message RaiseEventWorkflowResponse {
+  // Empty
 }

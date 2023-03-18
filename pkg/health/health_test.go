@@ -17,22 +17,26 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	clocklib "github.com/benbjohnson/clock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	clocktesting "k8s.io/utils/clock/testing"
 )
 
 var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
 
 func TestHealthCheck(t *testing.T) {
-	clock := clocklib.NewMock()
-	clock.Set(startOfTime)
+	t.Parallel()
 
 	t.Run("unhealthy endpoint custom interval 1, failure threshold 2s", func(t *testing.T) {
+		t.Parallel()
+
+		clock := &clocktesting.FakeClock{}
+		clock.SetTime(startOfTime)
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		ch := StartEndpointHealthCheck(ctx, "none",
@@ -41,25 +45,23 @@ func TestHealthCheck(t *testing.T) {
 			WithFailureThreshold(2),
 			WithInitialDelay(0),
 		)
-		runtime.Gosched()
-
-		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-		time.Sleep(50 * time.Millisecond)
 
 		// Nothing happens for the first second
-		clock.Add(time.Second)
-		assertNoHealthSignal(t, ch)
-
-		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-		time.Sleep(50 * time.Millisecond)
+		clock.Step(time.Second)
+		assertNoHealthSignal(t, clock, ch)
 
 		// Get a signal after the next tick
-		clock.Add(time.Second)
-		healthy := assertHealthSignal(t, ch)
+		clock.Step(time.Second)
+		healthy := assertHealthSignal(t, clock, ch)
 		assert.False(t, healthy)
 	})
 
 	t.Run("unhealthy endpoint custom interval 1s, failure threshold 1, initial delay 2s", func(t *testing.T) {
+		t.Parallel()
+
+		clock := &clocktesting.FakeClock{}
+		clock.SetTime(startOfTime)
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		ch := StartEndpointHealthCheck(ctx, "none",
@@ -68,26 +70,25 @@ func TestHealthCheck(t *testing.T) {
 			WithFailureThreshold(1),
 			WithInitialDelay(time.Second*2),
 		)
-		runtime.Gosched()
 
 		// Nothing happens for the first 2s
 		for i := 0; i < 2; i++ {
-			// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-			time.Sleep(50 * time.Millisecond)
-			clock.Add(time.Second)
-			assertNoHealthSignal(t, ch)
+			clock.Step(time.Second)
+			assertNoHealthSignal(t, clock, ch)
 		}
 
-		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-		time.Sleep(50 * time.Millisecond)
-
 		// Get a signal after the next tick
-		clock.Add(time.Second)
-		healthy := assertHealthSignal(t, ch)
+		clock.Step(time.Second)
+		healthy := assertHealthSignal(t, clock, ch)
 		assert.False(t, healthy)
 	})
 
 	t.Run("unhealthy endpoint custom interval 1s, failure threshold 2, initial delay 2s", func(t *testing.T) {
+		t.Parallel()
+
+		clock := &clocktesting.FakeClock{}
+		clock.SetTime(startOfTime)
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		ch := StartEndpointHealthCheck(ctx, "none",
@@ -96,23 +97,16 @@ func TestHealthCheck(t *testing.T) {
 			WithFailureThreshold(2),
 			WithInitialDelay(time.Second*2),
 		)
-		runtime.Gosched()
-
-		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-		time.Sleep(50 * time.Millisecond)
 
 		// Nothing happens for the first 3s
 		for i := 0; i < 3; i++ {
-			clock.Add(time.Second)
-			assertNoHealthSignal(t, ch)
+			clock.Step(time.Second)
+			assertNoHealthSignal(t, clock, ch)
 		}
 
-		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-		time.Sleep(50 * time.Millisecond)
-
 		// Get a signal after the next tick
-		clock.Add(time.Second)
-		healthy := assertHealthSignal(t, ch)
+		clock.Step(time.Second)
+		healthy := assertHealthSignal(t, clock, ch)
 		assert.False(t, healthy)
 	})
 }
@@ -163,10 +157,14 @@ func (t *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestResponses(t *testing.T) {
-	clock := clocklib.NewMock()
-	clock.Set(startOfTime)
+	t.Parallel()
 
 	t.Run("default success status", func(t *testing.T) {
+		t.Parallel()
+
+		clock := &clocktesting.FakeClock{}
+		clock.SetTime(startOfTime)
+
 		server := httptest.NewServer(&testServer{
 			statusCode: 200,
 		})
@@ -179,16 +177,18 @@ func TestResponses(t *testing.T) {
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
 		)
-		runtime.Gosched()
 
-		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-		time.Sleep(50 * time.Millisecond)
-		clock.Add(5 * time.Second)
-		healthy := assertHealthSignal(t, ch)
+		clock.Step(5 * time.Second)
+		healthy := assertHealthSignal(t, clock, ch)
 		assert.True(t, healthy)
 	})
 
 	t.Run("custom success status", func(t *testing.T) {
+		t.Parallel()
+
+		clock := &clocktesting.FakeClock{}
+		clock.SetTime(startOfTime)
+
 		server := httptest.NewServer(&testServer{
 			statusCode: 201,
 		})
@@ -202,16 +202,18 @@ func TestResponses(t *testing.T) {
 			WithFailureThreshold(1),
 			WithSuccessStatusCode(201),
 		)
-		runtime.Gosched()
 
-		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-		time.Sleep(50 * time.Millisecond)
-		clock.Add(5 * time.Second)
-		healthy := assertHealthSignal(t, ch)
+		clock.Step(5 * time.Second)
+		healthy := assertHealthSignal(t, clock, ch)
 		assert.True(t, healthy)
 	})
 
 	t.Run("test fail", func(t *testing.T) {
+		t.Parallel()
+
+		clock := &clocktesting.FakeClock{}
+		clock.SetTime(startOfTime)
+
 		server := httptest.NewServer(&testServer{
 			statusCode: 500,
 		})
@@ -224,16 +226,18 @@ func TestResponses(t *testing.T) {
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
 		)
-		runtime.Gosched()
 
-		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-		time.Sleep(50 * time.Millisecond)
-		clock.Add(5 * time.Second)
-		healthy := assertHealthSignal(t, ch)
+		clock.Step(5 * time.Second)
+		healthy := assertHealthSignal(t, clock, ch)
 		assert.False(t, healthy)
 	})
 
 	t.Run("test app recovery", func(t *testing.T) {
+		t.Parallel()
+
+		clock := &clocktesting.FakeClock{}
+		clock.SetTime(startOfTime)
+
 		test := &testServer{
 			statusCode: 500,
 		}
@@ -247,13 +251,10 @@ func TestResponses(t *testing.T) {
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
 		)
-		runtime.Gosched()
 
 		for i := 0; i <= 1; i++ {
-			// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync
-			time.Sleep(50 * time.Millisecond)
-			clock.Add(5 * time.Second)
-			healthy := assertHealthSignal(t, ch)
+			clock.Step(5 * time.Second)
+			healthy := assertHealthSignal(t, clock, ch)
 			if i == 0 {
 				assert.False(t, healthy)
 				test.statusCode = 200
@@ -264,9 +265,15 @@ func TestResponses(t *testing.T) {
 	})
 }
 
-func assertHealthSignal(t *testing.T, ch <-chan bool) bool {
+func assertHealthSignal(t *testing.T, clock *clocktesting.FakeClock, ch <-chan bool) bool {
 	t.Helper()
-	runtime.Gosched()
+	// Wait to ensure ticker in health server is setup.
+	// Wait for the clock to have tickers before stepping, since they are likely
+	// being created in another go routine to this test.
+	require.Eventually(t, func() bool {
+		return clock.HasWaiters()
+	}, time.Second, time.Microsecond, "ticker in program not created in time")
+
 	select {
 	case v := <-ch:
 		return v
@@ -276,11 +283,17 @@ func assertHealthSignal(t *testing.T, ch <-chan bool) bool {
 	return false
 }
 
-func assertNoHealthSignal(t *testing.T, ch <-chan bool) {
+func assertNoHealthSignal(t *testing.T, clock *clocktesting.FakeClock, ch <-chan bool) {
 	t.Helper()
 
+	// Wait to ensure ticker in health server is setup.
+	// Wait for the clock to have tickers before stepping, since they are likely
+	// being created in another go routine to this test.
+	require.Eventually(t, func() bool {
+		return clock.HasWaiters()
+	}, time.Second, time.Microsecond, "ticker in program not created in time")
+
 	// The signal is sent in a background goroutine, so we need to use a wall clock here
-	runtime.Gosched()
 	select {
 	case <-ch:
 		t.Fatal("received unexpected signal")
