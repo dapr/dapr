@@ -299,6 +299,20 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 		}
 	})
 
+	t.Run("non-Dapr runtime APIs are always allowed", func(t *testing.T) {
+		a := []config.APIAccessRule{
+			{
+				Name:     "invoke",
+				Version:  "v1",
+				Protocol: "grpc",
+			},
+		}
+
+		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+
+		tm(t, "/myservice/method", false)
+	})
+
 	t.Run("no rules, middlewares are nil", func(t *testing.T) {
 		u, s := setAPIEndpointsMiddlewares(nil)
 		assert.Nil(t, u)
