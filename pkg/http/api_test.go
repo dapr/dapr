@@ -3375,7 +3375,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// assert
 		assert.Nil(t, resp.ErrorBody)
 	})
-
 }
 
 func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
