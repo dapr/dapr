@@ -426,8 +426,7 @@ replace (
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
 //
-replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230318201936-1037aaaf3a8d
-
-//
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
+
+replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230318201936-1037aaaf3a8d
