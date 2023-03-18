@@ -24,6 +24,7 @@ import (
 	"net"
 	gohttp "net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,6 +39,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -47,12 +50,15 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	workflowContrib "github.com/dapr/components-contrib/workflows"
+	"github.com/dapr/dapr/pkg/actors"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -1502,999 +1508,999 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
-// func TestV1ActorEndpoints(t *testing.T) {
-// 	fakeServer := newFakeHTTPServer()
-// 	testAPI := &api{
-// 		actor:      nil,
-// 		resiliency: resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency),
-// 	}
-
-// 	fakeServer.StartServer(testAPI.constructActorEndpoints())
-
-// 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
-// 	fakeData, _ := json.Marshal(fakeBodyObject)
-
-// 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
-// 		apisAndMethods := map[string][]string{
-// 			"v1.0/actors/fakeActorType/fakeActorID/state/key1":          {"GET"},
-// 			"v1.0/actors/fakeActorType/fakeActorID/state":               {"POST", "PUT"},
-// 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE", "PATCH"},
-// 			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
-// 			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
-// 		}
-// 		testAPI.actor = nil
-
-// 		for apiPath, testMethods := range apisAndMethods {
-// 			for _, method := range testMethods {
-// 				// act
-// 				resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
-
-// 				// assert
-// 				assert.Equal(t, 500, resp.StatusCode, apiPath)
-// 				assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
-// 			}
-// 		}
-// 	})
-
-// 	t.Run("All PUT/POST APIs - 400 for invalid JSON", func(t *testing.T) {
-// 		testAPI.actor = new(actors.MockActors)
-// 		apiPaths := []string{
-// 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
-// 			"v1.0/actors/fakeActorType/fakeActorID/state",
-// 			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1",
-// 		}
-
-// 		for _, apiPath := range apiPaths {
-// 			for _, requestMethod := range []string{"PUT", "POST"} {
-// 				// {{
-// 				inputBodyBytes := invalidJSON
-
-// 				// act
-// 				resp := fakeServer.DoRequest(requestMethod, apiPath, inputBodyBytes, nil)
-
-// 				// assert
-// 				assert.Equal(t, 400, resp.StatusCode, apiPath)
-// 				assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
-// 			}
-// 		}
-// 	})
-
-// 	t.Run("All PATCH APIs - 400 for invalid JSON", func(t *testing.T) {
-// 		testAPI.actor = new(actors.MockActors)
-// 		apiPaths := []string{
-// 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
-// 		}
-
-// 		for _, apiPath := range apiPaths {
-// 			inputBodyBytes := invalidJSON
-
-// 			// act
-// 			resp := fakeServer.DoRequest(fasthttp.MethodPatch, apiPath, inputBodyBytes, nil)
-
-// 			// assert
-// 			assert.Equal(t, 400, resp.StatusCode, apiPath)
-// 			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
-// 		}
-// 	})
-
-// 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("GetState", &actors.GetStateRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 			Key:       "key1",
-// 		}).Return(&actors.StateResponse{
-// 			Data: fakeData,
-// 		}, nil)
-
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(true)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 200, resp.StatusCode)
-// 		assert.Equal(t, fakeData, resp.RawBody)
-// 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
-// 	})
-
-// 	t.Run("Get actor state - 204 No Content", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("GetState", &actors.GetStateRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 			Key:       "key1",
-// 		}).Return(nil, nil)
-
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(true)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 204, resp.StatusCode)
-// 		assert.Equal(t, []byte{}, resp.RawBody)
-// 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
-// 	})
-
-// 	t.Run("Get actor state - 500 on GetState failure", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("GetState", &actors.GetStateRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 			Key:       "key1",
-// 		}).Return(nil, errors.New("UPSTREAM_ERROR"))
-
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(true)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_STATE_GET", resp.ErrorBody["errorCode"])
-// 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
-// 	})
-
-// 	t.Run("Get actor state - 400 for missing actor instace", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("GetState", &actors.GetStateRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 			Key:       "key1",
-// 		}).Return(&actors.StateResponse{
-// 			Data: fakeData,
-// 		}, nil)
-
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(func(*actors.ActorHostedRequest) bool { return false })
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 400, resp.StatusCode)
-// 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
-// 		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
-// 	})
-
-// 	t.Run("Transaction - 204 No Content", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
-
-// 		testTransactionalOperations := []actors.TransactionalOperation{
-// 			{
-// 				Operation: actors.Upsert,
-// 				Request: map[string]interface{}{
-// 					"key":   "fakeKey1",
-// 					"value": fakeBodyObject,
-// 				},
-// 			},
-// 			{
-// 				Operation: actors.Delete,
-// 				Request: map[string]interface{}{
-// 					"key": "fakeKey1",
-// 				},
-// 			},
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
-// 			ActorID:    "fakeActorID",
-// 			ActorType:  "fakeActorType",
-// 			Operations: testTransactionalOperations,
-// 		}).Return(nil)
-
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(true)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
-
-// 		assert.NoError(t, err)
-// 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
-
-// 		// assert
-// 		assert.Equal(t, 204, resp.StatusCode)
-// 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
-// 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
-// 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
-// 	})
-
-// 	t.Run("Transaction - 400 when actor instance not present", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
-
-// 		testTransactionalOperations := []actors.TransactionalOperation{
-// 			{
-// 				Operation: actors.Upsert,
-// 				Request: map[string]interface{}{
-// 					"key":   "fakeKey1",
-// 					"value": fakeBodyObject,
-// 				},
-// 			},
-// 			{
-// 				Operation: actors.Delete,
-// 				Request: map[string]interface{}{
-// 					"key": "fakeKey1",
-// 				},
-// 			},
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(func(*actors.ActorHostedRequest) bool { return false })
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
-
-// 		assert.NoError(t, err)
-// 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
-
-// 		// assert
-// 		assert.Equal(t, 400, resp.StatusCode)
-// 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
-// 		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
-// 	})
-
-// 	t.Run("Transaction - 500 when transactional state operation fails", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
-
-// 		testTransactionalOperations := []actors.TransactionalOperation{
-// 			{
-// 				Operation: actors.Upsert,
-// 				Request: map[string]interface{}{
-// 					"key":   "fakeKey1",
-// 					"value": fakeBodyObject,
-// 				},
-// 			},
-// 			{
-// 				Operation: actors.Delete,
-// 				Request: map[string]interface{}{
-// 					"key": "fakeKey1",
-// 				},
-// 			},
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
-// 			ActorID:    "fakeActorID",
-// 			ActorType:  "fakeActorType",
-// 			Operations: testTransactionalOperations,
-// 		}).Return(errors.New("UPSTREAM_ERROR"))
-
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(true)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
-
-// 		assert.NoError(t, err)
-// 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
-// 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
-// 		assert.Equal(t, "ERR_ACTOR_STATE_TRANSACTION_SAVE", resp.ErrorBody["errorCode"])
-// 	})
-
-// 	t.Run("Reminder Create - 204 No Content", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-// 		reminderRequest := actors.CreateReminderRequest{
-// 			Name:      "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 			Data:      nil,
-// 			DueTime:   "0h0m3s0ms",
-// 			Period:    "0h0m7s0ms",
-// 		}
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(reminderRequest)
-
-// 		assert.NoError(t, err)
-// 		for _, method := range []string{"POST", "PUT"} {
-// 			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
-// 			assert.Equal(t, 204, resp.StatusCode)
-// 		}
-
-// 		// assert
-// 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 2)
-// 	})
-
-// 	t.Run("Reminder Create - 500 when CreateReminderFails", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-// 		reminderRequest := actors.CreateReminderRequest{
-// 			Name:      "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 			Data:      nil,
-// 			DueTime:   "0h0m3s0ms",
-// 			Period:    "0h0m7s0ms",
-// 		}
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(reminderRequest)
-
-// 		assert.NoError(t, err)
-// 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_REMINDER_CREATE", resp.ErrorBody["errorCode"])
-// 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
-// 	})
-
-// 	t.Run("Reminder Rename - 204 when RenameReminderFails", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-// 		reminderRequest := actors.RenameReminderRequest{
-// 			OldName:   "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 			NewName:   "reminder2",
-// 		}
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(reminderRequest)
-
-// 		assert.NoError(t, err)
-// 		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
-
-// 		// assert
-// 		assert.Equal(t, 204, resp.StatusCode)
-// 		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
-// 	})
-
-// 	t.Run("Reminder Rename - 500 when RenameReminderFails", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-// 		reminderRequest := actors.RenameReminderRequest{
-// 			OldName:   "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 			NewName:   "reminder2",
-// 		}
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(reminderRequest)
-
-// 		assert.NoError(t, err)
-// 		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_REMINDER_RENAME", resp.ErrorBody["errorCode"])
-// 		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
-// 	})
-
-// 	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-// 		reminderRequest := actors.DeleteReminderRequest{
-// 			Name:      "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("DeleteReminder", &reminderRequest).Return(nil)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 204, resp.StatusCode)
-// 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
-// 		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
-// 	})
-
-// 	t.Run("Reminder Delete - 500 on upstream actor error", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-// 		reminderRequest := actors.DeleteReminderRequest{
-// 			Name:      "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_REMINDER_DELETE", resp.ErrorBody["errorCode"])
-// 		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
-// 	})
-
-// 	t.Run("Reminder Get - 200 OK", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-// 		reminderRequest := actors.GetReminderRequest{
-// 			Name:      "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("GetReminder", &reminderRequest).Return(nil, nil)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 200, resp.StatusCode)
-// 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
-// 	})
-
-// 	t.Run("Reminder Get - 500 on upstream actor error", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-// 		reminderRequest := actors.GetReminderRequest{
-// 			Name:      "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
-// 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
-// 	})
-
-// 	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-// 		reminderRequest := actors.GetReminderRequest{
-// 			Name:      "reminder1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 		}
-
-// 		reminderResponse := actors.Reminder{
-// 			// Functions are not JSON encodable. This will force the error condition
-// 			Data: func() {},
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
-// 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
-// 	})
-
-// 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
-
-// 		timerRequest := actors.CreateTimerRequest{
-// 			Name:      "timer1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 			Data:      nil,
-// 			DueTime:   "0h0m3s0ms",
-// 			Period:    "0h0m7s0ms",
-// 			Callback:  "",
-// 		}
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("CreateTimer", &timerRequest).Return(nil)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(timerRequest)
-
-// 		assert.NoError(t, err)
-// 		for _, method := range []string{"POST", "PUT"} {
-// 			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
-// 			assert.Equal(t, 204, resp.StatusCode)
-// 		}
-
-// 		// assert
-// 		mockActors.AssertNumberOfCalls(t, "CreateTimer", 2)
-// 	})
-
-// 	t.Run("Timer Create - 500 on upstream error", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
-
-// 		timerRequest := actors.CreateTimerRequest{
-// 			Name:      "timer1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 			Data:      nil,
-// 			DueTime:   "0h0m3s0ms",
-// 			Period:    "0h0m7s0ms",
-// 		}
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(timerRequest)
-
-// 		assert.NoError(t, err)
-// 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_TIMER_CREATE", resp.ErrorBody["errorCode"])
-
-// 		// assert
-// 		mockActors.AssertNumberOfCalls(t, "CreateTimer", 1)
-// 	})
-
-// 	t.Run("Timer Delete - 204 No Conent", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
-// 		timerRequest := actors.DeleteTimerRequest{
-// 			Name:      "timer1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("DeleteTimer", &timerRequest).Return(nil)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 204, resp.StatusCode)
-// 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
-// 		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
-// 	})
-
-// 	t.Run("Timer Delete - 500 For upstream error", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
-// 		timerRequest := actors.DeleteTimerRequest{
-// 			Name:      "timer1",
-// 			ActorType: "fakeActorType",
-// 			ActorID:   "fakeActorID",
-// 		}
-
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_TIMER_DELETE", resp.ErrorBody["errorCode"])
-// 		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
-// 	})
-
-// 	t.Run("Direct Message - Forwards downstream status", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
-// 		mockActors := new(actors.MockActors)
-// 		fakeData := []byte("fakeData")
-
-// 		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
-// 		defer response.Close()
-// 		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
-// 			m, err := imr.ProtoWithData()
-// 			if err != nil {
-// 				return false
-// 			}
-
-// 			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
-// 				return false
-// 			}
-
-// 			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, fakeData) {
-// 				return false
-// 			}
-// 			return true
-// 		})).Return(response, nil)
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-// 		// assert
-// 		assert.Equal(t, 206, resp.StatusCode)
-// 		mockActors.AssertNumberOfCalls(t, "Call", 1)
-// 	})
-
-// 	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
-// 			m, err := imr.ProtoWithData()
-// 			if err != nil {
-// 				return false
-// 			}
-
-// 			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
-// 				return false
-// 			}
-
-// 			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, []byte("fakeData")) {
-// 				return false
-// 			}
-// 			return true
-// 		})).Return(nil, errors.New("UPSTREAM_ERROR"))
-
-// 		testAPI.actor = mockActors
-
-// 		// act
-// 		resp := fakeServer.DoRequest("POST", apiPath, []byte("fakeData"), nil)
-
-// 		// assert
-// 		assert.Equal(t, 500, resp.StatusCode)
-// 		assert.Equal(t, "ERR_ACTOR_INVOKE_METHOD", resp.ErrorBody["errorCode"])
-// 		mockActors.AssertNumberOfCalls(t, "Call", 1)
-// 	})
-
-// 	failingActors := &actors.FailingActors{
-// 		Failure: daprt.NewFailure(
-// 			map[string]int{
-// 				"failingId": 1,
-// 			},
-// 			map[string]time.Duration{
-// 				"timeoutId": time.Second * 10,
-// 			},
-// 			map[string]int{},
-// 		),
-// 	}
-
-// 	t.Run("Direct Message - retries with resiliency", func(t *testing.T) {
-// 		testAPI.actor = failingActors
-
-// 		msg := []byte("M'illumino d'immenso.")
-// 		apiPath := fmt.Sprintf("v1.0/actors/failingActorType/%s/method/method1", "failingId")
-// 		resp := fakeServer.DoRequest("POST", apiPath, msg, nil)
-
-// 		assert.Equal(t, 200, resp.StatusCode)
-// 		assert.Equal(t, msg, resp.RawBody)
-// 		assert.Equal(t, 2, failingActors.Failure.CallCount("failingId"))
-// 	})
-
-// 	fakeServer.Shutdown()
-// }
-
-// func TestV1MetadataEndpoint(t *testing.T) {
-// 	fakeServer := newFakeHTTPServer()
-
-// 	testAPI := &api{
-// 		actor: nil,
-// 		getComponentsFn: func() []componentsV1alpha1.Component {
-// 			return []componentsV1alpha1.Component{
-// 				{
-// 					ObjectMeta: metaV1.ObjectMeta{
-// 						Name: "MockComponent1Name",
-// 					},
-// 					Spec: componentsV1alpha1.ComponentSpec{
-// 						Type:    "mock.component1Type",
-// 						Version: "v1.0",
-// 						Metadata: []componentsV1alpha1.MetadataItem{
-// 							{
-// 								Name: "actorMockComponent1",
-// 								Value: componentsV1alpha1.DynamicValue{
-// 									JSON: v1.JSON{Raw: []byte("true")},
-// 								},
-// 							},
-// 						},
-// 					},
-// 				},
-// 				{
-// 					ObjectMeta: metaV1.ObjectMeta{
-// 						Name: "MockComponent2Name",
-// 					},
-// 					Spec: componentsV1alpha1.ComponentSpec{
-// 						Type:    "mock.component2Type",
-// 						Version: "v1.0",
-// 						Metadata: []componentsV1alpha1.MetadataItem{
-// 							{
-// 								Name: "actorMockComponent2",
-// 								Value: componentsV1alpha1.DynamicValue{
-// 									JSON: v1.JSON{Raw: []byte("true")},
-// 								},
-// 							},
-// 						},
-// 					},
-// 				},
-// 			}
-// 		},
-// 		extendedMetadata: sync.Map{},
-// 		getComponentsCapabilitesFn: func() map[string][]string {
-// 			capsMap := make(map[string][]string)
-// 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
-// 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
-// 			return capsMap
-// 		},
-// 		getSubscriptionsFn: func() []runtimePubsub.Subscription {
-// 			return []runtimePubsub.Subscription{
-// 				{
-// 					PubsubName:      "test",
-// 					Topic:           "topic",
-// 					DeadLetterTopic: "dead",
-// 					Metadata:        map[string]string{},
-// 					Rules: []*runtimePubsub.Rule{
-// 						{
-// 							Match: &expr.Expr{},
-// 							Path:  "path",
-// 						},
-// 					},
-// 				},
-// 			}
-// 		},
-// 	}
-// 	// PutMetadata only stroes string(request body)
-// 	testAPI.extendedMetadata.Store("test", "value")
-
-// 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
-
-// 	expectedBody := metadata{
-// 		ID: "xyz",
-// 		ActiveActorsCount: []actors.ActiveActorsCount{
-// 			{
-// 				Type:  "abcd",
-// 				Count: 10,
-// 			},
-// 			{
-// 				Type:  "xyz",
-// 				Count: 5,
-// 			},
-// 		},
-// 		Extended: map[string]string{
-// 			"test":               "value",
-// 			"daprRuntimeVersion": "edge",
-// 		},
-// 		RegisteredComponents: []registeredComponent{
-// 			{
-// 				Name:         "MockComponent1Name",
-// 				Type:         "mock.component1Type",
-// 				Version:      "v1.0",
-// 				Capabilities: []string{"mock.feat.MockComponent1Name"},
-// 			},
-// 			{
-// 				Name:         "MockComponent2Name",
-// 				Type:         "mock.component2Type",
-// 				Version:      "v1.0",
-// 				Capabilities: []string{"mock.feat.MockComponent2Name"},
-// 			},
-// 		},
-// 		Subscriptions: []pubsubSubscription{
-// 			{
-// 				PubsubName:      "test",
-// 				Topic:           "topic",
-// 				DeadLetterTopic: "dead",
-// 				Metadata:        map[string]string{},
-// 				Rules: []*pubsubSubscriptionRule{
-// 					{
-// 						Match: "",
-// 						Path:  "path",
-// 					},
-// 				},
-// 			},
-// 		},
-// 	}
-// 	expectedBodyBytes, _ := json.Marshal(expectedBody)
-
-// 	t.Run("Metadata - 200 OK", func(t *testing.T) {
-// 		apiPath := "v1.0/metadata"
-// 		mockActors := new(actors.MockActors)
-
-// 		mockActors.On("GetActiveActorsCount")
-
-// 		testAPI.id = "xyz"
-// 		testAPI.actor = mockActors
-// 		testAPI.daprRunTimeVersion = "edge"
-
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-// 		assert.Equal(t, 200, resp.StatusCode)
-// 		assert.ElementsMatch(t, expectedBodyBytes, resp.RawBody)
-// 		mockActors.AssertNumberOfCalls(t, "GetActiveActorsCount", 1)
-// 	})
-
-// 	fakeServer.Shutdown()
-// }
+func TestV1ActorEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		actor:      nil,
+		resiliency: resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency),
+	}
+
+	fakeServer.StartServer(testAPI.constructActorEndpoints())
+
+	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
+	fakeData, _ := json.Marshal(fakeBodyObject)
+
+	t.Run("Actor runtime is not initialized", func(t *testing.T) {
+		apisAndMethods := map[string][]string{
+			"v1.0/actors/fakeActorType/fakeActorID/state/key1":          {"GET"},
+			"v1.0/actors/fakeActorType/fakeActorID/state":               {"POST", "PUT"},
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE", "PATCH"},
+			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
+		}
+		testAPI.actor = nil
+
+		for apiPath, testMethods := range apisAndMethods {
+			for _, method := range testMethods {
+				// act
+				resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+
+				// assert
+				assert.Equal(t, 500, resp.StatusCode, apiPath)
+				assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+			}
+		}
+	})
+
+	t.Run("All PUT/POST APIs - 400 for invalid JSON", func(t *testing.T) {
+		testAPI.actor = new(actors.MockActors)
+		apiPaths := []string{
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
+			"v1.0/actors/fakeActorType/fakeActorID/state",
+			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1",
+		}
+
+		for _, apiPath := range apiPaths {
+			for _, requestMethod := range []string{"PUT", "POST"} {
+				// {{
+				inputBodyBytes := invalidJSON
+
+				// act
+				resp := fakeServer.DoRequest(requestMethod, apiPath, inputBodyBytes, nil)
+
+				// assert
+				assert.Equal(t, 400, resp.StatusCode, apiPath)
+				assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+			}
+		}
+	})
+
+	t.Run("All PATCH APIs - 400 for invalid JSON", func(t *testing.T) {
+		testAPI.actor = new(actors.MockActors)
+		apiPaths := []string{
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
+		}
+
+		for _, apiPath := range apiPaths {
+			inputBodyBytes := invalidJSON
+
+			// act
+			resp := fakeServer.DoRequest(fasthttp.MethodPatch, apiPath, inputBodyBytes, nil)
+
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, apiPath)
+			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("Get actor state - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		mockActors := new(actors.MockActors)
+		mockActors.On("GetState", &actors.GetStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(&actors.StateResponse{
+			Data: fakeData,
+		}, nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, fakeData, resp.RawBody)
+		mockActors.AssertNumberOfCalls(t, "GetState", 1)
+	})
+
+	t.Run("Get actor state - 204 No Content", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		mockActors := new(actors.MockActors)
+		mockActors.On("GetState", &actors.GetStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(nil, nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody)
+		mockActors.AssertNumberOfCalls(t, "GetState", 1)
+	})
+
+	t.Run("Get actor state - 500 on GetState failure", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		mockActors := new(actors.MockActors)
+		mockActors.On("GetState", &actors.GetStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(nil, errors.New("UPSTREAM_ERROR"))
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_STATE_GET", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "GetState", 1)
+	})
+
+	t.Run("Get actor state - 400 for missing actor instace", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		mockActors := new(actors.MockActors)
+		mockActors.On("GetState", &actors.GetStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(&actors.StateResponse{
+			Data: fakeData,
+		}, nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(func(*actors.ActorHostedRequest) bool { return false })
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 400, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Transaction - 204 No Content", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
+
+		testTransactionalOperations := []actors.TransactionalOperation{
+			{
+				Operation: actors.Upsert,
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
+			},
+			{
+				Operation: actors.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
+
+		mockActors := new(actors.MockActors)
+		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
+			ActorID:    "fakeActorID",
+			ActorType:  "fakeActorType",
+			Operations: testTransactionalOperations,
+		}).Return(nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
+		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+	})
+
+	t.Run("Transaction - 400 when actor instance not present", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
+
+		testTransactionalOperations := []actors.TransactionalOperation{
+			{
+				Operation: actors.Upsert,
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
+			},
+			{
+				Operation: actors.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
+
+		mockActors := new(actors.MockActors)
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(func(*actors.ActorHostedRequest) bool { return false })
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 400, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Transaction - 500 when transactional state operation fails", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
+
+		testTransactionalOperations := []actors.TransactionalOperation{
+			{
+				Operation: actors.Upsert,
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
+			},
+			{
+				Operation: actors.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
+
+		mockActors := new(actors.MockActors)
+		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
+			ActorID:    "fakeActorID",
+			ActorType:  "fakeActorType",
+			Operations: testTransactionalOperations,
+		}).Return(errors.New("UPSTREAM_ERROR"))
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
+		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Equal(t, "ERR_ACTOR_STATE_TRANSACTION_SAVE", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Reminder Create - 204 No Content", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		reminderRequest := actors.CreateReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+		}
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		for _, method := range []string{"POST", "PUT"} {
+			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
+			assert.Equal(t, 204, resp.StatusCode)
+		}
+
+		// assert
+		mockActors.AssertNumberOfCalls(t, "CreateReminder", 2)
+	})
+
+	t.Run("Reminder Create - 500 when CreateReminderFails", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		reminderRequest := actors.CreateReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+		}
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_CREATE", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
+	})
+
+	t.Run("Reminder Rename - 204 when RenameReminderFails", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		reminderRequest := actors.RenameReminderRequest{
+			OldName:   "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			NewName:   "reminder2",
+		}
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
+	})
+
+	t.Run("Reminder Rename - 500 when RenameReminderFails", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		reminderRequest := actors.RenameReminderRequest{
+			OldName:   "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			NewName:   "reminder2",
+		}
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_RENAME", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
+	})
+
+	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.DeleteReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("DeleteReminder", &reminderRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
+	})
+
+	t.Run("Reminder Delete - 500 on upstream actor error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.DeleteReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_DELETE", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
+	})
+
+	t.Run("Reminder Get - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.GetReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("GetReminder", &reminderRequest).Return(nil, nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+	})
+
+	t.Run("Reminder Get - 500 on upstream actor error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.GetReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+	})
+
+	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.GetReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		reminderResponse := actors.Reminder{
+			// Functions are not JSON encodable. This will force the error condition
+			Data: func() {},
+		}
+
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+	})
+
+	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+
+		timerRequest := actors.CreateTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+			Callback:  "",
+		}
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("CreateTimer", &timerRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(timerRequest)
+
+		assert.NoError(t, err)
+		for _, method := range []string{"POST", "PUT"} {
+			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
+			assert.Equal(t, 204, resp.StatusCode)
+		}
+
+		// assert
+		mockActors.AssertNumberOfCalls(t, "CreateTimer", 2)
+	})
+
+	t.Run("Timer Create - 500 on upstream error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+
+		timerRequest := actors.CreateTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+		}
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(timerRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_CREATE", resp.ErrorBody["errorCode"])
+
+		// assert
+		mockActors.AssertNumberOfCalls(t, "CreateTimer", 1)
+	})
+
+	t.Run("Timer Delete - 204 No Conent", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		timerRequest := actors.DeleteTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("DeleteTimer", &timerRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
+	})
+
+	t.Run("Timer Delete - 500 For upstream error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		timerRequest := actors.DeleteTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_DELETE", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
+	})
+
+	t.Run("Direct Message - Forwards downstream status", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
+		mockActors := new(actors.MockActors)
+		fakeData := []byte("fakeData")
+
+		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
+		defer response.Close()
+		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
+			m, err := imr.ProtoWithData()
+			if err != nil {
+				return false
+			}
+
+			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
+				return false
+			}
+
+			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, fakeData) {
+				return false
+			}
+			return true
+		})).Return(response, nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		assert.Equal(t, 206, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "Call", 1)
+	})
+
+	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
+		mockActors := new(actors.MockActors)
+		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
+			m, err := imr.ProtoWithData()
+			if err != nil {
+				return false
+			}
+
+			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
+				return false
+			}
+
+			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, []byte("fakeData")) {
+				return false
+			}
+			return true
+		})).Return(nil, errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, []byte("fakeData"), nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_INVOKE_METHOD", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "Call", 1)
+	})
+
+	failingActors := &actors.FailingActors{
+		Failure: daprt.NewFailure(
+			map[string]int{
+				"failingId": 1,
+			},
+			map[string]time.Duration{
+				"timeoutId": time.Second * 10,
+			},
+			map[string]int{},
+		),
+	}
+
+	t.Run("Direct Message - retries with resiliency", func(t *testing.T) {
+		testAPI.actor = failingActors
+
+		msg := []byte("M'illumino d'immenso.")
+		apiPath := fmt.Sprintf("v1.0/actors/failingActorType/%s/method/method1", "failingId")
+		resp := fakeServer.DoRequest("POST", apiPath, msg, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, msg, resp.RawBody)
+		assert.Equal(t, 2, failingActors.Failure.CallCount("failingId"))
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestV1MetadataEndpoint(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	testAPI := &api{
+		actor: nil,
+		getComponentsFn: func() []componentsV1alpha1.Component {
+			return []componentsV1alpha1.Component{
+				{
+					ObjectMeta: metaV1.ObjectMeta{
+						Name: "MockComponent1Name",
+					},
+					Spec: componentsV1alpha1.ComponentSpec{
+						Type:    "mock.component1Type",
+						Version: "v1.0",
+						Metadata: []componentsV1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent1",
+								Value: componentsV1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metaV1.ObjectMeta{
+						Name: "MockComponent2Name",
+					},
+					Spec: componentsV1alpha1.ComponentSpec{
+						Type:    "mock.component2Type",
+						Version: "v1.0",
+						Metadata: []componentsV1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent2",
+								Value: componentsV1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
+							},
+						},
+					},
+				},
+			}
+		},
+		extendedMetadata: sync.Map{},
+		getComponentsCapabilitesFn: func() map[string][]string {
+			capsMap := make(map[string][]string)
+			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
+			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
+			return capsMap
+		},
+		getSubscriptionsFn: func() []runtimePubsub.Subscription {
+			return []runtimePubsub.Subscription{
+				{
+					PubsubName:      "test",
+					Topic:           "topic",
+					DeadLetterTopic: "dead",
+					Metadata:        map[string]string{},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Match: &expr.Expr{},
+							Path:  "path",
+						},
+					},
+				},
+			}
+		},
+	}
+	// PutMetadata only stroes string(request body)
+	testAPI.extendedMetadata.Store("test", "value")
+
+	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
+
+	expectedBody := metadata{
+		ID: "xyz",
+		ActiveActorsCount: []actors.ActiveActorsCount{
+			{
+				Type:  "abcd",
+				Count: 10,
+			},
+			{
+				Type:  "xyz",
+				Count: 5,
+			},
+		},
+		Extended: map[string]string{
+			"test":               "value",
+			"daprRuntimeVersion": "edge",
+		},
+		RegisteredComponents: []registeredComponent{
+			{
+				Name:         "MockComponent1Name",
+				Type:         "mock.component1Type",
+				Version:      "v1.0",
+				Capabilities: []string{"mock.feat.MockComponent1Name"},
+			},
+			{
+				Name:         "MockComponent2Name",
+				Type:         "mock.component2Type",
+				Version:      "v1.0",
+				Capabilities: []string{"mock.feat.MockComponent2Name"},
+			},
+		},
+		Subscriptions: []pubsubSubscription{
+			{
+				PubsubName:      "test",
+				Topic:           "topic",
+				DeadLetterTopic: "dead",
+				Metadata:        map[string]string{},
+				Rules: []*pubsubSubscriptionRule{
+					{
+						Match: "",
+						Path:  "path",
+					},
+				},
+			},
+		},
+	}
+	expectedBodyBytes, _ := json.Marshal(expectedBody)
+
+	t.Run("Metadata - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/metadata"
+		mockActors := new(actors.MockActors)
+
+		mockActors.On("GetActiveActorsCount")
+
+		testAPI.id = "xyz"
+		testAPI.actor = mockActors
+		testAPI.daprRunTimeVersion = "edge"
+
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.ElementsMatch(t, expectedBodyBytes, resp.RawBody)
+		mockActors.AssertNumberOfCalls(t, "GetActiveActorsCount", 1)
+	})
+
+	fakeServer.Shutdown()
+}
 
 func createExporters(buffer *string) {
 	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
 	exporter.Register("fakeID")
 }
 
-// func TestV1ActorEndpointsWithTracer(t *testing.T) {
-// 	fakeServer := newFakeHTTPServer()
+func TestV1ActorEndpointsWithTracer(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
 
-// 	buffer := ""
-// 	spec := config.TracingSpec{SamplingRate: "1"}
+	buffer := ""
+	spec := config.TracingSpec{SamplingRate: "1"}
 
-// 	createExporters(&buffer)
+	createExporters(&buffer)
 
-// 	testAPI := &api{
-// 		actor:       nil,
-// 		tracingSpec: spec,
-// 		resiliency:  resiliency.New(nil),
-// 	}
+	testAPI := &api{
+		actor:       nil,
+		tracingSpec: spec,
+		resiliency:  resiliency.New(nil),
+	}
 
-// 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
+	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
 
-// 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
-// 	fakeData, _ := json.Marshal(fakeBodyObject)
+	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
+	fakeData, _ := json.Marshal(fakeBodyObject)
 
-// 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-// 		testAPI.actor = nil
+	t.Run("Actor runtime is not initialized", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		testAPI.actor = nil
 
-// 		testMethods := []string{"GET"}
+		testMethods := []string{"GET"}
 
-// 		for _, method := range testMethods {
-// 			buffer = ""
-// 			// act
-// 			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+		for _, method := range testMethods {
+			buffer = ""
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
-// 			// assert
-// 			assert.Equal(t, 500, resp.StatusCode, apiPath)
-// 			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"], apiPath)
-// 		}
-// 	})
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, apiPath)
+			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"], apiPath)
+		}
+	})
 
-// 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
-// 		buffer = ""
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("GetState", &actors.GetStateRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 			Key:       "key1",
-// 		}).Return(&actors.StateResponse{
-// 			Data: fakeData,
-// 		}, nil)
+	t.Run("Get actor state - 200 OK", func(t *testing.T) {
+		buffer = ""
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		mockActors := new(actors.MockActors)
+		mockActors.On("GetState", &actors.GetStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(&actors.StateResponse{
+			Data: fakeData,
+		}, nil)
 
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(true)
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
-// 		testAPI.actor = mockActors
+		testAPI.actor = mockActors
 
-// 		// act
-// 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
-// 		// assert
-// 		assert.Equal(t, 200, resp.StatusCode)
-// 		assert.Equal(t, fakeData, resp.RawBody)
-// 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
-// 	})
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, fakeData, resp.RawBody)
+		mockActors.AssertNumberOfCalls(t, "GetState", 1)
+	})
 
-// 	t.Run("Transaction - 204 No Content", func(t *testing.T) {
-// 		buffer = ""
-// 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
+	t.Run("Transaction - 204 No Content", func(t *testing.T) {
+		buffer = ""
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
-// 		testTransactionalOperations := []actors.TransactionalOperation{
-// 			{
-// 				Operation: actors.Upsert,
-// 				Request: map[string]interface{}{
-// 					"key":   "fakeKey1",
-// 					"value": fakeBodyObject,
-// 				},
-// 			},
-// 			{
-// 				Operation: actors.Delete,
-// 				Request: map[string]interface{}{
-// 					"key": "fakeKey1",
-// 				},
-// 			},
-// 		}
+		testTransactionalOperations := []actors.TransactionalOperation{
+			{
+				Operation: actors.Upsert,
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
+			},
+			{
+				Operation: actors.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
 
-// 		mockActors := new(actors.MockActors)
-// 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
-// 			ActorID:    "fakeActorID",
-// 			ActorType:  "fakeActorType",
-// 			Operations: testTransactionalOperations,
-// 		}).Return(nil)
+		mockActors := new(actors.MockActors)
+		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
+			ActorID:    "fakeActorID",
+			ActorType:  "fakeActorType",
+			Operations: testTransactionalOperations,
+		}).Return(nil)
 
-// 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-// 			ActorID:   "fakeActorID",
-// 			ActorType: "fakeActorType",
-// 		}).Return(true)
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
-// 		testAPI.actor = mockActors
+		testAPI.actor = mockActors
 
-// 		// act
-// 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
 
-// 		assert.NoError(t, err)
-// 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
-// 		// assert
-// 		assert.Equal(t, 204, resp.StatusCode)
-// 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
-// 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
-// 	})
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
+	})
 
-// 	fakeServer.Shutdown()
-// }
+	fakeServer.Shutdown()
+}
 
 func TestAPIToken(t *testing.T) {
 	token := "1234"
