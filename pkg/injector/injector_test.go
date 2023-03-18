@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -34,17 +35,20 @@ import (
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 )
 
 func TestConfigCorrectValues(t *testing.T) {
-	i := NewInjector(nil, Config{
-		TLSCertFile:            "a",
-		TLSKeyFile:             "b",
-		SidecarImage:           "c",
-		SidecarImagePullPolicy: "d",
-		Namespace:              "e",
+	i, err := NewInjector(nil, Config{
+		TLSCertFile:                       "a",
+		TLSKeyFile:                        "b",
+		SidecarImage:                      "c",
+		SidecarImagePullPolicy:            "d",
+		Namespace:                         "e",
+		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*",
 	}, nil, nil)
+	assert.NoError(t, err)
 
 	injector := i.(*injector)
 	assert.Equal(t, "a", injector.config.TLSCertFile)
@@ -52,6 +56,21 @@ func TestConfigCorrectValues(t *testing.T) {
 	assert.Equal(t, "c", injector.config.SidecarImage)
 	assert.Equal(t, "d", injector.config.SidecarImagePullPolicy)
 	assert.Equal(t, "e", injector.config.Namespace)
+	m, err := namespacednamematcher.CreateFromString("ns*:sa,namespace:sa*")
+	assert.NoError(t, err)
+	assert.Equal(t, m, injector.namespaceNameMatcher)
+}
+
+func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
+	_, err := NewInjector(nil, Config{
+		TLSCertFile:                       "a",
+		TLSKeyFile:                        "b",
+		SidecarImage:                      "c",
+		SidecarImagePullPolicy:            "d",
+		Namespace:                         "e",
+		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
+	}, nil, nil)
+	assert.Error(t, err)
 }
 
 func TestAnnotations(t *testing.T) {
@@ -377,12 +396,15 @@ func TestGetAppIDFromRequest(t *testing.T) {
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 
-	i := NewInjector([]string{authID}, Config{
-		TLSCertFile:  "test-cert",
-		TLSKeyFile:   "test-key",
-		SidecarImage: "test-image",
-		Namespace:    "test-ns",
+	i, err := NewInjector([]string{authID}, Config{
+		TLSCertFile:                       "test-cert",
+		TLSKeyFile:                        "test-key",
+		SidecarImage:                      "test-image",
+		Namespace:                         "test-ns",
+		AllowedServiceAccountsPrefixNames: "vc-proj*:sa-dev*,vc-all-allowed*:*",
 	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
+
+	assert.NoError(t, err)
 	injector := i.(*injector)
 
 	podBytes, _ := json.Marshal(corev1.Pod{
@@ -541,6 +563,63 @@ func TestHandleRequest(t *testing.T) {
 			http.StatusOK,
 			false,
 		},
+		{
+			"TestSidecarInjectUserInfoMatchesServiceAccountPrefix",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:vc-project-star:sa-dev-team-usa",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			true,
+		},
+		{
+			"TestSidecarInjectUserInfoMatchesAllAllowedServiceAccountPrefix",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:vc-all-allowed-project:dapr",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			true,
+		},
+		{
+			"TestSidecarInjectUserInfoNotMatchesServiceAccountPrefix",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:vc-bad-project-star:sa-dev-team-usa",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(injector.handleRequest))
@@ -617,5 +696,23 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
 		assert.NoError(t, err)
 		assert.Equal(t, 3, len(uids))
+	})
+}
+
+func Test_Ready(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	t.Run("if injector ready return nil", func(t *testing.T) {
+		i := &injector{ready: make(chan struct{})}
+		close(i.ready)
+		assert.NoError(t, i.Ready(ctx))
+	})
+
+	t.Run("if not ready then should return timeout error if context cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+		defer cancel()
+		i := &injector{ready: make(chan struct{})}
+		assert.Error(t, i.Ready(ctx), errors.New("timed out waiting for injector to become ready"))
 	})
 }

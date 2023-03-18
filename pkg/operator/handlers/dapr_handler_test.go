@@ -5,8 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"k8s.io/client-go/kubernetes/scheme"
-
+	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -14,8 +13,10 @@ import (
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/dapr/dapr/pkg/injector/annotations"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -112,20 +113,20 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 		Name:      "test",
 	}
 	deployment := getDeployment("test", "true")
-	deployment.GetTemplateAnnotations()[daprMetricsPortKey] = "12345"
+	deployment.GetTemplateAnnotations()[annotations.KeyMetricsPort] = "12345"
 
 	service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 	require.NotNil(t, service)
-	assert.Equal(t, "test", service.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
 	assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"])
 	assert.Equal(t, "12345", service.ObjectMeta.Annotations["prometheus.io/port"])
 	assert.Equal(t, "/", service.ObjectMeta.Annotations["prometheus.io/path"])
 
-	deployment.GetTemplateAnnotations()[daprEnableMetricsKey] = "false"
+	deployment.GetTemplateAnnotations()[annotations.KeyEnableMetrics] = "false"
 
 	service = testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 	require.NotNil(t, service)
-	assert.Equal(t, "test", service.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/scrape"])
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/port"])
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
@@ -154,7 +155,7 @@ func TestPatchDaprService(t *testing.T) {
 	var actualService corev1.Service
 	err = cli.Get(ctx, myDaprService, &actualService)
 	assert.NoError(t, err)
-	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[annotations.KeyAppID])
 	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
 	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
 	assert.Len(t, actualService.OwnerReferences, 1)
@@ -165,7 +166,7 @@ func TestPatchDaprService(t *testing.T) {
 	assert.NoError(t, err)
 	err = cli.Get(ctx, myDaprService, &actualService)
 	assert.NoError(t, err)
-	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[annotations.KeyAppID])
 	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
 	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
 	assert.Len(t, actualService.OwnerReferences, 1)
@@ -210,22 +211,27 @@ func TestGetMetricsPort(t *testing.T) {
 func TestWrapper(t *testing.T) {
 	deploymentWrapper := getDeployment("test_id", "true")
 	statefulsetWrapper := getStatefulSet("test_id", "true")
+	rolloutWrapper := getRollout("test_id", "true")
 
 	t.Run("get match label from wrapper", func(t *testing.T) {
 		assert.Equal(t, "test", deploymentWrapper.GetMatchLabels()["app"])
 		assert.Equal(t, "test", statefulsetWrapper.GetMatchLabels()["app"])
+		assert.Equal(t, "test", rolloutWrapper.GetMatchLabels()["app"])
 	})
 
 	t.Run("get annotations from wrapper", func(t *testing.T) {
-		assert.Equal(t, "test_id", deploymentWrapper.GetTemplateAnnotations()[appIDAnnotationKey])
-		assert.Equal(t, "test_id", statefulsetWrapper.GetTemplateAnnotations()[appIDAnnotationKey])
+		assert.Equal(t, "test_id", deploymentWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
+		assert.Equal(t, "test_id", statefulsetWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
+		assert.Equal(t, "test_id", rolloutWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
 	})
 
 	t.Run("get object from wrapper", func(t *testing.T) {
 		assert.Equal(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
+		assert.Equal(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&argov1alpha1.Rollout{}))
 		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
+		assert.NotEqual(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 	})
 }
 
@@ -234,7 +240,9 @@ func TestInit(t *testing.T) {
 
 	_ = scheme.AddToScheme(mgr.GetScheme())
 
-	handler := NewDaprHandler(mgr)
+	handler := NewDaprHandlerWithOptions(mgr, &Options{
+		ArgoRolloutServiceReconcilerEnabled: true,
+	})
 
 	t.Run("test init dapr handler", func(t *testing.T) {
 		assert.NotNil(t, handler)
@@ -243,7 +251,7 @@ func TestInit(t *testing.T) {
 
 		assert.Nil(t, err)
 
-		assert.Equal(t, 2, len(mgr.GetRunnables()))
+		assert.Equal(t, 3, len(mgr.GetRunnables()))
 
 		srv := &corev1.Service{}
 		val := mgr.GetIndexerFunc(&corev1.Service{})(srv)
@@ -270,6 +278,7 @@ func TestInit(t *testing.T) {
 	t.Run("test wrapper", func(t *testing.T) {
 		deploymentCtl := mgr.GetRunnables()[0]
 		statefulsetCtl := mgr.GetRunnables()[1]
+		rolloutCtl := mgr.GetRunnables()[2]
 
 		// the runnable is sigs.k8s.io/controller-runtime/pkg/internal/controller.Controller
 		reconciler := reflect.Indirect(reflect.ValueOf(deploymentCtl)).FieldByName("Do").Interface().(*Reconciler)
@@ -287,12 +296,20 @@ func TestInit(t *testing.T) {
 		assert.NotNil(t, wrapper)
 
 		assert.Equal(t, reflect.TypeOf(&appsv1.StatefulSet{}), reflect.TypeOf(wrapper.GetObject()))
+
+		reconciler = reflect.Indirect(reflect.ValueOf(rolloutCtl)).FieldByName("Do").Interface().(*Reconciler)
+
+		wrapper = reconciler.newWrapper()
+
+		assert.NotNil(t, wrapper)
+
+		assert.Equal(t, reflect.TypeOf(&argov1alpha1.Rollout{}), reflect.TypeOf(wrapper.GetObject()))
 	})
 }
 
 func getDeploymentWithMetricsPortAnnotation(daprID string, daprEnabled string, metricsPort string) ObjectWrapper {
 	d := getDeployment(daprID, daprEnabled)
-	d.GetTemplateAnnotations()[daprMetricsPortKey] = metricsPort
+	d.GetTemplateAnnotations()[annotations.KeyMetricsPort] = metricsPort
 	return d
 }
 
@@ -302,9 +319,9 @@ func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 		Name:   "app",
 		Labels: map[string]string{"app": "test_app"},
 		Annotations: map[string]string{
-			appIDAnnotationKey:       appID,
-			daprEnabledAnnotationKey: daprEnabled,
-			daprEnableMetricsKey:     "true",
+			annotations.KeyAppID:         appID,
+			annotations.KeyEnabled:       daprEnabled,
+			annotations.KeyEnableMetrics: "true",
 		},
 	}
 
@@ -336,9 +353,9 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 		Name:   "app",
 		Labels: map[string]string{"app": "test_app"},
 		Annotations: map[string]string{
-			appIDAnnotationKey:       appID,
-			daprEnabledAnnotationKey: daprEnabled,
-			daprEnableMetricsKey:     "true",
+			annotations.KeyAppID:         appID,
+			annotations.KeyEnabled:       daprEnabled,
+			annotations.KeyEnableMetrics: "true",
 		},
 	}
 
@@ -363,6 +380,40 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 
 	return &StatefulSetWrapper{
 		statefulset,
+	}
+}
+
+func getRollout(appID string, daprEnabled string) ObjectWrapper {
+	metadata := metaV1.ObjectMeta{
+		Name:   "app",
+		Labels: map[string]string{"app": "test_app"},
+		Annotations: map[string]string{
+			annotations.KeyAppID:         appID,
+			annotations.KeyEnabled:       daprEnabled,
+			annotations.KeyEnableMetrics: "true",
+		},
+	}
+
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: metadata,
+	}
+
+	rollout := argov1alpha1.Rollout{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "app",
+		},
+		Spec: argov1alpha1.RolloutSpec{
+			Template: podTemplateSpec,
+			Selector: &metaV1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "test",
+				},
+			},
+		},
+	}
+
+	return &RolloutWrapper{
+		rollout,
 	}
 }
 

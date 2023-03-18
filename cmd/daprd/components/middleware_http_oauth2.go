@@ -14,6 +14,8 @@ limitations under the License.
 package components
 
 import (
+	"context"
+
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -24,7 +26,7 @@ import (
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return oauth2.NewOAuth2Middleware(log).GetHandler(metadata)
+			return oauth2.NewOAuth2Middleware(log).GetHandler(context.TODO(), metadata)
 		}
 	}, "oauth2")
 }

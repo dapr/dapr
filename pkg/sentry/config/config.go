@@ -51,6 +51,17 @@ func (c SentryConfig) GetTokenAudiences() (audiences []string) {
 	return
 }
 
+// String implements fmt.Stringer.
+func (c SentryConfig) String() string {
+	caStore := "default"
+	if c.CAStore != "" {
+		caStore = c.CAStore
+	}
+
+	return fmt.Sprintf("Configuration: port:'%v' ca store:'%s', allowed clock skew:'%s', workload cert ttl:'%s'",
+		c.Port, caStore, c.AllowedClockSkew.String(), c.WorkloadCertTTL.String())
+}
+
 var configGetters = map[string]func(string) (SentryConfig, error){
 	selfHostedConfig: getSelfhostedConfig,
 	kubernetesConfig: getKubernetesConfig,
@@ -73,18 +84,8 @@ func FromConfigName(configName string) (SentryConfig, error) {
 		conf = getDefaultConfig()
 	}
 
-	printConfig(conf)
+	log.Info(conf.String())
 	return conf, err
-}
-
-func printConfig(config SentryConfig) {
-	caStore := "default"
-	if config.CAStore != "" {
-		caStore = config.CAStore
-	}
-
-	log.Infof("configuration: [port]: %v, [ca store]: %s, [allowed clock skew]: %s, [workload cert ttl]: %s",
-		config.Port, caStore, config.AllowedClockSkew.String(), config.WorkloadCertTTL.String())
 }
 
 func IsKubernetesHosted() bool {

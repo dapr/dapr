@@ -33,8 +33,6 @@ on:
     types: [perf-test]
 
 env:
-  # Version of Go
-  GOVER: "^1.19.2"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
@@ -94,7 +92,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -217,17 +215,17 @@ jobs:
                 `PR_NUMBER=${testPayload.issue.number}`
               );
             }
-      - name: Set up Go ${{ env.GOVER }}
-        if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GOVER }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
       - name: Cache Go modules (perf)
         if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
         uses: actions/cache@v3
@@ -358,25 +356,30 @@ jobs:
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-perf") {
+              let selectedTestsEnvVar = ""
+              if (testPayload?.args) {
+                selectedTestsEnvVar = `DAPR_PERF_TEST=${testPayload.args}\n`
+              }
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
+                `${selectedTestsEnvVar}`+
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
                 `PR_NUMBER=${testPayload.issue.number}`
               );
             }
-      - name: Set up Go ${{ env.GOVER }}
-        if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GOVER }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
       - name: Cache Go modules (perf-test)
         if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
         uses: actions/cache@v3
@@ -462,11 +465,18 @@ jobs:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: test_perf.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.*
-      - name: Show test summary
+      - name: Add job test summary
         if: always()
         uses: test-summary/action@v2
         with:
           paths: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.xml
+      - name: Add job test outputs
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const script = require('./.github/scripts/dapr_tests_summary.js')
+            await script({core, glob})
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
