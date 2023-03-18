@@ -118,7 +118,6 @@ func main() {
 }
 
 func readPubsubEnvVar() error {
-
 	pubSubName = os.Getenv("PERF_PUBSUB_HTTP_COMPONENT_NAME")
 	topic = os.Getenv("PERF_PUBSUB_HTTP_TOPIC_NAME")
 	route = os.Getenv("PERF_PUBSUB_HTTP_ROUTE_NAME")
