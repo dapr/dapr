@@ -294,6 +294,18 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
+			Version: apiVersionV1alpha1,
+			Handler: a.onPauseWorkflowHandler(),
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
+			Version: apiVersionV1alpha1,
+			Handler: a.onResumeWorkflowHandler(),
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
 			Handler: a.onTerminateWorkflowHandler(),
@@ -828,8 +840,8 @@ func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
 func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.TerminateWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *runtimev1pb.TerminateWorkflowResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.WorkflowActivityRequest, *runtimev1pb.WorkflowActivityResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
@@ -846,6 +858,32 @@ func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.EventName = reqCtx.UserValue(eventName).(string)
+				return in, nil
+			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
+		})
+}
+
+func (a *api) onPauseWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.PauseWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.WorkflowActivityRequest, *runtimev1pb.WorkflowActivityResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityRequest, error) {
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
+				return in, nil
+			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
+		})
+}
+
+func (a *api) onResumeWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.ResumeWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.WorkflowActivityRequest, *runtimev1pb.WorkflowActivityResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityRequest, error) {
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				return in, nil
 			},
 			SuccessStatusCode: fasthttp.StatusAccepted,

@@ -71,7 +71,8 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 	cp := trustBundler.GetTrustAnchors()
 
 	config := &tls.Config{
-		ClientCAs: cp,
+		MinVersion: tls.VersionTLS12,
+		ClientCAs:  cp,
 		// Require cert verification
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
