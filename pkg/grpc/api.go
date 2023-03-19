@@ -107,7 +107,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
-	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
+	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	daprRunTimeVersion         string
 }
 
@@ -262,7 +262,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
-	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 }
 
 // NewAPI returns a new gRPC API.
@@ -1554,12 +1554,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions, err := a.getSubscriptionsFn()
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetMetadataResponse{}, err
-	}
+	subscriptions := a.getSubscriptionsFn()
 	ps := []*runtimev1pb.PubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, &runtimev1pb.PubsubSubscription{

@@ -16,8 +16,10 @@ package raft
 import (
 	"io"
 	"log"
+	"strings"
 
 	"github.com/hashicorp/go-hclog"
+	"github.com/spf13/cast"
 
 	"github.com/dapr/kit/logger"
 )
@@ -31,37 +33,55 @@ func newLoggerAdapter() hclog.Logger {
 // loggerAdapter is the adapter to integrate with dapr logger.
 type loggerAdapter struct{}
 
+func (l *loggerAdapter) printLog(msg string, args ...any) {
+	if len(args) > 0 {
+		fields := strings.Builder{}
+		for i, f := range args {
+			if i%2 == 1 {
+				fields.WriteRune('=')
+			} else {
+				fields.WriteRune(',')
+			}
+			fields.WriteString(cast.ToString(f))
+		}
+		logging.Debug(msg + fields.String())
+		return
+	}
+
+	logging.Debug(msg)
+}
+
 func (l *loggerAdapter) Log(level hclog.Level, msg string, args ...interface{}) {
 	switch level {
 	case hclog.Debug:
-		logging.Debugf(msg, args)
+		l.printLog(msg, args...)
 	case hclog.Warn:
-		logging.Debugf(msg, args)
+		l.printLog(msg, args...)
 	case hclog.Error:
-		logging.Debugf(msg, args)
+		l.printLog(msg, args...)
 	default:
-		logging.Debugf(msg, args)
+		l.printLog(msg, args...)
 	}
 }
 
 func (l *loggerAdapter) Trace(msg string, args ...interface{}) {
-	logging.Debugf(msg, args)
+	l.printLog(msg, args...)
 }
 
 func (l *loggerAdapter) Debug(msg string, args ...interface{}) {
-	logging.Debugf(msg, args)
+	l.printLog(msg, args...)
 }
 
 func (l *loggerAdapter) Info(msg string, args ...interface{}) {
-	logging.Debugf(msg, args)
+	l.printLog(msg, args...)
 }
 
 func (l *loggerAdapter) Warn(msg string, args ...interface{}) {
-	logging.Debugf(msg, args)
+	l.printLog(msg, args...)
 }
 
 func (l *loggerAdapter) Error(msg string, args ...interface{}) {
-	logging.Debugf(msg, args)
+	l.printLog(msg, args...)
 }
 
 func (l *loggerAdapter) IsTrace() bool { return false }
