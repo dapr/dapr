@@ -195,8 +195,8 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		return false
 	}
 
-	for _, pod := range podList.Items {
-		pod := pod
+	for i := range podList.Items {
+		pod := podList.Items[i]
 		// Skip invalid pods
 		if pod.Name == "" {
 			continue
