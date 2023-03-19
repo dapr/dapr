@@ -19,11 +19,10 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -52,7 +51,7 @@ func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrCryptoGetKey, in.Name, err.Error())
+		err = messages.ErrCryptoGetKey.WithFormat(in.Name, err)
 		a.Logger.Debug(err)
 		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
@@ -73,13 +72,15 @@ func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 		)
 		err = res.Raw(&v)
 		if err != nil {
-			err = status.Errorf(codes.Internal, "failed to marshal public key %s as PKIX: %s", in.Name, err.Error())
+			err = fmt.Errorf("failed to marshal public key %s as PKIX: %w", in.Name, err)
+			err = messages.ErrCryptoGetKey.WithFormat(in.Name, err)
 			a.Logger.Debug(err)
 			return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 		}
 		der, err = x509.MarshalPKIXPublicKey(v)
 		if err != nil {
-			err = status.Errorf(codes.Internal, "failed to marshal public key %s as PKIX: %s", in.Name, err.Error())
+			err = fmt.Errorf("failed to marshal public key %s as PKIX: %w", in.Name, err)
+			err = messages.ErrCryptoGetKey.WithFormat(in.Name, err)
 			a.Logger.Debug(err)
 			return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 		}
@@ -91,13 +92,14 @@ func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 	case runtimev1pb.SubtleGetKeyAlpha1Request_JSON: //nolint:nosnakecase
 		pk, err = json.Marshal(res)
 		if err != nil {
-			err = status.Errorf(codes.Internal, "failed to marshal public key %s as JSON: %s", in.Name, err.Error())
+			err = fmt.Errorf("failed to marshal public key %s as JSON: %w", in.Name, err)
+			err = messages.ErrCryptoGetKey.WithFormat(in.Name, err)
 			a.Logger.Debug(err)
 			return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 		}
 
 	default:
-		err = status.Errorf(codes.InvalidArgument, "invalid key format")
+		err = messages.ErrBadRequest.WithFormat("invalid key format")
 		a.Logger.Debug(err)
 		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
@@ -120,33 +122,26 @@ func (a *UniversalAPI) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.
 		return &runtimev1pb.SubtleEncryptAlpha1Response{}, err
 	}
 
-	policyRunner := resiliency.NewRunner[*subtleEncryptRes](ctx,
+	policyRunner := resiliency.NewRunner[subtleEncryptRes](ctx,
 		a.Resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
 	)
 	start := time.Now()
-	ser, err := policyRunner(func(ctx context.Context) (*subtleEncryptRes, error) {
-		ciphertext, tag, rErr := component.Encrypt(ctx, in.Plaintext, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
-		if rErr != nil {
-			return nil, rErr
-		}
-		return &subtleEncryptRes{
-			ciphertext: ciphertext,
-			tag:        tag,
-		}, nil
+	ser, err := policyRunner(func(ctx context.Context) (r subtleEncryptRes, rErr error) {
+		r.ciphertext, r.tag, rErr = component.Encrypt(ctx, in.Plaintext, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
+		return
 	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
-		a.Logger.Debug(err)
+		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
+		// We will log the full error as a debug log, but only return a generic one to the user
+		a.Logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
+		err = messages.ErrCryptoOperation.WithFormat("failed to encrypt")
 		return &runtimev1pb.SubtleEncryptAlpha1Response{}, err
 	}
 
-	if ser == nil {
-		ser = &subtleEncryptRes{}
-	}
 	return &runtimev1pb.SubtleEncryptAlpha1Response{
 		Ciphertext: ser.ciphertext,
 		Tag:        ser.tag,
@@ -172,8 +167,10 @@ func (a *UniversalAPI) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.
 	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
-		a.Logger.Debug(err)
+		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
+		// We will log the full error as a debug log, but only return a generic one to the user
+		a.Logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
+		err = messages.ErrCryptoOperation.WithFormat("failed to decrypt")
 		return &runtimev1pb.SubtleDecryptAlpha1Response{}, err
 	}
 
@@ -197,38 +194,32 @@ func (a *UniversalAPI) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.
 	// Parse the plaintext key
 	pk, err := contribCrypto.ParseKey(in.PlaintextKey, "")
 	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, "error while parsing plaintext key: %s", err.Error())
+		err = fmt.Errorf("failed to parse plaintext key: %w", err)
+		err = messages.ErrCryptoOperation.WithFormat(err)
 		a.Logger.Debug(err)
 		return &runtimev1pb.SubtleWrapKeyAlpha1Response{}, err
 	}
 
-	policyRunner := resiliency.NewRunner[*subtleWrapKeyRes](ctx,
+	policyRunner := resiliency.NewRunner[subtleWrapKeyRes](ctx,
 		a.Resiliency.ComponentOutboundPolicy(in.ComponentName, resiliency.Crypto),
 	)
 	start := time.Now()
-	swkr, err := policyRunner(func(ctx context.Context) (*subtleWrapKeyRes, error) {
-		wrappedKey, tag, rErr := component.WrapKey(ctx, pk, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
-		if rErr != nil {
-			return nil, rErr
-		}
-		return &subtleWrapKeyRes{
-			wrappedKey: wrappedKey,
-			tag:        tag,
-		}, nil
+	swkr, err := policyRunner(func(ctx context.Context) (r subtleWrapKeyRes, rErr error) {
+		r.wrappedKey, r.tag, rErr = component.WrapKey(ctx, pk, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
+		return
 	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
-		a.Logger.Debug(err)
+		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
+		// We will log the full error as a debug log, but only return a generic one to the user
+		a.Logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
+		err = messages.ErrCryptoOperation.WithFormat("failed to wrap key")
 		return &runtimev1pb.SubtleWrapKeyAlpha1Response{}, err
 	}
 
-	if swkr == nil {
-		swkr = &subtleWrapKeyRes{}
-	}
 	return &runtimev1pb.SubtleWrapKeyAlpha1Response{
 		WrappedKey: swkr.wrappedKey,
 		Tag:        swkr.tag,
@@ -254,15 +245,18 @@ func (a *UniversalAPI) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1p
 	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
-		a.Logger.Debug(err)
+		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
+		// We will log the full error as a debug log, but only return a generic one to the user
+		a.Logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
+		err = messages.ErrCryptoOperation.WithFormat("failed to unwrap key")
 		return &runtimev1pb.SubtleUnwrapKeyAlpha1Response{}, err
 	}
 
 	// Serialize the key
 	enc, err := contribCrypto.SerializeKey(plaintextText)
 	if err != nil {
-		err = status.Errorf(codes.Internal, "failed to serialize unwrapped key: %s", err.Error())
+		err = fmt.Errorf("failed to serialize unwrapped key: %w", err)
+		err = messages.ErrCryptoOperation.WithFormat(err)
 		a.Logger.Debug(err)
 		return &runtimev1pb.SubtleUnwrapKeyAlpha1Response{}, err
 	}
@@ -291,8 +285,10 @@ func (a *UniversalAPI) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.Sub
 	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
-		a.Logger.Debug(err)
+		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
+		// We will log the full error as a debug log, but only return a generic one to the user
+		a.Logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
+		err = messages.ErrCryptoOperation.WithFormat("failed to sign")
 		return &runtimev1pb.SubtleSignAlpha1Response{}, err
 	}
 
@@ -320,8 +316,10 @@ func (a *UniversalAPI) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.S
 	diag.DefaultComponentMonitoring.CryptoInvoked(ctx, in.ComponentName, diag.CryptoOp, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrCryptoOperation, err.Error())
-		a.Logger.Debug(err)
+		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
+		// We will log the full error as a debug log, but only return a generic one to the user
+		a.Logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
+		err = messages.ErrCryptoOperation.WithFormat("failed to verify signature")
 		return &runtimev1pb.SubtleVerifyAlpha1Response{}, err
 	}
 
@@ -333,14 +331,14 @@ func (a *UniversalAPI) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.S
 // Internal method that checks if the request is for a valid crypto component.
 func (a *UniversalAPI) cryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
 	if a.CryptoProviders == nil || len(a.CryptoProviders) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrCryptoProvidersNotConfigured)
+		err := messages.ErrCryptoProvidersNotConfigured
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
 	component := a.CryptoProviders[componentName]
 	if component == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrCryptoProviderNotFound, componentName)
+		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
 		a.Logger.Debug(err)
 		return nil, err
 	}
