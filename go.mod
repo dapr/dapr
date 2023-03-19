@@ -23,7 +23,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/hashicorp/go-hclog v1.4.0
-	github.com/hashicorp/go-msgpack v0.5.5
+	github.com/hashicorp/go-msgpack/v2 v2.1.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/hashicorp/raft v1.4.0
@@ -72,7 +72,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.5
 )
 
-require github.com/bufbuild/protocompile v0.4.0 // indirect
+require (
+	github.com/bufbuild/protocompile v0.4.0 // indirect
+	github.com/hashicorp/go-msgpack v0.5.5 // indirect
+)
 
 require (
 	cloud.google.com/go v0.110.0 // indirect
@@ -104,7 +107,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue v0.1.0 // indirect
 	github.com/Azure/go-amqp v0.18.1 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v0.9.0 // indirect
-	github.com/DataDog/zstd v1.5.0 // indirect
+	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect

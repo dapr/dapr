@@ -18,7 +18,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/hashicorp/go-msgpack/codec"
+	"github.com/hashicorp/go-msgpack/v2/codec"
 )
 
 const defaultDirPermission = 0o755
