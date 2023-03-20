@@ -25,7 +25,7 @@ name: dapr-perf
 on:
   # Run every 6 hours
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 */12 * * *"
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
