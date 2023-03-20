@@ -366,6 +366,8 @@ github.com/dapr/components-contrib v1.10.4-0.20230320200417-76e33137d95f h1:bfqQ
 github.com/dapr/components-contrib v1.10.4-0.20230320200417-76e33137d95f/go.mod h1:R8O3GuaUQv0pn8NDHqsoY/lIPgjjSo93juJ0rsE6UF4=
 github.com/dapr/kit v0.0.4 h1:i+7TIN4crC1Mo0JFyWpIkwAE8orlliA0O6/ibvs2AaE=
 github.com/dapr/kit v0.0.4/go.mod h1:RFN6r5pZzhrelB0SUr8Dha44ckRBl7t+B01X5aw8WeE=
+github.com/dapr/kit v0.0.5-0.20230307192505-b5bafe889a81 h1:8vCcvFXpCH4xvbG4JuG0g9bFk0T3cgY0infitTxG7oA=
+github.com/dapr/kit v0.0.5-0.20230307192505-b5bafe889a81/go.mod h1:JXPc/7O0s0ieBe+GpOUuYiyxRcgip1MQwSwCmQPYSVE=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
