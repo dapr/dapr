@@ -21,7 +21,6 @@ healthapp \
 hellodapr \
 stateapp \
 secretapp \
-workflowsapp \
 service_invocation \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
