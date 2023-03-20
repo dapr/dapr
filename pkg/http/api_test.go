@@ -2295,7 +2295,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+		getSubscriptionsFn: func() []runtimePubsub.Subscription {
 			return []runtimePubsub.Subscription{
 				{
 					PubsubName:      "test",
@@ -2309,7 +2309,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 						},
 					},
 				},
-			}, nil
+			}
 		},
 	}
 	// PutMetadata only stroes string(request body)
@@ -3005,14 +3005,14 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	workflowComponents := map[string]workflowContrib.Workflow{
 		componentName: fakeWorkflowComponent,
 	}
+	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency)
 	testAPI := &api{
-		resiliency:         resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency),
-		workflowComponents: workflowComponents,
-	}
-	testAPI.universal = &universalapi.UniversalAPI{
-		Logger:             logger.NewLogger("fakeLogger"),
-		WorkflowComponents: workflowComponents,
-		Resiliency:         testAPI.resiliency,
+		resiliency: resiliencyConfig,
+		universal: &universalapi.UniversalAPI{
+			Logger:             logger.NewLogger("fakeLogger"),
+			WorkflowComponents: workflowComponents,
+			Resiliency:         resiliencyConfig,
+		},
 	}
 
 	fakeServer.StartServer(testAPI.constructWorkflowEndpoints())

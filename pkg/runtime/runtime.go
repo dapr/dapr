@@ -1438,7 +1438,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		AppChannel:                  a.appChannel,
 		DirectMessaging:             a.directMessaging,
 		GetComponentsFn:             a.getComponents,
-		GetSubscriptionsFn:          a.getSubscriptions,
+		GetSubscriptionsFn:          a.getSubscriptionsCache,
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
 		WorkflowsComponents:         a.workflowComponents,
@@ -1559,7 +1559,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		GetSubscriptionsFn:          a.getSubscriptions,
+		GetSubscriptionsFn:          a.getSubscriptionsCache,
 	})
 }
 
@@ -1842,6 +1842,10 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription
 		}
 	}
 	return subs[:i]
+}
+
+func (a *DaprRuntime) getSubscriptionsCache() []runtimePubsub.Subscription {
+	return a.subscriptions
 }
 
 func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {

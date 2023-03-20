@@ -82,10 +82,9 @@ type api struct {
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
 	getComponentsFn            func() []componentsV1alpha1.Component
-	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
+	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	workflowComponents         map[string]wfs.Workflow
 	lockStores                 map[string]lock.Store
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{}
@@ -169,7 +168,7 @@ type APIOpts struct {
 	AppChannel                  channel.AppChannel
 	DirectMessaging             messaging.DirectMessaging
 	GetComponentsFn             func() []componentsV1alpha1.Component
-	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 	Resiliency                  resiliency.Provider
 	StateStores                 map[string]state.Store
 	WorkflowsComponents         map[string]wfs.Workflow
@@ -203,7 +202,6 @@ func NewAPI(opts APIOpts) API {
 		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
-		workflowComponents:         opts.WorkflowsComponents,
 		lockStores:                 opts.LockStores,
 		secretStores:               opts.SecretStores,
 		secretsConfiguration:       opts.SecretsConfiguration,
@@ -224,6 +222,7 @@ func NewAPI(opts APIOpts) API {
 			Resiliency:           opts.Resiliency,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			WorkflowComponents:   opts.WorkflowsComponents,
 		},
 	}
 
@@ -269,7 +268,7 @@ func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
 }
 
-// Workflow Component: Component specified in yaml (temporal, etc..)
+// Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
 func (a *api) constructWorkflowEndpoints() []Endpoint {
@@ -796,7 +795,7 @@ func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lo
 }
 
 // Route:   "workflows/{workflowComponent}/{workflowName}/{instanceId}",
-// Workflow Component: Component specified in yaml (temporal, etc..)
+// Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
 func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
@@ -2099,13 +2098,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions, err := a.getSubscriptionsFn()
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_GET_SUBSCRIPTIONS", fmt.Sprintf(messages.ErrPubsubGetSubscriptions, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
+	subscriptions := a.getSubscriptionsFn()
 	ps := []pubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, pubsubSubscription{
