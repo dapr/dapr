@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -1822,7 +1823,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -1852,7 +1853,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -2026,9 +2027,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		reminderResponse := actors.Reminder{
-			// Functions are not JSON encodable. This will force the error condition
-			Data: func() {},
+		reminderResponse := reminders.Reminder{
+			// This is not valid JSON
+			Data: json.RawMessage(`foo`),
 		}
 
 		mockActors := new(actors.MockActors)
@@ -2053,7 +2054,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 			Callback:  "",
@@ -2084,7 +2085,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
