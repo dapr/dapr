@@ -19,9 +19,9 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"net"
 	nethttp "net/http"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,10 +35,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -53,6 +52,8 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
+	"github.com/dapr/kit/logger"
+	timeutils "github.com/dapr/kit/time"
 )
 
 const (
@@ -61,10 +62,7 @@ const (
 	metadataZeroID       = "00000000-0000-0000-0000-000000000000"
 )
 
-var (
-	log     = logger.NewLogger("dapr.runtime.actor")
-	pattern = regexp.MustCompile(`^(R(?P<repetition>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
-)
+var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management.
 //
@@ -120,6 +118,9 @@ type actorsRuntime struct {
 	tracingSpec            configuration.TracingSpec
 	resiliency             resiliency.Provider
 	storeName              string
+	ctx                    context.Context
+	cancel                 context.CancelFunc
+	clock                  clock.WithTicker
 	internalActors         map[string]InternalActor
 	internalActorChannel   *internalActorChannel
 }
@@ -172,6 +173,10 @@ type ActorsOpts struct {
 
 // NewActors create a new actors runtime with given config.
 func NewActors(opts ActorsOpts) Actors {
+	return newActorsWithClock(opts, &clock.RealClock{})
+}
+
+func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	var transactionalStore state.TransactionalStore
 	if opts.StateStore != nil {
 		features := opts.StateStore.Features()
@@ -182,6 +187,7 @@ func NewActors(opts ActorsOpts) Actors {
 
 	appHealthy := &atomic.Bool{}
 	appHealthy.Store(true)
+	ctx, cancel := context.WithCancel(context.Background())
 	return &actorsRuntime{
 		store:                  opts.StateStore,
 		appChannel:             opts.AppChannel,
@@ -204,6 +210,9 @@ func NewActors(opts ActorsOpts) Actors {
 		evaluationLock:         &sync.RWMutex{},
 		evaluationChan:         make(chan struct{}, 1),
 		appHealthy:             appHealthy,
+		ctx:                    ctx,
+		cancel:                 cancel,
+		clock:                  clock,
 		internalActors:         map[string]InternalActor{},
 		internalActorChannel:   newInternalActorChannel(),
 	}
@@ -230,7 +239,7 @@ func (a *actorsRuntime) Init() error {
 		}
 	}
 
-	hostname := fmt.Sprintf("%s:%d", a.config.HostAddress, a.config.Port)
+	hostname := net.JoinHostPort(a.config.HostAddress, strconv.Itoa(a.config.Port))
 
 	afterTableUpdateFn := func() {
 		a.drainRebalancedActors()
@@ -247,7 +256,7 @@ func (a *actorsRuntime) Init() error {
 	}
 
 	go a.placement.Start()
-	a.startDeactivationTicker(a.config)
+	go a.deactivationTicker(a.config, a.deactivateActor)
 
 	log.Infof("actor runtime started. actor idle timeout: %s. actor scan interval: %s",
 		a.config.ActorIdleTimeout.String(), a.config.ActorDeactivationScanInterval.String())
@@ -269,19 +278,19 @@ func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
 		return
 	}
 
-	ch := health.StartEndpointHealthCheck(a.appChannel.GetBaseAddress()+"/healthz", opts...)
+	ch := health.StartEndpointHealthCheck(a.ctx, a.appChannel.GetBaseAddress()+"/healthz", opts...)
 	for {
-		appHealthy := <-ch
-		a.appHealthy.Store(appHealthy)
+		select {
+		case <-a.ctx.Done():
+			break
+		case appHealthy := <-ch:
+			a.appHealthy.Store(appHealthy)
+		}
 	}
 }
 
 func constructCompositeKey(keys ...string) string {
 	return strings.Join(keys, daprSeparator)
-}
-
-func decomposeCompositeKey(compositeKey string) []string {
-	return strings.Split(compositeKey, daprSeparator)
 }
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
@@ -292,7 +301,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	defer req.Close()
 
 	// TODO Propagate context.
-	ctx := context.Background()
+	ctx := context.TODO()
 
 	resp, err := a.getAppChannel(actorType).InvokeMethod(ctx, req)
 	if err != nil {
@@ -302,28 +311,37 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	defer resp.Close()
 
 	if resp.Status().Code != nethttp.StatusOK {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
+		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().Code), 10))
 		body, _ := resp.RawDataFull()
 		return fmt.Errorf("error from actor service: %s", string(body))
 	}
 
-	actorKey := constructCompositeKey(actorType, actorID)
-	a.actorsTable.Delete(actorKey)
+	a.removeActorFromTable(actorType, actorID)
 	diag.DefaultMonitoring.ActorDeactivated(actorType)
 	log.Debugf("deactivated actor type=%s, id=%s\n", actorType, actorID)
 
 	return nil
 }
 
+func (a *actorsRuntime) removeActorFromTable(actorType, actorID string) {
+	a.actorsTable.Delete(constructCompositeKey(actorType, actorID))
+}
+
 func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
-	arr := decomposeCompositeKey(key)
+	arr := strings.Split(key, daprSeparator)
 	return arr[0], arr[1]
 }
 
-func (a *actorsRuntime) startDeactivationTicker(configuration Config) {
-	ticker := time.NewTicker(configuration.ActorDeactivationScanInterval)
-	go func() {
-		for t := range ticker.C {
+type deactivateFn = func(actorType string, actorID string) error
+
+func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn deactivateFn) {
+	ticker := a.clock.NewTicker(configuration.ActorDeactivationScanInterval)
+	ch := ticker.C()
+	defer ticker.Stop()
+
+	for {
+		select {
+		case t := <-ch:
 			a.actorsTable.Range(func(key, value interface{}) bool {
 				actorInstance := value.(*actor)
 
@@ -335,7 +353,7 @@ func (a *actorsRuntime) startDeactivationTicker(configuration Config) {
 				if durationPassed >= configuration.GetIdleTimeoutForType(actorInstance.actorType) {
 					go func(actorKey string) {
 						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
-						err := a.deactivateActor(actorType, actorID)
+						err := deactivateFn(actorType, actorID)
 						if err != nil {
 							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
 						}
@@ -344,8 +362,10 @@ func (a *actorsRuntime) startDeactivationTicker(configuration Config) {
 
 				return true
 			})
+		case <-a.ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
 type lookupActorRes struct {
@@ -451,7 +471,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.GetReentrancyForType(actorType).MaxStackDepth))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.GetReentrancyForType(actorType).MaxStackDepth, a.clock))
 	}
 
 	return val.(*actor)
@@ -510,8 +530,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		req.WithReplay(true)
 	}
 
-	policyRunner := resiliency.NewRunnerWithOptions(ctx,
-		policyDef,
+	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
@@ -731,7 +750,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 					// wait until actor isn't busy or timeout hits
 					if actor.isBusy() {
 						select {
-						case <-time.After(a.config.DrainOngoingCallTimeout):
+						case <-a.clock.After(a.config.DrainOngoingCallTimeout):
 							break
 						case <-actor.channel():
 							// if a call comes in from the actor for state changes, that's still allowed
@@ -754,7 +773,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 						}
 						break
 					}
-					time.Sleep(time.Millisecond * 500)
+					a.clock.Sleep(time.Millisecond * 500)
 				}
 			}
 		}(key, value, &wg)
@@ -915,7 +934,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 
 	repeats = -1 // set to default
 	if len(reminder.Period) != 0 {
-		if years, months, days, period, repeats, err = parseDuration(reminder.Period); err != nil {
+		if years, months, days, period, repeats, err = timeutils.ParseDuration(reminder.Period); err != nil {
 			return fmt.Errorf("error parsing reminder period: %w", err)
 		}
 	}
@@ -941,18 +960,18 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 
 	go func(reminder *Reminder, years int, months int, days int, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, eTag *string, stop chan bool) {
 		var (
-			ttlTimer, nextTimer *time.Timer
+			ttlTimer, nextTimer clock.Timer
 			ttlTimerC           <-chan time.Time
 			err                 error
 		)
 		if !ttl.IsZero() {
-			ttlTimer = time.NewTimer(time.Until(ttl))
-			ttlTimerC = ttlTimer.C
+			ttlTimer = a.clock.NewTimer(ttl.Sub(a.clock.Now()))
+			ttlTimerC = ttlTimer.C()
 		}
-		nextTimer = time.NewTimer(time.Until(nextTime))
+		nextTimer = a.clock.NewTimer(nextTime.Sub(a.clock.Now()))
 		defer func() {
 			if nextTimer.Stop() {
-				<-nextTimer.C
+				<-nextTimer.C()
 			}
 			if ttlTimer != nil && ttlTimer.Stop() {
 				<-ttlTimerC
@@ -961,7 +980,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 	L:
 		for {
 			select {
-			case <-nextTimer.C:
+			case <-nextTimer.C():
 				// noop
 			case <-ttlTimerC:
 				// proceed with reminder deletion
@@ -986,7 +1005,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			if err = a.executeReminder(reminder); err != nil {
 				if errors.Is(err, ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
-					log.Infof("reminder %q was canceled by the actor", reminder.Name)
+					log.Debugf("reminder %q was canceled by the actor", reminder.Name)
 					break L
 				} else {
 					log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
@@ -1019,9 +1038,9 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			}
 			nextTime = nextTime.AddDate(years, months, days).Add(period)
 			if nextTimer.Stop() {
-				<-nextTimer.C
+				<-nextTimer.C()
 			}
-			nextTimer.Reset(time.Until(nextTime))
+			nextTimer.Reset(nextTime.Sub(a.clock.Now()))
 		}
 		err = a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 			Name:      reminder.Name,
@@ -1059,10 +1078,11 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	}
 	defer req.Close()
 
-	policyRunner := resiliency.NewRunnerWithOptions(
-		context.TODO(), policyDef, resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+	policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
-		})
+		},
+	)
 	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
@@ -1198,12 +1218,14 @@ func (m *ActorMetadata) calculateDatabasePartitionKey(stateKey string) string {
 }
 
 func (a *actorsRuntime) waitForEvaluationChan() bool {
-	t := time.NewTimer(5 * time.Second)
+	t := a.clock.NewTimer(5 * time.Second)
+	defer t.Stop()
 	select {
-	case <-t.C:
+	case <-a.ctx.Done():
+		return false
+	case <-t.C():
 		return false
 	case a.evaluationChan <- struct{}{}:
-		t.Stop()
 		<-a.evaluationChan
 	}
 	return true
@@ -1235,7 +1257,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		return errors.New("error creating reminder: timed out after 5s")
 	}
 
-	now := time.Now()
+	now := a.clock.Now()
 	reminder := Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
@@ -1252,7 +1274,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		err          error
 	)
 	if len(req.DueTime) != 0 {
-		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
+		if dueTime, err = timeutils.ParseTime(req.DueTime, &now); err != nil {
 			return fmt.Errorf("error parsing reminder due time: %w", err)
 		}
 	} else {
@@ -1261,7 +1283,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	reminder.RegisteredTime = dueTime.Format(time.RFC3339)
 
 	if len(req.Period) != 0 {
-		_, _, _, _, repeats, err = parseDuration(req.Period)
+		_, _, _, _, repeats, err = timeutils.ParseDuration(req.Period)
 		if err != nil {
 			return fmt.Errorf("error parsing reminder period: %w", err)
 		}
@@ -1272,7 +1294,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	}
 	// set expiration time if configured
 	if len(req.TTL) > 0 {
-		if ttl, err = parseTime(req.TTL, &dueTime); err != nil {
+		if ttl, err = timeutils.ParseTime(req.TTL, &dueTime); err != nil {
 			return fmt.Errorf("error parsing reminder TTL: %w", err)
 		}
 		// check if already expired
@@ -1315,9 +1337,9 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		close(stopChan.(chan bool))
 	}
 
-	now := time.Now()
+	now := a.clock.Now()
 	if len(req.DueTime) != 0 {
-		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
+		if dueTime, err = timeutils.ParseTime(req.DueTime, &now); err != nil {
 			return fmt.Errorf("error parsing timer due time: %w", err)
 		}
 	} else {
@@ -1326,7 +1348,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 	repeats = -1 // set to default
 	if len(req.Period) != 0 {
-		if years, months, days, period, repeats, err = parseDuration(req.Period); err != nil {
+		if years, months, days, period, repeats, err = timeutils.ParseDuration(req.Period); err != nil {
 			return fmt.Errorf("error parsing timer period: %w", err)
 		}
 		// error on timers with zero repetitions
@@ -1336,7 +1358,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	}
 
 	if len(req.TTL) > 0 {
-		if ttl, err = parseTime(req.TTL, &dueTime); err != nil {
+		if ttl, err = timeutils.ParseTime(req.TTL, &dueTime); err != nil {
 			return fmt.Errorf("error parsing timer TTL: %w", err)
 		}
 		if now.After(ttl) || dueTime.After(ttl) {
@@ -1351,19 +1373,19 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 	go func(stop chan bool, req *CreateTimerRequest) {
 		var (
-			ttlTimer, nextTimer *time.Timer
+			ttlTimer, nextTimer clock.Timer
 			ttlTimerC           <-chan time.Time
 			err                 error
 		)
 		if !ttl.IsZero() {
-			ttlTimer = time.NewTimer(time.Until(ttl))
-			ttlTimerC = ttlTimer.C
+			ttlTimer = a.clock.NewTimer(ttl.Sub(a.clock.Now()))
+			ttlTimerC = ttlTimer.C()
 		}
 		nextTime := dueTime
-		nextTimer = time.NewTimer(time.Until(nextTime))
+		nextTimer = a.clock.NewTimer(nextTime.Sub(a.clock.Now()))
 		defer func() {
 			if nextTimer.Stop() {
-				<-nextTimer.C
+				<-nextTimer.C()
 			}
 			if ttlTimer != nil && ttlTimer.Stop() {
 				<-ttlTimerC
@@ -1372,7 +1394,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	L:
 		for {
 			select {
-			case <-nextTimer.C:
+			case <-nextTimer.C():
 				// noop
 			case <-ttlTimerC:
 				// timer has expired; proceed with deletion
@@ -1401,9 +1423,9 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 			}
 			nextTime = nextTime.AddDate(years, months, days).Add(period)
 			if nextTimer.Stop() {
-				<-nextTimer.C
+				<-nextTimer.C()
 			}
-			nextTimer.Reset(time.Until(nextTime))
+			nextTimer.Reset(nextTime.Sub(a.clock.Now()))
 		}
 		err = a.DeleteTimer(ctx, &DeleteTimerRequest{
 			Name:      req.Name,
@@ -1441,10 +1463,11 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	}
 	defer req.Close()
 
-	policyRunner := resiliency.NewRunnerWithOptions(
-		context.TODO(), policyDef, resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+	policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
-		})
+		},
+	)
 	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
@@ -1731,7 +1754,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	if len(resp.Data) > 0 {
 		err = json.Unmarshal(resp.Data, &reminders)
 		if err != nil {
-			return nil, nil, fmt.Errorf("could not parse actor reminders: %v", err)
+			return nil, nil, fmt.Errorf("could not parse actor reminders: %w", err)
 		}
 	}
 
@@ -1796,7 +1819,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, req *DeleteReminde
 
 	stop, exists := a.activeReminders.Load(reminderKey)
 	if exists {
-		log.Infof("Found reminder with key: %v. Deleting reminder", reminderKey)
+		log.Debugf("Found reminder with key: %v. Deleting reminder", reminderKey)
 		close(stop.(chan bool))
 		a.activeReminders.Delete(reminderKey)
 	}
@@ -2029,7 +2052,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 }
 
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
-	actorCountMap := map[string]int{}
+	actorCountMap := make(map[string]int, len(a.config.HostedActorTypes))
 	for _, actorType := range a.config.HostedActorTypes {
 		if !isInternalActor(actorType) {
 			actorCountMap[actorType] = 0
@@ -2043,9 +2066,11 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 		return true
 	})
 
-	activeActorsCount := make([]ActiveActorsCount, 0, len(actorCountMap))
+	activeActorsCount := make([]ActiveActorsCount, len(actorCountMap))
+	n := 0
 	for actorType, count := range actorCountMap {
-		activeActorsCount = append(activeActorsCount, ActiveActorsCount{Type: actorType, Count: count})
+		activeActorsCount[n] = ActiveActorsCount{Type: actorType, Count: count}
+		n++
 	}
 
 	return activeActorsCount
@@ -2060,6 +2085,10 @@ func (a *actorsRuntime) Stop() {
 	if a.placement != nil {
 		a.placement.Stop()
 	}
+	if a.cancel != nil {
+		a.cancel()
+		a.cancel = nil
+	}
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters
@@ -2072,88 +2101,4 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 		}
 	}
 	return nil
-}
-
-func parseISO8601Duration(from string) (int, int, int, time.Duration, int, error) {
-	match := pattern.FindStringSubmatch(from)
-	if match == nil {
-		return 0, 0, 0, 0, 0, fmt.Errorf("unsupported ISO8601 duration format %q", from)
-	}
-	years, months, days, duration := 0, 0, 0, time.Duration(0)
-	// -1 signifies infinite repetition
-	repetition := -1
-	for i, name := range pattern.SubexpNames() {
-		part := match[i]
-		if i == 0 || name == "" || part == "" {
-			continue
-		}
-		val, err := strconv.Atoi(part)
-		if err != nil {
-			return 0, 0, 0, 0, 0, err
-		}
-		switch name {
-		case "year":
-			years = val
-		case "month":
-			months = val
-		case "week":
-			days += 7 * val
-		case "day":
-			days += val
-		case "hour":
-			duration += time.Hour * time.Duration(val)
-		case "minute":
-			duration += time.Minute * time.Duration(val)
-		case "second":
-			duration += time.Second * time.Duration(val)
-		case "repetition":
-			repetition = val
-		default:
-			return 0, 0, 0, 0, 0, fmt.Errorf("unsupported ISO8601 duration field %s", name)
-		}
-	}
-	return years, months, days, duration, repetition, nil
-}
-
-// parseDuration creates time.Duration from either:
-// - ISO8601 duration format,
-// - time.Duration string format.
-func parseDuration(from string) (int, int, int, time.Duration, int, error) {
-	y, m, d, dur, r, err := parseISO8601Duration(from)
-	if err == nil {
-		return y, m, d, dur, r, nil
-	}
-	dur, err = time.ParseDuration(from)
-	if err == nil {
-		return 0, 0, 0, dur, -1, nil
-	}
-	return 0, 0, 0, 0, 0, fmt.Errorf("unsupported duration format %q", from)
-}
-
-// parseTime creates time.Duration from either:
-// - ISO8601 duration format,
-// - time.Duration string format,
-// - RFC3339 datetime format.
-// For duration formats, an offset is added.
-func parseTime(from string, offset *time.Time) (time.Time, error) {
-	var start time.Time
-	if offset != nil {
-		start = *offset
-	} else {
-		start = time.Now()
-	}
-	y, m, d, dur, r, err := parseISO8601Duration(from)
-	if err == nil {
-		if r != -1 {
-			return time.Time{}, errors.New("repetitions are not allowed")
-		}
-		return start.AddDate(y, m, d).Add(dur), nil
-	}
-	if dur, err = time.ParseDuration(from); err == nil {
-		return start.Add(dur), nil
-	}
-	if t, err := time.Parse(time.RFC3339, from); err == nil {
-		return t, nil
-	}
-	return time.Time{}, fmt.Errorf("unsupported time/duration format %q", from)
 }
