@@ -194,6 +194,9 @@ spec:
 {{- if .Values.global.argoRolloutServiceReconciler.enabled }}
         - "--enable-argo-rollout-service-reconciler"
 {{- end }}
+{{- if .Values.global.operator.watchdogCanPatchPodLabels }}
+        - "--watchdog-can-patch-pod-labels"
+{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: credentials
