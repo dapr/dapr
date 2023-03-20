@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package PubsubSubscribeHTTP
+package pubsub_subscribe_http
 
 import (
 	"encoding/json"
@@ -70,7 +70,7 @@ func getAppDescription(pubsubComponent Component, pubsubType string) kube.AppDes
 			"PERF_PUBSUB_HTTP_COMPONENT_NAME": pubsubComponent.Name,
 			"PERF_PUBSUB_HTTP_TOPIC_NAME":     pubsubComponent.Topic,
 			"PERF_PUBSUB_HTTP_ROUTE_NAME":     pubsubComponent.Route,
-			"SUBSCRIBE_TYPE":         pubsubType,
+			"SUBSCRIBE_TYPE":                  pubsubType,
 		},
 	}
 
