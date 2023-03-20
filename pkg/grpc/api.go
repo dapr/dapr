@@ -90,7 +90,6 @@ type api struct {
 	appChannel                 channel.AppChannel
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	workflowComponents         map[string]workflows.Workflow
 	transactionalStateStores   map[string]state.TransactionalStore
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
@@ -277,6 +276,7 @@ func NewAPI(opts APIOpts) API {
 			Resiliency:           opts.Resiliency,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			WorkflowComponents:   opts.WorkflowComponents,
 		},
 		directMessaging:            opts.DirectMessaging,
 		actor:                      opts.Actor,
@@ -286,7 +286,6 @@ func NewAPI(opts APIOpts) API {
 		pubsubAdapter:              opts.PubsubAdapter,
 		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
-		workflowComponents:         opts.WorkflowComponents,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
