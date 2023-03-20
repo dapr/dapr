@@ -2394,7 +2394,7 @@ func TestGetMetadata(t *testing.T) {
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+		getSubscriptionsFn: func() []runtimePubsub.Subscription {
 			return []runtimePubsub.Subscription{
 				{
 					PubsubName:      "test",
@@ -2408,7 +2408,7 @@ func TestGetMetadata(t *testing.T) {
 						},
 					},
 				},
-			}, nil
+			}
 		},
 	}
 	fakeAPI.extendedMetadata.Store("testKey", "testValue")
