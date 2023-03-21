@@ -84,21 +84,21 @@ func TestPlacementHA(t *testing.T) {
 	}
 
 	t.Run("set and retrieve state in leader", func(t *testing.T) {
-		_, err := raftServers[leader].ApplyCommand(raft.MemberUpsert, *testMembers[0])
+		_, err := raftServers[findLeader(t, raftServers)].ApplyCommand(raft.MemberUpsert, *testMembers[0])
 		assert.NoError(t, err)
 
-		retrieveValidState(t, raftServers[leader], testMembers[0])
+		retrieveValidState(t, raftServers[findLeader(t, raftServers)], testMembers[0])
 	})
 
 	t.Run("retrieve state in follower", func(t *testing.T) {
-		follower := (leader + 1) % 3
+		follower := (findLeader(t, raftServers) + 1) % 3
 		retrieveValidState(t, raftServers[follower], testMembers[0])
 	})
 
+	oldLeader := findLeader(t, raftServers)
 	t.Run("new leader after leader fails", func(t *testing.T) {
-		raftServerCancel[leader]()
-		raftServers[leader] = nil
-		oldLeader := leader
+		raftServerCancel[oldLeader]()
+		raftServers[oldLeader] = nil
 		require.Eventually(t, func() bool {
 			leader = findLeader(t, raftServers)
 			return oldLeader != leader
@@ -106,10 +106,10 @@ func TestPlacementHA(t *testing.T) {
 	})
 
 	t.Run("set and retrieve state in leader after re-election", func(t *testing.T) {
-		_, err := raftServers[leader].ApplyCommand(raft.MemberUpsert, *testMembers[1])
+		_, err := raftServers[findLeader(t, raftServers)].ApplyCommand(raft.MemberUpsert, *testMembers[1])
 		assert.NoError(t, err)
 
-		retrieveValidState(t, raftServers[leader], testMembers[1])
+		retrieveValidState(t, raftServers[findLeader(t, raftServers)], testMembers[1])
 	})
 
 	t.Run("leave only leader node running", func(t *testing.T) {
@@ -120,6 +120,16 @@ func TestPlacementHA(t *testing.T) {
 				break
 			}
 		}
+
+		t.Run("only single server running", func(t *testing.T) {
+			var running int
+			for i := 0; i < 3; i++ {
+				if raftServers[i] != nil {
+					running++
+				}
+			}
+			assert.Equal(t, 1, running)
+		})
 
 		// There should be no leader
 		assert.Eventually(t, func() bool {
@@ -133,23 +143,23 @@ func TestPlacementHA(t *testing.T) {
 	})
 
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
-		i := 0
-		for {
-			if raftServers[i] == nil {
-				break
-			}
-			i++
-		}
-
-		raftServers[i], ready[i], raftServerCancel[i] = createRaftServer(t, i, peers)
+		raftServers[oldLeader], ready[oldLeader], raftServerCancel[oldLeader] = createRaftServer(t, oldLeader, peers)
 		select {
-		case <-ready[i]:
+		case <-ready[oldLeader]:
 			// nop
 		case <-time.After(time.Second):
-			t.Fatalf("raft server %d did not start in time", i)
+			t.Fatalf("raft server %d did not start in time", oldLeader)
 		}
 
-		leader = findLeader(t, raftServers)
+		var running int
+		for i := 0; i < 3; i++ {
+			if raftServers[i] != nil {
+				running++
+			}
+		}
+		assert.Equal(t, 2, running)
+
+		findLeader(t, raftServers)
 	})
 
 	t.Run("state is preserved", func(t *testing.T) {
@@ -200,7 +210,7 @@ func TestPlacementHA(t *testing.T) {
 	})
 
 	t.Run("leader is elected", func(t *testing.T) {
-		leader = findLeader(t, raftServers)
+		findLeader(t, raftServers)
 	})
 
 	// Shutdown all servers
