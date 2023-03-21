@@ -3,6 +3,7 @@ package placement
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,11 +16,13 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-func TestPlacementHA(t *testing.T) {
+func init() {
 	logger.ApplyOptionsToLoggers(&logger.Options{
 		OutputLevel: "debug",
 	})
+}
 
+func TestPlacementHA(t *testing.T) {
 	// Get 3 ports
 	ports, err := daprtesting.GetFreePorts(3)
 	if err != nil {
@@ -74,20 +77,24 @@ func TestPlacementHA(t *testing.T) {
 	t.Run("elects leader with 3 nodes", func(t *testing.T) {
 		leader = findLeader(t, raftServers)
 	})
+
 	if leader == -1 {
 		// If there's no leader, no point in running the other tests
-		t.FailNow()
+		t.Fatal("does not have a leader")
 	}
+
 	t.Run("set and retrieve state in leader", func(t *testing.T) {
 		_, err := raftServers[leader].ApplyCommand(raft.MemberUpsert, *testMembers[0])
 		assert.NoError(t, err)
 
 		retrieveValidState(t, raftServers[leader], testMembers[0])
 	})
+
 	t.Run("retrieve state in follower", func(t *testing.T) {
 		follower := (leader + 1) % 3
 		retrieveValidState(t, raftServers[follower], testMembers[0])
 	})
+
 	t.Run("new leader after leader fails", func(t *testing.T) {
 		raftServerCancel[leader]()
 		raftServers[leader] = nil
@@ -97,12 +104,14 @@ func TestPlacementHA(t *testing.T) {
 			return oldLeader != leader
 		}, time.Second*5, time.Millisecond*100)
 	})
+
 	t.Run("set and retrieve state in leader after re-election", func(t *testing.T) {
 		_, err := raftServers[leader].ApplyCommand(raft.MemberUpsert, *testMembers[1])
 		assert.NoError(t, err)
 
 		retrieveValidState(t, raftServers[leader], testMembers[1])
 	})
+
 	t.Run("leave only leader node running", func(t *testing.T) {
 		for i, srv := range raftServers {
 			if srv != nil && !srv.IsLeader() {
@@ -121,6 +130,7 @@ func TestPlacementHA(t *testing.T) {
 			return true
 		}, time.Second*5, time.Millisecond*100, "leader did not step down")
 	})
+
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
 		i := 0
 		for {
@@ -129,6 +139,7 @@ func TestPlacementHA(t *testing.T) {
 			}
 			i++
 		}
+
 		raftServers[i], ready[i], raftServerCancel[i] = createRaftServer(t, i, peers)
 		select {
 		case <-ready[i]:
@@ -136,8 +147,10 @@ func TestPlacementHA(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatalf("raft server %d did not start in time", i)
 		}
+
 		leader = findLeader(t, raftServers)
 	})
+
 	t.Run("state is preserved", func(t *testing.T) {
 		for _, srv := range raftServers {
 			if srv != nil {
@@ -145,6 +158,7 @@ func TestPlacementHA(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("leave only follower node running", func(t *testing.T) {
 		for i, srv := range raftServers {
 			if srv != nil && srv.IsLeader() {
@@ -160,6 +174,7 @@ func TestPlacementHA(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("shutdown and restart all nodes", func(t *testing.T) {
 		// Shutdown all nodes
 		for i, srv := range raftServers {
@@ -181,6 +196,7 @@ func TestPlacementHA(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("leader is elected", func(t *testing.T) {
 		leader = findLeader(t, raftServers)
 	})
@@ -194,7 +210,6 @@ func TestPlacementHA(t *testing.T) {
 }
 
 func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Server, <-chan struct{}, context.CancelFunc) {
-	t.Helper()
 	srv := raft.New(fmt.Sprintf("mynode-%d", nodeID), true, peers, "")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -224,46 +239,52 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 		require.NoError(t, err)
 	}()
 
-	return srv, ready, func() {
+	stopFn := func() {
 		cancel()
 		select {
 		case <-serverStopped:
 			// nop
 		case <-time.After(5 * time.Second):
-			t.Error("raft server did not stop in time")
+			t.Fatal("raft server did not stop in time")
 		}
 	}
+
+	return srv, ready, stopFn
 }
 
 func findLeader(t *testing.T, raftServers []*raft.Server) int {
-	t.Helper()
+	n := atomic.Int32{}
+	n.Store(-1)
 
-	var n int
 	// Ensure that one node became leader
 	require.Eventually(t, func() bool {
 		for i, srv := range raftServers {
 			if srv != nil && srv.IsLeader() {
 				t.Logf("leader elected server %d", i)
-				n = i
+				n.CompareAndSwap(-1, int32(i))
 				return true
 			}
 		}
 		return false
 	}, 5*time.Second, 100*time.Millisecond, "no leader elected")
-	return n
+
+	return int(n.Load())
 }
 
 func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
-	t.Helper()
-	var actual *raft.DaprHostMember
+	actual := atomic.Pointer[raft.DaprHostMember]{}
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
 		assert.NotNil(t, state)
-		var found bool
-		actual, found = state.Members()[expect.Name]
-		return found && expect.Name == actual.Name &&
-			expect.AppID == actual.AppID
-	}, 5*time.Second, 100*time.Millisecond, "%v != %v", expect, actual)
-	require.NotNil(t, actual)
-	assert.EqualValues(t, expect.Entities, actual.Entities)
+		val, found := state.Members()[expect.Name]
+		if found && expect.Name == val.Name &&
+			expect.AppID == val.AppID {
+			actual.CompareAndSwap(nil, val)
+			return true
+		}
+		return false
+	}, 5*time.Second, 100*time.Millisecond, "%v != %v", expect, actual.Load())
+
+	require.NotNil(t, actual.Load())
+	assert.EqualValues(t, expect.Entities, actual.Load().Entities)
 }

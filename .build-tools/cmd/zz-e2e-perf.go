@@ -49,6 +49,7 @@ type cmdE2EPerfFlags struct {
 	IgnoreFile       string
 	CacheIncludeFile string
 	Name             string
+	WindowsVersion   string
 }
 
 // Returns the command for e2e or perf
@@ -91,6 +92,7 @@ If the "--cache-registry" option is set, it will be pushed to the cache too.
 	buildCmd.Flags().StringVar(&obj.flags.TargetArch, "target-arch", runtime.GOARCH, "Target architecture")
 	buildCmd.Flags().StringVar(&obj.flags.IgnoreFile, "ignore-file", ".gitignore", "Name of the file with files to exclude (in the format of .gitignore)")
 	buildCmd.Flags().StringVar(&obj.flags.CacheIncludeFile, "cache-include-file", ".cache-include", "Name of the file inside the app folder with additional files to include in checksumming (in the format of .gitignore)")
+	buildCmd.Flags().StringVar(&obj.flags.WindowsVersion, "windows-version", "", "Windows version to use for Windows containers")
 
 	// "push" sub-command
 	pushCmd := &cobra.Command{
@@ -132,6 +134,7 @@ If the "--cahce-registry" option is set and the image exists in the cache, it wi
 	buildAndPushCmd.Flags().StringVar(&obj.flags.TargetArch, "target-arch", runtime.GOARCH, "Target architecture")
 	buildAndPushCmd.Flags().StringVar(&obj.flags.IgnoreFile, "ignore-file", ".gitignore", "Name of the file with files to exclude (in the format of .gitignore)")
 	buildAndPushCmd.Flags().StringVar(&obj.flags.CacheIncludeFile, "cache-include-file", ".cache-include", "Name of the file inside the app folder with additional files to include in checksumming (in the format of .gitignore)")
+	buildAndPushCmd.Flags().StringVar(&obj.flags.WindowsVersion, "windows-version", "", "Windows version to use for Windows containers")
 
 	// Register the commands
 	cmd.AddCommand(buildCmd)
@@ -244,8 +247,13 @@ func (c *cmdE2EPerf) getCachedImage() (string, error) {
 		return "", err
 	}
 
-	// If cache is enable, try pulling from cache first
-	cachedImage := fmt.Sprintf("%s/%s-%s:%s-%s-%s", c.flags.CacheRegistry, c.cmdType, c.flags.Name, c.flags.TargetOS, c.flags.TargetArch, hashDir)
+	tag := fmt.Sprintf("%s-%s-%s", c.flags.TargetOS, c.flags.TargetArch, hashDir)
+
+	if c.flags.WindowsVersion != "" {
+		tag = fmt.Sprintf("%s-%s-%s-%s", c.flags.TargetOS, c.flags.WindowsVersion, c.flags.TargetArch, hashDir)
+	}
+
+	cachedImage := fmt.Sprintf("%s/%s-%s:%s", c.flags.CacheRegistry, c.cmdType, c.flags.Name, tag)
 	return cachedImage, nil
 }
 
@@ -324,6 +332,9 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
 	default:
 		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
+	}
+	if c.flags.WindowsVersion != "" {
+		args = append(args, "--build-arg", "WINDOWS_VERSION="+c.flags.WindowsVersion)
 	}
 
 	fmt.Printf("Running 'docker %s'\n", strings.Join(args, " "))

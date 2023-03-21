@@ -18,6 +18,7 @@ package universalapi
 import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -30,4 +31,5 @@ type UniversalAPI struct {
 	StateStores          map[string]state.Store
 	SecretStores         map[string]secretstores.SecretStore
 	SecretsConfiguration map[string]config.SecretsScope
+	WorkflowComponents   map[string]workflows.Workflow
 }

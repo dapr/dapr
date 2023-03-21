@@ -39,8 +39,8 @@ type UniversalFastHTTPHandlerOpts[T proto.Message, U proto.Message] struct {
 	// NOTE: Newly-implemented APIs should ensure that on the HTTP endpoint the response matches the protos to offer a consistent experience, and should NOT modify the output before it's sent to the client.
 	OutModifier func(out U) (any, error)
 
-	// Status code to return on successful responses
-	// Defaults to 200 (OK) if unset
+	// Status code to return on successful responses.
+	// Defaults to 200 (OK) if unset.
 	SuccessStatusCode int
 
 	// If true, skips parsing the body of the request in the input proto.

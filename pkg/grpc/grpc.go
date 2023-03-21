@@ -52,6 +52,7 @@ type AppChannelConfig struct {
 	SSLEnabled           bool
 	MaxRequestBodySizeMB int
 	ReadBufferSizeKB     int
+	AllowInsecureTLS     bool
 }
 
 // Manager is a wrapper around gRPC connection pooling.
@@ -128,14 +129,14 @@ func (g *Manager) SetLocalConnCreateFn(fn ConnCreatorFn) {
 }
 
 func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
-	conn, err := g.createLocalConnection(context.Background(), g.channelConfig.Port, g.channelConfig.SSLEnabled)
+	conn, err := g.createLocalConnection(context.Background(), g.channelConfig.Port, g.channelConfig.SSLEnabled, g.channelConfig.AllowInsecureTLS)
 	if err != nil {
 		return nil, fmt.Errorf("error establishing a grpc connection to app on port %v: %w", g.channelConfig.Port, err)
 	}
 	return conn, nil
 }
 
-func (g *Manager) createLocalConnection(parentCtx context.Context, port int, sslEnabled bool) (conn *grpc.ClientConn, err error) {
+func (g *Manager) createLocalConnection(parentCtx context.Context, port int, sslEnabled bool, allowInsecureTLS bool) (conn *grpc.ClientConn, err error) {
 	opts := make([]grpc.DialOption, 0, 2)
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
@@ -146,9 +147,11 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ssl
 
 	if sslEnabled {
 		//nolint:gosec
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			InsecureSkipVerify: true,
-		})))
+		tlsConfig := &tls.Config{InsecureSkipVerify: true}
+		if !allowInsecureTLS {
+			tlsConfig.MinVersion = channel.AppChannelMinTLSVersion
+		}
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
