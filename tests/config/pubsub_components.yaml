@@ -15,7 +15,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: kafka-messagebus
+  name: dapr-perf-test-kafka-pubsub-subs-http
 spec:
   type: pubsub.kafka
   initTimeout: 1m
@@ -35,7 +35,7 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: rabbitmq-messagebus
+  name: dapr-perf-test-rabbitmq-pubsub-subs-http
 spec:
   type: pubsub.rabbitmq
   initTimeout: 1m
@@ -53,7 +53,7 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: mqtt-messagebus
+  name: dapr-perf-test-mqtt-pubsub-subs-http
 spec:
   type: pubsub.mqtt3
   version: v1
@@ -68,7 +68,7 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: pulsar-messagebus
+  name: dapr-perf-test-pulsar-pubsub-subs-http
 spec:
   type: pubsub.pulsar
   version: v1
@@ -81,7 +81,7 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: redis-messagebus
+  name: dapr-perf-test-redis-pubsub-subs-http
 spec:
   type: pubsub.redis
   version: v1

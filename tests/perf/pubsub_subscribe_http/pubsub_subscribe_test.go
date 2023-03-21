@@ -83,7 +83,7 @@ func TestMain(m *testing.M) {
 	//Read env variable for pubsub test config file, this will decide whether to run single component or all the components.
 	pubsubTestConfigFileName := os.Getenv("DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME")
 
-	if pubsubTestConfigFileName == '' || pubsubTestConfigFileName == nil{
+	if pubsubTestConfigFileName == "" {
 		pubsubTestConfigFileName = "pubsub_subscribe_http_default_component_test_config.yaml"
 	}
 
@@ -93,6 +93,8 @@ func TestMain(m *testing.M) {
 		fmt.Printf("error reading %v: %v\n", pubsubTestConfigFileName, err)
 		return
 	}
+
+	fmt.Println("pubsubTestConfigFileName: ", pubsubTestConfigFileName)
 
 	err = yaml.Unmarshal(data, &configs)
 

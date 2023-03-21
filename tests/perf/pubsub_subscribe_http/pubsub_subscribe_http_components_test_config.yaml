@@ -13,7 +13,7 @@
 
 name: pubsub performance test
 components:
-  - name: kafka-messagebus
+  - name: dapr-perf-test-kafka-pubsub-subs-http
     topic: kafka-perf-test
     route: kafka-perf-test
     numHealthChecks: 60
@@ -24,7 +24,7 @@ components:
     imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
-  - name: rabbitmq-messagebus
+  - name: dapr-perf-test-rabbitmq-pubsub-subs-http
     topic: rabbitmq-perf-test
     route: rabbitmq-perf-test
     numHealthChecks: 60
@@ -35,7 +35,7 @@ components:
     imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
-  - name: mqtt-messagebus
+  - name: dapr-perf-test-mqtt-pubsub-subs-http
     topic: mqtt-perf-test
     route: mqtt-perf-test
     numHealthChecks: 60
@@ -46,7 +46,7 @@ components:
     imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
-  - name: pulsar-messagebus
+  - name: dapr-perf-test-pulsar-pubsub-subs-http
     topic: pulsar-perf-test
     route: pulsar-perf-test
     numHealthChecks: 60
@@ -57,7 +57,7 @@ components:
     imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
-  - name: redis-messagebus
+  - name: dapr-perf-test-redis-pubsub-subs-http
     topic: redis-perf-test
     route: redis-perf-test
     numHealthChecks: 60

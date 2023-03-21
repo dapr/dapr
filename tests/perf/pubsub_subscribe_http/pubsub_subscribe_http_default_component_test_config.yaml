@@ -13,7 +13,7 @@
 
 name: pubsub performance test
 components:
-  - name: kafka-messagebus
+  - name: dapr-perf-test-kafka-pubsub-subs-http
     topic: kafka-perf-test
     route: kafka-perf-test
     numHealthChecks: 60
