@@ -69,7 +69,7 @@ type option = func(ctx *fasthttp.RequestCtx)
 func withEtag(etag *string) option {
 	return func(ctx *fasthttp.RequestCtx) {
 		if etag != nil {
-			ctx.Response.Header.Set(etagHeader, *etag)
+			ctx.Response.Header.Add(etagHeader, *etag)
 		}
 	}
 }
@@ -78,7 +78,7 @@ func withEtag(etag *string) option {
 func withMetadata(metadata map[string]string) option {
 	return func(ctx *fasthttp.RequestCtx) {
 		for k, v := range metadata {
-			ctx.Response.Header.Set(metadataPrefix+k, v)
+			ctx.Response.Header.Add(metadataPrefix+k, v)
 		}
 	}
 }
