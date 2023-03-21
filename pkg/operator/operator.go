@@ -115,7 +115,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		NewCache:               operatorcache.GetFilteredCache(watchdogPodSelector),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to start manager, err: %s", err)
+		return nil, fmt.Errorf("unable to start manager: %w", err)
 	}
 	mgrClient := mgr.GetClient()
 
@@ -131,7 +131,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 			podSelector:       watchdogPodSelector,
 		}
 		if err := mgr.Add(wd); err != nil {
-			return nil, fmt.Errorf("unable to add watchdog controller, err: %s", err)
+			return nil, fmt.Errorf("unable to add watchdog controller: %w", err)
 		}
 	} else {
 		log.Infof("Dapr Watchdog is not enabled")
@@ -140,7 +140,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	if opts.ServiceReconcilerEnabled {
 		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, &handlers.Options{ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled})
 		if err := daprHandler.Init(ctx); err != nil {
-			return nil, fmt.Errorf("unable to initialize handler, err: %s", err)
+			return nil, fmt.Errorf("unable to initialize handler: %w", err)
 		}
 	}
 
@@ -159,7 +159,7 @@ func (o *operator) prepareConfig() error {
 	var err error
 	o.config, err = LoadConfiguration(o.configName, o.client)
 	if err != nil {
-		return fmt.Errorf("unable to load configuration, config: %s, err: %s", o.configName, err)
+		return fmt.Errorf("unable to load configuration, config: %s, err: %w", o.configName, err)
 	}
 	o.config.Credentials = credentials.NewTLSCredentials(o.certChainPath)
 	return nil
@@ -169,7 +169,7 @@ func (o *operator) syncComponent(ctx context.Context) func(obj interface{}) {
 	return func(obj interface{}) {
 		c, ok := obj.(*componentsapi.Component)
 		if ok {
-			log.Debugf("Observed component to be synced, %s/%s", c.Namespace, c.Name)
+			log.Debugf("Observed component to be synced: %s/%s", c.Namespace, c.Name)
 			o.apiServer.OnComponentUpdated(ctx, c)
 		}
 	}
@@ -190,7 +190,7 @@ func (o *operator) loadCertChain(ctx context.Context) (*credentials.CertChain, e
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
 				// Ignore context.Canceled
-				fserr <- fmt.Errorf("error starting watch on filesystem: %s", err)
+				fserr <- fmt.Errorf("error starting watch on filesystem: %w", err)
 			} else {
 				fserr <- nil
 			}
@@ -224,97 +224,108 @@ func (o *operator) loadCertChain(ctx context.Context) (*credentials.CertChain, e
 }
 
 func (o *operator) Run(ctx context.Context) error {
-	log.Infof("Dapr Operator is starting")
+	log.Info("Dapr Operator is starting")
 	healthzServer := health.NewServer(log)
 
-	if err := o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
+	err := o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
 		// start healthz server
-		if err := healthzServer.Run(ctx, healthzPort); err != nil {
-			return fmt.Errorf("failed to start healthz server: %s", err)
+		if rErr := healthzServer.Run(ctx, healthzPort); rErr != nil {
+			return fmt.Errorf("failed to start healthz server: %w", rErr)
 		}
 		return nil
-	}}); err != nil {
+	}})
+	if err != nil {
 		return err
 	}
 
-	if err := o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
-		if err := o.apiServer.Ready(ctx); err != nil {
-			return fmt.Errorf("failed to start API server: %s", err)
+	err = o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
+		if rErr := o.apiServer.Ready(ctx); rErr != nil {
+			return fmt.Errorf("failed to start API server: %w", rErr)
 		}
 		healthzServer.Ready()
 		log.Infof("Dapr Operator started")
 		<-ctx.Done()
 		return nil
-	}}); err != nil {
+	}})
+	if err != nil {
 		return err
 	}
 
-	if err := o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
-		if err := o.prepareConfig(); err != nil {
-			return err
+	err = o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
+		rErr := o.prepareConfig()
+		if rErr != nil {
+			return rErr
 		}
 
 		/*
 			Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
 		*/
 		if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
-			if err := ctrl.NewWebhookManagedBy(o.mgr).
+			rErr = ctrl.NewWebhookManagedBy(o.mgr).
 				For(&subscriptionsapiV1alpha1.Subscription{}).
-				Complete(); err != nil {
-				return fmt.Errorf("unable to create webhook Subscriptions v1alpha1: %v", err)
+				Complete()
+			if rErr != nil {
+				return fmt.Errorf("unable to create webhook Subscriptions v1alpha1: %w", rErr)
 			}
-			if err := ctrl.NewWebhookManagedBy(o.mgr).
+			rErr = ctrl.NewWebhookManagedBy(o.mgr).
 				For(&subscriptionsapiV2alpha1.Subscription{}).
-				Complete(); err != nil {
-				return fmt.Errorf("unable to create webhook Subscriptions v2alpha1: %v", err)
+				Complete()
+			if rErr != nil {
+				return fmt.Errorf("unable to create webhook Subscriptions v2alpha1: %w", rErr)
 			}
 		}
 
 		// load certs from disk
-		certChain, err := o.loadCertChain(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to load cert chain: %s", err)
+		certChain, rErr := o.loadCertChain(ctx)
+		if rErr != nil {
+			return fmt.Errorf("failed to load cert chain: %w", rErr)
 		}
 
-		if err := o.patchCRDs(ctx, o.mgr.GetConfig(), "subscriptions.dapr.io"); err != nil {
-			return err
+		rErr = o.patchCRDs(ctx, o.mgr.GetConfig(), "subscriptions.dapr.io")
+		if rErr != nil {
+			return rErr
 		}
 
-		log.Info("starting api server")
-		if err := o.apiServer.Run(ctx, certChain); err != nil {
-			return fmt.Errorf("failed to start API server: %s", err)
+		log.Info("Starting api server")
+		rErr = o.apiServer.Run(ctx, certChain)
+		if rErr != nil {
+			return fmt.Errorf("failed to start API server: %w", rErr)
 		}
 		return nil
-	}}); err != nil {
+	}})
+	if err != nil {
 		return err
 	}
 
-	if err := o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
+	err = o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
 		if !o.mgr.GetCache().WaitForCacheSync(ctx) {
 			return errors.New("failed to wait for cache sync")
 		}
 
-		componentInformer, err := o.mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
-		if err != nil {
-			return fmt.Errorf("unable to get setup components informer, err: %s", err)
+		componentInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
+		if rErr != nil {
+			return fmt.Errorf("unable to get setup components informer: %w", rErr)
 		}
 
-		if _, err := componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		_, rErr = componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: o.syncComponent(ctx),
 			UpdateFunc: func(_, newObj interface{}) {
 				o.syncComponent(ctx)(newObj)
 			},
-		}); err != nil {
-			return fmt.Errorf("unable to add components informer event handler, err: %s", err)
+		})
+		if rErr != nil {
+			return fmt.Errorf("unable to add components informer event handler: %w", rErr)
 		}
 		<-ctx.Done()
 		return nil
-	}}); err != nil {
+	}})
+	if err != nil {
 		return err
 	}
 
-	if err := o.mgr.Start(ctx); err != nil {
-		return fmt.Errorf("error running operator: %s", err)
+	err = o.mgr.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("error running operator: %w", err)
 	}
 
 	return nil

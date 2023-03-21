@@ -86,21 +86,21 @@ func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChai
 
 	opts, err := daprCredentials.GetServerOptions(certChain)
 	if err != nil {
-		return fmt.Errorf("error creating gRPC options: %v", err)
+		return fmt.Errorf("error creating gRPC options: %w", err)
 	}
 	s := grpc.NewServer(opts...)
 	operatorv1pb.RegisterOperatorServer(s, a)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
 	if err != nil {
-		return fmt.Errorf("error starting tcp listener: %v", err)
+		return fmt.Errorf("error starting tcp listener: %w", err)
 	}
 	close(a.readyCh)
 
 	errCh := make(chan error)
 	go func() {
-		if err := s.Serve(lis); err != nil {
-			errCh <- fmt.Errorf("gRPC server error: %w", err)
+		if rErr := s.Serve(lis); rErr != nil {
+			errCh <- fmt.Errorf("gRPC server error: %w", rErr)
 			return
 		}
 		errCh <- nil
@@ -110,11 +110,13 @@ func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChai
 	<-ctx.Done()
 
 	s.GracefulStop()
-	if err := <-errCh; err != nil {
+	err = <-errCh
+	if err != nil {
 		return err
 	}
-	if err := lis.Close(); err != nil {
-		return fmt.Errorf("error closing listener: %v", err)
+	err = lis.Close()
+	if err != nil {
+		return fmt.Errorf("error closing listener: %w", err)
 	}
 	return nil
 }
@@ -297,20 +299,21 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
 	log.Info("sidecar connected for component updates")
-	key, err := uuid.NewRandom()
+	keyObj, err := uuid.NewRandom()
 	if err != nil {
 		return err
 	}
+	key := keyObj.String()
 
 	a.connLock.Lock()
-	a.allConnUpdateChan[key.String()] = make(chan *componentsapi.Component, 1)
-	updateChan := a.allConnUpdateChan[key.String()]
+	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
+	updateChan := a.allConnUpdateChan[key]
 	a.connLock.Unlock()
 
 	defer func() {
 		a.connLock.Lock()
 		defer a.connLock.Unlock()
-		delete(a.allConnUpdateChan, key.String())
+		delete(a.allConnUpdateChan, key)
 	}()
 
 	updateComponentFunc := func(ctx context.Context, c *componentsapi.Component) {

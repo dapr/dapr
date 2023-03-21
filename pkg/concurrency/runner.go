@@ -16,8 +16,6 @@ package concurrency
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -31,9 +29,7 @@ type Runner func(context.Context) error
 // waits for all runners to finish. If any runner returns, the RunnerManager
 // will stop all other runners and return any error.
 type RunnerManager struct {
-	errs    []string
 	lock    sync.Mutex
-	wg      sync.WaitGroup
 	runners []Runner
 	running atomic.Bool
 }
@@ -59,7 +55,7 @@ func (r *RunnerManager) Add(runner ...Runner) error {
 // Run runs all runners in parallel and waits for all runners to finish. If any
 // runner returns, the RunnerManager will stop all other runners and return any
 // error.
-func (r *RunnerManager) Run(ctx context.Context) error {
+func (r *RunnerManager) Run(ctx context.Context) (err error) {
 	if !r.running.CompareAndSwap(false, true) {
 		return ErrManagerAlreadyStarted
 	}
@@ -67,34 +63,31 @@ func (r *RunnerManager) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	r.wg.Add(len(r.runners))
+	errCh := make(chan error)
 	for _, runner := range r.runners {
 		go func(runner Runner) {
-			defer r.wg.Done()
-
 			// Since the task returned, we need to cancel all other tasks.
 			// This is a noop if the parent context is already cancelled, or another
 			// task returned before this one.
 			defer cancel()
 
-			if err := runner(ctx); err != nil &&
-				// Ignore context cancelled errors since errors from a runner manager
-				// will likely determine the exit code of the program.
-				// Context cancelled errors are also not really useful to the user in
-				// this situation.
-				!errors.Is(err, context.Canceled) {
-				r.lock.Lock()
-				defer r.lock.Unlock()
-
-				r.errs = append(r.errs, err.Error())
+			// Ignore context cancelled errors since errors from a runner manager
+			// will likely determine the exit code of the program.
+			// Context cancelled errors are also not really useful to the user in
+			// this situation.
+			rErr := runner(ctx)
+			if rErr != nil && !errors.Is(rErr, context.Canceled) {
+				errCh <- rErr
+				return
 			}
+			errCh <- nil
 		}(runner)
 	}
 
-	r.wg.Wait()
-	if len(r.errs) > 0 {
-		return fmt.Errorf("%s", strings.Join(r.errs, "; "))
+	// Collect all errors
+	for i := 0; i < len(r.runners); i++ {
+		err = errors.Join(err, <-errCh)
 	}
 
-	return nil
+	return err
 }
