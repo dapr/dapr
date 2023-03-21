@@ -196,7 +196,7 @@ type MetricSpec struct {
 	Rules   []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
 }
 
-// GetEnabled returns true if the metrics are enabled.
+// GetEnabled returns true if metrics are enabled.
 func (m MetricSpec) GetEnabled() bool {
 	// Defaults to true if nil
 	return m.Enabled == nil || *m.Enabled

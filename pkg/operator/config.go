@@ -33,6 +33,6 @@ func LoadConfiguration(name string, client client.Client) (*Config, error) {
 		return nil, err
 	}
 	return &Config{
-		MTLSEnabled: conf.Spec.MTLSSpec.Enabled,
+		MTLSEnabled: conf.Spec.MTLSSpec.GetEnabled(),
 	}, nil
 }

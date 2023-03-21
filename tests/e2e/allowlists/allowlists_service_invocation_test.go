@@ -217,7 +217,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 		t.Logf("configuration name: daprsystem, get failed: %s \n", err.Error())
 		os.Exit(-1)
 	}
-	if !config.Spec.MTLSSpec.Enabled {
+	if !config.Spec.MTLSSpec.GetEnabled() {
 		t.Logf("mtls disabled. can't running unit tests")
 		return
 	}
