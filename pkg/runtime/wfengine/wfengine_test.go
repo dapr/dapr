@@ -447,9 +447,20 @@ func TestContinueAsNewWorkflow(t *testing.T) {
 			if err := ctx.CreateTimer(0).Await(nil); err != nil {
 				return nil, err
 			}
-			ctx.ContinueAsNew(input + 1)
+			var nextInput int32
+			if err := ctx.CallActivity("PlusOne", input).Await(&nextInput); err != nil {
+				return nil, err
+			}
+			ctx.ContinueAsNew(nextInput)
 		}
 		return input, nil
+	})
+	r.AddActivityN("PlusOne", func(ctx task.ActivityContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input + 1, nil
 	})
 
 	ctx := context.Background()
@@ -665,6 +676,38 @@ func TestConcurrentTimerExecution(t *testing.T) {
 
 					// Because all the timers run in parallel, they should complete very quickly
 					assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
+				}
+			}
+		})
+	}
+}
+
+// TestRaiseEvent verifies that a workflow can have an event raised against it to trigger specific functionality.
+func TestRaiseEvent(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("WorkflowForRaiseEvent", func(ctx *task.OrchestrationContext) (any, error) {
+		var nameInput string
+		if err := ctx.WaitForSingleEvent("NameOfEventBeingRaised", 30*time.Second).Await(&nameInput); err != nil {
+			// Timeout expired
+			return nil, err
+		}
+		return fmt.Sprintf("Hello, %s!", nameInput), nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "WorkflowForRaiseEvent")
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationStart(ctx, id)
+				if assert.NoError(t, err) {
+					assert.Equal(t, id, metadata.InstanceID)
+					client.RaiseEvent(ctx, id, "NameOfEventBeingRaised", "NameOfInput")
+					metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
+					assert.True(t, metadata.IsComplete())
+					assert.Equal(t, `"Hello, NameOfInput!"`, metadata.SerializedOutput)
+					assert.Nil(t, metadata.FailureDetails)
 				}
 			}
 		})

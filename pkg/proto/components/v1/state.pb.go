@@ -579,6 +579,7 @@ type TransactionalStateOperation struct {
 	// request is either delete or set.
 	//
 	// Types that are assignable to Request:
+	//
 	//	*TransactionalStateOperation_Delete
 	//	*TransactionalStateOperation_Set
 	Request isTransactionalStateOperation_Request `protobuf_oneof:"request"`

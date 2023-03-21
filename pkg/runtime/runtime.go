@@ -559,7 +559,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
 		// We can't just pass "a.appChannel.HealthProbe" because appChannel may be re-created
-		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
+		a.appHealth = apphealth.New(*a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
 			return a.appChannel.HealthProbe(ctx)
 		})
 		a.appHealth.OnHealthChange(a.appHealthChanged)
@@ -682,30 +682,37 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (httpMiddleware.Pipeline, error) {
-	var handlers []httpMiddleware.Middleware
-
+func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (pipeline httpMiddleware.Pipeline, err error) {
 	if a.globalConfig != nil {
+		pipeline.Handlers = make([]func(next nethttp.Handler) nethttp.Handler, 0, len(spec.Handlers))
 		for i := 0; i < len(spec.Handlers); i++ {
 			middlewareSpec := spec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
-				err := fmt.Errorf(
-					"couldn't find middleware component with name %s and type %s/%s",
-					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version,
-				)
-				return httpMiddleware.Pipeline{}, err
+				// Log the error but continue with initializing the pipeline
+				log.Error("couldn't find middleware component defined in configuration with name %s and type %s/%s",
+					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version)
+				continue
 			}
 			md := middleware.Metadata{Base: a.toBaseMetadata(component)}
 			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
 			if err != nil {
-				return httpMiddleware.Pipeline{}, err
+				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
+				if !component.Spec.IgnoreErrors {
+					log.Warn("error processing middleware component, daprd process will exit gracefully")
+					a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
+					log.Fatal(e)
+					// This error is only caught by tests, since during normal execution we panic
+					return pipeline, errors.New("dapr panicked")
+				}
+				log.Error(e)
+				continue
 			}
 			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
-			handlers = append(handlers, handler)
+			pipeline.Handlers = append(pipeline.Handlers, handler)
 		}
 	}
-	return httpMiddleware.Pipeline{Handlers: handlers}, nil
+	return pipeline, nil
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
@@ -899,6 +906,12 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 				pErr = a.publishMessageGRPC(ctx, psm)
 			default:
 				pErr = backoff.Permanent(errors.New("invalid application protocol"))
+			}
+			var rErr *RetriableError
+			if errors.As(pErr, &rErr) {
+				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, rErr.Unwrap())
+			} else if pErr != nil {
+				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
 			}
 			return nil, pErr
 		})
@@ -1419,7 +1432,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		AppChannel:                  a.appChannel,
 		DirectMessaging:             a.directMessaging,
 		GetComponentsFn:             a.getComponents,
-		GetSubscriptionsFn:          a.getSubscriptions,
+		GetSubscriptionsFn:          a.getSubscriptionsCache,
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
 		WorkflowsComponents:         a.workflowComponents,
@@ -1534,7 +1547,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		GetSubscriptionsFn:          a.getSubscriptions,
+		GetSubscriptionsFn:          a.getSubscriptionsCache,
 	})
 }
 
@@ -1817,6 +1830,10 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription
 		}
 	}
 	return subs[:i]
+}
+
+func (a *DaprRuntime) getSubscriptionsCache() []runtimePubsub.Subscription {
+	return a.subscriptions
 }
 
 func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
@@ -2152,7 +2169,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 
 	if err != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
+		return fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", NewRetriableError(err))
 	}
 	defer resp.Close()
 
@@ -2184,7 +2201,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 			return nil
 		case pubsub.Retry:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], NewRetriableError(nil))
 		case pubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
@@ -2192,7 +2209,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		}
 		// Consider unknown status field as error and retry
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
+		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[pubsub.IDField], appResponse.Status, NewRetriableError(nil))
 	}
 
 	body, _ := resp.RawDataFull()
@@ -2209,7 +2226,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
 	log.Warnf(errMsg)
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return errors.New(errMsg)
+	return NewRetriableError(errors.New(errMsg))
 }
 
 func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
@@ -2233,13 +2250,13 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
 
-				return decodeErr
+				return fmt.Errorf("error returned from app while processing pub/sub event: %w", NewRetriableError(decodeErr))
 			}
 
 			envelope.Data = decoded
 		} else {
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-			return ErrUnexpectedEnvelopeData
+			return fmt.Errorf("error returned from app while processing pub/sub event: %w", NewRetriableError(ErrUnexpectedEnvelopeData))
 		}
 	} else if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
@@ -2252,7 +2269,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 				envelope.Data = v
 			default:
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-				return ErrUnexpectedEnvelopeData
+				return fmt.Errorf("error returned from app while processing pub/sub event: %w", NewRetriableError(ErrUnexpectedEnvelopeData))
 			}
 		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
 			envelope.Data, _ = json.Marshal(data)
@@ -2316,7 +2333,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 			return nil
 		}
 
-		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], err)
+		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], NewRetriableError(err))
 		log.Debug(err)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 
@@ -2332,7 +2349,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		return nil
 	case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], NewRetriableError(nil))
 	case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
@@ -2342,7 +2359,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 	// Consider unknown status field as error and retry
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], res.GetStatus())
+	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[pubsub.IDField], res.GetStatus(), NewRetriableError(nil))
 }
 
 func extractCloudEventExtensions(cloudEvent map[string]interface{}) (*structpb.Struct, error) {
@@ -2734,6 +2751,11 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	log.Info("Initiating actor shutdown")
 	a.stopActor()
 
+	if a.appHealth != nil {
+		log.Info("Closing App Health")
+		a.appHealth.Close()
+	}
+
 	log.Infof("Holding shutdown for %s to allow graceful stop of outstanding operations", duration.String())
 	<-time.After(duration)
 
@@ -2925,7 +2947,8 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 		if err != nil {
 			return err
 		}
-		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, pipeline, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		config := a.getAppHTTPChannelConfig(pipeline)
+		ch, err = httpChannel.CreateLocalChannel(config)
 		if err != nil {
 			return err
 		}
@@ -2937,6 +2960,19 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 	a.appChannel = ch
 
 	return nil
+}
+
+func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) httpChannel.ChannelConfiguration {
+	return httpChannel.ChannelConfiguration{
+		Port:                 a.runtimeConfig.ApplicationPort,
+		MaxConcurrency:       a.runtimeConfig.MaxConcurrency,
+		Pipeline:             pipeline,
+		TracingSpec:          a.globalConfig.Spec.TracingSpec,
+		SslEnabled:           a.runtimeConfig.AppSSL,
+		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
+		ReadBufferSizeKB:     a.runtimeConfig.ReadBufferSize,
+		AllowInsecureTLS:     a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS),
+	}
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
@@ -3183,6 +3219,7 @@ func createGRPCManager(runtimeConfig *Config, globalConfig *config.Configuration
 	grpcAppChannelConfig := &grpc.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.Spec.TracingSpec
+		grpcAppChannelConfig.AllowInsecureTLS = globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS)
 	}
 	if runtimeConfig != nil {
 		grpcAppChannelConfig.Port = runtimeConfig.ApplicationPort

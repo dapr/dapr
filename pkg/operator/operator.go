@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
+	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
@@ -60,6 +61,7 @@ type Options struct {
 	WatchNamespace                      string
 	ServiceReconcilerEnabled            bool
 	ArgoRolloutServiceReconcilerEnabled bool
+	WatchdogCanPatchPodLabels           bool
 }
 
 type operator struct {
@@ -91,12 +93,14 @@ func NewOperator(opts Options) Operator {
 	if err != nil {
 		log.Fatalf("Unable to get controller runtime configuration, err: %s", err)
 	}
+	watchdogPodSelector := getSideCarInjectedNotExistsSelector()
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
 		LeaderElection:     opts.LeaderElection,
 		LeaderElectionID:   "operator.dapr.io",
 		Namespace:          opts.WatchNamespace,
+		NewCache:           operatorcache.GetFilteredCache(watchdogPodSelector),
 	})
 	if err != nil {
 		log.Fatalf("Unable to start manager, err: %s", err)
@@ -111,6 +115,8 @@ func NewOperator(opts Options) Operator {
 			client:            mgrClient,
 			interval:          opts.WatchdogInterval,
 			maxRestartsPerMin: opts.WatchdogMaxRestartsPerMin,
+			canPatchPodLabels: opts.WatchdogCanPatchPodLabels,
+			podSelector:       watchdogPodSelector,
 		}
 		err = mgr.Add(wd)
 		if err != nil {

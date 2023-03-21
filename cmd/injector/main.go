@@ -14,13 +14,16 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"path/filepath"
 
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector"
@@ -47,16 +50,10 @@ func main() {
 
 	kubeClient := utils.GetKubeClient()
 	conf := utils.GetConfig()
-	daprClient, _ := scheme.NewForConfig(conf)
-
-	healthzServer := health.NewServer(log)
-	go func() {
-		healthzErr := healthzServer.Run(ctx, healthzPort)
-		if healthzErr != nil {
-			log.Fatalf("failed to start healthz server: %s", healthzErr)
-		}
-	}()
-
+	daprClient, err := scheme.NewForConfig(conf)
+	if err != nil {
+		log.Fatalf("error creating dapr client: %s", err)
+	}
 	uids, err := injector.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
 	if err != nil {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
@@ -64,14 +61,33 @@ func main() {
 
 	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient)
 	if err != nil {
-		log.Fatalf("could not create Injector, err: %s", err)
+		log.Fatalf("error creating injector: %s", err)
 	}
-	// Blocking call
-	inj.Run(ctx, func() {
-		healthzServer.Ready()
-	})
 
-	log.Infof("Dapr sidecar injector shut down")
+	healthzServer := health.NewServer(log)
+	mngr := concurrency.NewRunnerManager(
+		inj.Run,
+		func(ctx context.Context) error {
+			if err := inj.Ready(ctx); err != nil {
+				return err
+			}
+			healthzServer.Ready()
+			<-ctx.Done()
+			return nil
+		},
+		func(ctx context.Context) error {
+			if err := healthzServer.Run(ctx, healthzPort); err != nil {
+				return fmt.Errorf("failed to start healthz server: %w", err)
+			}
+			return nil
+		},
+	)
+
+	if err := mngr.Run(ctx); err != nil {
+		log.Fatalf("error running injector: %s", err)
+	}
+
+	log.Infof("Dapr sidecar injector shut down gracefully")
 }
 
 func init() {

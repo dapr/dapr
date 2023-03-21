@@ -90,7 +90,6 @@ type api struct {
 	appChannel                 channel.AppChannel
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	workflowComponents         map[string]workflows.Workflow
 	transactionalStateStores   map[string]state.TransactionalStore
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
@@ -106,7 +105,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
-	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
+	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	daprRunTimeVersion         string
 }
 
@@ -260,7 +259,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
-	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 }
 
 // NewAPI returns a new gRPC API.
@@ -277,6 +276,7 @@ func NewAPI(opts APIOpts) API {
 			Resiliency:           opts.Resiliency,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			WorkflowComponents:   opts.WorkflowComponents,
 		},
 		directMessaging:            opts.DirectMessaging,
 		actor:                      opts.Actor,
@@ -286,7 +286,6 @@ func NewAPI(opts APIOpts) API {
 		pubsubAdapter:              opts.PubsubAdapter,
 		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
-		workflowComponents:         opts.WorkflowComponents,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		lockStores:                 opts.LockStores,
@@ -352,7 +351,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			ID:              a.id,
+			Source:          a.id,
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
 			Data:            body,
@@ -560,7 +559,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				ID:              a.id,
+				Source:          a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
@@ -1551,12 +1550,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions, err := a.getSubscriptionsFn()
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetMetadataResponse{}, err
-	}
+	subscriptions := a.getSubscriptionsFn()
 	ps := []*runtimev1pb.PubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, &runtimev1pb.PubsubSubscription{
@@ -1603,136 +1597,6 @@ func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.Pu
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
 	return &emptypb.Empty{}, nil
-}
-
-func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	req := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-	response, err := workflowRun.Get(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-
-	id := &runtimev1pb.WorkflowReference{
-		InstanceId: response.WFInfo.InstanceID,
-	}
-
-	t, err := time.Parse(time.RFC3339, response.StartTime)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTimerParse, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-
-	res := &runtimev1pb.GetWorkflowResponse{
-		InstanceId: id.InstanceId,
-		StartTime:  t.Unix(),
-		Metadata:   response.Metadata,
-	}
-	return res, nil
-}
-
-func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error) {
-	if in.WorkflowName == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrWorkflowNameMissing)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	wf := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-
-	var inputMap map[string]interface{}
-	json.Unmarshal(in.Input, &inputMap)
-	req := workflows.StartRequest{
-		WorkflowReference: wf,
-		Options:           in.Options,
-		WorkflowName:      in.WorkflowName,
-		Input:             inputMap,
-	}
-
-	resp, err := workflowRun.Start(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrStartWorkflow, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-	ret := &runtimev1pb.WorkflowReference{
-		InstanceId: resp.InstanceID,
-	}
-	return ret, nil
-}
-
-func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	req := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-
-	err := workflowRun.Terminate(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, nil
-	}
-	return &runtimev1pb.TerminateWorkflowResponse{}, nil
 }
 
 // Shutdown the sidecar.

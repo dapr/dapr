@@ -65,39 +65,57 @@ type Channel struct {
 	pipeline              httpMiddleware.Pipeline
 }
 
-// CreateLocalChannel creates an HTTP AppChannel
+// ChannelConfiguration is the configuration used to create an HTTP AppChannel.
+type ChannelConfiguration struct {
+	Port                 int
+	MaxConcurrency       int
+	Pipeline             httpMiddleware.Pipeline
+	TracingSpec          config.TracingSpec
+	SslEnabled           bool
+	MaxRequestBodySizeMB int
+	ReadBufferSizeKB     int
+	AllowInsecureTLS     bool
+}
+
+// CreateLocalChannel creates an HTTP AppChannel.
 //
 //nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySizeMB, readBufferSizeKB int) (channel.AppChannel, error) {
+func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error) {
 	var tlsConfig *tls.Config
 	scheme := httpScheme
-	if sslEnabled {
+	if config.SslEnabled {
 		tlsConfig = &tls.Config{
 			InsecureSkipVerify: true,
+		}
+		if !config.AllowInsecureTLS {
+			tlsConfig.MinVersion = channel.AppChannelMinTLSVersion
 		}
 		scheme = httpsScheme
 	}
 
 	c := &Channel{
-		pipeline: pipeline,
+		pipeline: config.Pipeline,
 		client: &http.Client{
 			Transport: &http.Transport{
-				ReadBufferSize:         readBufferSizeKB << 10,
-				MaxResponseHeaderBytes: int64(readBufferSizeKB) << 10,
+				ReadBufferSize:         config.ReadBufferSizeKB << 10,
+				MaxResponseHeaderBytes: int64(config.ReadBufferSizeKB) << 10,
 				MaxConnsPerHost:        1024,
 				MaxIdleConns:           64, // A local channel connects to a single host
 				MaxIdleConnsPerHost:    64,
 				TLSClientConfig:        tlsConfig,
 			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
-		baseAddress:           fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
-		tracingSpec:           spec,
+		baseAddress:           fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, config.Port),
+		tracingSpec:           config.TracingSpec,
 		appHeaderToken:        auth.GetAppToken(),
-		maxResponseBodySizeMB: maxRequestBodySizeMB,
+		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
 	}
 
-	if maxConcurrency > 0 {
-		c.ch = make(chan struct{}, maxConcurrency)
+	if config.MaxConcurrency > 0 {
+		c.ch = make(chan struct{}, config.MaxConcurrency)
 	}
 
 	return c, nil

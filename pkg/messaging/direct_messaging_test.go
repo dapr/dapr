@@ -199,7 +199,7 @@ func TestInvokeRemote(t *testing.T) {
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
 
-		assert.Empty(t, pd.Message.Data.Value)
+		assert.True(t, pd.Message.Data == nil || len(pd.Message.Data.Value) == 0)
 	})
 
 	t.Run("streaming with single chunk", func(t *testing.T) {
