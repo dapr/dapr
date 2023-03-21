@@ -270,6 +270,9 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 		cancel()
 		select {
 		case <-stopped:
+			assert.Eventually(t, func() bool {
+				return !srv.IsLeader()
+			}, time.Second*5, time.Millisecond, "server didn't stop in time")
 		case <-time.After(time.Second * 5):
 			require.Fail(t, "server didn't stop in time")
 		}
