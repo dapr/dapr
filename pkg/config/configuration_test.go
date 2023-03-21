@@ -219,9 +219,9 @@ func compareWithFile(t *testing.T, file string, expect string) {
 	require.NoError(t, err)
 
 	// Replace all "\r\n" with "\n" because (*wave hands*, *lesigh*) ... Windows
-	bytes.ReplaceAll(f, []byte{'\r', '\n'}, []byte{'\n'})
+	f = bytes.ReplaceAll(f, []byte{'\r', '\n'}, []byte{'\n'})
 
-	assert.Equal(t, string(f), expect)
+	assert.Equal(t, expect, string(f))
 }
 
 func TestSortAndValidateSecretsConfigration(t *testing.T) {
