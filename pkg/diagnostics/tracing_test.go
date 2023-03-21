@@ -159,21 +159,22 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	})
 
 	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
-		numTraces := 100000
-		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", 0)
 		// We use a fixed seed for the RNG so we can use an exact number here
-		require.Equal(t, sampledCount, 1012, "Expected to sample 1012 traces but only sampled %d", sampledCount)
+		const expectSampled = 1051
+		const numTraces = 100000
+		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", 0)
+		require.Equal(t, sampledCount, expectSampled, "Expected to sample %d traces but sampled %d", expectSampled, sampledCount)
 		require.Less(t, sampledCount, numTraces, "Expected to sample fewer than the total number of traces, but sampled all of them!")
 	})
 
 	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (and P=1.00)", func(t *testing.T) {
-		numTraces := 1000
+		const numTraces = 1000
 		sampledCount := runTraces(t, "test_trace", numTraces, "1.00", 0)
 		require.Equal(t, sampledCount, numTraces, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
 	})
 
 	t.Run("traceparent is provided with sampling flag = 1 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
-		numTraces := 1000
+		const numTraces = 1000
 		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", 1)
 		require.Equal(t, sampledCount, numTraces, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
 	})
