@@ -57,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -81,10 +82,9 @@ type api struct {
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
 	getComponentsFn            func() []componentsV1alpha1.Component
-	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
+	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	workflowComponents         map[string]wfs.Workflow
 	lockStores                 map[string]lock.Store
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{}
@@ -150,8 +150,9 @@ const (
 	secretNameParam          = "key"
 	nameParam                = "name"
 	workflowComponent        = "workflowComponent"
-	workflowType             = "workflowType"
+	workflowName             = "workflowName"
 	instanceID               = "instanceID"
+	eventName                = "eventName"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
 	pubsubnameparam          = "pubsubname"
@@ -167,7 +168,7 @@ type APIOpts struct {
 	AppChannel                  channel.AppChannel
 	DirectMessaging             messaging.DirectMessaging
 	GetComponentsFn             func() []componentsV1alpha1.Component
-	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 	Resiliency                  resiliency.Provider
 	StateStores                 map[string]state.Store
 	WorkflowsComponents         map[string]wfs.Workflow
@@ -201,7 +202,6 @@ func NewAPI(opts APIOpts) API {
 		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
-		workflowComponents:         opts.WorkflowsComponents,
 		lockStores:                 opts.LockStores,
 		secretStores:               opts.SecretStores,
 		secretsConfiguration:       opts.SecretsConfiguration,
@@ -222,6 +222,7 @@ func NewAPI(opts APIOpts) API {
 			Resiliency:           opts.Resiliency,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			WorkflowComponents:   opts.WorkflowsComponents,
 		},
 	}
 
@@ -267,28 +268,34 @@ func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
 }
 
-// Workflow Component: Component specified in yaml (temporal, etc..)
-// Workflow Type: Name of the workflow to run (function name)
+// Workflow Component: Component specified in yaml
+// Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
 func (a *api) constructWorkflowEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceID}",
+			Route:   "workflows/{workflowComponent}/{instanceID}",
 			Version: apiVersionV1alpha1,
-			Handler: a.onGetWorkflow,
+			Handler: a.onGetWorkflowHandler(),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceID}/start",
+			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
 			Version: apiVersionV1alpha1,
-			Handler: a.onStartWorkflow,
+			Handler: a.onRaiseEventWorkflowHandler(),
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{workflowName}/{instanceID}/start",
+			Version: apiVersionV1alpha1,
+			Handler: a.onStartWorkflowHandler(),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
-			Handler: a.onTerminateWorkflow,
+			Handler: a.onTerminateWorkflowHandler(),
 		},
 	}
 }
@@ -787,168 +794,61 @@ func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lo
 	return a.lockStores[storeName], storeName, nil
 }
 
-// Route:   "workflows/{workflowComponent}/{workflowType}/{instanceId}",
-// Workflow Component: Component specified in yaml (temporal, etc..)
-// Workflow Type: Name of the workflow to run (function name)
+// Route:   "workflows/{workflowComponent}/{workflowName}/{instanceId}",
+// Workflow Component: Component specified in yaml
+// Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
-func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
-	startReq := wfs.StartRequest{}
-
-	wfType := reqCtx.UserValue(workflowType).(string)
-	if wfType == "" {
-		msg := NewErrorResponse("ERR_NO_WORKFLOW_TYPE_PROVIDED", messages.ErrWorkflowNameMissing)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	component := reqCtx.UserValue(workflowComponent).(string)
-	if component == "" {
-		msg := NewErrorResponse("ERR_NO_WORKFLOW_COMPONENT_PROVIDED", messages.ErrNoOrMissingWorkflowComponent)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-	workflowRun := a.workflowComponents[component]
-	if workflowRun == nil {
-		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, component))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	err := json.Unmarshal(reqCtx.PostBody(), &startReq)
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	instance := reqCtx.UserValue(instanceID).(string)
-	if instance == "" {
-		msg := NewErrorResponse("ERR_NO_INSTANCE_ID_PROVIDED", fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	req := wfs.StartRequest{
-		Options:           startReq.Options,
-		WorkflowReference: startReq.WorkflowReference,
-		WorkflowName:      wfType,
-		Input:             startReq.Input,
-	}
-	req.WorkflowReference.InstanceID = instance
-
-	resp, err := workflowRun.Start(reqCtx, &req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_START_WORKFLOW", fmt.Sprintf(messages.ErrStartWorkflow, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-	response, err := json.Marshal(resp)
-	if err != nil {
-		msg := NewErrorResponse("ERR_METADATA_GET", fmt.Sprintf(messages.ErrMetadataGet, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-	log.Debug(resp)
-	respond(reqCtx, withJSON(fasthttp.StatusAccepted, response))
+func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.StartWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.StartWorkflowRequest, *runtimev1pb.WorkflowReference]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
+				in.WorkflowName = reqCtx.UserValue(workflowName).(string)
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+				return in, nil
+			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
+		})
 }
 
-func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
-	wfType := reqCtx.UserValue(workflowType).(string)
-	if wfType == "" {
-		msg := NewErrorResponse("ERR_NO_WORKFLOW_TYPE_PROVIDED", messages.ErrWorkflowNameMissing)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	component := reqCtx.UserValue(workflowComponent).(string)
-	if component == "" {
-		msg := NewErrorResponse("ERR_NO_WORKFLOW_COMPONENT_PROVIDED", messages.ErrNoOrMissingWorkflowComponent)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	instance := reqCtx.UserValue(instanceID).(string)
-	if instance == "" {
-		msg := NewErrorResponse("ERR_NO_INSTANCE_ID_PROVIDED", messages.ErrMissingOrEmptyInstance)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	workflowRun := a.workflowComponents[component]
-	if workflowRun == nil {
-		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, component))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	req := wfs.WorkflowReference{
-		InstanceID: instance,
-	}
-
-	resp, err := workflowRun.Get(reqCtx, &req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_GET_WORKFLOW", fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-	response, err := json.Marshal(resp)
-	if err != nil {
-		msg := NewErrorResponse("ERR_METADATA_GET", fmt.Sprintf(messages.ErrMetadataGet, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-	respond(reqCtx, withJSON(fasthttp.StatusAccepted, response))
+func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.GetWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetWorkflowRequest, *runtimev1pb.GetWorkflowResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowRequest, error) {
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+				return in, nil
+			},
+		})
 }
 
-func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
-	instance := reqCtx.UserValue(instanceID).(string)
-	if instance == "" {
-		msg := NewErrorResponse("ERR_NO_INSTANCE_ID_PROVIDED", messages.ErrMissingOrEmptyInstance)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
+func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.TerminateWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *runtimev1pb.TerminateWorkflowResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+				return in, nil
+			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
+		})
+}
 
-	component := reqCtx.UserValue(workflowComponent).(string)
-	if component == "" {
-		msg := NewErrorResponse("ERR_NO_WORKFLOW_COMPONENT_PROVIDED", messages.ErrNoOrMissingWorkflowComponent)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	workflowRun := a.workflowComponents[component]
-	if workflowRun == nil {
-		msg := NewErrorResponse("ERR_NON_EXISTENT_WORKFLOW_COMPONENT_PROVIDED", fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, component))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	req := wfs.WorkflowReference{
-		InstanceID: instance,
-	}
-
-	err := workflowRun.Terminate(reqCtx, &req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_TERMINATE_WORKFLOW", fmt.Sprintf(messages.ErrTerminateWorkflow, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
+func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.RaiseEventWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *runtimev1pb.RaiseEventWorkflowResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
+				in.EventName = reqCtx.UserValue(eventName).(string)
+				return in, nil
+			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
+		})
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
@@ -1718,7 +1618,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			} else {
 				resStatus.Code = statusCode
 			}
-		} else if resStatus.Code < 200 || resStatus.Code > 299 {
+		} else if resStatus.Code < 200 || resStatus.Code > 399 {
 			// We are not returning an `invokeError` here on purpose.
 			// Returning an error that is not an `invokeError` will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned so the "received non-successful status code" is "swallowed" (will appear in logs but won't be returned to the app).
 			return rResp, fmt.Errorf("received non-successful status code: %d", resStatus.Code)
@@ -2198,13 +2098,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions, err := a.getSubscriptionsFn()
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_GET_SUBSCRIPTIONS", fmt.Sprintf(messages.ErrPubsubGetSubscriptions, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
+	subscriptions := a.getSubscriptionsFn()
 	ps := []pubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, pubsubSubscription{
@@ -2302,7 +2196,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			ID:              a.id,
+			Source:          a.id,
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
@@ -2463,7 +2357,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			spanMap[i] = childSpan
 
 			envelope, envelopeErr := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				ID:              a.id,
+				Source:          a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
@@ -2612,7 +2506,7 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.outboundReadyStatus {
-		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
+		msg := NewErrorResponse("ERR_OUTBOUND_HEALTH_NOT_READY", messages.ErrOutboundHealthNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {

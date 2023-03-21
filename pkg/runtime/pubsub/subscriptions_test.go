@@ -139,7 +139,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionToDisk(s, filePath)
 		defer os.RemoveAll(filePath)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 1) {
@@ -167,7 +167,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 			defer os.RemoveAll(filepath)
 		}
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
@@ -200,7 +200,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionsToDisk(subscriptions, filepath)
 		defer os.RemoveAll(filepath)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
@@ -222,7 +222,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionToDisk(s, filePath)
 		defer os.RemoveAll(filePath)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		assert.Len(t, subs, 0)
 	})
 
@@ -234,7 +234,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 
 		writeSubscriptionToDisk(s, dir)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		assert.Len(t, subs, 0)
 	})
 }
@@ -253,7 +253,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		writeSubscriptionToDisk(s, filePath)
 		defer os.RemoveAll(filePath)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 3) {
@@ -287,7 +287,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 			defer os.RemoveAll(filePath)
 		}
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
 				iStr := fmt.Sprintf("%v", i)
@@ -325,7 +325,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		writeSubscriptionsToDisk(subscriptions, filepath)
 		defer os.RemoveAll(filepath)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
 				iStr := fmt.Sprintf("%v", i)
@@ -348,7 +348,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 
 		writeSubscriptionToDisk(s, dir)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeLocal([]string{dir}, log)
 		assert.Len(t, subs, 0)
 	})
 }

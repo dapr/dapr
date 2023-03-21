@@ -4,6 +4,8 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/argoproj/argo-rollouts/pkg/apis/rollouts"
+	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/operator/meta"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
@@ -42,12 +45,21 @@ const (
 
 var log = logger.NewLogger("dapr.operator.handlers")
 
+var defaultOptions = &Options{
+	ArgoRolloutServiceReconcilerEnabled: false,
+}
+
+type Options struct {
+	ArgoRolloutServiceReconcilerEnabled bool
+}
+
 // DaprHandler handles the lifetime for Dapr CRDs.
 type DaprHandler struct {
 	mgr ctrl.Manager
 
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                              *runtime.Scheme
+	argoRolloutServiceReconcilerEnabled bool
 }
 
 type Reconciler struct {
@@ -58,11 +70,17 @@ type Reconciler struct {
 // NewDaprHandler returns a new Dapr handler.
 // This is a reconciler that watches all Deployment and StatefulSet resources and ensures that a matching Service resource is deployed to allow Dapr sidecar-to-sidecar communication and access to other ports.
 func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
+	return NewDaprHandlerWithOptions(mgr, defaultOptions)
+}
+
+// NewDaprHandlerWithOptions returns a new Dapr handler with options.
+func NewDaprHandlerWithOptions(mgr ctrl.Manager, opts *Options) *DaprHandler {
 	return &DaprHandler{
 		mgr: mgr,
 
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:                              mgr.GetClient(),
+		Scheme:                              mgr.GetScheme(),
+		argoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled,
 	}
 }
 
@@ -75,10 +93,10 @@ func (h *DaprHandler) Init() error {
 		func(rawObj client.Object) []string {
 			svc := rawObj.(*corev1.Service)
 			owner := metaV1.GetControllerOf(svc)
-			if owner == nil || owner.APIVersion != appsv1.SchemeGroupVersion.String() || (owner.Kind != "Deployment" && owner.Kind != "StatefulSet") {
-				return nil
+			if h.isReconciled(owner) {
+				return []string{owner.Name}
 			}
-			return []string{owner.Name}
+			return nil
 		},
 	)
 	if err != nil {
@@ -117,6 +135,25 @@ func (h *DaprHandler) Init() error {
 		return err
 	}
 
+	if h.argoRolloutServiceReconcilerEnabled {
+		_ = argov1alpha1.AddToScheme(h.Scheme)
+		err = ctrl.NewControllerManagedBy(h.mgr).
+			For(&argov1alpha1.Rollout{}).
+			Owns(&corev1.Service{}).
+			WithOptions(controller.Options{
+				MaxConcurrentReconciles: 100,
+			}).
+			Complete(&Reconciler{
+				DaprHandler: h,
+				newWrapper: func() ObjectWrapper {
+					return &RolloutWrapper{}
+				},
+			})
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -149,6 +186,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if expectedService {
 		err := r.ensureDaprServicePresent(ctx, req.Namespace, wrapper)
 		if err != nil {
+			log.Errorf("failed to ensure dapr service present, err: %v", err)
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
@@ -287,12 +325,7 @@ func (h *DaprHandler) getAppID(wrapper ObjectWrapper) string {
 }
 
 func (h *DaprHandler) isAnnotatedForDapr(wrapper ObjectWrapper) bool {
-	annotationsMap := wrapper.GetTemplateAnnotations()
-	val := annotationsMap[annotations.KeyEnabled]
-	if val == "" {
-		return false
-	}
-	return utils.IsTruthy(val)
+	return meta.IsAnnotatedForDapr(wrapper.GetTemplateAnnotations())
 }
 
 func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {
@@ -313,4 +346,19 @@ func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int {
 		}
 	}
 	return metricsPort
+}
+
+func (h *DaprHandler) isReconciled(owner *metaV1.OwnerReference) bool {
+	if owner == nil {
+		return false
+	}
+
+	switch owner.APIVersion {
+	case appsv1.SchemeGroupVersion.String():
+		return owner.Kind == "Deployment" || owner.Kind == "StatefulSet"
+	case argov1alpha1.SchemeGroupVersion.String():
+		return h.argoRolloutServiceReconcilerEnabled && owner.Kind == rollouts.RolloutKind
+	}
+
+	return false
 }

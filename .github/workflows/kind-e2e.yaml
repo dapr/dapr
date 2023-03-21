@@ -26,7 +26,6 @@ on:
 defaults:
   run:
     shell: bash
-    working-directory: ./src/github.com/dapr/dapr
 
 jobs:
   # This workflow runs our e2e tests in a local KinD cluster. Since it
@@ -51,7 +50,6 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      GOVER: "^1.19.2"
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
@@ -82,14 +80,13 @@ jobs:
         - k8s-version: v1.23.13
           mode: non-ha
     steps:
-    - name: Set up Go ${{ env.GOVER }}
-      uses: actions/setup-go@v2
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Set up Go
+      id: setup-go
+      uses: actions/setup-go@v3
       with:
-        go-version: ${{ env.GOVER }}
-    - name: Check out code onto GOPATH
-      uses: actions/checkout@v2
-      with:
-        path: ./src/github.com/dapr/dapr
+        go-version-file: 'go.mod'
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
       # (a) a couple of worker nodes: this is needed to run both
@@ -98,7 +95,6 @@ jobs:
       #     https://github.com/kubernetes-sigs/kind/issues/1165, using
       #     a local repository speeds up the image pushes into KinD
       #     significantly.
-      working-directory: ./
       run: |
         cat > kind.yaml <<EOF
         apiVersion: kind.x-k8s.io/v1alpha4
@@ -192,10 +188,6 @@ jobs:
     - name: Setup MongoDB
       run: |
         make setup-test-env-mongodb
-
-    - name: Setup Temporal
-      run: |
-        make setup-test-env-temporal
 
     - name: Setup Zipkin
       run: |

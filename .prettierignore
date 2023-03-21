@@ -1,0 +1,3 @@
+tests/apps/*/obj/Debug
+tests/apps/*/obj/Release
+grafana/*.json

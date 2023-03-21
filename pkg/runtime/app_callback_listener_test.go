@@ -204,9 +204,9 @@ func TestAppCallbackListener(t *testing.T) {
 func newTestLogger(t *testing.T, dest *bytes.Buffer) logger.Logger {
 	t.Helper()
 
-	log := logger.NewLogger("testlog")
-	log.EnableJSONOutput(true)
-	log.SetOutputLevel(logger.DebugLevel)
-	log.SetOutput(dest)
-	return log
+	testLogger := logger.NewLogger("testlog")
+	testLogger.EnableJSONOutput(true)
+	testLogger.SetOutputLevel(logger.DebugLevel)
+	testLogger.SetOutput(dest)
+	return testLogger
 }

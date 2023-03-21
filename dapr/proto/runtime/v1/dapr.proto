@@ -120,6 +120,9 @@ service Dapr {
   // Terminate Workflow
   rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
 
+  // Raise Event for a Workflow
+  rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (RaiseEventWorkflowResponse) {}
+
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
@@ -684,13 +687,22 @@ message UnlockResponse {
   Status status = 1;
 }
 
+message ConnectAppCallbackRequest {
+  // Empty
+}
+
+message ConnectAppCallbackResponse {
+  // Port clients should connect to
+  int32 port = 1;
+}
+
 message WorkflowReference {
   string instance_id = 1;
 }
 
 message GetWorkflowRequest {
   string instance_id  = 1;
-  string workflow_type = 2;
+  string workflow_name = 2;
   string workflow_component = 3;
 }
 
@@ -716,11 +728,13 @@ message TerminateWorkflowRequest {
 message TerminateWorkflowResponse {
 }
 
-message ConnectAppCallbackRequest {
-  // Empty
+message RaiseEventWorkflowRequest {
+  string instance_id = 1;
+  string workflow_component = 2;
+  string event_name = 3;
+  bytes input = 4;
 }
 
-message ConnectAppCallbackResponse {
-  // Port clients should connect to
-  int32 port = 1;
+message RaiseEventWorkflowResponse {
+  // Empty
 }
