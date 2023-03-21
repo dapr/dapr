@@ -2834,17 +2834,21 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 	storeName := "store1"
 
-	lockStores := map[string]lock.Store{
-		storeName: fakeLockStore,
-	}
+	l := logger.NewLogger("fakeLogger")
+	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
 	testAPI := &api{
-		resiliency: resiliency.New(nil),
-		lockStores: lockStores,
+		universal: &universalapi.UniversalAPI{
+			Logger: l,
+			LockStores: map[string]lock.Store{
+				storeName: fakeLockStore,
+			},
+			Resiliency: resiliencyConfig,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructDistributedLockEndpoints())
 
 	t.Run("Lock with valid request", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/lock/store1"
+		apiPath := apiVersionV1alpha1 + "/lock/store1"
 
 		req := lock.TryLockRequest{
 			ResourceID:      "1",
@@ -2865,7 +2869,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 
 	t.Run("Lock with invalid resource id", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/lock/store1"
+		apiPath := apiVersionV1alpha1 + "/lock/store1"
 
 		req := lock.TryLockRequest{
 			ResourceID:      "",
@@ -2876,14 +2880,14 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
 	})
 
 	t.Run("Lock with invalid owner", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/lock/store1"
+		apiPath := apiVersionV1alpha1 + "/lock/store1"
 
 		req := lock.TryLockRequest{
 			ResourceID:      "1",
@@ -2894,14 +2898,14 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
 	})
 
 	t.Run("Lock with invalid expiry", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/lock/store1"
+		apiPath := apiVersionV1alpha1 + "/lock/store1"
 
 		req := lock.TryLockRequest{
 			ResourceID: "1",
@@ -2911,14 +2915,14 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
 	})
 
 	t.Run("Unlock with valid request", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/unlock/store1"
+		apiPath := apiVersionV1alpha1 + "/unlock/store1"
 
 		req := lock.UnlockRequest{
 			ResourceID: "1",
@@ -2932,13 +2936,13 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
+		rspMap := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap)
 		assert.Equal(t, float64(0), rspMap["status"])
 	})
 
 	t.Run("Unlock with invalid resource id", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/unlock/store1"
+		apiPath := apiVersionV1alpha1 + "/unlock/store1"
 
 		req := lock.UnlockRequest{
 			ResourceID: "",
@@ -2948,17 +2952,15 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
-		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
-		assert.NotNil(t, rspMap)
-		assert.Equal(t, float64(3), rspMap["status"])
+		assert.Contains(t, string(resp.RawBody), "ERR_MALFORMED_REQUEST")
+		assert.Contains(t, string(resp.RawBody), "ResourceId is empty in lock store store1")
 	})
 
 	t.Run("Unlock with invalid resource id that returns 500", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/unlock/store1"
+		apiPath := apiVersionV1alpha1 + "/unlock/store1"
 
 		req := lock.UnlockRequest{
 			ResourceID: "error",
@@ -2975,11 +2977,11 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 
 	t.Run("Unlock with invalid owner", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/unlock/store1"
+		apiPath := apiVersionV1alpha1 + "/unlock/store1"
 
 		req := lock.UnlockRequest{
 			ResourceID: "1",
-			LockOwner:  "",
+			LockOwner:  "not-owner",
 		}
 
 		b, _ := json.Marshal(&req)
@@ -4668,7 +4670,7 @@ func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*l
 		return &lock.UnlockResponse{}, errors.New("empty request")
 	}
 
-	if req.LockOwner == "" {
+	if req.LockOwner == "not-owner" {
 		return &lock.UnlockResponse{
 			Status: 3,
 		}, nil
