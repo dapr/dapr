@@ -27,6 +27,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -50,7 +51,8 @@ import (
 var log = logger.NewLogger("dapr.operator")
 
 const (
-	healthzPort = 8080
+	healthzPort   = 8080
+	webhookCAName = "dapr-webhook-ca"
 )
 
 // Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
@@ -274,7 +276,7 @@ func (o *operator) Run(ctx context.Context) error {
 			return fmt.Errorf("failed to load cert chain: %s", err)
 		}
 
-		if err := o.patchCRDs(ctx, certChain.RootCA, o.mgr.GetConfig(), "subscriptions.dapr.io"); err != nil {
+		if err := o.patchCRDs(ctx, o.mgr.GetConfig(), "subscriptions.dapr.io"); err != nil {
 			return err
 		}
 
@@ -318,7 +320,12 @@ func (o *operator) Run(ctx context.Context) error {
 	return nil
 }
 
-func (o *operator) patchCRDs(ctx context.Context, trustChain []byte, conf *rest.Config, crdNames ...string) error {
+func (o *operator) patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) error {
+	client, err := kubernetes.NewForConfig(conf)
+	if err != nil {
+		return fmt.Errorf("could not get Kubernetes API client: %v", err)
+	}
+
 	clientSet, err := apiextensionsclient.NewForConfig(conf)
 	if err != nil {
 		return fmt.Errorf("could not get API extension client: %v", err)
@@ -328,6 +335,18 @@ func (o *operator) patchCRDs(ctx context.Context, trustChain []byte, conf *rest.
 	namespace := os.Getenv("NAMESPACE")
 	if namespace == "" {
 		return errors.New("could not get dapr namespace")
+	}
+
+	si, err := client.CoreV1().Secrets(namespace).Get(ctx, webhookCAName, v1.GetOptions{})
+	if err != nil {
+		log.Debugf("Could not get webhook CA: %v", err)
+		log.Info("The webhook CA secret was not found. Assuming conversion webhook caBundles are managed manually.")
+		return nil
+	}
+
+	caBundle, ok := si.Data["caBundle"]
+	if !ok {
+		return errors.New("webhook CA secret did not contain 'caBundle'")
 	}
 
 	for _, crdName := range crdNames {
@@ -346,7 +365,7 @@ func (o *operator) patchCRDs(ctx context.Context, trustChain []byte, conf *rest.
 		if crd.Spec.Conversion.Webhook.ClientConfig.Service != nil &&
 			crd.Spec.Conversion.Webhook.ClientConfig.Service.Namespace == namespace &&
 			crd.Spec.Conversion.Webhook.ClientConfig.CABundle != nil &&
-			bytes.Equal(crd.Spec.Conversion.Webhook.ClientConfig.CABundle, trustChain) {
+			bytes.Equal(crd.Spec.Conversion.Webhook.ClientConfig.CABundle, caBundle) {
 			log.Infof("Conversion webhook for %q is up to date", crdName)
 
 			continue
@@ -366,7 +385,7 @@ func (o *operator) patchCRDs(ctx context.Context, trustChain []byte, conf *rest.
 		}, {
 			Op:    "replace",
 			Path:  "/spec/conversion/webhook/clientConfig/caBundle",
-			Value: trustChain,
+			Value: caBundle,
 		}}
 
 		payloadJSON, err := json.Marshal(payload)
