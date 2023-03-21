@@ -39,3 +39,6 @@ global:
   #   key: "tls.key"
   argoRolloutServiceReconciler:
     enabled: false
+
+  operator:
+    watchdogCanPatchPodLabels: false
