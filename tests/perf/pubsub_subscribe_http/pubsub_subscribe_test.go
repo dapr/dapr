@@ -80,10 +80,17 @@ func getAppDescription(pubsubComponent Component, pubsubType string) kube.AppDes
 func TestMain(m *testing.M) {
 	utils.SetupLogs(testLabel)
 
+	//Read env variable for pubsub test config file, this will decide whether to run single component or all the components.
+	pubsubTestConfigFileName := os.Getenv("DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME")
+
+	if pubsubTestConfigFileName == '' || pubsubTestConfigFileName == nil{
+		pubsubTestConfigFileName = "pubsub_subscribe_http_default_component_test_config.yaml"
+	}
+
 	//Read the config file for individual components
-	data, err := ioutil.ReadFile("pubsub_component_test_config.yaml")
+	data, err := ioutil.ReadFile(pubsubTestConfigFileName)
 	if err != nil {
-		fmt.Println("error reading pubsub_component_test_config.yaml: ", err)
+		fmt.Printf("error reading %v: %v\n", pubsubTestConfigFileName, err)
 		return
 	}
 

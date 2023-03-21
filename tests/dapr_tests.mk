@@ -77,7 +77,6 @@ pubsub_bulk_publish_grpc \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
-pubsub_subscribe_http \
 
 KUBECTL=kubectl
 
@@ -113,6 +112,10 @@ MINIKUBE_NODE_IP=$(shell minikube ip)
 ifeq ($(MINIKUBE_NODE_IP),)
 $(error cannot find get minikube node ip address. ensure that you have minikube environment.)
 endif
+endif
+
+ifeq ($(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME),)
+DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=pubsub_subscribe_http_components_test_config.yaml
 endif
 
 # check the required environment variables
@@ -235,7 +238,9 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt setup-test-env-pulsar
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
+
+setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -326,7 +331,7 @@ test-perf-$(1): check-e2e-env test-deps
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).xml \
 			--format standard-quiet \
 			-- \
-				-timeout 3h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
+				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json | strings
 endef
 
@@ -363,6 +368,7 @@ else
 		DAPR_TEST_TAG=$(DAPR_TEST_TAG) \
 		DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) \
 		DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
+		DAPR_TEST_COMPONENT_CONFIG_FILE=pubsub_single_component_test_config.yaml \
 		NO_API_LOGGING=true \
 			gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json \
@@ -373,6 +379,24 @@ else
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
 endif
+
+test-perf-pubsub-subscribe-http-components: check-e2e-env test-deps
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
+	DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
+	GOOS=$(TARGET_OS_LOCAL) \
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) \
+	DAPR_TEST_TAG=$(DAPR_TEST_TAG) \
+	DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) \
+	DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
+	DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=$(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME) \
+	NO_API_LOGGING=true \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).xml \
+			--format standard-quiet \
+			-- \
+				-timeout 3h -p 1 -count=1 -v -tags=perf ./tests/perf/pubsub_subscribe_http/...
+	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json | strings
 
 # add required helm repo
 setup-helm-init:
@@ -449,7 +473,7 @@ delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Setup the test environment by installing components
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt setup-test-env-pulsar
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
