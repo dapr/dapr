@@ -228,7 +228,7 @@ func (o *operator) Run(ctx context.Context) error {
 	if err := o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
 		// start healthz server
 		if err := healthzServer.Run(ctx, healthzPort); err != nil {
-			return fmt.Errorf("Failed to start healthz server: %s", err)
+			return fmt.Errorf("failed to start healthz server: %s", err)
 		}
 		return nil
 	}}); err != nil {
@@ -237,7 +237,7 @@ func (o *operator) Run(ctx context.Context) error {
 
 	if err := o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
 		if err := o.apiServer.Ready(ctx); err != nil {
-			return fmt.Errorf("Failed to start API server: %s", err)
+			return fmt.Errorf("failed to start API server: %s", err)
 		}
 		healthzServer.Ready()
 		log.Infof("Dapr Operator started")
@@ -280,7 +280,7 @@ func (o *operator) Run(ctx context.Context) error {
 
 		log.Info("starting api server")
 		if err := o.apiServer.Run(ctx, certChain); err != nil {
-			return fmt.Errorf("Failed to start API server: %s", err)
+			return fmt.Errorf("failed to start API server: %s", err)
 		}
 		return nil
 	}}); err != nil {
@@ -294,7 +294,7 @@ func (o *operator) Run(ctx context.Context) error {
 
 		componentInformer, err := o.mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
 		if err != nil {
-			return fmt.Errorf("Unable to get setup components informer, err: %s", err)
+			return fmt.Errorf("unable to get setup components informer, err: %s", err)
 		}
 
 		if _, err := componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -303,7 +303,7 @@ func (o *operator) Run(ctx context.Context) error {
 				o.syncComponent(ctx)(newObj)
 			},
 		}); err != nil {
-			return fmt.Errorf("Unable to add components informer event handler, err: %s", err)
+			return fmt.Errorf("unable to add components informer event handler, err: %s", err)
 		}
 		<-ctx.Done()
 		return nil
