@@ -3,7 +3,6 @@ package placement
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -225,11 +224,10 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
-	wg.Add(3)
 
+	stopped := make(chan struct{})
 	go func() {
-		defer wg.Done()
+		defer close(stopped)
 		require.NoError(t, srv.StartRaft(ctx, &hcraft.Config{
 			ProtocolVersion:    hcraft.ProtocolVersionMax,
 			HeartbeatTimeout:   500 * time.Millisecond,
@@ -246,7 +244,6 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 
 	ready := make(chan struct{})
 	go func() {
-		defer wg.Done()
 		defer close(ready)
 		for {
 			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second)
@@ -260,7 +257,6 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 	}()
 
 	go func() {
-		defer wg.Done()
 		for {
 			select {
 			case <-ready:
@@ -268,24 +264,6 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 				clock.Step(time.Second * 2)
 			}
 		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-time.After(time.Millisecond):
-				clock.Step(time.Millisecond * 500)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	stopped := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(stopped)
 	}()
 
 	return srv, ready, func() {
@@ -301,9 +279,8 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 func findLeader(t *testing.T, raftServers []*raft.Server) int {
 	t.Helper()
 
-	var n int
-
 	// Ensure that one node became leader
+	var n int
 	require.Eventually(t, func() bool {
 		for i, srv := range raftServers {
 			if srv != nil && srv.IsLeader() {
