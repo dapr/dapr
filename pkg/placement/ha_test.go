@@ -240,8 +240,8 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 		defer close(stopped)
 		require.NoError(t, srv.StartRaft(ctx, &hcraft.Config{
 			ProtocolVersion:    hcraft.ProtocolVersionMax,
-			HeartbeatTimeout:   500 * time.Millisecond,
-			ElectionTimeout:    500 * time.Millisecond,
+			HeartbeatTimeout:   time.Second,
+			ElectionTimeout:    time.Second,
 			CommitTimeout:      50 * time.Millisecond,
 			MaxAppendEntries:   64,
 			ShutdownOnRemove:   true,

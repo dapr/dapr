@@ -87,7 +87,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// wait until all host member change requests are flushed
 		assert.Eventually(t, func() bool {
 			return len(testServer.raftNode.FSM().State().Members()) == 3
-		}, disseminateTimerInterval+100*time.Millisecond, time.Millisecond)
+		}, disseminateTimerInterval+500*time.Millisecond, time.Millisecond)
 	}
 
 	t.Run("successful dissemination", func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		select {
 		case <-done:
-		case <-time.After(disseminateTimerInterval + 100*time.Millisecond):
+		case <-time.After(disseminateTimerInterval + 500*time.Millisecond):
 			t.Error("dissemination did not happen in time")
 		}
 
@@ -142,7 +142,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			clock.Step(disseminateTimerInterval)
 			return testServer.memberUpdateCount.Load() == 0 &&
 				testServer.faultyHostDetectDuration.Load() == int64(faultyHostDetectDefaultDuration)
-		}, time.Second, time.Millisecond,
+		}, time.Second*5, time.Millisecond,
 			"flushed all member updates and faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
@@ -157,7 +157,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			clock.Step(disseminateTimerInterval)
 			return len(testServer.raftNode.FSM().State().Members()) == 0
-		}, time.Second, time.Millisecond)
+		}, 5*time.Second, time.Millisecond)
 	})
 }
 

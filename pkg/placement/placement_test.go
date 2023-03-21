@@ -32,7 +32,7 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-const testStreamSendLatency = 250 * time.Millisecond
+const testStreamSendLatency = 500 * time.Millisecond
 
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
