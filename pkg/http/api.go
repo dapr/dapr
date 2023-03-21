@@ -268,7 +268,7 @@ func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
 }
 
-// Workflow Component: Component specified in yaml (temporal, etc..)
+// Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
 func (a *api) constructWorkflowEndpoints() []Endpoint {
@@ -795,7 +795,7 @@ func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lo
 }
 
 // Route:   "workflows/{workflowComponent}/{workflowName}/{instanceId}",
-// Workflow Component: Component specified in yaml (temporal, etc..)
+// Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
 func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
