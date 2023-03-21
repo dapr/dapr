@@ -78,7 +78,7 @@ func NewAPIServer(client client.Client) Server {
 
 // Run starts a new gRPC server.
 func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChain) error {
-	if a.running.CompareAndSwap(false, true) {
+	if !a.running.CompareAndSwap(false, true) {
 		return errors.New("api server already running")
 	}
 
