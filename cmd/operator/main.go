@@ -39,6 +39,7 @@ var (
 	disableServiceReconciler           bool
 	watchNamespace                     string
 	enableArgoRolloutServiceReconciler bool
+	watchdogCanPatchPodLabels          bool
 )
 
 //nolint:gosec
@@ -69,6 +70,7 @@ func main() {
 		WatchNamespace:                      watchNamespace,
 		ServiceReconcilerEnabled:            !disableServiceReconciler,
 		ArgoRolloutServiceReconcilerEnabled: enableArgoRolloutServiceReconciler,
+		WatchdogCanPatchPodLabels:           watchdogCanPatchPodLabels,
 	}
 
 	switch strings.ToLower(watchInterval) {
@@ -122,6 +124,7 @@ func init() {
 	flag.BoolVar(&disableServiceReconciler, "disable-service-reconciler", false, "Disable the Service reconciler for Dapr-enabled Deployments and StatefulSets")
 	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
 	flag.BoolVar(&enableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for Dapr-enabled Argo Rollouts")
+	flag.BoolVar(&watchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
 
 	flag.Parse()
 

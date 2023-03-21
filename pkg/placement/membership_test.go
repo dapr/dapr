@@ -45,8 +45,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 	)
 
 	setupEach := func(t *testing.T) context.CancelFunc {
-		t.Helper()
-
 		ctx, cancel := context.WithCancel(context.Background())
 		var cancelServer context.CancelFunc
 		serverAddress, testServer, cancelServer = newTestPlacementServer(t, testRaftServer)
@@ -308,8 +306,6 @@ func TestPerformTableUpdate(t *testing.T) {
 }
 
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
-	t.Helper()
-
 	const testClients = 100
 	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
 	testServer.hasLeadership.Store(true)
