@@ -366,7 +366,6 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 
 	for _, host := range hosts {
 		go func(h placementGRPCStream) {
-
 			for _, s := range []struct {
 				op    string
 				table *v1pb.PlacementTables
