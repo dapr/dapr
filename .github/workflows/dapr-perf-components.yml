@@ -439,15 +439,6 @@ jobs:
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
         run: make setup-test-components
-      - name: Create Rabbitmq secret
-        if: env.TEST_PREFIX != ''
-        run: |
-          # Get the credentials for RabbitMQ
-          RABBITMQ_PWD=$(kubectl get secret --namespace ${{ env.DAPR_NAMESPACE }} rabbitmq -o jsonpath="{.data.rabbitmq-password}" | base64 -d)
-
-          kubectl create secret generic rabbitmq-secret \
-            --namespace=$DAPR_NAMESPACE \
-            --from-literal=connectionString="amqp://user:${RABBITMQ_PWD}@rabbitmq.${{ env.DAPR_NAMESPACE }}.svc.cluster.local:5672"
       - name: Run pub-sub subscribe http components performance tests
         if: env.TEST_PREFIX != ''
         run: make test-perf-pubsub-subscribe-http-components

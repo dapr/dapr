@@ -441,7 +441,7 @@ setup-test-env-kafka:
 
 # install rabbitmq to the cluster
 setup-test-env-rabbitmq:
-	$(HELM) upgrade --install rabbitmq bitnami/rabbitmq --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade --install rabbitmq bitnami/rabbitmq --set auth.username='admin' --set auth.password='admin' --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
 # install mqtt to the cluster
 setup-test-env-mqtt:

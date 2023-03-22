@@ -43,9 +43,7 @@ spec:
   metadata:
   # rabbitmq broker connection setting
   - name: host
-    secretKeyRef:
-      name: rabbitmq-secret
-      key: connectionString
+    value: amqp://admin:admin@rabbitmq.dapr-tests.svc.cluster.local:5672
 
 ---
 
