@@ -119,7 +119,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 }
 
 func TestMemberRegistration_Leadership(t *testing.T) {
-	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
+	serverAddress, testServer, clock, cleanup := newTestPlacementServer(t, testRaftServer)
 	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(true)
 
@@ -139,16 +139,20 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		require.NoError(t, stream.Send(host))
 
 		// assert
-		select {
-		case memberChange := <-testServer.membershipCh:
-			assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-			assert.Equal(t, host.Name, memberChange.host.Name)
-			assert.Equal(t, host.Id, memberChange.host.AppID)
-			assert.EqualValues(t, host.Entities, memberChange.host.Entities)
-			assert.Equal(t, 1, len(testServer.streamConnPool))
-		case <-time.After(testStreamSendLatency):
-			require.Fail(t, "no membership change")
-		}
+		assert.Eventually(t, func() bool {
+			clock.Step(disseminateTimerInterval)
+			select {
+			case memberChange := <-testServer.membershipCh:
+				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
+				assert.Equal(t, host.Name, memberChange.host.Name)
+				assert.Equal(t, host.Id, memberChange.host.AppID)
+				assert.EqualValues(t, host.Entities, memberChange.host.Entities)
+				assert.Equal(t, 1, len(testServer.streamConnPool))
+				return true
+			default:
+				return false
+			}
+		}, testStreamSendLatency, time.Millisecond, "no membership change")
 
 		// act
 		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
@@ -183,20 +187,23 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		stream.Send(host)
 
 		// assert
-		select {
-		case memberChange := <-testServer.membershipCh:
-			assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-			assert.Equal(t, host.Name, memberChange.host.Name)
-			assert.Equal(t, host.Id, memberChange.host.AppID)
-			assert.EqualValues(t, host.Entities, memberChange.host.Entities)
-			testServer.streamConnPoolLock.Lock()
-			l := len(testServer.streamConnPool)
-			testServer.streamConnPoolLock.Unlock()
-			assert.Equal(t, 1, l)
-
-		case <-time.After(testStreamSendLatency):
-			require.True(t, false, "no membership change")
-		}
+		assert.Eventually(t, func() bool {
+			clock.Step(disseminateTimerInterval)
+			select {
+			case memberChange := <-testServer.membershipCh:
+				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
+				assert.Equal(t, host.Name, memberChange.host.Name)
+				assert.Equal(t, host.Id, memberChange.host.AppID)
+				assert.EqualValues(t, host.Entities, memberChange.host.Entities)
+				testServer.streamConnPoolLock.Lock()
+				l := len(testServer.streamConnPool)
+				testServer.streamConnPoolLock.Unlock()
+				assert.Equal(t, 1, l)
+				return true
+			default:
+				return false
+			}
+		}, testStreamSendLatency, time.Millisecond, "no membership change")
 
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario
