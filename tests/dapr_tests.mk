@@ -21,7 +21,6 @@ healthapp \
 hellodapr \
 stateapp \
 secretapp \
-workflowsapp \
 service_invocation \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
@@ -115,8 +114,13 @@ $(error cannot find get minikube node ip address. ensure that you have minikube 
 endif
 endif
 
+
 ifeq ($(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME),)
 DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=pubsub_subscribe_http_components_test_config.yaml
+endif
+
+ifeq ($(WINDOWS_VERSION),)
+WINDOWS_VERSION=ltsc2022
 endif
 
 # check the required environment variables
@@ -173,7 +177,8 @@ build-push-e2e-app-$(1): check-e2e-env check-e2e-cache
 		--dockerfile "$(DOCKERFILE)" \
 		--target-os "$(TARGET_OS)" \
 		--target-arch "$(TARGET_ARCH)" \
-		--cache-registry "$(DAPR_CACHE_REGISTRY)"
+		--cache-registry "$(DAPR_CACHE_REGISTRY)" \
+		--windows-version "$(WINDOWS_VERSION)"
 endef
 
 # Generate test app image build-push targets

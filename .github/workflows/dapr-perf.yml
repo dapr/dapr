@@ -23,9 +23,10 @@
 name: dapr-perf
 
 on:
-  # Run every 6 hours
+  # Run every 8 hours on weekdays, and daily on weekends
   schedule:
-    - cron: "0 */12 * * *"
+    - cron: "44 6,14,22 * * 1-5"
+    - cron: "44 23 * * 0,6"
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
