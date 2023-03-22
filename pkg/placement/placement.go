@@ -147,12 +147,12 @@ func NewPlacementService(raftNode *raft.Server, certChain *daprCredentials.CertC
 // Run starts the placement service gRPC server.
 // Blocks until the service is closed and all connections are drained.
 func (p *Service) Run(ctx context.Context, port string) error {
-	if !p.running.CompareAndSwap(false, true) {
-		return errors.New("placement service is already running")
-	}
-
 	if p.closed.Load() {
 		return errors.New("placement service is closed")
+	}
+
+	if !p.running.CompareAndSwap(false, true) {
+		return errors.New("placement service is already running")
 	}
 
 	var err error

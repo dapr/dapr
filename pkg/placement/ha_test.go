@@ -240,7 +240,6 @@ func TestPlacementHA(t *testing.T) {
 }
 
 func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Server, <-chan struct{}, context.CancelFunc) {
-	t.Helper()
 	clock := clocktesting.NewFakeClock(time.Now())
 
 	srv := raft.New(raft.Options{
@@ -306,8 +305,6 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 }
 
 func findLeader(t *testing.T, raftServers []*raft.Server) int {
-	t.Helper()
-
 	// Ensure that one node became leader
 	n := -1
 	require.Eventually(t, func() bool {
@@ -335,7 +332,6 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 }
 
 func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
-	t.Helper()
 	var actual *raft.DaprHostMember
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
