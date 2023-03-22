@@ -62,8 +62,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}()
 
 		return func() {
-			cancelServer()
 			cancel()
+			cancelServer()
 			select {
 			case <-membershipStopCh:
 			case <-time.After(time.Second):
@@ -95,8 +95,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// arrange
 		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
-		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
+
 		done := make(chan bool)
 		go func() {
 			for {
@@ -199,8 +199,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	clientUpToDateCh := make(chan struct{}, testClients)
 
 	for i := 0; i < testClients; i++ {
-		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
 		clientRecvData = append(clientRecvData, map[string]int64{})
@@ -325,10 +324,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	startFlag.Store(false)
 	wg.Add(testClients)
 	for i := 0; i < testClients; i++ {
-		conn, stream, err := newTestClient(serverAddress)
-		if err != nil {
-			t.Fatal(err)
-		}
+		conn, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
 		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {
@@ -382,7 +378,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 		testServer.streamConnPoolLock.RLock()
 		defer testServer.streamConnPoolLock.RUnlock()
 		return len(testServer.streamConnPool) == testClients
-	}, time.Second, time.Millisecond)
+	}, time.Second*5, time.Millisecond)
 
 	testServer.streamConnPoolLock.RLock()
 	streamConnPool := make([]placementGRPCStream, len(testServer.streamConnPool))

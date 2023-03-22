@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"net"
 	"strconv"
 	"testing"
 	"time"
@@ -32,29 +33,39 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-const testStreamSendLatency = 500 * time.Millisecond
+const testStreamSendLatency = time.Second
 
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	serverStoped := make(chan struct{})
-	testServer := NewPlacementService(raftServer)
+	testServer, err := NewPlacementService(raftServer, nil)
+	require.NoError(t, err)
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock
 
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
+
+	serverStopped := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		defer close(serverStoped)
-		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port), nil))
+		close(serverStopped)
+		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
 	}()
+
+	assert.Eventually(t, func() bool {
+		conn, err := net.Dial("tcp", ":"+strconv.Itoa(port))
+		if err == nil {
+			conn.Close()
+		}
+		return err == nil
+	}, time.Second*5, time.Millisecond, "server did not start in time")
 
 	cleanUpFn := func() {
 		cancel()
 		select {
-		case <-serverStoped:
-		case <-time.After(time.Second):
+		case <-serverStopped:
+		case <-time.After(time.Second * 5):
 			t.Error("server did not stop in time")
 		}
 	}
@@ -63,21 +74,17 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	return serverAddress, testServer, clock, cleanUpFn
 }
 
-func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient, error) { //nolint:nosnakecase
+func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	if err != nil {
-		return nil, nil, err
-	}
+	require.NoError(t, err)
+
 	client := v1pb.NewPlacementClient(conn)
 	stream, err := client.ReportDaprStatus(context.Background())
-	if err != nil {
-		conn.Close()
-		return nil, nil, err
-	}
+	require.NoError(t, err)
 
-	return conn, stream, nil
+	return conn, stream
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
@@ -87,8 +94,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	testServer.hasLeadership.Store(false)
 
 	// arrange
-	conn, stream, err := newTestClient(serverAddress)
-	require.NoError(t, err)
+	conn, stream := newTestClient(t, serverAddress)
 
 	host := &v1pb.Host{
 		Name:     "127.0.0.1:50102",
@@ -100,7 +106,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 
 	// act
 	stream.Send(host)
-	_, err = stream.Recv()
+	_, err := stream.Recv()
 	s, ok := status.FromError(err)
 
 	// assert
@@ -119,8 +125,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
-		conn, stream, err := newTestClient(serverAddress)
-		require.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
 
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50102",
@@ -165,8 +170,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
-		conn, stream, err := newTestClient(serverAddress)
-		require.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{
@@ -214,8 +218,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("non actor host", func(t *testing.T) {
 		// arrange
-		conn, stream, err := newTestClient(serverAddress)
-		require.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{

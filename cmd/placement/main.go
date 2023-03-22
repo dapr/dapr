@@ -65,10 +65,6 @@ func main() {
 		log.Fatal("Failed to create raft server.")
 	}
 
-	// Start Placement gRPC server.
-	hashing.SetReplicationFactor(cfg.replicationFactor)
-	apiServer := placement.NewPlacementService(raftServer)
-
 	var certChain *credentials.CertChain
 	if cfg.tlsEnabled {
 		tlsCreds := credentials.NewTLSCredentials(cfg.certChainPath)
@@ -79,6 +75,13 @@ func main() {
 		}
 
 		log.Info("TLS certificates loaded successfully")
+	}
+
+	// Start Placement gRPC server.
+	hashing.SetReplicationFactor(cfg.replicationFactor)
+	apiServer, err := placement.NewPlacementService(raftServer, certChain)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	err = concurrency.NewRunnerManager(
@@ -95,7 +98,7 @@ func main() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			return apiServer.Run(ctx, strconv.Itoa(cfg.placementPort), certChain)
+			return apiServer.Run(ctx, strconv.Itoa(cfg.placementPort))
 		},
 	).Run(signals.Context())
 	if err != nil {

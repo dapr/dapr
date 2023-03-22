@@ -15,8 +15,8 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -40,7 +40,22 @@ const (
 // expected to do, so we must react to changes
 //
 // reference: https://github.com/hashicorp/consul/blob/master/agent/consul/leader.go
-func (p *Service) MonitorLeadership(ctx context.Context) error {
+func (p *Service) MonitorLeadership(parentCtx context.Context) error {
+	if p.closed.Load() {
+		return errors.New("placement is closed")
+	}
+
+	ctx, cancel := context.WithCancel(parentCtx)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		defer cancel()
+		select {
+		case <-parentCtx.Done():
+		case <-p.closedCh:
+		}
+	}()
+
 	raft, err := p.raftNode.Raft(ctx)
 	if err != nil {
 		return err
@@ -66,7 +81,9 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 			if isLeader {
 				oneLeaderLoopRun.Do(func() {
 					loopNotRunning = make(chan struct{})
+					p.wg.Add(1)
 					go func() {
+						defer p.wg.Done()
 						defer close(loopNotRunning)
 						log.Info("Cluster leadership acquired")
 						p.leaderLoop(leaderCtx)
@@ -166,12 +183,9 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 
 	p.memberUpdateCount.Store(0)
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
-	wg.Add(1)
+	p.wg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer p.wg.Done()
 		p.processRaftStateCommand(ctx)
 	}()
 
@@ -244,9 +258,6 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 
 	processingTicker := p.clock.NewTicker(10 * time.Second)
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -265,9 +276,9 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
 				logApplyConcurrency <- struct{}{}
-				wg.Add(1)
+				p.wg.Add(1)
 				go func() {
-					defer wg.Done()
+					defer p.wg.Done()
 
 					// We lock dissemination to ensure the updates can complete before the table is disseminated.
 					p.disseminateLock.Lock()
@@ -348,18 +359,13 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
 
-	var (
-		wg   sync.WaitGroup
-		errs []string
-		lock sync.Mutex
-	)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	wg.Add(len(hosts))
+
+	errCh := make(chan error)
 
 	for _, host := range hosts {
 		go func(h placementGRPCStream) {
-			defer wg.Done()
 
 			for _, s := range []struct {
 				op    string
@@ -369,18 +375,17 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 				{"update", newTable},
 				{"unlock", nil},
 			} {
-				if err := p.disseminateOperation(ctx, []placementGRPCStream{h}, s.op, s.table); err != nil {
-					lock.Lock()
-					errs = append(errs, err.Error())
-					lock.Unlock()
-				}
+				errCh <- p.disseminateOperation(ctx, []placementGRPCStream{h}, s.op, s.table)
 			}
 		}(host)
 	}
-	wg.Wait()
 
-	if len(errs) > 0 {
-		return fmt.Errorf("dissemination failed: %s", strings.Join(errs, ", "))
+	var err error
+	for i := 0; i < len(hosts)*3; i++ {
+		err = errors.Join(err, <-errCh)
+	}
+	if err != nil {
+		return fmt.Errorf("dissemination failed: %s", err)
 	}
 
 	log.Debugf("performTablesUpdate succeed %v", p.clock.Since(startedAt))

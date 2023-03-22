@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -235,22 +234,17 @@ func (s *Server) StartRaft(ctx context.Context, config *raft.Config) error {
 	<-ctx.Done()
 	logging.Info("Raft server is shutting down ...")
 
-	var errs []string
-	if err = s.raftTransport.Close(); err != nil {
-		errs = append(errs, err.Error())
-	}
+	closeErr := s.raftTransport.Close()
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	if s.raft.Shutdown().Error() != nil {
-		errs = append(errs, err.Error())
-	}
+
 	if s.raftStore != nil {
-		if err := s.raftStore.Close(); err != nil {
-			errs = append(errs, err.Error())
-		}
+		closeErr = errors.Join(closeErr, s.raftStore.Close())
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("error shutting down raft server: %s", strings.Join(errs, ", "))
+	closeErr = errors.Join(closeErr, s.raft.Shutdown().Error())
+
+	if closeErr != nil {
+		return fmt.Errorf("error shutting down raft server: %w", closeErr)
 	}
 
 	logging.Info("Raft server shutdown")
