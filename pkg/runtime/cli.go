@@ -343,7 +343,7 @@ func FromFlags() (*DaprRuntime, error) {
 	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
 	if *mode == string(modes.KubernetesMode) {
-		log.Infof("Initializing the operator client (config: %s)", *config)
+		log.Info("Initializing the operator client")
 		client, conn, clientErr := client.GetOperatorClient(context.TODO(), *controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
 			return nil, clientErr
