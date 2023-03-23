@@ -431,9 +431,7 @@ func Test_Ready(t *testing.T) {
 				close(ch)
 				return ch
 			},
-			ctx: func() context.Context {
-				return context.Background()
-			},
+			ctx:    context.Background,
 			expErr: false,
 		},
 		"if context is cancelled, then expect error": {
