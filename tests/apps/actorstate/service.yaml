@@ -5,12 +5,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: actorapp
+  name: actorstate
   labels:
-    testapp: actorapp
+    testapp: actorstate
 spec:
   selector:
-    testapp: actorapp
+    testapp: actorstate
   ports:
   - protocol: TCP
     port: 80
@@ -23,23 +23,23 @@ kind: Deployment
 metadata:
   name: stateapp
   labels:
-    testapp: actorapp
+    testapp: actorstate
 spec:
   replicas: 1
   selector:
     matchLabels:
-      testapp: actorapp
+      testapp: actorstate
   template:
     metadata:
       labels:
-        testapp: actorapp
+        testapp: actorstate
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/app-id: "actorapp"
+        dapr.io/app-id: "actorstate"
         dapr.io/app-port: "3000"
     spec:
       containers:
-      - name: actorapp
+      - name: actorstate
         image: docker.io/YOUR_ALIAS/e2e-actorstate:dev
         ports:
         - containerPort: 3000

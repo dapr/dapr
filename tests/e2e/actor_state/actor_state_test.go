@@ -44,7 +44,7 @@ const (
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
-	utils.SetupLogs("actor_activation")
+	utils.SetupLogs("actor_state")
 	utils.InitHTTPClient(true)
 
 	// These apps will be deployed before starting actual test and will be
