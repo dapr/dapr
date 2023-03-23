@@ -374,7 +374,6 @@ else
 		DAPR_TEST_TAG=$(DAPR_TEST_TAG) \
 		DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) \
 		DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
-		DAPR_TEST_COMPONENT_CONFIG_FILE=pubsub_single_component_test_config.yaml \
 		NO_API_LOGGING=true \
 			gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json \
