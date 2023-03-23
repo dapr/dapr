@@ -144,8 +144,15 @@ func initActor(w http.ResponseWriter, r *http.Request) {
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 
-	http.Post(fmt.Sprintf(actorInvokeURLFormat, daprHTTPPort, actorType, id), "application/json", bytes.NewBuffer([]byte{}))
+	resp, err := http.Post(fmt.Sprintf(actorInvokeURLFormat, daprHTTPPort, actorType, id), "application/json", bytes.NewBuffer([]byte{}))
+	if err == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
+	if resp != nil {
+		resp.Body.Close()
+	}
 }
 
 func httpCall(method string, url string, body io.ReadCloser) ([]byte, int, error) {
