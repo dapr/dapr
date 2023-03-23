@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path"
 	"testing"
 	"time"
 
@@ -68,8 +67,8 @@ func TestActorState(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
-	httpURL := path.Join("%s/test/actor_state_http", externalURL)
-	grpcURL := path.Join("%s/test/actor_state_grpc", externalURL)
+	httpURL := fmt.Sprintf("%s/test/actor_state_http", externalURL)
+	grpcURL := fmt.Sprintf("%s/test/actor_state_grpc", externalURL)
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
