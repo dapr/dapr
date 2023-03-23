@@ -64,9 +64,11 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorState(t *testing.T) {
+	utils.InitHTTPClient(true)
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
+	initActorURL := fmt.Sprintf("%s/test/initactor", externalURL)
 	httpURL := fmt.Sprintf("%s/test/actor_state_http", externalURL)
 	grpcURL := fmt.Sprintf("%s/test/actor_state_grpc", externalURL)
 
@@ -80,6 +82,10 @@ func TestActorState(t *testing.T) {
 
 	t.Run("http", func(t *testing.T) {
 		t.Run("getting state which does not exist should error", func(t *testing.T) {
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", initActorURL))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+
 			resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/doesnotexist", httpURL))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNotFound, code)
@@ -87,6 +93,10 @@ func TestActorState(t *testing.T) {
 		})
 
 		t.Run("should be able to save, get, update and delete state", func(t *testing.T) {
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", initActorURL))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+
 			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", httpURL), []byte(`{key:"myKey",value:"myData"}`))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
@@ -129,6 +139,10 @@ func TestActorState(t *testing.T) {
 		})
 
 		t.Run("data saved with TTL should be automatically deleted", func(t *testing.T) {
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", initActorURL))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+
 			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorTypeTTL/myActorID", httpURL), []byte(`{key:"myKey",value:"myData","metadata":{"ttlInSeconds":5}}`))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
@@ -148,17 +162,25 @@ func TestActorState(t *testing.T) {
 
 	t.Run("grpc", func(t *testing.T) {
 		t.Run("getting state which does not exist should error", func(t *testing.T) {
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/myActorID", initActorURL))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+
 			b, err := json.Marshal(&runtimev1.GetActorStateRequest{
 				ActorType: "grpcMyActorType", ActorId: "myActorID", Key: "doesnotexist",
 			})
 			require.NoError(t, err)
 
-			_, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
+			_, code, err = utils.HTTPGetWithStatusWithData(grpcURL, b)
 			assert.Error(t, err)
 			assert.Equal(t, http.StatusInternalServerError, code)
 		})
 
 		t.Run("should be able to save, get, update and delete state", func(t *testing.T) {
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/myActorID", initActorURL))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+
 			b, err := json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
 				ActorType: "grpcMyActorType", ActorId: "myActorID",
 				Operations: []*runtimev1.TransactionalActorStateOperation{
@@ -167,7 +189,7 @@ func TestActorState(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
-			_, code, err := utils.HTTPPostWithStatus(grpcURL, b)
+			_, code, err = utils.HTTPPostWithStatus(grpcURL, b)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
@@ -241,6 +263,10 @@ func TestActorState(t *testing.T) {
 		})
 
 		t.Run("data saved with TTL should be automatically deleted", func(t *testing.T) {
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/myActorID", initActorURL))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+
 			b, err := json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
 				ActorType: "grpcMyActorTypeTTL", ActorId: "myActorID",
 				Operations: []*runtimev1.TransactionalActorStateOperation{
@@ -252,7 +278,7 @@ func TestActorState(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
-			_, code, err := utils.HTTPPostWithStatus(grpcURL, b)
+			_, code, err = utils.HTTPPostWithStatus(grpcURL, b)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 

@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,6 +33,7 @@ import (
 
 const (
 	daprBaseURLFormat               = "http://localhost:%d/v1.0"
+	actorInvokeURLFormat            = daprBaseURLFormat + "/actors/%s/%s/method/test/"
 	actorSaveStateURLFormat         = daprBaseURLFormat + "/actors/%s/%s/state/"
 	actorGetStateURLFormat          = daprBaseURLFormat + "/actors/%s/%s/state/%s/"
 	actorTypeEnvName                = "TEST_APP_ACTOR_TYPE"                 // To set to change actor type.
@@ -138,6 +140,14 @@ func actorStateHandlerHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+func initActor(w http.ResponseWriter, r *http.Request) {
+	actorType := mux.Vars(r)["actorType"]
+	id := mux.Vars(r)["id"]
+
+	http.Post(fmt.Sprintf(actorInvokeURLFormat, daprHTTPPort, actorType, id), "application/json", bytes.NewBuffer([]byte{}))
+	w.WriteHeader(http.StatusOK)
+}
+
 func httpCall(method string, url string, body io.ReadCloser) ([]byte, int, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -166,6 +176,7 @@ func appRouter() *mux.Router {
 	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
+	router.HandleFunc("/test/initactor/{actorType}/{id}", initActor).Methods("GET")
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}/{key}", actorStateHandlerHTTP).Methods("GET", "DELETE")
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}", actorStateHandlerHTTP).Methods("POST", "PATCH")
 	router.HandleFunc("/test/actor_state_grpc", actorStateHandlerGRPC).Methods("GET", "POST", "DELETE", "PATCH")
