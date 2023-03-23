@@ -41,6 +41,7 @@ scopes:
 - actorjava
 - actordotnet
 - actorpython
+- actorstate
 - actorphp
 - resiliencyapp
 - resiliencyappgrpc
