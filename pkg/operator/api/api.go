@@ -86,7 +86,7 @@ func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChai
 
 	opts, err := daprCredentials.GetServerOptions(certChain)
 	if err != nil {
-		return fmt.Errorf("error creating gRPC options: %w", err)
+		return fmt.Errorf("error getting gRPC server options: %w", err)
 	}
 	s := grpc.NewServer(opts...)
 	operatorv1pb.RegisterOperatorServer(s, a)
@@ -121,7 +121,7 @@ func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChai
 	return nil
 }
 
-func (a *apiServer) OnComponentUpdated(ctx context.Context, component *componentsapi.Component) {
+func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsapi.Component) {
 	a.connLock.Lock()
 	for _, connUpdateChan := range a.allConnUpdateChan {
 		connUpdateChan <- component

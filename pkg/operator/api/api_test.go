@@ -418,3 +418,42 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Equal(t, 0, len(res.GetResiliencies()))
 	})
 }
+
+func Test_Ready(t *testing.T) {
+	tests := map[string]struct {
+		readyCh func() chan struct{}
+		ctx     func() context.Context
+		expErr  bool
+	}{
+		"if readyCh is closed, then expect no error": {
+			readyCh: func() chan struct{} {
+				ch := make(chan struct{})
+				close(ch)
+				return ch
+			},
+			ctx: func() context.Context {
+				return context.Background()
+			},
+			expErr: false,
+		},
+		"if context is cancelled, then expect error": {
+			readyCh: func() chan struct{} {
+				ch := make(chan struct{})
+				return ch
+			},
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+			expErr: true,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := (&apiServer{readyCh: test.readyCh()}).Ready(test.ctx())
+			assert.Equal(t, test.expErr, err != nil, err)
+		})
+	}
+}
