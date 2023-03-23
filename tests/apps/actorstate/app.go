@@ -144,15 +144,43 @@ func initActor(w http.ResponseWriter, r *http.Request) {
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 
-	resp, err := http.Post(fmt.Sprintf(actorInvokeURLFormat, daprHTTPPort, actorType, id), "application/json", bytes.NewBuffer([]byte{}))
-	if err == nil {
+	reqURL := fmt.Sprintf(actorInvokeURLFormat, daprHTTPPort, actorType, id)
+	req, err := http.NewRequest(http.MethodPut, reqURL, bytes.NewBuffer([]byte{}))
+	if err != nil {
+		log.Printf("actor init call failed: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := httpClient.Do(req)
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("actor init call failed: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	if resp != nil {
-		resp.Body.Close()
-	}
+	w.Write(b)
+}
+
+func configHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(struct {
+		Entities                []string `json:"entities,omitempty"`
+		ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
+		ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
+		DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
+		DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
+	}{
+		Entities:                []string{"httpMyActorType", "grpcMyActorType"},
+		ActorIdleTimeout:        "5s",
+		ActorScanInterval:       "1s",
+		DrainOngoingCallTimeout: "1s",
+		DrainRebalancedActors:   true,
+	})
 }
 
 func httpCall(method string, url string, body io.ReadCloser) ([]byte, int, error) {
@@ -183,9 +211,10 @@ func appRouter() *mux.Router {
 	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
+	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 	router.HandleFunc("/test/initactor/{actorType}/{id}", initActor).Methods("GET")
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}/{key}", actorStateHandlerHTTP).Methods("GET", "DELETE")
-	router.HandleFunc("/test/actor_state_http/{actorType}/{id}", actorStateHandlerHTTP).Methods("POST", "PATCH")
+	router.HandleFunc("/test/actor_state_http/{actorType}/{id}", actorStateHandlerHTTP).Methods("PUT", "POST", "PATCH")
 	router.HandleFunc("/test/actor_state_grpc", actorStateHandlerGRPC).Methods("GET", "POST", "DELETE", "PATCH")
 	router.Use(mux.CORSMethodMiddleware(router))
 

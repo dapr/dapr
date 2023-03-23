@@ -31,6 +31,7 @@ import (
 
 	runtimev1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/e2e/utils"
+
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 )
@@ -82,14 +83,15 @@ func TestActorState(t *testing.T) {
 
 	t.Run("http", func(t *testing.T) {
 		t.Run("getting state which does not exist should error", func(t *testing.T) {
-			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", initActorURL))
+			resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", initActorURL))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
+			t.Logf("response: %s", resp)
 
-			resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/doesnotexist", httpURL))
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/doesnotexist", httpURL))
 			assert.NoError(t, err)
-			assert.Equal(t, http.StatusNotFound, code)
-			t.Logf("response: %s", string(resp))
+			assert.Equal(t, http.StatusNoContent, code)
+			t.Logf("response: %s", resp)
 		})
 
 		t.Run("should be able to save, get, update and delete state", func(t *testing.T) {
@@ -100,22 +102,22 @@ func TestActorState(t *testing.T) {
 			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", httpURL), []byte(`{key:"myKey",value:"myData"}`))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			t.Logf("response: %s", string(resp))
+			t.Logf("response: %s", resp)
 
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/myKey", httpURL))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			assert.Equal(t, "myData", string(resp))
+			assert.Equal(t, "myData", resp)
 
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/nothttpMyActorType/myActorID/myKey", httpURL))
 			assert.NoError(t, err)
-			assert.Equal(t, http.StatusNotFound, code)
-			t.Logf("response: %s", string(resp))
+			assert.Equal(t, http.StatusNoContent, code)
+			t.Logf("response: %s", resp)
 
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/notmyActorID/myKey", httpURL))
 			assert.NoError(t, err)
-			assert.Equal(t, http.StatusNotFound, code)
-			t.Logf("response: %s", string(resp))
+			assert.Equal(t, http.StatusNoContent, code)
+			t.Logf("response: %s", resp)
 
 			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", httpURL), []byte(`{key:"myKey",value:"newData"}`))
 			assert.NoError(t, err)
@@ -125,7 +127,7 @@ func TestActorState(t *testing.T) {
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/myKey", httpURL))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			assert.Equal(t, "newData", string(resp))
+			assert.Equal(t, "newData", resp)
 
 			resp, code, err = utils.HTTPDeleteWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/myKey", httpURL))
 			assert.NoError(t, err)
@@ -134,8 +136,8 @@ func TestActorState(t *testing.T) {
 
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/myKey", httpURL))
 			assert.NoError(t, err)
-			assert.Equal(t, http.StatusNotFound, code)
-			t.Logf("response: %s", string(resp))
+			assert.Equal(t, http.StatusNoContent, code)
+			t.Logf("response: %s", resp)
 		})
 
 		t.Run("data saved with TTL should be automatically deleted", func(t *testing.T) {
@@ -151,11 +153,11 @@ func TestActorState(t *testing.T) {
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorTypeTTL/myActorID/myKey", httpURL))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			assert.Empty(t, "myData", string(resp))
+			assert.Empty(t, "myData", resp)
 
 			assert.Eventually(t, func() bool {
 				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorTypeTTL/myActorID/myKey", httpURL))
-				return err == nil && code == http.StatusNotFound
+				return err == nil && code == http.StatusNoContent
 			}, 10*time.Second, 1*time.Second, "state should be deleted after TTL: %s", code)
 		})
 	})
