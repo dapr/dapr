@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
       - name: actorapp
-        image: docker.io/YOUR_ALIAS/e2e-actorapp:dev
+        image: docker.io/YOUR_ALIAS/e2e-actorstate:dev
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
