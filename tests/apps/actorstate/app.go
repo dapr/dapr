@@ -70,7 +70,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func actorStateHandlerGRPC(w http.ResponseWriter, r *http.Request) {
-	daprAddress := fmt.Sprintf("localhost:%d", daprGRPCPort)
+	daprAddress := fmt.Sprintf("http://localhost:%d", daprGRPCPort)
 	conn, err := grpc.DialContext(r.Context(), daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Printf("gRPC dapr connection failed %s", err.Error())
