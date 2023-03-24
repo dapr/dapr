@@ -21,17 +21,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	runtimev1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/e2e/utils"
-
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 )
@@ -83,108 +82,127 @@ func TestActorState(t *testing.T) {
 
 	t.Run("http", func(t *testing.T) {
 		t.Run("getting state which does not exist should error", func(t *testing.T) {
-			resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", initActorURL))
+			uuid, err := uuid.NewUUID()
+			require.NoError(t, err)
+			actuid := uuid.String()
+
+			resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", initActorURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			t.Logf("response: %s", resp)
+			assert.Empty(t, resp)
 
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/doesnotexist", httpURL))
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/doesnotexist", httpURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, code)
-			t.Logf("response: %s", resp)
+			assert.Empty(t, resp)
 		})
 
 		t.Run("should be able to save, get, update and delete state", func(t *testing.T) {
-			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", initActorURL))
+			uuid, err := uuid.NewUUID()
+			require.NoError(t, err)
+			actuid := uuid.String()
+
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", initActorURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
-			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", httpURL), []byte(`{key:"myKey",value:"myData"}`))
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusOK, code)
-			t.Logf("response: %s", resp)
-
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/myKey", httpURL))
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusOK, code)
-			assert.Equal(t, "myData", resp)
-
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/nothttpMyActorType/myActorID/myKey", httpURL))
+			myData := []byte(`[{"operation":"upsert","request":{"key":"myKey","value":"myData"}}]`)
+			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), myData)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, code)
-			t.Logf("response: %s", resp)
+			assert.Empty(t, string(resp))
 
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/notmyActorID/myKey", httpURL))
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+			assert.Equal(t, `"myData"`, string(resp))
+
+			_, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-notMyActorID/myKey", httpURL, actuid))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusBadRequest, code)
+
+			newData := []byte(`[{"operation":"upsert","request":{"key":"myKey","value":"newData"}}]`)
+			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), newData)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, code)
-			t.Logf("response: %s", resp)
 
-			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", httpURL), []byte(`{key:"myKey",value:"newData"}`))
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			assert.NotEmpty(t, resp)
+			assert.Equal(t, `"newData"`, string(resp))
 
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/myKey", httpURL))
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusOK, code)
-			assert.Equal(t, "newData", resp)
-
-			resp, code, err = utils.HTTPDeleteWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/myKey", httpURL))
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusOK, code)
-			assert.Empty(t, resp)
-
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID/myKey", httpURL))
+			deleteData := []byte(`[{"operation":"delete","request":{"key":"myKey"}}]`)
+			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), deleteData)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, code)
-			t.Logf("response: %s", resp)
+			assert.Empty(t, string(resp))
+
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusNoContent, code)
+			assert.Empty(t, string(resp))
 		})
 
 		t.Run("data saved with TTL should be automatically deleted", func(t *testing.T) {
-			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/myActorID", initActorURL))
+			uuid, err := uuid.NewUUID()
+			require.NoError(t, err)
+			actuid := uuid.String()
+
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", initActorURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
-			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorTypeTTL/myActorID", httpURL), []byte(`{key:"myKey",value:"myData","metadata":{"ttlInSeconds":5}}`))
+			myData := []byte(`[{"operation":"upsert","request":{"key":"myTTLKey","value":"myTTLData","metadata":{"ttlInSeconds":"5"}}}]`)
+			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), myData)
 			assert.NoError(t, err)
-			assert.Equal(t, http.StatusOK, code)
-			assert.Empty(t, resp)
+			assert.Equal(t, http.StatusNoContent, code)
+			assert.Empty(t, string(resp))
 
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorTypeTTL/myActorID/myKey", httpURL))
+			// Ensure the data isn't deleted yet.
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			assert.Empty(t, "myData", resp)
+			assert.Equal(t, `"myTTLData"`, string(resp))
 
 			assert.Eventually(t, func() bool {
-				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorTypeTTL/myActorID/myKey", httpURL))
-				return err == nil && code == http.StatusNoContent
-			}, 10*time.Second, 1*time.Second, "state should be deleted after TTL: %s", code)
+				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
+				return err == nil && code == http.StatusNoContent && string(resp) == ""
+			}, 10*time.Second, time.Second/2, "state should be deleted after TTL: %s", code)
 		})
 	})
 
 	t.Run("grpc", func(t *testing.T) {
 		t.Run("getting state which does not exist should error", func(t *testing.T) {
-			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/myActorID", initActorURL))
+			uuid, err := uuid.NewUUID()
+			require.NoError(t, err)
+			actuid := uuid.String()
+
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/%s-myActorID", initActorURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
 			b, err := json.Marshal(&runtimev1.GetActorStateRequest{
-				ActorType: "grpcMyActorType", ActorId: "myActorID", Key: "doesnotexist",
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid), Key: "doesnotexist",
 			})
 			require.NoError(t, err)
 
-			_, code, err = utils.HTTPGetWithStatusWithData(grpcURL, b)
-			assert.Error(t, err)
-			assert.Equal(t, http.StatusInternalServerError, code)
+			resp, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+			assert.Equal(t, "{}", string(resp))
 		})
 
 		t.Run("should be able to save, get, update and delete state", func(t *testing.T) {
-			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/myActorID", initActorURL))
+			uuid, err := uuid.NewUUID()
+			require.NoError(t, err)
+			actuid := uuid.String()
+
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/%s-myActorID", initActorURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
 			b, err := json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
-				ActorType: "grpcMyActorType", ActorId: "myActorID",
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid),
 				Operations: []*runtimev1.TransactionalActorStateOperation{
 					{OperationType: "upsert", Key: "myKey",
 						Value: &anypb.Any{Value: []byte("myData")}},
@@ -196,7 +214,8 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusOK, code)
 
 			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
-				ActorType: "grpcMyActorType", ActorId: "myActorID", Key: "myKey",
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid),
+				Key: "myKey",
 			})
 			require.NoError(t, err)
 			resp, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
@@ -207,14 +226,6 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, []byte("myData"), gresp.Data)
 
 			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
-				ActorType: "notgrpcMyActorType", ActorId: "myActorID", Key: "myKey",
-			})
-			require.NoError(t, err)
-			_, code, err = utils.HTTPGetWithStatusWithData(grpcURL, b)
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusInternalServerError, code)
-
-			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
 				ActorType: "grpcMyActorType", ActorId: "notmyActorID", Key: "myKey",
 			})
 			require.NoError(t, err)
@@ -223,19 +234,20 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusInternalServerError, code)
 
 			b, err = json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
-				ActorType: "grpcMyActorType", ActorId: "myActorID",
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid),
 				Operations: []*runtimev1.TransactionalActorStateOperation{
 					{OperationType: "upsert", Key: "myKey",
 						Value: &anypb.Any{Value: []byte("newData")}},
 				},
 			})
 			require.NoError(t, err)
-			_, code, err = utils.HTTPPostWithStatus(grpcURL, b)
+			resp, code, err = utils.HTTPPostWithStatus(grpcURL, b)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
+			assert.Empty(t, string(resp))
 
 			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
-				ActorType: "grpcMyActorType", ActorId: "myActorID", Key: "myKey",
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid), Key: "myKey",
 			})
 			require.NoError(t, err)
 			resp, code, err = utils.HTTPGetWithStatusWithData(grpcURL, b)
@@ -245,7 +257,7 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, []byte("newData"), gresp.Data)
 
 			b, err = json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
-				ActorType: "grpcMyActorType", ActorId: "myActorID",
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid),
 				Operations: []*runtimev1.TransactionalActorStateOperation{
 					{OperationType: "delete", Key: "myKey"},
 				},
@@ -256,24 +268,29 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusOK, code)
 
 			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
-				ActorType: "grpcMyActorType", ActorId: "myActorID", Key: "myKey",
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid), Key: "myKey",
 			})
 			require.NoError(t, err)
-			_, code, err = utils.HTTPGetWithStatusWithData(grpcURL, b)
+			resp, code, err = utils.HTTPGetWithStatusWithData(grpcURL, b)
 			assert.NoError(t, err)
-			assert.Equal(t, http.StatusInternalServerError, code)
+			assert.Equal(t, http.StatusOK, code)
+			assert.Equal(t, "{}", string(resp))
 		})
 
 		t.Run("data saved with TTL should be automatically deleted", func(t *testing.T) {
-			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/myActorID", initActorURL))
+			uuid, err := uuid.NewUUID()
+			require.NoError(t, err)
+			actuid := uuid.String()
+
+			_, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/grpcMyActorType/%s-myActorIDTTL", initActorURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
 			b, err := json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
-				ActorType: "grpcMyActorTypeTTL", ActorId: "myActorID",
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorIDTTL", actuid),
 				Operations: []*runtimev1.TransactionalActorStateOperation{
 					{
-						OperationType: "upsert", Key: "myKey",
+						OperationType: "upsert", Key: "myTTLKey",
 						Value:    &anypb.Any{Value: []byte("myData")},
 						Metadata: map[string]string{"ttlInSeconds": "3"},
 					},
@@ -284,25 +301,15 @@ func TestActorState(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
-			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
-				ActorType: "grpcMyActorType", ActorId: "myActorID", Key: "myKey",
-			})
-			require.NoError(t, err)
-			resp, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusOK, code)
-			var gresp runtimev1.GetActorStateResponse
-			assert.NoError(t, json.Unmarshal(resp, &gresp))
-			assert.Equal(t, []byte("newData"), gresp.Data)
-
 			assert.Eventually(t, func() bool {
 				b, err = json.Marshal(&runtimev1.GetActorStateRequest{
-					ActorType: "grpcMyActorType", ActorId: "myActorID", Key: "myKey",
+					ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorIDTTL", actuid),
+					Key: "myTTLKey",
 				})
 				require.NoError(t, err)
-				_, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
-				return err != nil && code == http.StatusInternalServerError
-			}, 10*time.Second, 1*time.Second)
+				resp, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
+				return err == nil && code == http.StatusOK && string(resp) == "{}"
+			}, 10*time.Second, time.Second/2)
 		})
 	})
 }

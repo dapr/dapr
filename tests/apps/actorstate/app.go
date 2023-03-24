@@ -33,9 +33,9 @@ import (
 
 const (
 	daprBaseURLFormat               = "http://localhost:%d/v1.0"
-	actorInvokeURLFormat            = daprBaseURLFormat + "/actors/%s/%s/method/test/"
-	actorSaveStateURLFormat         = daprBaseURLFormat + "/actors/%s/%s/state/"
-	actorGetStateURLFormat          = daprBaseURLFormat + "/actors/%s/%s/state/%s/"
+	actorInvokeURLFormat            = daprBaseURLFormat + "/actors/%s/%s/method/test"
+	actorSaveStateURLFormat         = daprBaseURLFormat + "/actors/%s/%s/state"
+	actorGetStateURLFormat          = daprBaseURLFormat + "/actors/%s/%s/state/%s"
 	actorTypeEnvName                = "TEST_APP_ACTOR_TYPE"                 // To set to change actor type.
 	actorRemindersPartitionsEnvName = "TEST_APP_ACTOR_REMINDERS_PARTITIONS" // To set actor type partition count.
 )
@@ -108,7 +108,7 @@ func actorStateHandlerGRPC(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err = client.ExecuteActorStateTransaction(r.Context(), &op)
+		_, err := client.ExecuteActorStateTransaction(r.Context(), &op)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -145,7 +145,7 @@ func initActor(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
 	reqURL := fmt.Sprintf(actorInvokeURLFormat, daprHTTPPort, actorType, id)
-	req, err := http.NewRequest(http.MethodPut, reqURL, bytes.NewBuffer([]byte{}))
+	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewBuffer([]byte{}))
 	if err != nil {
 		log.Printf("actor init call failed: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -161,6 +161,10 @@ func initActor(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write(b)
+}
+
+func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
@@ -189,6 +193,8 @@ func httpCall(method string, url string, body io.ReadCloser) ([]byte, int, error
 		return nil, -1, err
 	}
 
+	req.Header.Set("Content-Type", "application/json; utf-8")
+
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, -1, err
@@ -216,6 +222,8 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}/{key}", actorStateHandlerHTTP).Methods("GET", "DELETE")
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}", actorStateHandlerHTTP).Methods("PUT", "POST", "PATCH")
 	router.HandleFunc("/test/actor_state_grpc", actorStateHandlerGRPC).Methods("GET", "POST", "DELETE", "PATCH")
+	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT", "POST")
+	router.HandleFunc("/actors/{actorType}/{id}", actorMethodHandler).Methods("POST", "DELETE")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
