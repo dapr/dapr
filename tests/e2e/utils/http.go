@@ -129,7 +129,7 @@ func HTTPGetWithStatus(url string) ([]byte, int, error) {
 
 // HTTPGetWithStatusWithData is a helper to make GET request call to url.
 func HTTPGetWithStatusWithData(surl string, data []byte) ([]byte, int, error) {
-	url, err := url.Parse(surl)
+	url, err := url.Parse(SanitizeHTTPURL(surl))
 	if err != nil {
 		return nil, 0, err
 	}
