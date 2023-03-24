@@ -153,6 +153,12 @@ func initActor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Printf("actor init call failed: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("actor init call failed: %s", err.Error())
