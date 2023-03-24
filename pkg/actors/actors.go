@@ -85,8 +85,8 @@ type Actors interface {
 
 // PlacementService allows for interacting with the actor placement service.
 type PlacementService interface {
-	Start()
-	Stop()
+	Start(context.Context) error
+	Close()
 	WaitUntilPlacementTableIsReady(ctx context.Context) error
 	LookupActor(actorType, actorID string) (host string, appID string)
 	AddHostedActorType(actorType string) error
@@ -246,14 +246,18 @@ func (a *actorsRuntime) Init() error {
 	appHealthFn := func() bool { return a.appHealthy.Load() }
 
 	if a.placement == nil {
-		a.placement = internal.NewActorPlacement(
-			a.config.PlacementAddresses, a.certChain,
-			a.config.AppID, hostname, a.config.HostedActorTypes,
-			appHealthFn,
-			afterTableUpdateFn)
+		a.placement = internal.NewActorPlacement(internal.Options{
+			ServerAddr:         a.config.PlacementAddresses,
+			ClientCert:         a.certChain,
+			AppID:              a.config.AppID,
+			RuntimeHostName:    hostname,
+			ActorTypes:         a.config.HostedActorTypes,
+			AppHealthFn:        appHealthFn,
+			AfterTableUpdateFn: afterTableUpdateFn,
+		})
 	}
 
-	go a.placement.Start()
+	go a.placement.Start(context.TODO())
 	go a.deactivationTicker(a.config, a.deactivateActor)
 
 	log.Infof("actor runtime started. actor idle timeout: %v. actor scan interval: %v",
@@ -1950,7 +1954,7 @@ func isInternalActor(actorType string) bool {
 // Stop closes all network connections and resources used in actor runtime.
 func (a *actorsRuntime) Stop() {
 	if a.placement != nil {
-		a.placement.Stop()
+		a.placement.Close()
 	}
 	if a.cancel != nil {
 		a.cancel()

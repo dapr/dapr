@@ -15,6 +15,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -29,6 +30,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -62,48 +64,73 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	cleanup := make([]func(), testServerCount)
 
 	for i := 0; i < testServerCount; i++ {
-		address[i], testSrv[i], cleanup[i] = newTestServer()
+		address[i], testSrv[i], cleanup[i] = newTestServer(t)
 	}
 
-	appHealthFunc := func() bool {
-		return true
-	}
-	noopTableUpdateFunc := func() {}
+	testPlacement := NewActorPlacement(Options{
+		ServerAddr:         address,
+		ClientCert:         nil,
+		AppID:              "testAppID",
+		RuntimeHostName:    "127.0.0.1:1000",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        func() bool { return true },
+		AfterTableUpdateFn: func() {},
+	})
+	clock := clocktesting.NewFakeClock(time.Now())
+	testPlacement.clock = clock
 
-	testPlacement := NewActorPlacement(
-		address, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
-		appHealthFunc, noopTableUpdateFunc)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// act
+	errCh := make(chan error)
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			require.Fail(t, "timeout waiting for placement server to shutdown")
+		}
+	})
+
+	// set leader for leaderServer[0]
+	testSrv[leaderServer[0]].setLeader(true)
+
+	go func() {
+		errCh <- testPlacement.Start(ctx)
+	}()
+
+	assert.Eventually(t, clock.HasWaiters, time.Second, time.Millisecond)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
-		// set leader for leaderServer[0]
-		testSrv[leaderServer[0]].setLeader(true)
-
-		// act
-		testPlacement.Start()
-		time.Sleep(statusReportHeartbeatInterval * 3)
-		assert.Equal(t, leaderServer[0], testPlacement.serverIndex.Load())
-		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 2)
+		require.Eventually(t, func() bool {
+			clock.Step(statusReportHeartbeatInterval)
+			return leaderServer[0] == testPlacement.serverIndex.Load() &&
+				testSrv[leaderServer[0]].recvCount.Load() >= int32(2)
+		}, time.Second, time.Millisecond)
 	})
 
 	t.Run("shutdown leader and find the next leader", func(t *testing.T) {
 		// shutdown server
 		cleanup[leaderServer[0]]()
 
-		time.Sleep(statusReportHeartbeatInterval)
-
 		// set the second leader
 		testSrv[leaderServer[1]].setLeader(true)
 
 		// wait until placement connect to the second leader node
-		time.Sleep(statusReportHeartbeatInterval * 3)
-		assert.Equal(t, leaderServer[1], testPlacement.serverIndex.Load())
-		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 1)
+		require.Eventually(t, func() bool {
+			clock.Step(statusReportHeartbeatInterval)
+			return leaderServer[1] == testPlacement.serverIndex.Load() &&
+				testSrv[leaderServer[1]].recvCount.Load() >= 1
+		}, time.Second, time.Millisecond)
 	})
 
 	// tear down
-	testPlacement.Stop()
-	time.Sleep(statusReportHeartbeatInterval)
-	assert.True(t, testSrv[testPlacement.serverIndex.Load()].isGracefulShutdown.Load())
+	testPlacement.Close()
+	assert.Eventually(t, func() bool {
+		clock.Step(statusReportHeartbeatInterval)
+		return testSrv[testPlacement.serverIndex.Load()].isGracefulShutdown.Load()
+	}, time.Second, time.Millisecond)
 
 	for _, fn := range cleanup {
 		fn()
@@ -112,7 +139,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 
 func TestAppHealthyStatus(t *testing.T) {
 	// arrange
-	address, testSrv, cleanup := newTestServer()
+	address, testSrv, cleanup := newTestServer(t)
 
 	// set leader
 	testSrv.setLeader(true)
@@ -122,40 +149,71 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	appHealthFunc := appHealth.Load
 	noopTableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{address}, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
-		appHealthFunc, noopTableUpdateFunc)
+	testPlacement := NewActorPlacement(Options{
+		ServerAddr:         []string{address},
+		ClientCert:         nil,
+		AppID:              "testAppID",
+		RuntimeHostName:    "127.0.0.1:1000",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: noopTableUpdateFunc,
+	})
+	clock := clocktesting.NewFakeClock(time.Now())
+	testPlacement.clock = clock
 
 	// act
-	testPlacement.Start()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	// act
+	errCh := make(chan error)
+	t.Cleanup(func() {
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second * 5):
+			require.Fail(t, "timeout waiting for placement server to shutdown")
+		}
+	})
+	go func() {
+		errCh <- testPlacement.Start(ctx)
+	}()
 
 	// wait until client sends heartbeat to the test server
-	time.Sleep(statusReportHeartbeatInterval * 3)
-	oldCount := testSrv.recvCount.Load()
-	assert.True(t, oldCount >= 2, "client must send at least twice")
+	var oldCount int32
+	assert.Eventually(t, func() bool {
+		clock.Step(statusReportHeartbeatInterval)
+		oldCount = testSrv.recvCount.Load()
+		return oldCount >= 2
+	}, time.Second, time.Millisecond, "client must send at least twice")
 
 	// Mark app unhealthy
 	appHealth.Store(false)
-	time.Sleep(statusReportHeartbeatInterval * 2)
+	clock.Step(statusReportHeartbeatInterval * 2)
 	assert.True(t, testSrv.recvCount.Load() <= oldCount+1, "no more +1 heartbeat because app is unhealthy")
 
 	// clean up
-	testPlacement.Stop()
+	testPlacement.Close()
 	cleanup()
 }
 
 func TestOnPlacementOrder(t *testing.T) {
+	ctx := context.Background()
 	tableUpdateCount := 0
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() { tableUpdateCount++ }
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+	testPlacement := NewActorPlacement(Options{
+		ServerAddr:         []string{},
+		ClientCert:         nil,
+		AppID:              "testAppID",
+		RuntimeHostName:    "127.0.0.1:1000",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: tableUpdateFunc,
+	})
 
 	t.Run("lock operation", func(t *testing.T) {
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{
 			Operation: "lock",
 		})
 		assert.True(t, testPlacement.tableIsBlocked.Load())
@@ -164,7 +222,7 @@ func TestOnPlacementOrder(t *testing.T) {
 	t.Run("update operation", func(t *testing.T) {
 		tableVersion := "1"
 		tableUpdateCount = 0
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
 				Version: tableVersion,
@@ -175,7 +233,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		assert.Equal(t, 1, tableUpdateCount)
 
 		// no update with the same table version
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
 				Version: tableVersion,
@@ -187,7 +245,7 @@ func TestOnPlacementOrder(t *testing.T) {
 	})
 
 	t.Run("unlock operation", func(t *testing.T) {
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{
 			Operation: "unlock",
 		})
 		assert.False(t, testPlacement.tableIsBlocked.Load())
@@ -195,13 +253,20 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
+	ctx := context.Background()
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+	testPlacement := NewActorPlacement(Options{
+		ServerAddr:         []string{},
+		ClientCert:         nil,
+		AppID:              "testAppID",
+		RuntimeHostName:    "127.0.0.1:1000",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: tableUpdateFunc,
+	})
+	clock := clocktesting.NewFakeClock(time.Now())
+	testPlacement.clock = clock
 
 	t.Run("already unlocked", func(t *testing.T) {
 		require.False(t, testPlacement.tableIsBlocked.Load())
@@ -211,7 +276,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	})
 
 	t.Run("wait until ready", func(t *testing.T) {
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{Operation: "lock"})
 
 		testSuccessCh := make(chan struct{})
 		go func() {
@@ -221,11 +286,13 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 			}
 		}()
 
-		time.Sleep(50 * time.Millisecond)
-		require.True(t, testPlacement.tableIsBlocked.Load())
+		assert.Eventually(t, func() bool {
+			clock.Step(50 * time.Millisecond)
+			return testPlacement.tableIsBlocked.Load()
+		}, 500*time.Millisecond, time.Millisecond)
 
 		// unlock
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{Operation: "unlock"})
 
 		// ensure that it is unlocked
 		select {
@@ -239,7 +306,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	})
 
 	t.Run("abort on context canceled", func(t *testing.T) {
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+		testPlacement.onPlacementOrder(ctx, &placementv1pb.PlacementOrder{Operation: "lock"})
 
 		testSuccessCh := make(chan struct{})
 		ctx, cancel := context.WithCancel(context.Background())
@@ -250,8 +317,10 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 			}
 		}()
 
-		time.Sleep(50 * time.Millisecond)
-		require.True(t, testPlacement.tableIsBlocked.Load())
+		assert.Eventually(t, func() bool {
+			clock.Step(50 * time.Millisecond)
+			return testPlacement.tableIsBlocked.Load()
+		}, time.Second, time.Millisecond)
 
 		// cancel context
 		cancel()
@@ -271,11 +340,15 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 func TestLookupActor(t *testing.T) {
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+	testPlacement := NewActorPlacement(Options{
+		ServerAddr:         []string{},
+		ClientCert:         nil,
+		AppID:              "testAppID",
+		RuntimeHostName:    "127.0.0.1:1000",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: tableUpdateFunc,
+	})
 
 	t.Run("Placementtable is unset", func(t *testing.T) {
 		name, appID := testPlacement.LookupActor("actorOne", "test")
@@ -311,11 +384,15 @@ func TestLookupActor(t *testing.T) {
 func TestConcurrentUnblockPlacements(t *testing.T) {
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+	testPlacement := NewActorPlacement(Options{
+		ServerAddr:         []string{},
+		ClientCert:         nil,
+		AppID:              "testAppID",
+		RuntimeHostName:    "127.0.0.1:1000",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: tableUpdateFunc,
+	})
 
 	t.Run("concurrent_unlock", func(t *testing.T) {
 		for i := 0; i < 10000; i++ {
@@ -336,9 +413,11 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 	})
 }
 
-func newTestServer() (conn string, srv *testServer, cleanup func()) {
+func newTestServer(t *testing.T) (conn string, srv *testServer, cleanup func()) {
+	t.Helper()
+
 	srv = &testServer{}
-	conn, cleanup = newTestServerWithOpts(func(s *grpc.Server) {
+	conn, cleanup = newTestServerWithOpts(t, func(s *grpc.Server) {
 		srv.isGracefulShutdown.Store(false)
 		srv.setLeader(false)
 		placementv1pb.RegisterPlacementServer(s, srv)
@@ -346,25 +425,37 @@ func newTestServer() (conn string, srv *testServer, cleanup func()) {
 	return
 }
 
-func newTestServerWithOpts(useGrpcServer ...func(*grpc.Server)) (string, func()) {
+func newTestServerWithOpts(t *testing.T, useGrpcServer ...func(*grpc.Server)) (string, func()) {
+	t.Helper()
+
 	port, _ := freeport.GetFreePort()
 	conn := fmt.Sprintf("127.0.0.1:%d", port)
-	listener, _ := net.Listen("tcp", conn)
+	listener, err := net.Listen("tcp", conn)
+	require.NoError(t, err)
+
 	server := grpc.NewServer()
 	for _, opt := range useGrpcServer {
 		opt(server)
 	}
 
+	serverStopped := make(chan struct{})
 	go func() {
-		server.Serve(listener)
+		defer close(serverStopped)
+		if err := server.Serve(listener); !errors.Is(err, grpc.ErrServerStopped) {
+			require.NoError(t, err)
+		}
 	}()
 
-	// wait until test server starts
-	time.Sleep(100 * time.Millisecond)
+	t.Logf("test server listening on %s", conn)
 
 	cleanup := func() {
-		listener.Close()
 		server.Stop()
+		listener.Close()
+		select {
+		case <-serverStopped:
+		case <-time.After(5 * time.Second):
+			t.Fatal("server did not stop in 5 seconds")
+		}
 	}
 
 	return conn, cleanup
@@ -386,7 +477,7 @@ func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStat
 		}
 
 		req, err := srv.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
 			s.isGracefulShutdown.Store(true)
 			return nil
 		} else if err != nil {

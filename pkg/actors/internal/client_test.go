@@ -14,106 +14,40 @@ limitations under the License.
 package internal
 
 import (
-	"sync"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 )
 
 func TestConnectToServer(t *testing.T) {
+	ctx := context.Background()
 	t.Run("when grpc get opts return an error connectToServer should return an error", func(t *testing.T) {
-		client := newPlacementClient(func() ([]grpc.DialOption, error) {
+		_, err := newPlacementClient(ctx, "", func() ([]grpc.DialOption, error) {
 			return nil, errEstablishingTLSConn
 		})
-		assert.Equal(t, client.connectToServer(""), errEstablishingTLSConn)
+		assert.Equal(t, err, errEstablishingTLSConn)
 	})
 	t.Run("when grpc dial returns an error connectToServer should return an error", func(t *testing.T) {
-		client := newPlacementClient(func() ([]grpc.DialOption, error) {
+		_, err := newPlacementClient(ctx, "", func() ([]grpc.DialOption, error) {
 			return []grpc.DialOption{}, nil
 		})
-
-		assert.NotNil(t, client.connectToServer(""))
+		assert.Error(t, err)
 	})
 	t.Run("when new placement stream returns an error connectToServer should return an error", func(t *testing.T) {
-		client := newPlacementClient(func() ([]grpc.DialOption, error) {
+		conn, cleanup := newTestServerWithOpts(t) // do not register the placement stream server
+		defer cleanup()
+		_, err := newPlacementClient(ctx, conn, func() ([]grpc.DialOption, error) {
 			return []grpc.DialOption{}, nil
 		})
-		conn, cleanup := newTestServerWithOpts() // do not register the placement stream server
-		defer cleanup()
-		assert.NotNil(t, client.connectToServer(conn))
+		assert.Error(t, err)
 	})
-	t.Run("when connectToServer succeeds it should broadcast that a new connection is alive", func(t *testing.T) {
-		conn, _, cleanup := newTestServer() // do not register the placement stream server
+	t.Run("when connectToServer succeeds it should return no error", func(t *testing.T) {
+		conn, _, cleanup := newTestServer(t) // do not register the placement stream server
 		defer cleanup()
 
-		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, nil))
-
-		var ready sync.WaitGroup
-		ready.Add(1)
-		go func() {
-			client.waitUntil(func(streamConnAlive bool) bool {
-				return streamConnAlive
-			})
-			ready.Done()
-		}()
-
-		assert.Nil(t, client.connectToServer(conn))
-		ready.Wait() // should not timeout
-		assert.True(t, client.streamConnAlive)
-	})
-}
-
-func TestDisconnect(t *testing.T) {
-	t.Run("disconnectFn should return and broadcast when connection is not alive", func(t *testing.T) {
-		client := newPlacementClient(func() ([]grpc.DialOption, error) {
-			return nil, nil
-		})
-		client.streamConnAlive = true
-
-		called := false
-		shouldNotBeCalled := func() {
-			called = true
-		}
-		var ready sync.WaitGroup
-		ready.Add(1)
-
-		go func() {
-			client.waitUntil(func(streamConnAlive bool) bool {
-				return !streamConnAlive
-			})
-			ready.Done()
-		}()
-		client.streamConnAlive = false
-		client.disconnectFn(shouldNotBeCalled)
-		ready.Wait()
-		assert.False(t, called)
-	})
-	t.Run("disconnectFn should broadcast not connected when disconnected and should drain and execute func inside lock", func(t *testing.T) {
-		conn, _, cleanup := newTestServer() // do not register the placement stream server
-		defer cleanup()
-
-		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, nil))
-		assert.Nil(t, client.connectToServer(conn))
-
-		called := false
-		shouldBeCalled := func() {
-			called = true
-		}
-
-		var ready sync.WaitGroup
-		ready.Add(1)
-
-		go func() {
-			client.waitUntil(func(streamConnAlive bool) bool {
-				return !streamConnAlive
-			})
-			ready.Done()
-		}()
-		client.disconnectFn(shouldBeCalled)
-		ready.Wait()
-		assert.Equal(t, client.clientConn.GetState(), connectivity.Shutdown)
-		assert.True(t, called)
+		_, err := newPlacementClient(ctx, conn, getGrpcOptsGetter([]string{conn}, nil))
+		assert.NoError(t, err)
 	})
 }

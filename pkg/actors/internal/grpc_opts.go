@@ -18,11 +18,11 @@ import (
 	"strings"
 	"sync"
 
+	"google.golang.org/grpc"
+
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/security"
-
-	"google.golang.org/grpc"
 )
 
 var errEstablishingTLSConn = errors.New("failed to establish TLS credentials for actor placement service")
@@ -56,6 +56,8 @@ func getGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) 
 				opts,
 				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
 		}
+
+		opts = append(opts, grpc.WithBlock())
 
 		if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
 			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
