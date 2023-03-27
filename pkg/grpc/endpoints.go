@@ -79,6 +79,15 @@ var endpoints = map[string][]string{
 	"unlock.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/UnlockAlpha1",
 	},
+	"subtlecrypto.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/SubtleGetKeyAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleEncryptAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleDecryptAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleSignAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleVerifyAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleWrapKeyAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleUnwrapKeyAlpha1",
+	},
 	"workflows.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/StartWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/GetWorkflowAlpha1",
