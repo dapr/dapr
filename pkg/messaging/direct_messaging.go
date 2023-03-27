@@ -129,7 +129,10 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	}
 
 	if app.id == d.appID && app.namespace == d.namespace {
-		return d.invokeLocal(ctx, req)
+		log.Infof("invoke local app: %s.%s startAt: %d", app.id, app.namespace, time.Now().UnixMilli())
+		result, err := d.invokeLocal(ctx, req)
+		log.Infof("invoke local app: %s.%s endAt: %d", app.id, app.namespace, time.Now().UnixMilli())
+		return result, err
 	}
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
 }
