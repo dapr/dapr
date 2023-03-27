@@ -281,12 +281,13 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context, firstAttempt 
 }
 
 // Close shuts down server stream gracefully.
-func (p *ActorPlacement) Close() {
+func (p *ActorPlacement) Close() error {
 	// CAS to avoid stop more than once.
 	if p.shutdown.CompareAndSwap(false, true) {
 		close(p.closedCh)
 	}
 	p.wg.Wait()
+	return nil
 }
 
 // WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.

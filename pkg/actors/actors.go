@@ -86,7 +86,7 @@ type Actors interface {
 // PlacementService allows for interacting with the actor placement service.
 type PlacementService interface {
 	Start(context.Context) error
-	Close()
+	Close() error
 	WaitUntilPlacementTableIsReady(ctx context.Context) error
 	LookupActor(actorType, actorID string) (host string, appID string)
 	AddHostedActorType(actorType string) error
