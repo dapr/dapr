@@ -1478,16 +1478,16 @@ func reminderValidation(ctx context.Context, t *testing.T, dueTime, period, ttl,
 func TestReminderValidation(t *testing.T) {
 	ctx := context.Background()
 	t.Run("reminder dueTime invalid (1)", func(t *testing.T) {
-		reminderValidation(ctx, t, "invalid", "R5/PT2S", "1h", "error parsing reminder due time: unsupported time/duration format \"invalid\"")
+		reminderValidation(ctx, t, "invalid", "R5/PT2S", "1h", "error parsing reminder due time: unsupported time/duration format: invalid")
 	})
 	t.Run("reminder dueTime invalid (2)", func(t *testing.T) {
 		reminderValidation(ctx, t, "R5/PT2S", "R5/PT2S", "1h", "error parsing reminder due time: repetitions are not allowed")
 	})
 	t.Run("reminder period invalid", func(t *testing.T) {
-		reminderValidation(ctx, t, time.Now().Add(time.Minute).Format(time.RFC3339), "invalid", "1h", "error parsing reminder period: unsupported duration format \"invalid\"")
+		reminderValidation(ctx, t, time.Now().Add(time.Minute).Format(time.RFC3339), "invalid", "1h", "error parsing reminder period: unsupported duration format: invalid")
 	})
 	t.Run("reminder ttl invalid (1)", func(t *testing.T) {
-		reminderValidation(ctx, t, "", "", "invalid", "error parsing reminder TTL: unsupported time/duration format \"invalid\"")
+		reminderValidation(ctx, t, "", "", "invalid", "error parsing reminder TTL: unsupported time/duration format: invalid")
 	})
 	t.Run("reminder ttl invalid (2)", func(t *testing.T) {
 		reminderValidation(ctx, t, "", "", "R5/PT2S", "error parsing reminder TTL: repetitions are not allowed")
@@ -1947,16 +1947,16 @@ func timerValidation(ctx context.Context, t *testing.T, dueTime, period, ttl, ms
 func TestTimerValidation(t *testing.T) {
 	ctx := context.Background()
 	t.Run("timer dueTime invalid (1)", func(t *testing.T) {
-		timerValidation(ctx, t, "invalid", "R5/PT2S", "1h", "error parsing timer due time: unsupported time/duration format \"invalid\"")
+		timerValidation(ctx, t, "invalid", "R5/PT2S", "1h", "error parsing timer due time: unsupported time/duration format: invalid")
 	})
 	t.Run("timer dueTime invalid (2)", func(t *testing.T) {
 		timerValidation(ctx, t, "R5/PT2S", "R5/PT2S", "1h", "error parsing timer due time: repetitions are not allowed")
 	})
 	t.Run("timer period invalid", func(t *testing.T) {
-		timerValidation(ctx, t, startOfTime.Add(time.Minute).Format(time.RFC3339), "invalid", "1h", "error parsing timer period: unsupported duration format \"invalid\"")
+		timerValidation(ctx, t, startOfTime.Add(time.Minute).Format(time.RFC3339), "invalid", "1h", "error parsing timer period: unsupported duration format: invalid")
 	})
 	t.Run("timer ttl invalid (1)", func(t *testing.T) {
-		timerValidation(ctx, t, "", "", "invalid", "error parsing timer TTL: unsupported time/duration format \"invalid\"")
+		timerValidation(ctx, t, "", "", "invalid", "error parsing timer TTL: unsupported time/duration format: invalid")
 	})
 	t.Run("timer ttl invalid (2)", func(t *testing.T) {
 		timerValidation(ctx, t, "", "", "R5/PT2S", "error parsing timer TTL: repetitions are not allowed")

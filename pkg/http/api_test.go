@@ -3005,14 +3005,14 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	workflowComponents := map[string]workflowContrib.Workflow{
 		componentName: fakeWorkflowComponent,
 	}
+	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency)
 	testAPI := &api{
-		resiliency:         resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency),
-		workflowComponents: workflowComponents,
-	}
-	testAPI.universal = &universalapi.UniversalAPI{
-		Logger:             logger.NewLogger("fakeLogger"),
-		WorkflowComponents: workflowComponents,
-		Resiliency:         testAPI.resiliency,
+		resiliency: resiliencyConfig,
+		universal: &universalapi.UniversalAPI{
+			Logger:             logger.NewLogger("fakeLogger"),
+			WorkflowComponents: workflowComponents,
+			Resiliency:         resiliencyConfig,
+		},
 	}
 
 	fakeServer.StartServer(testAPI.constructWorkflowEndpoints())

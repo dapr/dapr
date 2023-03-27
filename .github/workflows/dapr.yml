@@ -31,37 +31,50 @@ on:
       - feature/*
 jobs:
   build:
-    name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
-    runs-on: ${{ matrix.os }}
+    name: "Build and test on ${{ matrix.job_name }}"
+    runs-on: "${{ matrix.os }}"
     env:
       GOLANGCILINT_VER: "v1.51.2"
       PROTOC_VERSION: "21.12"
-      GOOS: ${{ matrix.target_os }}
-      GOARCH: ${{ matrix.target_arch }}
-      GOPROXY: https://proxy.golang.org
-      ARCHIVE_OUTDIR: dist/archives
-      TEST_OUTPUT_FILE_PREFIX: test_report
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+      ARCHIVE_OUTDIR: "dist/archives"
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-latest]
-        target_arch: [arm, arm64, amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
+            target_arch: amd64
+            job_name: "Linux/amd64"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+            job_name: "Linux/arm64"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm
+            job_name: "Linux/arm"
           - os: windows-2019
             target_os: windows
             target_arch: amd64
             windows_version: "1809"
+            job_name: "Windows 1809"
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
+            job_name: "Windows LTSC 2022"
           - os: macOS-latest
             target_os: darwin
-        exclude:
+            target_arch: amd64
+            job_name: "macOS/Intel"
           - os: macOS-latest
-            target_arch: arm
+            target_os: darwin
+            target_arch: arm64
+            job_name: "macOS/Apple Silicon"
     steps:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1

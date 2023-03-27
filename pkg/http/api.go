@@ -85,7 +85,6 @@ type api struct {
 	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	workflowComponents         map[string]wfs.Workflow
 	lockStores                 map[string]lock.Store
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{}
@@ -203,7 +202,6 @@ func NewAPI(opts APIOpts) API {
 		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
-		workflowComponents:         opts.WorkflowsComponents,
 		lockStores:                 opts.LockStores,
 		secretStores:               opts.SecretStores,
 		secretsConfiguration:       opts.SecretsConfiguration,
@@ -224,6 +222,7 @@ func NewAPI(opts APIOpts) API {
 			Resiliency:           opts.Resiliency,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			WorkflowComponents:   opts.WorkflowsComponents,
 		},
 	}
 
@@ -269,7 +268,7 @@ func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
 }
 
-// Workflow Component: Component specified in yaml (temporal, etc..)
+// Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
 func (a *api) constructWorkflowEndpoints() []Endpoint {
@@ -808,7 +807,7 @@ func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lo
 }
 
 // Route:   "workflows/{workflowComponent}/{workflowName}/{instanceId}",
-// Workflow Component: Component specified in yaml (temporal, etc..)
+// Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
 func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {

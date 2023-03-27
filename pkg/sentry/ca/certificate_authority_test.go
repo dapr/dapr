@@ -1,6 +1,7 @@
 package ca
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -121,7 +122,7 @@ func TestSignCSR(t *testing.T) {
 		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
-		err := certAuth.LoadOrStoreTrustBundle()
+		err := certAuth.LoadOrStoreTrustBundle(context.Background())
 		require.NoError(t, err)
 
 		resp, err := certAuth.SignCSR(certPem, "test-subject", nil, time.Hour*24, false)
@@ -140,7 +141,7 @@ func TestSignCSR(t *testing.T) {
 		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
-		err := certAuth.LoadOrStoreTrustBundle()
+		err := certAuth.LoadOrStoreTrustBundle(context.Background())
 		require.NoError(t, err)
 
 		resp, err := certAuth.SignCSR(certPem, "test-subject", nil, time.Hour*-1, false)
@@ -156,7 +157,7 @@ func TestSignCSR(t *testing.T) {
 		certPem := []byte("")
 
 		certAuth := getTestCertAuth()
-		err := certAuth.LoadOrStoreTrustBundle()
+		err := certAuth.LoadOrStoreTrustBundle(context.Background())
 		require.NoError(t, err)
 
 		_, err = certAuth.SignCSR(certPem, "", nil, time.Hour*24, false)
@@ -173,7 +174,7 @@ func TestSignCSR(t *testing.T) {
 		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
-		err := certAuth.LoadOrStoreTrustBundle()
+		err := certAuth.LoadOrStoreTrustBundle(context.Background())
 		require.NoError(t, err)
 
 		bundle := identity.NewBundle("app", "default", "public")
@@ -217,7 +218,7 @@ func TestCACertsGeneration(t *testing.T) {
 	defer cleanupCredentials()
 
 	ca := getTestCertAuth()
-	err := ca.LoadOrStoreTrustBundle()
+	err := ca.LoadOrStoreTrustBundle(context.Background())
 
 	assert.NoError(t, err)
 	assert.True(t, len(ca.GetCACertBundle().GetRootCertPem()) > 0)
@@ -230,13 +231,13 @@ func TestShouldCreateCerts(t *testing.T) {
 		defer cleanupCredentials()
 
 		a := getTestCertAuth()
-		r := shouldCreateCerts(a.(*defaultCA).config)
+		r := shouldCreateCerts(context.Background(), a.(*defaultCA).config)
 		assert.False(t, r)
 	})
 
 	t.Run("certs do not exist, should create", func(t *testing.T) {
 		a := getTestCertAuth()
-		r := shouldCreateCerts(a.(*defaultCA).config)
+		r := shouldCreateCerts(context.Background(), a.(*defaultCA).config)
 		assert.True(t, r)
 	})
 }
