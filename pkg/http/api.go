@@ -1357,6 +1357,7 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
+	log.Infof("Received direct message: %s, startAt: %d", reqCtx.RequestURI(), time.Now().UnixMilli())
 	targetID := a.findTargetID(reqCtx)
 	if targetID == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
