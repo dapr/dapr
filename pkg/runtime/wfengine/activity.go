@@ -74,18 +74,30 @@ func (a *activityActor) SetActorRuntime(actorsRuntime actors.Actors) {
 func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error) {
 	var ar ActivityRequest
 	if err := actors.DecodeInternalActorData(data, &ar); err != nil {
+		fmt.Println("RRL activity.go InvokeMethod err ", err)
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
 	}
 
+	fmt.Println("RRL activity.go InvokeMethod ar.Generation ", ar.Generation)
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
-	if state, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
+	var state activityState
+	if _, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
+		fmt.Println("RRL activity.go InvokeMethod methodName: ", methodName, err)
 		return nil, err
 	} else if state.Generation > 0 {
+		fmt.Println("RRL activity.go InvokeMethod! state.Generation: ", state.Generation)
 		return nil, ErrDuplicateInvocation
 	}
 
+	if methodName == "PurgeWorkflowState" {
+		fmt.Println("RRL activity.go PurgeWorkflowState")
+		if err := a.purgeActivityState(ctx, actorID, state); err != nil {
+			return nil, err
+		}
+	}
+
 	// Save the request details to the state store in case we need it after recovering from a failure.
-	state := activityState{
+	state = activityState{
 		Generation:   ar.Generation,
 		EventPayload: ar.HistoryEvent,
 	}
@@ -280,8 +292,31 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 	return nil
 }
 
+func (a *activityActor) purgeActivityState(ctx context.Context, actorID string, state activityState) error {
+	req := actors.TransactionalRequest{
+		ActorType: ActivityActorType,
+		ActorID:   actorID,
+		Operations: []actors.TransactionalOperation{{
+			Operation: actors.Delete,
+			Request: actors.TransactionalDelete{
+				Key: getActivityInvocationKey(state.Generation),
+			},
+		}},
+	}
+	fmt.Println("RRL activity.go purgeActivityState req: ", req)
+	if err := a.actorRuntime.TransactionalStateOperation(ctx, &req); err != nil {
+		return fmt.Errorf("failed to save activity state: %w", err)
+	}
+
+	if !a.cachingDisabled {
+		a.statesCache.Store(actorID, state)
+	}
+	return nil
+}
+
 func getActivityInvocationKey(generation uint64) string {
-	return fmt.Sprintf("activityreq-%d", generation)
+	// return fmt.Sprintf("activityreq-%d", generation)
+	return "activityState"
 }
 
 func (a *activityActor) createReliableReminder(ctx context.Context, actorID string, data any) error {

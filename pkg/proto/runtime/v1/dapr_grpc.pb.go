@@ -89,6 +89,8 @@ type DaprClient interface {
 	TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*TerminateWorkflowResponse, error)
 	// Raise Event for a Workflow
 	RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*RaiseEventWorkflowResponse, error)
+	// Purge Workflow
+	PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*PurgeWorkflowResponse, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -412,6 +414,15 @@ func (c *daprClient) RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEven
 	return out, nil
 }
 
+func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*PurgeWorkflowResponse, error) {
+	out := new(PurgeWorkflowResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PurgeWorkflowAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/Shutdown", in, out, opts...)
@@ -490,6 +501,8 @@ type DaprServer interface {
 	TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error)
 	// Raise Event for a Workflow
 	RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*RaiseEventWorkflowResponse, error)
+	// Purge Workflow
+	PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*PurgeWorkflowResponse, error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -593,6 +606,9 @@ func (UnimplementedDaprServer) TerminateWorkflowAlpha1(context.Context, *Termina
 }
 func (UnimplementedDaprServer) RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*RaiseEventWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RaiseEventWorkflowAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*PurgeWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeWorkflowAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
@@ -1188,6 +1204,24 @@ func _Dapr_RaiseEventWorkflowAlpha1_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_PurgeWorkflowAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).PurgeWorkflowAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/PurgeWorkflowAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).PurgeWorkflowAlpha1(ctx, req.(*PurgeWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
@@ -1336,6 +1370,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RaiseEventWorkflowAlpha1",
 			Handler:    _Dapr_RaiseEventWorkflowAlpha1_Handler,
+		},
+		{
+			MethodName: "PurgeWorkflowAlpha1",
+			Handler:    _Dapr_PurgeWorkflowAlpha1_Handler,
 		},
 		{
 			MethodName: "Shutdown",

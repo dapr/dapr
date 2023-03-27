@@ -239,6 +239,30 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 	}
 }
 
+// PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
+func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
+	// Need to define new operation on the workflow actor called "purge state"
+	// Need to call it from this method
+	// Implementaion of purge state on the workflow actor needs to do the following:
+	// Look through its history and find all the activities that have been scheduled by the workflow
+	// Invoke a similar purge state api on all those activities (need to define this on the activity actor as well)
+	// Once activity actor state is cleaned up, purge the workflow state. (Cleanup history, etc. Call statestore APIs to delete all that)
+
+	fmt.Println("RRL backend.go id: ", id)
+	req := invokev1.
+		NewInvokeMethodRequest(PurgeWorkflowStateMethod).
+		WithActor(WorkflowActorType, string(id)).
+		WithContentType(invokev1.OctetStreamContentType)
+	defer req.Close()
+
+	resp, err := be.actors.Call(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Close()
+	return nil
+}
+
 // Start implements backend.Backend
 func (be *actorBackend) Start(ctx context.Context) error {
 	var err error

@@ -150,6 +150,19 @@ func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, even
 	return nil
 }
 
+func addPurgeStateOperations(req *actors.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent) error {
+	// TODO: Investigate whether Dapr state stores put limits on batch sizes. It seems some storage
+	//       providers have limits and we need to know if that impacts this algorithm:
+	//       https://learn.microsoft.com/azure/cosmos-db/nosql/transactional-batch#limitations
+	for i := 0; i < len(events); i++ {
+		req.Operations = append(req.Operations, actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request:   actors.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
+		})
+	}
+	return nil
+}
+
 func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string) (workflowState, error) {
 	loadStartTime := time.Now()
 	loadedRecords := 0
@@ -159,7 +172,9 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		ActorID:   actorID,
 		Key:       metadataKey,
 	}
+	fmt.Println("RRL LoadWorkflowState req: ", req)
 	res, err := actorRuntime.GetState(ctx, &req)
+	fmt.Println("RRL LoadWorkflowState res: ", res)
 	loadedRecords++
 	if err != nil {
 		return workflowState{}, fmt.Errorf("failed to load workflow metadata: %w", err)
@@ -172,6 +187,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
 		return workflowState{}, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
+	fmt.Println("RRL LoadWorkflowState metadata: ", metadata)
 	state := NewWorkflowState()
 	state.Generation = metadata.Generation
 	// CONSIDER: Do some of these loads in parallel
@@ -217,6 +233,41 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 
 	wfLogger.Infof("%s: loaded %d state records in %v", actorID, loadedRecords, time.Since(loadStartTime))
 	return state, nil
+}
+
+func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRequest, error) {
+	req := &actors.TransactionalRequest{
+		ActorType:  WorkflowActorType,
+		ActorID:    actorID,
+		Operations: make([]actors.TransactionalOperation, 0, 100),
+	}
+
+	fmt.Println("RRL workflowstate.go s.Inbox: ", s.Inbox)
+	fmt.Println("RRL workflowstate.go s.History: ", s.History)
+
+	// Inbox Purging
+	if err := addPurgeStateOperations(req, inboxKeyPrefix, s.Inbox); err != nil {
+		return nil, err
+	}
+
+	// History Purging
+	if err := addPurgeStateOperations(req, historyKeyPrefix, s.History); err != nil {
+		return nil, err
+	}
+
+	req.Operations = append(req.Operations, actors.TransactionalOperation{
+		Operation: actors.Delete,
+		Request:   actors.TransactionalDelete{Key: customStatusKey},
+	})
+
+	req.Operations = append(req.Operations, actors.TransactionalOperation{
+		Operation: actors.Delete,
+		Request:   actors.TransactionalDelete{Key: metadataKey},
+	})
+
+	fmt.Println("RRL workflowstate.go req: ", req)
+
+	return req, nil
 }
 
 func getMultiEntryKeyName(prefix string, i int) string {

@@ -123,6 +123,9 @@ service Dapr {
   // Raise Event for a Workflow
   rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (RaiseEventWorkflowResponse) {}
 
+  // Purge Workflow
+  rpc PurgeWorkflowAlpha1 (PurgeWorkflowRequest) returns (PurgeWorkflowResponse) {}
+
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
@@ -707,6 +710,14 @@ message TerminateWorkflowRequest {
 }
 
 message TerminateWorkflowResponse {
+}
+
+message PurgeWorkflowRequest {
+  string instance_id = 1;
+  string workflow_component = 2;
+}
+
+message PurgeWorkflowResponse {
 }
 
 message RaiseEventWorkflowRequest {

@@ -36,6 +36,7 @@ const (
 	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
 	GetWorkflowMetadataMethod    = "GetWorkflowMetadata"
 	AddWorkflowEventMethod       = "AddWorkflowEvent"
+	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
 )
 
 type workflowActor struct {
@@ -95,6 +96,9 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 		result, err = wf.getWorkflowMetadata(ctx, actorID)
 	case AddWorkflowEventMethod:
 		err = wf.addWorkflowEvent(ctx, actorID, request)
+	case PurgeWorkflowStateMethod:
+		fmt.Println("RRL workflow.go InvokeMethod!", methodName)
+		err = wf.purgeWorkflowState(ctx, actorID)
 	default:
 		err = fmt.Errorf("no such method: %s", methodName)
 	}
@@ -211,6 +215,78 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string
 		failureDetuils,
 	)
 	return metadata, nil
+}
+
+func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string) error {
+	// Look through its history and find all the activities that have been scheduled by the workflow
+	// Invoke a similar purge state api on all those activities (need to define this on the activity actor as well)
+	// Once activity actor state is cleaned up, purge the workflow state. (Cleanup history, etc. Call statestore APIs to delete all that)
+	// This will call both workflow_state.go and activity.go
+
+	// Loop through history to find all the activities that we invoked and then send purge operations to them
+
+	state, exists, err := wf.loadInternalState(ctx, actorID)
+	if err != nil {
+		return err
+	} else if !exists {
+		return api.ErrInstanceNotFound
+	}
+
+	runtimeState := getRuntimeState(actorID, state)
+	if !runtimeState.IsCompleted() {
+		return api.ErrNotCompleted
+	}
+
+	for _, e := range state.History {
+		if ts := e.GetTaskScheduled(); ts != nil {
+			targetActorID := getActivityActorID(actorID, e.EventId)
+			eventData, err := backend.MarshalHistoryEvent(e)
+			if err != nil {
+				return err
+			}
+			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
+				HistoryEvent: eventData,
+				Generation:   state.Generation,
+			})
+			if err != nil {
+				return err
+			}
+			req := invokev1.
+				NewInvokeMethodRequest(PurgeWorkflowStateMethod).
+				WithActor(ActivityActorType, targetActorID).
+				WithRawDataBytes(activityRequestBytes).
+				WithContentType(invokev1.OctetStreamContentType)
+			defer req.Close()
+
+			fmt.Println("RRL workflow.go purgeWorkflowState req: ", req)
+			fmt.Println("RRL workflow.go purgeWorkflowState e: ", e)
+			fmt.Println("RRL workflow.go purgeWorkflowState state.History: ", state.History)
+			fmt.Println("RRL workflow.go purgeWorkflowState state.Generation: ", state.Generation)
+			resp, err := wf.actors.Call(ctx, req)
+			fmt.Println("RRL workflow.go purgeWorkflowState resp: ", resp, err)
+			if err != nil {
+				return fmt.Errorf("failed to purge activity actor '%s' ('%s'): %w", targetActorID, ts.Name, err)
+			}
+			resp.Close()
+		}
+	}
+
+	fmt.Println("RRL purgeWorkflowState state: ", state)
+	// This will create a request to purge everything
+	req, err := state.GetPurgeRequest(actorID)
+	fmt.Println("RRL purgeWorkflowState req: ", req)
+	if err != nil {
+		return err
+	}
+	// This will do the purging
+	err = wf.actors.TransactionalStateOperation(ctx, req)
+	if err != nil {
+		return err
+	}
+	fmt.Println("RRL purgeWorkflowState actorID: ", actorID)
+	wf.states.Delete(actorID)
+	return nil
+
 }
 
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {

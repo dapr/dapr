@@ -180,6 +180,9 @@ func (f *fakeStateStore) Multi(ctx context.Context, request *state.Transactional
 			f.items[req.Key] = f.newItem(b)
 		} else if o.Operation == state.Delete {
 			req := o.Request.(state.DeleteRequest)
+			fmt.Println("RRL WFENGINE_Test.go req.Key: ", req.Key)
+			fmt.Println("RRL WFENGINE_Test.go f.items: ", f.items)
+			fmt.Println("RRL WFENGINE_Test.go f.items[req.key]: ", f.items[req.Key])
 			delete(f.items, req.Key)
 		}
 	}
@@ -714,6 +717,63 @@ func TestRaiseEvent(t *testing.T) {
 	}
 }
 
+func TestPurge(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ActivityChainToPurge", func(ctx *task.OrchestrationContext) (any, error) {
+		val := 0
+		for i := 0; i < 5; i++ {
+			if err := ctx.CallActivity("PlusOne", val).Await(&val); err != nil {
+				return nil, err
+			}
+		}
+		return val, nil
+	})
+	r.AddActivityN("PlusOne", func(ctx task.ActivityContext) (any, error) {
+		var input int
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input + 1, nil
+	})
+
+	ctx := context.Background()
+	client, engine, stateStore := startEngineAndGetStore(ctx, r)
+	fmt.Println("RRL TEST FRESHLY CREATED store: ", stateStore)
+	// Make another start enginge call that returns client, engine, and state store // TODO IMPLEMENT ACTIVITY PURGE
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChainToPurge")
+			fmt.Println("RRL TEST ID: ", id)
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationStart(ctx, id)
+				if assert.NoError(t, err) {
+					assert.Equal(t, id, metadata.InstanceID)
+					metadata, err = client.FetchOrchestrationMetadata(ctx, id)
+					fmt.Println("RRL TEST PRE-PURGE METADATA: ", metadata)
+
+					// Inspect state store here to ensure that everything is still here before purge
+					fmt.Println("RRL TEST PRE-PURGE store: ", stateStore)
+
+					time.Sleep(5 * time.Second)
+					client.PurgeOrchestrationState(ctx, id)
+					metadata, err = client.FetchOrchestrationMetadata(ctx, id)
+					fmt.Println("RRL TEST POST-PURGE METADATA: ", metadata)
+
+					// Inspect state store here to ensure that everything is gone here after purge
+					var req state.GetRequest
+					resp, err := stateStore.Get(ctx, &req)
+					assert.NoError(t, err)
+					fmt.Println("RRL TEST POST-PURGE store resp: ", resp)
+					fmt.Println("RRL TEST POST-PURGE stateStore: ", stateStore)
+					client.PurgeOrchestrationState(ctx, id)
+					fmt.Println("RRL TEST POST-PURGE2 stateStore: ", stateStore)
+					// fmt.Println("RRL TEST TEST ERROR: ", err)
+				}
+			}
+		})
+	}
+}
+
 func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
 	var client backend.TaskHubClient
 	engine := getEngine()
@@ -725,6 +785,19 @@ func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClie
 		panic(err)
 	}
 	return client, engine
+}
+
+func startEngineAndGetStore(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine, state.Store) {
+	var client backend.TaskHubClient
+	engine, store := getEngineAndStateStore()
+	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
+		client = backend.NewTaskHubClient(be)
+		return task.NewTaskExecutor(r)
+	})
+	if err := engine.Start(ctx); err != nil {
+		panic(err)
+	}
+	return client, engine, *store
 }
 
 func getEngine() *wfengine.WorkflowEngine {
@@ -748,4 +821,27 @@ func getEngine() *wfengine.WorkflowEngine {
 	}
 	engine.SetActorRuntime(actors)
 	return engine
+}
+
+func getEngineAndStateStore() (*wfengine.WorkflowEngine, *state.Store) {
+	engine := wfengine.NewWorkflowEngine()
+	store := fakeStore()
+	cfg := actors.NewConfig(actors.ConfigOpts{
+		AppID:              testAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		AppConfig:          config.ApplicationConfig{},
+	})
+	actors := actors.NewActors(actors.ActorsOpts{
+		StateStore:     store,
+		Config:         cfg,
+		StateStoreName: "workflowStore",
+		MockPlacement:  NewMockPlacement(),
+		Resiliency:     resiliency.New(logger.NewLogger("test")),
+	})
+
+	if err := actors.Init(); err != nil {
+		panic(err)
+	}
+	engine.SetActorRuntime(actors)
+	return engine, &store
 }

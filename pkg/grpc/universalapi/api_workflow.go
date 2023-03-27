@@ -189,3 +189,36 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 	}
 	return &runtimev1pb.RaiseEventWorkflowResponse{}, nil
 }
+
+func (a *UniversalAPI) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowResponse, error) {
+	if in.InstanceId == "" {
+		err := messages.ErrMissingOrEmptyInstance
+		a.Logger.Debug(err)
+		return &runtimev1pb.PurgeWorkflowResponse{}, err
+	}
+
+	if in.WorkflowComponent == "" {
+		err := messages.ErrNoOrMissingWorkflowComponent
+		a.Logger.Debug(err)
+		return &runtimev1pb.PurgeWorkflowResponse{}, err
+	}
+
+	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
+	if workflowComponent == nil {
+		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
+		a.Logger.Debug(err)
+		return &runtimev1pb.PurgeWorkflowResponse{}, err
+	}
+
+	req := workflows.PurgeRequest{
+		InstanceID: in.InstanceId,
+	}
+
+	err := workflowComponent.Purge(ctx, &req)
+	if err != nil {
+		err = messages.ErrPurgeWorkflow.WithFormat(in.InstanceId)
+		a.Logger.Debug(err)
+		return &runtimev1pb.PurgeWorkflowResponse{}, err
+	}
+	return &runtimev1pb.PurgeWorkflowResponse{}, nil
+}

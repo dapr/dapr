@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/workflows"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
 	"github.com/dapr/kit/logger"
 )
 
@@ -127,6 +127,18 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 	}
 
 	c.logger.Infof("scheduled termination for workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
+	if req.InstanceID == "" {
+		return fmt.Errorf("a workflow instance ID is required")
+	}
+
+	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
+	}
+
 	return nil
 }
 

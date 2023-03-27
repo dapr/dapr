@@ -16,6 +16,7 @@ package wfengine_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/microsoft/durabletask-go/api"
@@ -183,6 +184,44 @@ func TestResetLoadedState(t *testing.T) {
 			assert.Equal(t, 15, deleteCount) // all history and inbox records are deleted
 		}
 	}
+}
+
+func TestPurgingState(t *testing.T) {
+	state := wfengine.NewWorkflowState()
+	for i := 0; i < 10; i++ {
+		// Simulate the loadng of inbox events from storage
+		state.Inbox = append(state.Inbox, &backend.HistoryEvent{})
+	}
+	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
+	for i := 0; i < 10; i++ {
+		if err := runtimeState.AddEvent(&backend.HistoryEvent{EventId: int32(i)}); !assert.NoError(t, err) {
+			return
+		}
+	}
+
+	state.ApplyRuntimeStateChanges(runtimeState)
+	for i := 0; i < 5; i++ {
+		state.AddToInbox(&backend.HistoryEvent{})
+	}
+	actors := getActorRuntime()
+
+	req, err := state.GetSaveRequest("wf1")
+	if !assert.NoError(t, err) {
+		return
+	}
+	fmt.Println("RRL ACTORS: ", actors)
+	fmt.Println("RRL req: ", req)
+	if err = actors.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
+		return
+	}
+	fmt.Println("RRL state: ", state)
+	state, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1")
+	if assert.NoError(t, err) {
+		assert.Equal(t, "wf1", req.ActorID)
+		assert.Equal(t, wfengine.WorkflowActorType, req.ActorType)
+	}
+	// state.PurgeWorkflowState(context.Background(), actors, "wf1")
+	// state.PurgeWorkflowState(context.Background(), actors, "wf1")
 }
 
 func getActorRuntime() actors.Actors {
