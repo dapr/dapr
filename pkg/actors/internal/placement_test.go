@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,6 +79,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	})
 	clock := clocktesting.NewFakeClock(time.Now())
 	testPlacement.clock = clock
+	testPlacement.backoff.(*backoff.ExponentialBackOff).Clock = clock
 
 	ctx, cancel := context.WithCancel(context.Background())
 

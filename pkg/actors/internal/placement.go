@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -113,11 +114,20 @@ type ActorPlacement struct {
 
 	// clock is the clock for time operations, used for testing.
 	clock clock.Clock
+
+	// backoff is the backoff for reconnecting to placement.
+	backoff backoff.BackOff
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
 func NewActorPlacement(opts Options) *ActorPlacement {
 	servers := addDNSResolverPrefix(opts.ServerAddr)
+
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 100 * time.Millisecond
+	bo.MaxInterval = 30 * time.Second
+	bo.MaxElapsedTime = 0 // Retry forever.
+
 	return &ActorPlacement{
 		actorTypes:         opts.ActorTypes,
 		appID:              opts.AppID,
@@ -129,6 +139,7 @@ func NewActorPlacement(opts Options) *ActorPlacement {
 		serverAddr:         servers,
 		grpcOpts:           getGrpcOptsGetter(servers, opts.ClientCert),
 		closedCh:           make(chan struct{}),
+		backoff:            bo,
 	}
 }
 
@@ -165,6 +176,7 @@ func (p *ActorPlacement) Start(ctx context.Context) error {
 			}
 		} else {
 			firstAttempt = true
+			p.backoff.Reset()
 		}
 
 		select {
@@ -172,7 +184,7 @@ func (p *ActorPlacement) Start(ctx context.Context) error {
 			return nil
 		case <-p.closedCh:
 			return nil
-		case <-p.clock.Tick(placementReconnectInterval):
+		case <-p.clock.Tick(p.backoff.NextBackOff()):
 		}
 	}
 }
@@ -189,7 +201,7 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context, firstAttempt 
 
 	serverAddr := p.serverAddr[p.serverIndex.Load()]
 	if firstAttempt {
-		log.Infof("Trying to connect to placement service: %s", serverAddr)
+		log.Info("Trying to connect to placement service: " + serverAddr)
 	}
 
 	client, err := newPlacementClient(ctx, serverAddr, p.grpcOpts)
@@ -201,7 +213,7 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context, firstAttempt 
 		return err
 	}
 
-	log.Infof("Connected to placement service at address %s", serverAddr)
+	log.Info("Connected to placement service at address " + serverAddr)
 
 	p.wg.Add(1)
 	go func() {
@@ -223,7 +235,7 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context, firstAttempt 
 			if !p.appHealthFn() {
 				// app is unresponsive, close the stream and disconnect from the placement service.
 				// Then Placement will remove this host from the member list.
-				log.Debug("Disconnecting from placement service by the unhealthy app.")
+				log.Debug("Disconnecting from placement service by the unhealthy app")
 				return
 			}
 		}
