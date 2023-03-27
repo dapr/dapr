@@ -19,5 +19,5 @@ import (
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(sqlserver.NewSQLServerStateStore, "sqlserver")
+	stateLoader.DefaultRegistry.RegisterComponent(sqlserver.New, "sqlserver")
 }

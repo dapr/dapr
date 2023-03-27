@@ -19,7 +19,6 @@ package codec
 import (
 	"testing"
 
-	_ "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/encoding"
 
