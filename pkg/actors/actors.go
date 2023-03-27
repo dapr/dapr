@@ -376,21 +376,16 @@ type lookupActorRes struct {
 func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	err := a.placement.WaitUntilPlacementTableIsReady(ctx)
 	if err != nil {
-		fmt.Println("RRL actors.go err on placement tables: ", err)
 		return nil, fmt.Errorf("failed to wait for placement table readiness: %w", err)
 	}
 
-	fmt.Println("RRL actors.go req: ", req)
-	fmt.Println("RRL actors.go req.Message().Method: ", req.Message().Method)
 	actor := req.Actor()
-	fmt.Println("RRL actors.go actor: ", actor)
 	// Retry here to allow placement table dissemination/rebalancing to happen.
 	policyDef := a.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
 	policyRunner := resiliency.NewRunner[*lookupActorRes](ctx, policyDef)
 	lar, err := policyRunner(func(ctx context.Context) (*lookupActorRes, error) {
 		rAddr, rAppID := a.placement.LookupActor(actor.GetActorType(), actor.GetActorId())
 		if rAddr == "" {
-			fmt.Println("RRL actors.go actor not found: ", actor)
 			return nil, fmt.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
 		}
 		return &lookupActorRes{
@@ -404,21 +399,13 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	if lar == nil {
 		lar = &lookupActorRes{}
 	}
-	fmt.Println("RRL actors.go after policy runner a.storeName: ", a.storeName)
-	fmt.Println("RRL actors.go after policy runner a.isActorLocal: ", a.isActorLocal(lar.targetActorAddress, a.config.HostAddress, a.config.Port))
 	var resp *invokev1.InvokeMethodResponse
 	if a.isActorLocal(lar.targetActorAddress, a.config.HostAddress, a.config.Port) {
-		fmt.Println("RRL actors.go a.callLocalActor: req.Actor().ActorId: ", req.Actor().ActorId)
-		fmt.Println("RRL actors.go a.callLocalActor: req.Message().Method: ", req.Message().Method)
 		resp, err = a.callLocalActor(ctx, req)
-		fmt.Println("RRL actors.go a.callLocalActor: resp, err: ", resp, err)
 	} else {
 		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, lar.targetActorAddress, lar.appID, req)
-		fmt.Println("RRL actors.go a.callRemoteActorWithRetry: resp, err: ", resp, err)
 	}
 
-	fmt.Println("RRL actors.go after actor call err: ", err)
-	fmt.Println("RRL actors.go after actor call resp: ", resp)
 	if err != nil {
 		if errors.Is(err, ErrDaprResponseHeader) {
 			// We return the response to maintain the .NET Actor contract which communicates errors via the body, but resiliency needs the error to retry.
@@ -679,7 +666,6 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		case Delete:
 			var delete TransactionalDelete
 			err := mapstructure.Decode(o.Request, &delete)
-			// fmt.Println("RRL actors.go delete req, err: ", req, err)
 			if err != nil {
 				return err
 			}
@@ -703,7 +689,6 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		Operations: operations,
 		Metadata:   metadata,
 	}
-	// fmt.Println("RRL actors.go delete stateReq: ", stateReq)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, a.transactionalStore.Multi(ctx, stateReq)
 	})

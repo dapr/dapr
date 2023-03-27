@@ -74,23 +74,18 @@ func (a *activityActor) SetActorRuntime(actorsRuntime actors.Actors) {
 func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error) {
 	var ar ActivityRequest
 	if err := actors.DecodeInternalActorData(data, &ar); err != nil {
-		fmt.Println("RRL activity.go InvokeMethod err ", err)
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
 	}
 
-	fmt.Println("RRL activity.go InvokeMethod ar.Generation ", ar.Generation)
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
 	var state activityState
 	if _, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
-		fmt.Println("RRL activity.go InvokeMethod methodName: ", methodName, err)
 		return nil, err
 	} else if state.Generation > 0 {
-		fmt.Println("RRL activity.go InvokeMethod! state.Generation: ", state.Generation)
 		return nil, ErrDuplicateInvocation
 	}
 
 	if methodName == "PurgeWorkflowState" {
-		fmt.Println("RRL activity.go PurgeWorkflowState")
 		if err := a.purgeActivityState(ctx, actorID, state); err != nil {
 			return nil, err
 		}
@@ -101,8 +96,10 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 		Generation:   ar.Generation,
 		EventPayload: ar.HistoryEvent,
 	}
-	if err := a.saveActivityState(ctx, actorID, state); err != nil {
-		return nil, err
+	if methodName != "PurgeWorkflowState" {
+		if err := a.saveActivityState(ctx, actorID, state); err != nil {
+			return nil, err
+		}
 	}
 
 	// The actual execution is triggered by a reminder
@@ -303,7 +300,6 @@ func (a *activityActor) purgeActivityState(ctx context.Context, actorID string, 
 			},
 		}},
 	}
-	fmt.Println("RRL activity.go purgeActivityState req: ", req)
 	if err := a.actorRuntime.TransactionalStateOperation(ctx, &req); err != nil {
 		return fmt.Errorf("failed to save activity state: %w", err)
 	}

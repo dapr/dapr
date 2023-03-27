@@ -97,7 +97,6 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 	case AddWorkflowEventMethod:
 		err = wf.addWorkflowEvent(ctx, actorID, request)
 	case PurgeWorkflowStateMethod:
-		fmt.Println("RRL workflow.go InvokeMethod!", methodName)
 		err = wf.purgeWorkflowState(ctx, actorID)
 	default:
 		err = fmt.Errorf("no such method: %s", methodName)
@@ -258,12 +257,7 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
 
-			fmt.Println("RRL workflow.go purgeWorkflowState req: ", req)
-			fmt.Println("RRL workflow.go purgeWorkflowState e: ", e)
-			fmt.Println("RRL workflow.go purgeWorkflowState state.History: ", state.History)
-			fmt.Println("RRL workflow.go purgeWorkflowState state.Generation: ", state.Generation)
 			resp, err := wf.actors.Call(ctx, req)
-			fmt.Println("RRL workflow.go purgeWorkflowState resp: ", resp, err)
 			if err != nil {
 				return fmt.Errorf("failed to purge activity actor '%s' ('%s'): %w", targetActorID, ts.Name, err)
 			}
@@ -271,10 +265,8 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 		}
 	}
 
-	fmt.Println("RRL purgeWorkflowState state: ", state)
 	// This will create a request to purge everything
 	req, err := state.GetPurgeRequest(actorID)
-	fmt.Println("RRL purgeWorkflowState req: ", req)
 	if err != nil {
 		return err
 	}
@@ -283,7 +275,6 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 	if err != nil {
 		return err
 	}
-	fmt.Println("RRL purgeWorkflowState actorID: ", actorID)
 	wf.states.Delete(actorID)
 	return nil
 

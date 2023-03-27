@@ -172,9 +172,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		ActorID:   actorID,
 		Key:       metadataKey,
 	}
-	fmt.Println("RRL LoadWorkflowState req: ", req)
 	res, err := actorRuntime.GetState(ctx, &req)
-	fmt.Println("RRL LoadWorkflowState res: ", res)
 	loadedRecords++
 	if err != nil {
 		return workflowState{}, fmt.Errorf("failed to load workflow metadata: %w", err)
@@ -187,7 +185,6 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
 		return workflowState{}, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
-	fmt.Println("RRL LoadWorkflowState metadata: ", metadata)
 	state := NewWorkflowState()
 	state.Generation = metadata.Generation
 	// CONSIDER: Do some of these loads in parallel
@@ -242,9 +239,6 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 		Operations: make([]actors.TransactionalOperation, 0, 100),
 	}
 
-	fmt.Println("RRL workflowstate.go s.Inbox: ", s.Inbox)
-	fmt.Println("RRL workflowstate.go s.History: ", s.History)
-
 	// Inbox Purging
 	if err := addPurgeStateOperations(req, inboxKeyPrefix, s.Inbox); err != nil {
 		return nil, err
@@ -264,8 +258,6 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 		Operation: actors.Delete,
 		Request:   actors.TransactionalDelete{Key: metadataKey},
 	})
-
-	fmt.Println("RRL workflowstate.go req: ", req)
 
 	return req, nil
 }
