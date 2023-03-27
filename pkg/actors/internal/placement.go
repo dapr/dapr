@@ -155,9 +155,16 @@ func (p *ActorPlacement) Start(ctx context.Context) error {
 		return errors.New("placement is shutdown")
 	}
 
+	// Used to toggle logging of the first attempt to connect to placement.
+	firstAttempt := true
 	for {
-		if err := p.manageConnectionLoop(ctx); err != nil {
-			return err
+		if err := p.manageConnectionLoop(ctx, firstAttempt); err != nil {
+			if firstAttempt {
+				log.Errorf("error managing connection to placement service: %s", err)
+				firstAttempt = false
+			}
+		} else {
+			firstAttempt = true
 		}
 
 		select {
@@ -170,7 +177,7 @@ func (p *ActorPlacement) Start(ctx context.Context) error {
 	}
 }
 
-func (p *ActorPlacement) manageConnectionLoop(ctx context.Context) error {
+func (p *ActorPlacement) manageConnectionLoop(ctx context.Context, firstAttempt bool) error {
 	if p.shutdown.Load() {
 		return nil
 	}
@@ -181,7 +188,9 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context) error {
 	defer cancel()
 
 	serverAddr := p.serverAddr[p.serverIndex.Load()]
-	log.Infof("trying to connect to placement service: %s", serverAddr)
+	if firstAttempt {
+		log.Infof("Trying to connect to placement service: %s", serverAddr)
+	}
 
 	client, err := newPlacementClient(ctx, serverAddr, p.grpcOpts)
 	if errors.Is(err, errEstablishingTLSConn) || errors.Is(err, context.Canceled) {
@@ -192,7 +201,7 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context) error {
 		return err
 	}
 
-	log.Infof("connected to placement service at address %s", serverAddr)
+	log.Infof("Connected to placement service at address %s", serverAddr)
 
 	p.wg.Add(1)
 	go func() {
@@ -214,7 +223,7 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context) error {
 			if !p.appHealthFn() {
 				// app is unresponsive, close the stream and disconnect from the placement service.
 				// Then Placement will remove this host from the member list.
-				log.Debug("disconnecting from placement service by the unhealthy app.")
+				log.Debug("Disconnecting from placement service by the unhealthy app.")
 				return
 			}
 		}

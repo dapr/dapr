@@ -16,8 +16,10 @@ package internal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 
@@ -59,16 +61,21 @@ func newPlacementClient(ctx context.Context, addr string, getGrpcOpts grpcOption
 		return nil, err
 	}
 
-	conn, err := grpc.DialContext(ctx, addr, opts...)
+	dialCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
+	conn, err := grpc.DialContext(dialCtx, addr, opts...)
 	if err != nil {
 		if conn != nil {
 			conn.Close()
 		}
-		return nil, err
+		return nil, fmt.Errorf("error connecting to placement service at %q: %s", addr, err)
 	}
 
 	stream, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(ctx)
 	if err != nil {
+		if conn != nil {
+			conn.Close()
+		}
 		return nil, err
 	}
 
