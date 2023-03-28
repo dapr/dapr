@@ -14,6 +14,7 @@ limitations under the License.
 package concurrency
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
