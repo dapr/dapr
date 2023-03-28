@@ -658,13 +658,14 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// try bulk get first
+	var key string
 	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
-		key, err1 := stateLoader.GetModifiedStateKey(k, storeName, a.id)
-		if err1 != nil {
-			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err1))
+		key, err = stateLoader.GetModifiedStateKey(k, storeName, a.id)
+		if err != nil {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-			log.Debug(err1)
+			log.Debug(err)
 			return
 		}
 		r := state.GetRequest{
@@ -727,17 +728,16 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 					r.Error = err.Error()
 					return
 				}
-				gr := &state.GetRequest{
-					Key:      k,
-					Metadata: metadata,
-				}
 
 				policyRunner := resiliency.NewRunner[*state.GetResponse](reqCtx, policyDef)
 				resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-					return store.Get(ctx, gr)
+					return store.Get(ctx, &state.GetRequest{
+						Key:      k,
+						Metadata: metadata,
+					})
 				})
 				if err != nil {
-					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
+					log.Debugf("Bulk get: error getting key %s: %v", r.Key, err)
 					r.Error = err.Error()
 				} else if resp != nil {
 					r.Data = json.RawMessage(resp.Data)
@@ -753,9 +753,15 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 	if encryption.EncryptedStateStore(storeName) {
 		for i := range bulkResp {
+			if bulkResp[i].Error != "" || len(bulkResp[i].Data) == 0 {
+				bulkResp[i].Data = nil
+				continue
+			}
+
 			val, err := encryption.TryDecryptValue(storeName, bulkResp[i].Data)
 			if err != nil {
-				log.Debugf("bulk get error: %s", err)
+				log.Debugf("Bulk get error: %v", err)
+				bulkResp[i].Data = nil
 				bulkResp[i].Error = err.Error()
 				continue
 			}

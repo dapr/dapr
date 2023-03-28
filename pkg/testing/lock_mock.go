@@ -78,3 +78,7 @@ func (mr *MockStoreMockRecorder) Unlock(ctx context.Context, req interface{}) *g
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockStore)(nil).Unlock), ctx, req)
 }
+
+func (m *MockStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}

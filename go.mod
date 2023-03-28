@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.10.4-0.20230320200417-76e33137d95f
+	github.com/dapr/components-contrib v1.10.4-0.20230325223448-2266e7ad440a
 	github.com/dapr/kit v0.0.5-0.20230321003608-efcc1af907a7
 	github.com/fasthttp/router v1.4.18
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
