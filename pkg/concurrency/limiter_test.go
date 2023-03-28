@@ -27,7 +27,7 @@ func TestLimiter(t *testing.T) {
 	// Execute some jobs with the limiter
 	for i := 0; i < 10; i++ {
 		limiter.Execute(func(param interface{}) {
-			assert.LessOrEqual(t, limiter.numInProgress, int32(3), "more than 3 tasks are running concurrently")
+			assert.LessOrEqual(t, atomic.LoadInt32(&limiter.numInProgress), int32(3), "more than 3 tasks are running concurrently")
 			// Simulate some work
 			time.Sleep(10 * time.Millisecond)
 		}, i)
