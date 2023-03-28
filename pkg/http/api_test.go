@@ -4625,6 +4625,10 @@ func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configura
 	return nil
 }
 
+func (c *fakeConfigurationStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 type fakeLockStore struct{}
 
 func (l fakeLockStore) Ping() error {
@@ -4691,6 +4695,10 @@ func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*l
 	}, nil
 }
 
+func (l *fakeLockStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 type fakeWorkflowComponent struct{}
 
 func (l *fakeWorkflowComponent) Init(metadata workflowContrib.Metadata) error {
@@ -4721,6 +4729,10 @@ func (l *fakeWorkflowComponent) Get(ctx context.Context, req *workflowContrib.Wo
 
 func (l *fakeWorkflowComponent) RaiseEvent(ctx context.Context, req *workflowContrib.RaiseEventRequest) error {
 	return nil
+}
+
+func (l *fakeWorkflowComponent) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {
