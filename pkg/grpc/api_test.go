@@ -3449,6 +3449,10 @@ func (m *mockConfigStore) Init(ctx context.Context, metadata configuration.Metad
 	return nil
 }
 
+func (m *mockConfigStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
 	items := map[string]*configuration.Item{
 		"key1": {Value: "val1"},
