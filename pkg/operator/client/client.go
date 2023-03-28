@@ -24,7 +24,9 @@ const (
 
 // GetOperatorClient returns a new k8s operator client and the underlying connection.
 // If a cert chain is given, a TLS connection will be established.
-func GetOperatorClient(address, serverName string, certChain *daprCredentials.CertChain) (operatorv1pb.OperatorClient, *grpc.ClientConn, error) {
+func GetOperatorClient(ctx context.Context,
+	address, serverName string, certChain *daprCredentials.CertChain,
+) (operatorv1pb.OperatorClient, *grpc.ClientConn, error) {
 	if certChain == nil {
 		return nil, nil, errors.New("certificate chain cannot be nil")
 	}
@@ -54,7 +56,7 @@ func GetOperatorClient(address, serverName string, certChain *daprCredentials.Ce
 	// block for connection
 	opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)), grpc.WithBlock())
 
-	ctx, cancelFunc := context.WithTimeout(context.Background(), dialTimeout)
+	ctx, cancelFunc := context.WithTimeout(ctx, dialTimeout)
 	defer cancelFunc()
 	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
