@@ -196,6 +196,7 @@ func testSubscribe(t *testing.T, appExternalUrl string) {
 	require.Equal(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, appResp.Message)
 
 	subscriptionId = appResp.Message
+	time.Sleep(defaultWaitTime) // Waiting for subscribe operation to complete
 
 	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
 	itemsInBytes, _ := json.Marshal(items)
@@ -203,7 +204,7 @@ func testSubscribe(t *testing.T, appExternalUrl string) {
 	require.NoError(t, err, "error updating key values")
 	require.Equal(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
 
-	time.Sleep(defaultWaitTime)
+	time.Sleep(defaultWaitTime) // Waiting for update operation to complete
 
 	expectedUpdates := make([]string, len(items))
 	for key, item := range items {
