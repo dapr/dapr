@@ -2093,6 +2093,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 	defer resp.Close()
 
+	// Use Add to ensure headers are appended and not replaced
 	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Add)
 	body, err := resp.RawDataFull()
 	if err != nil {
