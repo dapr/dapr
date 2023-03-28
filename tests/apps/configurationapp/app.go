@@ -16,7 +16,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -24,12 +24,13 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gorilla/mux"
+
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/tests/utils/configupdater"
 	cu_redis "github.com/dapr/components-contrib/tests/utils/configupdater/redis"
 	"github.com/dapr/dapr/tests/apps/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/gorilla/mux"
 )
 
 const (
@@ -44,11 +45,8 @@ var (
 	lock            sync.Mutex
 	receivedUpdates map[string][]string
 	updater         configupdater.Updater
+	httpClient      = utils.NewHTTPClient()
 )
-
-type testCommandRequest struct {
-	Message string `json:"message,omitempty"`
-}
 
 type appResponse struct {
 	Message   string `json:"message,omitempty"`
@@ -91,13 +89,13 @@ func getKeyValues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + buildQueryParams(keys)
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		sendResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer resp.Body.Close()
-	respInBytes, _ := ioutil.ReadAll(resp.Body)
+	respInBytes, _ := io.ReadAll(resp.Body)
 	sendResponse(w, http.StatusOK, string(respInBytes))
 }
 
@@ -105,7 +103,7 @@ func buildQueryParams(keys []string) string {
 	if len(keys) == 0 {
 		return ""
 	}
-	var ret string = "?key=" + keys[0]
+	ret := "?key=" + keys[0]
 	for i := 1; i < len(keys); i++ {
 		ret = ret + "&key=" + keys[i]
 	}
@@ -114,25 +112,25 @@ func buildQueryParams(keys []string) string {
 
 func subscribeToConfigUpdates(keys []string) (string, error) {
 	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/subscribe" + buildQueryParams(keys)
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("Error subscribing config updates: %s", err)
+		return "", fmt.Errorf("error subscribing config updates: %s", err)
 	}
 	defer resp.Body.Close()
-	sub, err := ioutil.ReadAll(resp.Body)
+	sub, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("Error reading subscription Id: %s", err)
+		return "", fmt.Errorf("error reading subscription Id: %s", err)
 	}
-	var subscriptionId string
+	var subscriptionID string
 	if !strings.Contains(string(sub), "errorCode") {
 		var subid map[string]interface{}
 		json.Unmarshal(sub, &subid)
 		log.Printf("App subscribed to config changes with subscription id: %s\n", subid["id"])
-		subscriptionId = subid["id"].(string)
+		subscriptionID = subid["id"].(string)
 	} else {
-		return "", fmt.Errorf("Error subscribing to config updates: %s", string(sub))
+		return "", fmt.Errorf("error subscribing to config updates: %s", string(sub))
 	}
-	return subscriptionId, nil
+	return subscriptionID, nil
 }
 
 // startSubscription is the handler for starting a subscription to config store
@@ -143,26 +141,26 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 		sendResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	subscriptionId, err := subscribeToConfigUpdates(keys)
+	subscriptionID, err := subscribeToConfigUpdates(keys)
 	if err != nil {
 		sendResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	sendResponse(w, http.StatusOK, subscriptionId)
+	sendResponse(w, http.StatusOK, subscriptionID)
 }
 
 // stopSubscription is the handler for unsubscribing from config store
 func stopSubscription(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	subscriptionId := vars["subscriptionId"]
-	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/" + subscriptionId + "/unsubscribe"
-	resp, err := http.Get(url)
+	subscriptionID := vars["subscriptionID"]
+	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/" + subscriptionID + "/unsubscribe"
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		sendResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer resp.Body.Close()
-	respInBytes, _ := ioutil.ReadAll(resp.Body)
+	respInBytes, _ := io.ReadAll(resp.Body)
 	sendResponse(w, http.StatusOK, string(respInBytes))
 }
 
@@ -174,31 +172,31 @@ func configurationUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		sendResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	subId := updateEvent.ID
-	receivedItemsInBytes, err := json.Marshal(updateEvent.Items)
+	subID := updateEvent.ID
+	receivedItemsInBytes, _ := json.Marshal(updateEvent.Items)
 	receivedItems := string(receivedItemsInBytes)
 
-	log.Printf("SubscriptionID: %s, Received item: %s\n", subId, receivedItems)
+	log.Printf("SubscriptionID: %s, Received item: %s\n", subID, receivedItems)
 	lock.Lock()
 	defer lock.Unlock()
-	if receivedUpdates[subId] == nil {
-		receivedUpdates[subId] = make([]string, 10)
+	if receivedUpdates[subID] == nil {
+		receivedUpdates[subID] = make([]string, 10)
 	}
-	receivedUpdates[subId] = append(receivedUpdates[subId], receivedItems)
+	receivedUpdates[subID] = append(receivedUpdates[subID], receivedItems)
 	sendResponse(w, http.StatusOK, "OK")
 }
 
 // getReceivedUpdates is the handler for getting received updates from config store
 func getReceivedUpdates(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	subId := vars["subscriptionId"]
+	subID := vars["subscriptionID"]
 
 	lock.Lock()
 	defer lock.Unlock()
 	response := receivedMessagesResponse{
-		ReceivedUpdates: receivedUpdates[subId],
+		ReceivedUpdates: receivedUpdates[subID],
 	}
-	receivedUpdates[subId] = make([]string, 10)
+	receivedUpdates[subID] = make([]string, 10)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
@@ -259,9 +257,9 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/initialize-updater", initializeUpdater).Methods("POST")
 	router.HandleFunc("/get-key-values", getKeyValues).Methods("POST")
 	router.HandleFunc("/subscribe", startSubscription).Methods("POST")
-	router.HandleFunc("/unsubscribe/{subscriptionId}", stopSubscription).Methods("GET")
+	router.HandleFunc("/unsubscribe/{subscriptionID}", stopSubscription).Methods("GET")
 	router.HandleFunc("/configuration/{storeName}/{key}", configurationUpdateHandler).Methods("POST")
-	router.HandleFunc("/get-received-updates/{subscriptionId}", getReceivedUpdates).Methods("GET")
+	router.HandleFunc("/get-received-updates/{subscriptionID}", getReceivedUpdates).Methods("GET")
 	router.HandleFunc("/update-key-values", updateKeyValues).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
