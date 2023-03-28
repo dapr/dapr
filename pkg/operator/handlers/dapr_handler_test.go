@@ -248,7 +248,7 @@ func TestInit(t *testing.T) {
 	t.Run("test init dapr handler", func(t *testing.T) {
 		assert.NotNil(t, handler)
 
-		err := handler.Init()
+		err := handler.Init(context.Background())
 
 		assert.Nil(t, err)
 
