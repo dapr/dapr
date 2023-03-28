@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/configuration"
-	"github.com/dapr/components-contrib/tests/utils/configupdater"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -48,7 +47,6 @@ var (
 	runID               string = uuid.Must(uuid.NewRandom()).String()
 	counter             int    = 0
 	tr                  *runner.TestRunner
-	updater             configupdater.Updater
 	subscribedKeyValues map[string]*configuration.Item
 )
 
