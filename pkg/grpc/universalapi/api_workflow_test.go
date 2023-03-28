@@ -17,12 +17,13 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -33,13 +34,13 @@ var (
 func TestPauseResumeWorkflow(t *testing.T) {
 	fakeWorkflowComponent := daprt.MockWorkflow{}
 	fakeWorkflows := map[string]workflows.Workflow{
-		"fakeWorkflow": fakeWorkflowComponent,
+		"fakeWorkflow": &fakeWorkflowComponent,
 	}
 
 	testCases := []struct {
 		testName          string
 		apiToBetested     string
-		instanceId        string
+		instanceID        string
 		workflowComponent string
 		errorExcepted     bool
 		expectedError     messages.APIError
@@ -47,7 +48,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "No instance id present in pause request",
 			apiToBetested:     PauseWorkflow,
-			instanceId:        "",
+			instanceID:        "",
 			workflowComponent: "fakeWorkflow",
 			errorExcepted:     true,
 			expectedError:     messages.ErrMissingOrEmptyInstance,
@@ -55,7 +56,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "No workflow component provided in pause request",
 			apiToBetested:     PauseWorkflow,
-			instanceId:        "inst1",
+			instanceID:        "inst1",
 			workflowComponent: "",
 			errorExcepted:     true,
 			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
@@ -63,7 +64,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "workflow component does not exist in pause request",
 			apiToBetested:     PauseWorkflow,
-			instanceId:        "inst1",
+			instanceID:        "inst1",
 			workflowComponent: "fakeWorkflowNotExist",
 			errorExcepted:     true,
 			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
@@ -71,7 +72,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "pause for this instance throws error",
 			apiToBetested:     PauseWorkflow,
-			instanceId:        "errorInstanceId",
+			instanceID:        "errorInstanceId",
 			workflowComponent: "fakeWorkflow",
 			errorExcepted:     true,
 			expectedError:     messages.ErrPauseWorkflow.WithFormat("errorInstanceId"),
@@ -79,14 +80,14 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "All is well in pause request",
 			apiToBetested:     PauseWorkflow,
-			instanceId:        "instanceId1",
+			instanceID:        "instanceId1",
 			workflowComponent: "fakeWorkflow",
 			errorExcepted:     false,
 		},
 		{
 			testName:          "No instance id present in resume request",
 			apiToBetested:     ResumeWorkflow,
-			instanceId:        "",
+			instanceID:        "",
 			workflowComponent: "fakeWorkflow",
 			errorExcepted:     true,
 			expectedError:     messages.ErrMissingOrEmptyInstance,
@@ -94,7 +95,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "No workflow component provided in resume request",
 			apiToBetested:     ResumeWorkflow,
-			instanceId:        "inst1",
+			instanceID:        "inst1",
 			workflowComponent: "",
 			errorExcepted:     true,
 			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
@@ -102,7 +103,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "workflow component does not exist in resume request",
 			apiToBetested:     ResumeWorkflow,
-			instanceId:        "inst1",
+			instanceID:        "inst1",
 			workflowComponent: "fakeWorkflowNotExist",
 			errorExcepted:     true,
 			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
@@ -110,7 +111,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "resume for this instance throws error",
 			apiToBetested:     ResumeWorkflow,
-			instanceId:        "errorInstanceId",
+			instanceID:        "errorInstanceId",
 			workflowComponent: "fakeWorkflow",
 			errorExcepted:     true,
 			expectedError:     messages.ErrResumeWorkflow.WithFormat("errorInstanceId"),
@@ -118,7 +119,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		{
 			testName:          "All is well in resume request",
 			apiToBetested:     ResumeWorkflow,
-			instanceId:        "instanceId1",
+			instanceID:        "instanceId1",
 			workflowComponent: "fakeWorkflow",
 			errorExcepted:     false,
 		},
@@ -134,7 +135,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
 			req := &runtimev1pb.WorkflowActivityRequest{
-				InstanceId:        tt.instanceId,
+				InstanceId:        tt.instanceID,
 				WorkflowComponent: tt.workflowComponent,
 			}
 			var err error
@@ -152,5 +153,4 @@ func TestPauseResumeWorkflow(t *testing.T) {
 			}
 		})
 	}
-
 }
