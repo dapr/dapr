@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,28 +24,28 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/redis/go-redis/v9"
 
-	"github.com/dapr/components-contrib/configuration"
-	"github.com/dapr/components-contrib/tests/utils/configupdater"
-	cu_redis "github.com/dapr/components-contrib/tests/utils/configupdater/redis"
 	"github.com/dapr/dapr/tests/apps/utils"
-	"github.com/dapr/kit/logger"
 )
 
 const (
 	daprHost        = "localhost"
 	daprHTTPPort    = "3500"
 	configStoreName = "configstore"
+	separator       = "||"
 	redisHost       = "dapr-redis-master.dapr-tests.svc.cluster.local:6379"
+	writeTimeout    = 5 * time.Second
 )
 
 var (
 	appPort         = 3000
 	lock            sync.Mutex
 	receivedUpdates map[string][]string
-	updater         configupdater.Updater
+	updater         Updater
 	httpClient      = utils.NewHTTPClient()
 )
 
@@ -56,6 +57,49 @@ type appResponse struct {
 
 type receivedMessagesResponse struct {
 	ReceivedUpdates []string `json:"received-messages"`
+}
+
+type Item struct {
+	Value    string            `json:"value,omitempty"`
+	Version  string            `json:"version,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+type UpdateEvent struct {
+	ID    string           `json:"id"`
+	Items map[string]*Item `json:"items"`
+}
+
+type Updater interface {
+	Init() error
+	Update(items map[string]*Item) error
+}
+
+type RedisUpdater struct {
+	client *redis.Client
+}
+
+func (r *RedisUpdater) Init() error {
+	opts := &redis.Options{
+		Addr:     redisHost,
+		Password: "",
+		DB:       0,
+	}
+	r.client = redis.NewClient(opts)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(writeTimeout))
+	defer cancel()
+	err := r.client.Ping(timeoutCtx).Err()
+	if err != nil {
+		return fmt.Errorf("error connecting to redis config store. err: %s", err)
+	}
+	return nil
+}
+
+func (r *RedisUpdater) Update(items map[string]*Item) error {
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(writeTimeout))
+	defer cancel()
+	values := getRedisValuesFromItems(items)
+	return r.client.Do(timeoutCtx, values).Err()
 }
 
 func init() {
@@ -78,6 +122,16 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func sendResponse(w http.ResponseWriter, statusCode int, message string) {
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(appResponse{Message: message})
+}
+
+// return key-value pairs as a list of strings
+func getRedisValuesFromItems(items map[string]*Item) []string {
+	m := make([]string, 0, 2*len(items)+1)
+	for key, item := range items {
+		val := item.Value + separator + item.Version
+		m = append(m, key, val)
+	}
+	return m
 }
 
 // getKeyValues is the handler for getting key-values from config store
@@ -166,7 +220,7 @@ func stopSubscription(w http.ResponseWriter, r *http.Request) {
 
 // configurationUpdateHandler is the handler for receiving updates from config store
 func configurationUpdateHandler(w http.ResponseWriter, r *http.Request) {
-	var updateEvent configuration.UpdateEvent
+	var updateEvent UpdateEvent
 	err := json.NewDecoder(r.Body).Decode(&updateEvent)
 	if err != nil {
 		sendResponse(w, http.StatusBadRequest, err.Error())
@@ -213,12 +267,8 @@ func initializeUpdater(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Initializing updater with component: %s\n", component)
 	switch component {
 	case "redis":
-		updater = cu_redis.NewRedisConfigUpdater(logger.NewLogger("configuration.redis"))
-		err := updater.Init(map[string]string{
-			"redisHost":     redisHost,
-			"redisPassword": "",
-			"redisDB":       "0",
-		})
+		updater = &RedisUpdater{}
+		err := updater.Init()
 		if err != nil {
 			sendResponse(w, http.StatusInternalServerError, err.Error())
 			return
@@ -232,13 +282,13 @@ func initializeUpdater(w http.ResponseWriter, r *http.Request) {
 
 // updateKeyValues is the handler for updating key values in the config store
 func updateKeyValues(w http.ResponseWriter, r *http.Request) {
-	items := make(map[string]*configuration.Item, 10)
+	items := make(map[string]*Item, 10)
 	err := json.NewDecoder(r.Body).Decode(&items)
 	if err != nil {
 		sendResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	err = updater.UpdateKey(items)
+	err = updater.Update(items)
 	if err != nil {
 		sendResponse(w, http.StatusBadRequest, err.Error())
 		return
