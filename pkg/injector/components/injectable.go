@@ -38,7 +38,7 @@ func Injectable(appID string, components []componentsapi.Component) []corev1.Con
 		}
 		var container *corev1.Container
 		if err := json.Unmarshal([]byte(containerAsStr), &container); err != nil {
-			log.Warnf("could not unmarshal %s error: %w", component.Name, err)
+			log.Warnf("could not unmarshal %s error: %v", component.Name, err)
 			continue
 		}
 

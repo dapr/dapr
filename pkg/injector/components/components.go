@@ -95,7 +95,7 @@ func PatchOps(componentContainers map[int]corev1.Container, injectedContainers [
 		patches = append(patches, patcher.GetVolumeMountPatchOperations(container.VolumeMounts, []corev1.VolumeMount{sharedSocketVolumeMount}, idx)...)
 	}
 
-	podVolumes := make(map[string]bool)
+	podVolumes := make(map[string]bool, len(pod.Spec.Volumes))
 	for _, volume := range pod.Spec.Volumes {
 		podVolumes[volume.Name] = true
 	}
