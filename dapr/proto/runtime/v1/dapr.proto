@@ -710,6 +710,7 @@ message TerminateWorkflowRequest {
 }
 
 message TerminateWorkflowResponse {
+  // Empty
 }
 
 message PurgeWorkflowRequest {
@@ -718,6 +719,7 @@ message PurgeWorkflowRequest {
 }
 
 message PurgeWorkflowResponse {
+  // Empty
 }
 
 message RaiseEventWorkflowRequest {
