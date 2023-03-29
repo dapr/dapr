@@ -216,14 +216,8 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string
 	return metadata, nil
 }
 
+// This method purges all the completed activity data from a workflow associated with the given actorID
 func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string) error {
-	// Look through its history and find all the activities that have been scheduled by the workflow
-	// Invoke a similar purge state api on all those activities (need to define this on the activity actor as well)
-	// Once activity actor state is cleaned up, purge the workflow state. (Cleanup history, etc. Call statestore APIs to delete all that)
-	// This will call both workflow_state.go and activity.go
-
-	// Loop through history to find all the activities that we invoked and then send purge operations to them
-
 	state, exists, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
@@ -236,6 +230,12 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 		return api.ErrNotCompleted
 	}
 
+	// Loop through the history of the loaded workflow state and schedule purge calls for all the activities that have been completed
+
+	// RRL TODO: Looping through history and invoking each actor once. They are not in the same transaction. Eqch transaction happens as its own call
+	// We are deleting one by one in sequence and not in builk.
+	// In case of each actor returning an error, the entire function returns an error
+	// Everything before error is deleted, and erverything afyter is not.
 	for _, e := range state.History {
 		if ts := e.GetTaskScheduled(); ts != nil {
 			targetActorID := getActivityActorID(actorID, e.EventId)
@@ -255,9 +255,9 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 				WithActor(ActivityActorType, targetActorID).
 				WithRawDataBytes(activityRequestBytes).
 				WithContentType(invokev1.OctetStreamContentType)
-			defer req.Close()
 
 			resp, err := wf.actors.Call(ctx, req)
+			req.Close()
 			if err != nil {
 				return fmt.Errorf("failed to purge activity actor '%s' ('%s'): %w", targetActorID, ts.Name, err)
 			}

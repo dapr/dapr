@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -246,11 +247,11 @@ func GetTestOptions() []func(wfe *wfengine.WorkflowEngine) string {
 			// caching enabled, etc.
 			return "default options"
 		},
-		// func(wfe *wfengine.WorkflowEngine) string {
-		// 	// disable caching to test recovery from failure
-		// 	wfe.DisableActorCaching(true)
-		// 	return "caching disabled"
-		// },
+		func(wfe *wfengine.WorkflowEngine) string {
+			// disable caching to test recovery from failure
+			wfe.DisableActorCaching(true)
+			return "caching disabled"
+		},
 	}
 }
 
@@ -746,10 +747,22 @@ func TestPurge(t *testing.T) {
 					assert.Equal(t, id, metadata.InstanceID)
 					metadata, err = client.FetchOrchestrationMetadata(ctx, id)
 					time.Sleep(5 * time.Second) // The sleep is here to avoid purging an on-going activity
-					fmt.Println("RRL STATESTORE PRE PURGE: ", stateStore)
-					client.PurgeOrchestrationState(ctx, id)
-					metadata, err = client.FetchOrchestrationMetadata(ctx, id)
-					fmt.Println("RRL STATESTORE POST PURGE: ", stateStore)
+
+					err := client.PurgeOrchestrationState(ctx, id)
+					assert.NoError(t, err)
+
+					// Check that no key from the statestore that was expected to be purged is still present in the statestore
+					keysPostPurge := []string{}
+					for key := range stateStore.(*fakeStateStore).items {
+						keysPostPurge = append(keysPostPurge, key)
+					}
+
+					for _, item := range keysPostPurge {
+						// Note that "activityState" comes from "getActivityInvocationKey" inside activity.go
+						if strings.Contains(item, "history") || strings.Contains(item, "activityState") || strings.Contains(item, "inbox") {
+							assert.True(t, false)
+						}
+					}
 				}
 			}
 		})
@@ -779,7 +792,7 @@ func startEngineAndGetStore(ctx context.Context, r *task.TaskRegistry) (backend.
 	if err := engine.Start(ctx); err != nil {
 		panic(err)
 	}
-	return client, engine, *store
+	return client, engine, store
 }
 
 func getEngine() *wfengine.WorkflowEngine {
@@ -805,9 +818,9 @@ func getEngine() *wfengine.WorkflowEngine {
 	return engine
 }
 
-func getEngineAndStateStore() (*wfengine.WorkflowEngine, *state.Store) {
+func getEngineAndStateStore() (*wfengine.WorkflowEngine, state.Store) {
 	engine := wfengine.NewWorkflowEngine()
-	store := fakeStore()
+	store := fakeStore().(*fakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
 		PlacementAddresses: []string{"placement:5050"},
@@ -825,5 +838,5 @@ func getEngineAndStateStore() (*wfengine.WorkflowEngine, *state.Store) {
 		panic(err)
 	}
 	engine.SetActorRuntime(actors)
-	return engine, &store
+	return engine, store
 }

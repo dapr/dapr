@@ -96,6 +96,8 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 		Generation:   ar.Generation,
 		EventPayload: ar.HistoryEvent,
 	}
+
+	// This conditional block prevents the statestore from re-saving the purged item
 	if methodName != "PurgeWorkflowState" {
 		if err := a.saveActivityState(ctx, actorID, state); err != nil {
 			return nil, err
