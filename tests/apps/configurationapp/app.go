@@ -99,7 +99,7 @@ func (r *RedisUpdater) Update(items map[string]*Item) error {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(writeTimeout))
 	defer cancel()
 	values := getRedisValuesFromItems(items)
-	return r.client.Do(timeoutCtx, values).Err()
+	return r.client.Do(timeoutCtx, values...).Err()
 }
 
 func init() {
@@ -125,8 +125,8 @@ func sendResponse(w http.ResponseWriter, statusCode int, message string) {
 }
 
 // return key-value pairs as a list of strings
-func getRedisValuesFromItems(items map[string]*Item) []string {
-	m := make([]string, 0, 2*len(items)+1)
+func getRedisValuesFromItems(items map[string]*Item) []interface{} {
+	m := make([]interface{}, 0, 2*len(items)+1)
 	for key, item := range items {
 		val := item.Value + separator + item.Version
 		m = append(m, key, val)
