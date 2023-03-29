@@ -36,7 +36,7 @@ const (
 	defaultMtlsEnabled = true
 )
 
-func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
+func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
 ) (patchOps []patcher.PatchOperation, err error) {
 	req := ar.Request
@@ -73,7 +73,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	sentryAddress := sidecar.ServiceAddress(sidecar.ServiceSentry, namespace, i.config.KubeClusterDomain)
 	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, namespace, i.config.KubeClusterDomain)
 
-	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(context.TODO(), kubeClient, namespace)
+	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(ctx, kubeClient, namespace)
 
 	// Get all volume mounts
 	volumeMounts := sidecar.GetVolumeMounts(pod)

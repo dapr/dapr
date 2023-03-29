@@ -21,7 +21,6 @@ healthapp \
 hellodapr \
 stateapp \
 secretapp \
-workflowsapp \
 service_invocation \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
@@ -39,6 +38,7 @@ actorapp \
 actorclientapp \
 actorfeatures \
 actorinvocationapp \
+actorstate \
 actorreentrancy \
 runtime \
 runtime_init \
@@ -115,6 +115,10 @@ $(error cannot find get minikube node ip address. ensure that you have minikube 
 endif
 endif
 
+ifeq ($(WINDOWS_VERSION),)
+WINDOWS_VERSION=ltsc2022
+endif
+
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
@@ -169,7 +173,8 @@ build-push-e2e-app-$(1): check-e2e-env check-e2e-cache
 		--dockerfile "$(DOCKERFILE)" \
 		--target-os "$(TARGET_OS)" \
 		--target-arch "$(TARGET_ARCH)" \
-		--cache-registry "$(DAPR_CACHE_REGISTRY)"
+		--cache-registry "$(DAPR_CACHE_REGISTRY)" \
+		--windows-version "$(WINDOWS_VERSION)"
 endef
 
 # Generate test app image build-push targets
@@ -379,7 +384,6 @@ setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
 	$(HELM) repo add stable https://charts.helm.sh/stable
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
-	$(HELM) repo add wener https://wenerme.github.io/charts
 	$(HELM) repo update
 
 # setup tailscale

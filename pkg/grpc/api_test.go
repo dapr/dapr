@@ -2406,7 +2406,7 @@ func TestGetMetadata(t *testing.T) {
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+		getSubscriptionsFn: func() []runtimePubsub.Subscription {
 			return []runtimePubsub.Subscription{
 				{
 					PubsubName:      "test",
@@ -2420,7 +2420,7 @@ func TestGetMetadata(t *testing.T) {
 						},
 					},
 				},
-			}, nil
+			}
 		},
 	}
 	fakeAPI.extendedMetadata.Store("testKey", "testValue")
@@ -3438,6 +3438,10 @@ type mockConfigStore struct{}
 
 func (m *mockConfigStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
+}
+
+func (m *mockConfigStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {

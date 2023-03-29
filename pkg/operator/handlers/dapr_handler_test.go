@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/operator/testobjects"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -247,7 +248,7 @@ func TestInit(t *testing.T) {
 	t.Run("test init dapr handler", func(t *testing.T) {
 		assert.NotNil(t, handler)
 
-		err := handler.Init()
+		err := handler.Init(context.Background())
 
 		assert.Nil(t, err)
 
@@ -314,73 +315,11 @@ func getDeploymentWithMetricsPortAnnotation(daprID string, daprEnabled string, m
 }
 
 func getDeployment(appID string, daprEnabled string) ObjectWrapper {
-	// Arrange
-	metadata := metaV1.ObjectMeta{
-		Name:   "app",
-		Labels: map[string]string{"app": "test_app"},
-		Annotations: map[string]string{
-			annotations.KeyAppID:         appID,
-			annotations.KeyEnabled:       daprEnabled,
-			annotations.KeyEnableMetrics: "true",
-		},
-	}
-
-	podTemplateSpec := corev1.PodTemplateSpec{
-		ObjectMeta: metadata,
-	}
-
-	deployment := appsv1.Deployment{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name: "app",
-		},
-
-		Spec: appsv1.DeploymentSpec{
-			Template: podTemplateSpec,
-			Selector: &metaV1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "test",
-				},
-			},
-		},
-	}
-
-	return &DeploymentWrapper{deployment}
+	return &DeploymentWrapper{testobjects.GetDeployment(appID, daprEnabled)}
 }
 
 func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
-	// Arrange
-	metadata := metaV1.ObjectMeta{
-		Name:   "app",
-		Labels: map[string]string{"app": "test_app"},
-		Annotations: map[string]string{
-			annotations.KeyAppID:         appID,
-			annotations.KeyEnabled:       daprEnabled,
-			annotations.KeyEnableMetrics: "true",
-		},
-	}
-
-	podTemplateSpec := corev1.PodTemplateSpec{
-		ObjectMeta: metadata,
-	}
-
-	statefulset := appsv1.StatefulSet{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name: "app",
-		},
-
-		Spec: appsv1.StatefulSetSpec{
-			Template: podTemplateSpec,
-			Selector: &metaV1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "test",
-				},
-			},
-		},
-	}
-
-	return &StatefulSetWrapper{
-		statefulset,
-	}
+	return &StatefulSetWrapper{testobjects.GetStatefulSet(appID, daprEnabled)}
 }
 
 func getRollout(appID string, daprEnabled string) ObjectWrapper {

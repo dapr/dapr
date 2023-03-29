@@ -39,6 +39,7 @@ var (
 	disableServiceReconciler           bool
 	watchNamespace                     string
 	enableArgoRolloutServiceReconciler bool
+	watchdogCanPatchPodLabels          bool
 )
 
 //nolint:gosec
@@ -69,17 +70,19 @@ func main() {
 		WatchNamespace:                      watchNamespace,
 		ServiceReconcilerEnabled:            !disableServiceReconciler,
 		ArgoRolloutServiceReconcilerEnabled: enableArgoRolloutServiceReconciler,
+		WatchdogCanPatchPodLabels:           watchdogCanPatchPodLabels,
 	}
 
-	switch strings.ToLower(watchInterval) {
+	wilc := strings.ToLower(watchInterval)
+	switch wilc {
 	case "0", "false", "f", "no", "off":
 		// Disabled - do nothing
 	default:
 		operatorOpts.WatchdogEnabled = true
-		if watchInterval != "once" {
+		if wilc != "once" {
 			dur, err := time.ParseDuration(watchInterval)
 			if err != nil {
-				log.Fatalf("invalid value for watch-interval: %s", err)
+				log.Fatalf("invalid value for watch-interval: %v", err)
 			}
 			if dur < time.Second {
 				log.Fatalf("invalid watch-interval value: if not '0' or 'once', must be at least 1s")
@@ -90,10 +93,16 @@ func main() {
 
 	ctx := signals.Context()
 
-	go operator.NewOperator(operatorOpts).Run(ctx)
-	go operator.RunWebhooks(ctx, !disableLeaderElection)
+	op, err := operator.NewOperator(ctx, operatorOpts)
+	if err != nil {
+		log.Fatalf("error creating operator: %v", err)
+	}
 
-	<-ctx.Done() // Wait for SIGTERM and SIGINT.
+	err = op.Run(ctx)
+	if err != nil {
+		log.Fatalf("error running operator: %v", err)
+	}
+	log.Info("operator shut down gracefully")
 }
 
 func init() {
@@ -122,6 +131,7 @@ func init() {
 	flag.BoolVar(&disableServiceReconciler, "disable-service-reconciler", false, "Disable the Service reconciler for Dapr-enabled Deployments and StatefulSets")
 	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
 	flag.BoolVar(&enableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for Dapr-enabled Argo Rollouts")
+	flag.BoolVar(&watchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
 
 	flag.Parse()
 

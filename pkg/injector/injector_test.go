@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -695,5 +696,23 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
 		assert.NoError(t, err)
 		assert.Equal(t, 3, len(uids))
+	})
+}
+
+func Test_Ready(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	t.Run("if injector ready return nil", func(t *testing.T) {
+		i := &injector{ready: make(chan struct{})}
+		close(i.ready)
+		assert.NoError(t, i.Ready(ctx))
+	})
+
+	t.Run("if not ready then should return timeout error if context cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+		defer cancel()
+		i := &injector{ready: make(chan struct{})}
+		assert.Error(t, i.Ready(ctx), errors.New("timed out waiting for injector to become ready"))
 	})
 }

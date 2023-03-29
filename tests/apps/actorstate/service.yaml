@@ -5,12 +5,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: workflowsapp
+  name: actorstate
   labels:
-    testapp: workflowsapp
+    testapp: actorstate
 spec:
   selector:
-    testapp: workflowsapp
+    testapp: actorstate
   ports:
   - protocol: TCP
     port: 80
@@ -21,26 +21,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: workflowsapp
+  name: stateapp
   labels:
-    testapp: workflowsapp
+    testapp: actorstate
 spec:
   replicas: 1
   selector:
     matchLabels:
-      testapp: workflowsapp
+      testapp: actorstate
   template:
     metadata:
       labels:
-        testapp: workflowsapp
+        testapp: actorstate
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/app-id: "workflowsapp"
+        dapr.io/app-id: "actorstate"
         dapr.io/app-port: "3000"
     spec:
       containers:
-      - name: workflowsapp
-        image: lettierir/e2e-workflowsapp:dev-linux-amd64
+      - name: actorstate
+        image: docker.io/YOUR_ALIAS/e2e-actorstate:dev
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
