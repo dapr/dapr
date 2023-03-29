@@ -73,15 +73,16 @@ func main() {
 		WatchdogCanPatchPodLabels:           watchdogCanPatchPodLabels,
 	}
 
-	switch strings.ToLower(watchInterval) {
+	wilc := strings.ToLower(watchInterval)
+	switch wilc {
 	case "0", "false", "f", "no", "off":
 		// Disabled - do nothing
 	default:
 		operatorOpts.WatchdogEnabled = true
-		if watchInterval != "once" {
+		if wilc != "once" {
 			dur, err := time.ParseDuration(watchInterval)
 			if err != nil {
-				log.Fatalf("invalid value for watch-interval: %s", err)
+				log.Fatalf("invalid value for watch-interval: %v", err)
 			}
 			if dur < time.Second {
 				log.Fatalf("invalid watch-interval value: if not '0' or 'once', must be at least 1s")
@@ -92,10 +93,16 @@ func main() {
 
 	ctx := signals.Context()
 
-	go operator.NewOperator(operatorOpts).Run(ctx)
-	go operator.RunWebhooks(ctx, !disableLeaderElection)
+	op, err := operator.NewOperator(ctx, operatorOpts)
+	if err != nil {
+		log.Fatalf("error creating operator: %v", err)
+	}
 
-	<-ctx.Done() // Wait for SIGTERM and SIGINT.
+	err = op.Run(ctx)
+	if err != nil {
+		log.Fatalf("error running operator: %v", err)
+	}
+	log.Info("operator shut down gracefully")
 }
 
 func init() {

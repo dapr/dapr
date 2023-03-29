@@ -77,16 +77,16 @@ func (s *server) Run(ctx context.Context, port int) error {
 		serveErr <- nil
 	}()
 
-	<-ctx.Done()
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+		// nop
+	}
 	s.log.Info("Healthz server is shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	err := srv.Shutdown(shutdownCtx)
-	if err != nil {
-		s.log.Errorf("Error while shutting down healthz server: %v", err)
-	}
-
-	return <-serveErr
+	return errors.Join(srv.Shutdown(shutdownCtx), <-serveErr)
 }
 
 // healthz is a health endpoint handler.

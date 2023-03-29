@@ -695,11 +695,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	// try bulk get first
+	var key string
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
-		key, err1 := stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
-		if err1 != nil {
-			return &runtimev1pb.GetBulkStateResponse{}, err1
+		key, err = stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
+		if err != nil {
+			return &runtimev1pb.GetBulkStateResponse{}, err
 		}
 		r := state.GetRequest{
 			Key:      key,
@@ -741,55 +742,58 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
 		}
-		return bulkResp, nil
-	}
-
-	// if store doesn't support bulk get, fallback to call get() method one by one
-	limiter := concurrency.NewLimiter(int(in.Parallelism))
-	n := len(reqs)
-	resultCh := make(chan *runtimev1pb.BulkStateItem, n)
-	for i := 0; i < n; i++ {
-		fn := func(param interface{}) {
-			req := param.(*state.GetRequest)
-			policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
-			res, policyErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-				return store.Get(ctx, req)
-			})
-
-			item := &runtimev1pb.BulkStateItem{
-				Key: stateLoader.GetOriginalStateKey(req.Key),
+	} else {
+		// if store doesn't support bulk get, fallback to call get() method one by one
+		bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(reqs))
+		limiter := concurrency.NewLimiter(int(in.Parallelism))
+		for i := range reqs {
+			bulkResp.Items[i] = &runtimev1pb.BulkStateItem{
+				Key: reqs[i].Key,
 			}
 
-			if policyErr != nil {
-				item.Error = policyErr.Error()
-			} else if res != nil {
-				item.Data = res.Data
-				item.Etag = stringValueOrEmpty(res.ETag)
-				item.Metadata = res.Metadata
+			fn := func(iAny any) {
+				rI := iAny.(int)
+				policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
+				res, rErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
+					return store.Get(ctx, &reqs[rI])
+				})
+
+				item := &runtimev1pb.BulkStateItem{
+					Key: stateLoader.GetOriginalStateKey(reqs[rI].Key),
+				}
+
+				if rErr != nil {
+					item.Error = rErr.Error()
+				} else if res != nil {
+					item.Data = res.Data
+					item.Etag = stringValueOrEmpty(res.ETag)
+					item.Metadata = res.Metadata
+				}
+				bulkResp.Items[rI] = item
 			}
-			resultCh <- item
+			limiter.Execute(fn, i)
 		}
-		limiter.Execute(fn, &reqs[i])
+		limiter.Wait()
 	}
-	limiter.Wait()
-	// collect result
-	for i := 0; i < n; i++ {
-		item := <-resultCh
 
-		if encryption.EncryptedStateStore(in.StoreName) {
-			val, err := encryption.TryDecryptValue(in.StoreName, item.Data)
-			if err != nil {
-				item.Error = err.Error()
-				apiServerLogger.Debug(err)
-
+	if encryption.EncryptedStateStore(in.StoreName) {
+		for i := range bulkResp.Items {
+			if bulkResp.Items[i].Error != "" || len(bulkResp.Items[i].Data) == 0 {
 				continue
 			}
 
-			item.Data = val
-		}
+			val, err := encryption.TryDecryptValue(in.StoreName, bulkResp.Items[i].Data)
+			if err != nil {
+				apiServerLogger.Debugf("Bulk get error: %v", err)
+				bulkResp.Items[i].Data = nil
+				bulkResp.Items[i].Error = err.Error()
+				continue
+			}
 
-		bulkResp.Items = append(bulkResp.Items, item)
+			bulkResp.Items[i].Data = val
+		}
 	}
+
 	return bulkResp, nil
 }
 
@@ -1392,10 +1396,13 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		var actorOp actors.TransactionalOperation
 		switch state.OperationType(op.OperationType) {
 		case state.Upsert:
-			setReq := map[string]interface{}{
+			setReq := map[string]any{
 				"key":   op.Key,
 				"value": op.Value.Value,
 				// Actor state do not user other attributes from state request.
+			}
+			if meta := op.GetMetadata(); len(meta) > 0 {
+				setReq["metadata"] = meta
 			}
 
 			actorOp = actors.TransactionalOperation{
