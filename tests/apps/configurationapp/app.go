@@ -99,7 +99,8 @@ func (r *RedisUpdater) Update(items map[string]*Item) error {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(writeTimeout))
 	defer cancel()
 	values := getRedisValuesFromItems(items)
-	return r.client.Do(timeoutCtx, values...).Err()
+	valuesWithCommand := append([]interface{}{"MSET"}, values...)
+	return r.client.Do(timeoutCtx, valuesWithCommand...).Err()
 }
 
 func init() {
