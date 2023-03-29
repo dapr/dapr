@@ -32,13 +32,14 @@ type TransactionalRequest struct {
 // TransactionalOperation is the request object for a state operation participating in a transaction.
 type TransactionalOperation struct {
 	Operation OperationType `json:"operation"`
-	Request   interface{}   `json:"request"`
+	Request   any           `json:"request"`
 }
 
 // TransactionalUpsert defines a key/value pair for an upsert operation.
 type TransactionalUpsert struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
+	Key      string            `json:"key"`
+	Value    any               `json:"value"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // TransactionalDelete defined a delete operation.
