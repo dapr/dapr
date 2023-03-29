@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -47,7 +46,7 @@ var (
 	runID               string = uuid.Must(uuid.NewRandom()).String()
 	counter             int    = 0
 	tr                  *runner.TestRunner
-	subscribedKeyValues map[string]*configuration.Item
+	subscribedKeyValues map[string]*Item
 )
 
 type testCommandRequest struct {
@@ -56,6 +55,12 @@ type testCommandRequest struct {
 
 type receivedMessagesResponse struct {
 	ReceivedUpdates []string `json:"received-messages"`
+}
+
+type Item struct {
+	Value    string            `json:"value,omitempty"`
+	Version  string            `json:"version,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type appResponse struct {
@@ -114,13 +119,13 @@ var configurationTests = []struct {
 }
 
 // Generates key-value pairs
-func generateKeyValues(keyCount int, version string) map[string]*configuration.Item {
-	m := make(map[string]*configuration.Item, keyCount)
+func generateKeyValues(keyCount int, version string) map[string]*Item {
+	m := make(map[string]*Item, keyCount)
 	k := counter
 	for ; k < counter+keyCount; k++ {
 		key := runID + "-key-" + strconv.Itoa(k)
 		val := runID + "-val-" + strconv.Itoa(k)
-		m[key] = &configuration.Item{
+		m[key] = &Item{
 			Value:    val,
 			Version:  version,
 			Metadata: map[string]string{},
@@ -131,12 +136,12 @@ func generateKeyValues(keyCount int, version string) map[string]*configuration.I
 }
 
 // Updates `mymap` with new values for every key
-func updateKeyValues(mymap map[string]*configuration.Item, version string) map[string]*configuration.Item {
-	m := make(map[string]*configuration.Item, len(mymap))
+func updateKeyValues(mymap map[string]*Item, version string) map[string]*Item {
+	m := make(map[string]*Item, len(mymap))
 	k := counter
 	for key := range mymap {
 		updatedVal := runID + "-val-" + strconv.Itoa(k)
-		m[key] = &configuration.Item{
+		m[key] = &Item{
 			Value:    updatedVal,
 			Version:  version,
 			Metadata: map[string]string{},
@@ -148,7 +153,7 @@ func updateKeyValues(mymap map[string]*configuration.Item, version string) map[s
 }
 
 // returns the keys of a map
-func getKeys(mymap map[string]*configuration.Item) []string {
+func getKeys(mymap map[string]*Item) []string {
 	keys := []string{}
 	for key := range mymap {
 		keys = append(keys, key)
@@ -206,7 +211,7 @@ func testSubscribe(t *testing.T, appExternalUrl string) {
 
 	expectedUpdates := make([]string, len(items))
 	for key, item := range items {
-		update := map[string]*configuration.Item{
+		update := map[string]*Item{
 			key: item,
 		}
 		updateInBytes, err := json.Marshal(update)
