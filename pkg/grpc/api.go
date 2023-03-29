@@ -43,7 +43,6 @@ import (
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -94,7 +93,6 @@ type api struct {
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
-	lockStores                 map[string]lock.Store
 	pubsubAdapter              runtimePubsub.Adapter
 	id                         string
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -107,135 +105,6 @@ type api struct {
 	getComponentsCapabilitesFn func() map[string][]string
 	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	daprRunTimeVersion         string
-}
-
-func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
-	// 1. validate
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.LockOwner == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.ExpiryInSeconds <= 0 {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrExpiryInSecondsNotPositive, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 2. find lock component
-	store, ok := a.lockStores[req.StoreName]
-	if !ok {
-		return &runtimev1pb.TryLockResponse{}, status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
-	}
-	// 3. convert request
-	compReq := TryLockRequestToComponentRequest(req)
-	// modify key
-	var err error
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 4. delegate to the component
-	compResp, err := store.TryLock(ctx, compReq)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 5. convert response
-	resp := TryLockResponseToGrpcResponse(compResp)
-	return resp, nil
-}
-
-func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error) {
-	// 1. validate
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
-		return newInternalErrorUnlockResponse(), err
-	}
-	if req.LockOwner == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 2. find store component
-	store, ok := a.lockStores[req.StoreName]
-	if !ok {
-		return newInternalErrorUnlockResponse(), status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
-	}
-	// 3. convert request
-	compReq := UnlockGrpcToComponentRequest(req)
-	// modify key
-	var err error
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 4. delegate to the component
-	compResp, err := store.Unlock(ctx, compReq)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 5. convert response
-	resp := UnlockResponseToGrpcResponse(compResp)
-	return resp, nil
-}
-
-func newInternalErrorUnlockResponse() *runtimev1pb.UnlockResponse {
-	return &runtimev1pb.UnlockResponse{
-		Status: runtimev1pb.UnlockResponse_INTERNAL_ERROR, //nolint:nosnakecase
-	}
-}
-
-func TryLockRequestToComponentRequest(req *runtimev1pb.TryLockRequest) *lock.TryLockRequest {
-	result := &lock.TryLockRequest{}
-	if req == nil {
-		return result
-	}
-	result.ResourceID = req.ResourceId
-	result.LockOwner = req.LockOwner
-	result.ExpiryInSeconds = req.ExpiryInSeconds
-	return result
-}
-
-func TryLockResponseToGrpcResponse(compResponse *lock.TryLockResponse) *runtimev1pb.TryLockResponse {
-	result := &runtimev1pb.TryLockResponse{}
-	if compResponse == nil {
-		return result
-	}
-	result.Success = compResponse.Success
-	return result
-}
-
-func UnlockGrpcToComponentRequest(req *runtimev1pb.UnlockRequest) *lock.UnlockRequest {
-	result := &lock.UnlockRequest{}
-	if req == nil {
-		return result
-	}
-	result.ResourceID = req.ResourceId
-	result.LockOwner = req.LockOwner
-	return result
-}
-
-func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.UnlockResponse {
-	result := &runtimev1pb.UnlockResponse{}
-	if compResp == nil {
-		return result
-	}
-	result.Status = runtimev1pb.UnlockResponse_Status(compResp.Status) //nolint:nosnakecase
-	return result
 }
 
 // APIOpts contains options for NewAPI.
@@ -272,10 +141,12 @@ func NewAPI(opts APIOpts) API {
 	}
 	return &api{
 		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:                opts.AppID,
 			Logger:               apiServerLogger,
 			Resiliency:           opts.Resiliency,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			LockStores:           opts.LockStores,
 			WorkflowComponents:   opts.WorkflowComponents,
 		},
 		directMessaging:            opts.DirectMessaging,
@@ -288,7 +159,6 @@ func NewAPI(opts APIOpts) API {
 		transactionalStateStores:   transactionalStateStores,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		lockStores:                 opts.LockStores,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
 		tracingSpec:                opts.TracingSpec,
 		accessControlList:          opts.AccessControlList,
@@ -1396,10 +1266,13 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		var actorOp actors.TransactionalOperation
 		switch state.OperationType(op.OperationType) {
 		case state.Upsert:
-			setReq := map[string]interface{}{
+			setReq := map[string]any{
 				"key":   op.Key,
 				"value": op.Value.Value,
 				// Actor state do not user other attributes from state request.
+			}
+			if meta := op.GetMetadata(); len(meta) > 0 {
+				setReq["metadata"] = meta
 			}
 
 			actorOp = actors.TransactionalOperation{

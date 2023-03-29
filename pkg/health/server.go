@@ -86,7 +86,7 @@ func (s *server) Run(ctx context.Context, port int) error {
 	s.log.Info("Healthz server is shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	return errors.Join(<-serveErr, srv.Shutdown(shutdownCtx))
+	return errors.Join(srv.Shutdown(shutdownCtx), <-serveErr)
 }
 
 // healthz is a health endpoint handler.

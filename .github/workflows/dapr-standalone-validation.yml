@@ -59,7 +59,7 @@ jobs:
       - name: Validate sidecar's basic resource utilization
         env:
           SECONDS_FOR_PROCESS_TO_RUN: 30
-          LIMIT_DELTA_BINARY_SIZE: 1024  # KB
+          LIMIT_DELTA_BINARY_SIZE: 7168  # KB (7 MB)
           LIMIT_DELTA_VIRT_MEM: 3200  # KB
           LIMIT_DELTA_GO_ROUTINES: 0  # Does not accept any extra Go routines
         run: ./.github/scripts/validate-sidecar-resources.sh

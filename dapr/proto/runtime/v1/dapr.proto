@@ -513,6 +513,11 @@ message TransactionalActorStateOperation {
   string operationType = 1;
   string key = 2;
   google.protobuf.Any value = 3;
+  // The metadata used for transactional operations.
+  //
+  // Common metadata property:
+  // - ttlInSeconds : the time to live in seconds for the stored value.
+  map<string, string> metadata = 4;
 }
 
 // InvokeActorRequest is the message to call an actor.
@@ -630,11 +635,11 @@ message UnsubscribeConfigurationResponse {
 
 message TryLockRequest {
   // Required. The lock store name,e.g. `redis`.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // Required. resource_id is the lock key. e.g. `order_id_111`
   // It stands for "which resource I want to protect"
-  string resource_id = 2;
+  string resource_id = 2 [json_name = "resourceId"];
 
   // Required. lock_owner indicate the identifier of lock owner.
   // You can generate a uuid as lock_owner.For example,in golang:
@@ -651,10 +656,10 @@ message TryLockRequest {
   // we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
   // 3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
   // So this field in the request shouldn't be removed.
-  string lock_owner = 3;
+  string lock_owner = 3 [json_name = "lockOwner"];
 
   // Required. The time before expiry.The time unit is second.
-  int32 expiryInSeconds = 4;
+  int32 expiry_in_seconds = 4 [json_name = "expiryInSeconds"];
 }
 
 message TryLockResponse {
@@ -662,11 +667,10 @@ message TryLockResponse {
 }
 
 message UnlockRequest {
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
   // resource_id is the lock key.
-  string resource_id = 2;
-
-  string lock_owner = 3;
+  string resource_id = 2 [json_name = "resourceId"];
+  string lock_owner = 3 [json_name = "lockOwner"];
 }
 
 message UnlockResponse {
