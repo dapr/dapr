@@ -85,9 +85,9 @@ func NewDaprHandlerWithOptions(mgr ctrl.Manager, opts *Options) *DaprHandler {
 }
 
 // Init allows for various startup tasks.
-func (h *DaprHandler) Init() error {
+func (h *DaprHandler) Init(ctx context.Context) error {
 	err := h.mgr.GetFieldIndexer().IndexField(
-		context.TODO(),
+		ctx,
 		&corev1.Service{},
 		daprServiceOwnerField,
 		func(rawObj client.Object) []string {

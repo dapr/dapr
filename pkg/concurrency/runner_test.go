@@ -1,3 +1,16 @@
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package concurrency
 
 import (
@@ -66,7 +79,7 @@ func Test_RunnerManager(t *testing.T) {
 
 	t.Run("a runner with multiple errors should collect all errors (string match)", func(t *testing.T) {
 		var i int32
-		assert.Error(t, NewRunnerManager(
+		err := NewRunnerManager(
 			func(ctx context.Context) error {
 				atomic.AddInt32(&i, 1)
 				return errors.New("error")
@@ -79,7 +92,9 @@ func Test_RunnerManager(t *testing.T) {
 				atomic.AddInt32(&i, 1)
 				return errors.New("error")
 			},
-		).Run(context.Background()), errors.New("error; error; error")) //nolint:dupword
+		).Run(context.Background())
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "error\nerror\nerror") //nolint:dupword
 		assert.Equal(t, int32(3), i)
 	})
 
@@ -100,7 +115,7 @@ func Test_RunnerManager(t *testing.T) {
 			},
 		).Run(context.Background())
 		require.Error(t, err)
-		assert.ElementsMatch(t, []string{"error1", "error2", "error3"}, strings.Split(err.Error(), "; "))
+		assert.ElementsMatch(t, []string{"error1", "error2", "error3"}, strings.Split(err.Error(), "\n"))
 		assert.Equal(t, int32(3), i)
 	})
 
@@ -184,7 +199,7 @@ func Test_RunnerManager(t *testing.T) {
 			},
 		).Run(context.Background())
 		require.Error(t, err)
-		assert.ElementsMatch(t, []string{"error1", "error2", "error3"}, strings.Split(err.Error(), "; "))
+		assert.ElementsMatch(t, []string{"error1", "error2", "error3"}, strings.Split(err.Error(), "\n"))
 		assert.Equal(t, int32(3), i)
 	})
 
@@ -208,10 +223,12 @@ func Test_RunnerManager(t *testing.T) {
 		})
 		assert.NoError(t, m.Run(context.Background()))
 		assert.Equal(t, int32(1), i)
-		assert.Error(t, m.Add(func(ctx context.Context) error {
+		err := m.Add(func(ctx context.Context) error {
 			atomic.AddInt32(&i, 1)
 			return nil
-		}), errors.New("manager already started"))
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrManagerAlreadyStarted)
 		assert.Equal(t, int32(1), i)
 	})
 }
