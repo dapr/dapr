@@ -1725,7 +1725,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if resp != nil {
 		headers := resp.Headers()
 		if len(headers) > 0 {
-			invokev1.InternalMetadataToHTTPHeader(reqCtx, headers, reqCtx.Response.Header.Set)
+			invokev1.InternalMetadataToHTTPHeader(reqCtx, headers, reqCtx.Response.Header.Add)
 		}
 	}
 
@@ -2049,11 +2049,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	method := reqCtx.UserValue(methodParam).(string)
 
-	metadata := make(map[string][]string, reqCtx.Request.Header.Len())
-	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
-		metadata[string(key)] = []string{string(value)}
-	})
-
 	policyDef := a.resiliency.ActorPreLockPolicy(actorType, actorID)
 
 	req := invokev1.NewInvokeMethodRequest(method).
@@ -2061,8 +2056,8 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
 		WithRawDataBytes(reqCtx.PostBody()).
 		WithContentType(string(reqCtx.Request.Header.ContentType())).
-		// Save headers to metadata
-		WithMetadata(metadata)
+		// Save headers to internal metadata
+		WithFastHTTPHeaders(&reqCtx.Request.Header)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
 	}
@@ -2098,7 +2093,8 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 	defer resp.Close()
 
-	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
+	// Use Add to ensure headers are appended and not replaced
+	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Add)
 	body, err := resp.RawDataFull()
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
