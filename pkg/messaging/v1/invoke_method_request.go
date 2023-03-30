@@ -80,17 +80,13 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 
 // WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
-	imr.r.Metadata = MetadataToInternalMetadata(md)
+	imr.r.Metadata = metadataToInternalMetadata(md)
 	return imr
 }
 
 // WithFastHTTPHeaders sets fasthttp request headers.
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
-	md := map[string][]string{}
-	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = []string{string(value)}
-	})
-	imr.r.Metadata = MetadataToInternalMetadata(md)
+	imr.r.Metadata = fasthttpHeadersToInternalMetadata(header)
 	return imr
 }
 
@@ -286,12 +282,7 @@ func (imr *InvokeMethodRequest) RawDataFull() ([]byte, error) {
 
 // Adds a new header to the existing set.
 func (imr *InvokeMethodRequest) AddHeaders(header *fasthttp.RequestHeader) {
-	md := map[string][]string{}
-	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = []string{string(value)}
-	})
-
-	internalMd := MetadataToInternalMetadata(md)
+	internalMd := fasthttpHeadersToInternalMetadata(header)
 
 	if imr.r.Metadata == nil {
 		imr.r.Metadata = internalMd

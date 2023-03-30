@@ -642,24 +642,6 @@ func TestAppToken(t *testing.T) {
 	})
 }
 
-func TestCreateChannel(t *testing.T) {
-	t.Run("ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, httpMiddleware.Pipeline{}, config.TracingSpec{}, true, 4, 4)
-		assert.NoError(t, err)
-
-		b := ch.GetBaseAddress()
-		assert.Equal(t, b, "https://127.0.0.1:3000")
-	})
-
-	t.Run("non-ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, httpMiddleware.Pipeline{}, config.TracingSpec{}, false, 4, 4)
-		assert.NoError(t, err)
-
-		b := ch.GetBaseAddress()
-		assert.Equal(t, b, "http://127.0.0.1:3000")
-	})
-}
-
 func TestHealthProbe(t *testing.T) {
 	ctx := context.Background()
 	h := &testStatusCodeHandler{}

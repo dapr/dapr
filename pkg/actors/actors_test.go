@@ -107,10 +107,6 @@ var testResiliency = &v1alpha1.Resiliency{
 	},
 }
 
-func (m *mockAppChannel) GetBaseAddress() string {
-	return "http://127.0.0.1"
-}
-
 func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
@@ -128,10 +124,6 @@ type reentrantAppChannel struct {
 	nextCall []*invokev1.InvokeMethodRequest
 	callLog  []string
 	a        *actorsRuntime
-}
-
-func (r *reentrantAppChannel) GetBaseAddress() string {
-	return "http://127.0.0.1"
 }
 
 func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {

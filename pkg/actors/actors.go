@@ -266,7 +266,9 @@ func (a *actorsRuntime) Init() error {
 	go a.startAppHealthCheck(
 		health.WithFailureThreshold(4),
 		health.WithInterval(5*time.Second),
-		health.WithRequestTimeout(2*time.Second))
+		health.WithRequestTimeout(2*time.Second),
+		health.WithHTTPClient(a.config.HealthHTTPClient),
+	)
 
 	return nil
 }
@@ -276,7 +278,7 @@ func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
 		return
 	}
 
-	ch := health.StartEndpointHealthCheck(a.ctx, a.appChannel.GetBaseAddress()+"/healthz", opts...)
+	ch := health.StartEndpointHealthCheck(a.ctx, a.config.HealthEndpoint+"/healthz", opts...)
 	for {
 		select {
 		case <-a.ctx.Done():
