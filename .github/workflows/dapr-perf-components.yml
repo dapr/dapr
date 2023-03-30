@@ -23,15 +23,13 @@
 name: dapr-perf-components
 
 on:
-  # Run every 6 hours
+  # Run every Saturday at 4.34am UTC
   schedule:
-    - cron: "0 0 */7 * *"
-  # Manual trigger
+    - cron: "34 4 * * 6"  # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
   repository_dispatch:
-    types: [perf-test]
-
+    types: [components-perf-test]
 env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org

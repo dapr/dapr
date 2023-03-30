@@ -116,7 +116,7 @@ endif
 
 
 ifeq ($(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME),)
-DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=pubsub_subscribe_http_components_test_config.yaml
+DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=test_all.yaml
 endif
 
 ifeq ($(WINDOWS_VERSION),)

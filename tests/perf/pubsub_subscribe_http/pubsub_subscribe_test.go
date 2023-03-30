@@ -84,7 +84,7 @@ func TestMain(m *testing.M) {
 	pubsubTestConfigFileName := os.Getenv("DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME")
 
 	if pubsubTestConfigFileName == "" {
-		pubsubTestConfigFileName = "pubsub_subscribe_http_default_component_test_config.yaml"
+		pubsubTestConfigFileName = "test_kafka.yaml"
 	}
 
 	//Read the config file for individual components
