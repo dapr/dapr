@@ -19,12 +19,12 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
+	"k8s.io/utils/clock"
 )
 
 const (
@@ -68,26 +68,42 @@ type Server struct {
 	snapStore   raft.SnapshotStore
 
 	raftLogStorePath string
+
+	clock clock.Clock
+}
+
+type Options struct {
+	ID           string
+	InMem        bool
+	Peers        []PeerInfo
+	LogStorePath string
+	Clock        clock.Clock
 }
 
 // New creates Raft server node.
-func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
-	raftBind := raftAddressForID(id, peers)
+func New(opts Options) *Server {
+	raftBind := raftAddressForID(opts.ID, opts.Peers)
 	if raftBind == "" {
 		return nil
 	}
 
+	cl := opts.Clock
+	if cl == nil {
+		cl = &clock.RealClock{}
+	}
+
 	return &Server{
-		id:               id,
-		inMem:            inMem,
+		id:               opts.ID,
+		inMem:            opts.InMem,
 		raftBind:         raftBind,
-		peers:            peers,
-		raftLogStorePath: logStorePath,
+		peers:            opts.Peers,
+		raftLogStorePath: opts.LogStorePath,
+		clock:            cl,
 		raftReady:        make(chan struct{}),
 	}
 }
 
-func tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr string) (*net.TCPAddr, error) {
+func (s *Server) tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr string) (*net.TCPAddr, error) {
 	// HACKHACK: Kubernetes POD DNS A record population takes some time
 	// to look up the address after StatefulSet POD is deployed.
 	var err error
@@ -100,7 +116,7 @@ func tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr string) (*net.TCP
 		select {
 		case <-ctx.Done():
 			return nil, err
-		case <-time.After(nameResolveRetryInterval):
+		case <-s.clock.After(nameResolveRetryInterval):
 			// nop
 		}
 	}
@@ -123,7 +139,7 @@ func (s *Server) StartRaft(ctx context.Context, config *raft.Config) error {
 
 	s.fsm = newFSM()
 
-	addr, err := tryResolveRaftAdvertiseAddr(ctx, s.raftBind)
+	addr, err := s.tryResolveRaftAdvertiseAddr(ctx, s.raftBind)
 	if err != nil {
 		return err
 	}
@@ -218,22 +234,17 @@ func (s *Server) StartRaft(ctx context.Context, config *raft.Config) error {
 	<-ctx.Done()
 	logging.Info("Raft server is shutting down ...")
 
-	var errs []string
-	if err = s.raftTransport.Close(); err != nil {
-		errs = append(errs, err.Error())
-	}
+	closeErr := s.raftTransport.Close()
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	if s.raft.Shutdown().Error() != nil {
-		errs = append(errs, err.Error())
-	}
+
 	if s.raftStore != nil {
-		if err := s.raftStore.Close(); err != nil {
-			errs = append(errs, err.Error())
-		}
+		closeErr = errors.Join(closeErr, s.raftStore.Close())
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("error shutting down raft server: %s", strings.Join(errs, ", "))
+	closeErr = errors.Join(closeErr, s.raft.Shutdown().Error())
+
+	if closeErr != nil {
+		return fmt.Errorf("error shutting down raft server: %w", closeErr)
 	}
 
 	logging.Info("Raft server shutdown")
@@ -294,7 +305,7 @@ func (s *Server) Raft(ctx context.Context) (*raft.Raft, error) {
 func (s *Server) IsLeader() bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	return s.raft.State() == raft.Leader
+	return s.raft != nil && s.raft.State() == raft.Leader
 }
 
 // ApplyCommand applies command log to state machine to upsert or remove members.
