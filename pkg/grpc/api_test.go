@@ -3496,59 +3496,20 @@ func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.Un
 	return nil
 }
 
-func TestTryLockRequestToComponentRequest(t *testing.T) {
-	req := TryLockRequestToComponentRequest(&runtimev1pb.TryLockRequest{
-		StoreName:       "redis",
-		ResourceId:      "resourceId",
-		LockOwner:       "owner1",
-		ExpiryInSeconds: 1000,
-	})
-	assert.True(t, req.ResourceID == "resourceId")
-	assert.True(t, req.LockOwner == "owner1")
-	assert.True(t, req.ExpiryInSeconds == 1000)
-	req = TryLockRequestToComponentRequest(nil)
-	assert.NotNil(t, req)
-}
-
-func TestTryLockResponseToGrpcResponse(t *testing.T) {
-	resp := TryLockResponseToGrpcResponse(&lock.TryLockResponse{
-		Success: true,
-	})
-	assert.True(t, resp.Success)
-	resp2 := TryLockResponseToGrpcResponse(nil)
-	assert.NotNil(t, resp2)
-}
-
-func TestUnlockGrpcToComponentRequest(t *testing.T) {
-	req := UnlockGrpcToComponentRequest(&runtimev1pb.UnlockRequest{
-		StoreName:  "redis",
-		ResourceId: "resourceId",
-		LockOwner:  "owner1",
-	})
-	assert.True(t, req.ResourceID == "resourceId")
-	assert.True(t, req.LockOwner == "owner1")
-	req = UnlockGrpcToComponentRequest(nil)
-	assert.NotNil(t, req)
-}
-
-//nolint:nosnakecase
-func TestUnlockResponseToGrpcResponse(t *testing.T) {
-	resp := UnlockResponseToGrpcResponse(&lock.UnlockResponse{Status: lock.Success})
-	assert.True(t, resp.Status == runtimev1pb.UnlockResponse_SUCCESS)
-	resp2 := UnlockResponseToGrpcResponse(nil)
-	assert.NotNil(t, resp2)
-}
-
 func TestTryLock(t *testing.T) {
+	l := logger.NewLogger("fakeLogger")
+	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
+
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
 		})
 		req := &runtimev1pb.TryLockRequest{
-			StoreName: "abc",
+			StoreName:       "abc",
+			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = FailedPrecondition desc = lock store is not configured", err.Error())
+		assert.Equal(t, "api error: code = FailedPrecondition desc = lock store is not configured", err.Error())
 	})
 
 	t.Run("InvalidArgument: ResourceID empty", func(t *testing.T) {
@@ -3557,14 +3518,15 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 		req := &runtimev1pb.TryLockRequest{
-			StoreName: "abc",
+			StoreName:       "mock",
+			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = ResourceId is empty in lock store mock", err.Error())
 	})
 
 	t.Run("InvalidArgument: LockOwner empty", func(t *testing.T) {
@@ -3573,15 +3535,17 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
 		req := &runtimev1pb.TryLockRequest{
-			StoreName:  "abc",
-			ResourceId: "resource",
+			StoreName:       "mock",
+			ResourceId:      "resource",
+			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = LockOwner is empty in lock store mock", err.Error())
 	})
 
 	t.Run("InvalidArgument: ExpiryInSeconds is not positive", func(t *testing.T) {
@@ -3590,17 +3554,19 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
 
 		req := &runtimev1pb.TryLockRequest{
-			StoreName:  "abc",
-			ResourceId: "resource",
-			LockOwner:  "owner",
+			StoreName:       "mock",
+			ResourceId:      "resource",
+			LockOwner:       "owner",
+			ExpiryInSeconds: 0,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = ExpiryInSeconds is not positive in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = ExpiryInSeconds is not positive in lock store mock", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock store not found", func(t *testing.T) {
@@ -3609,6 +3575,7 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3620,10 +3587,10 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 1,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = lock store abc not found", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock store abc not found", err.Error())
 	})
 
-	t.Run("Success", func(t *testing.T) {
+	t.Run("successful", func(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
@@ -3638,6 +3605,7 @@ func TestTryLock(t *testing.T) {
 			}, nil
 		})
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3654,8 +3622,12 @@ func TestTryLock(t *testing.T) {
 }
 
 func TestUnlock(t *testing.T) {
+	l := logger.NewLogger("fakeLogger")
+	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
+
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			TracingSpec: config.TracingSpec{},
 		})
 
@@ -3663,7 +3635,7 @@ func TestUnlock(t *testing.T) {
 			StoreName: "abc",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = FailedPrecondition desc = lock store is not configured", err.Error())
+		assert.Equal(t, "api error: code = FailedPrecondition desc = lock store is not configured", err.Error())
 	})
 
 	t.Run("InvalidArgument: ResourceId empty", func(t *testing.T) {
@@ -3672,15 +3644,15 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName: "abc",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock owner empty", func(t *testing.T) {
@@ -3689,15 +3661,15 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
 			ResourceId: "resource",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock store not found", func(t *testing.T) {
@@ -3706,8 +3678,8 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -3716,10 +3688,10 @@ func TestUnlock(t *testing.T) {
 			LockOwner:  "owner",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = lock store abc not found", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock store abc not found", err.Error())
 	})
 
-	t.Run("normal", func(t *testing.T) {
+	t.Run("successful", func(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
@@ -3733,8 +3705,8 @@ func TestUnlock(t *testing.T) {
 			}, nil
 		})
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "mock",
@@ -3742,7 +3714,7 @@ func TestUnlock(t *testing.T) {
 			LockOwner:  "owner",
 		}
 		resp, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
 	})
 }
