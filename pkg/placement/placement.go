@@ -27,12 +27,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/dapr/kit/logger"
+	"k8s.io/utils/clock"
 
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -77,9 +77,6 @@ type hostMemberChange struct {
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
-	// serverListener is the TCP listener for placement gRPC server.
-	serverListener net.Listener
-
 	// grpcServer is the gRPC server for placement service.
 	grpcServer *grpc.Server
 
@@ -113,57 +110,75 @@ type Service struct {
 	// streamConnGroup represents the number of stream connections.
 	// This waits until all stream connections are drained when revoking leadership.
 	streamConnGroup sync.WaitGroup
+
+	// clock keeps time. Mocked in tests.
+	clock clock.WithTicker
+
+	running  atomic.Bool
+	closed   atomic.Bool
+	closedCh chan struct{}
+	wg       sync.WaitGroup
 }
 
 // NewPlacementService returns a new placement service.
-func NewPlacementService(raftNode *raft.Server) *Service {
+func NewPlacementService(raftNode *raft.Server, certChain *daprCredentials.CertChain) (*Service, error) {
 	fhdd := &atomic.Int64{}
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
 
-	return &Service{
+	opts, err := daprCredentials.GetServerOptions(certChain)
+	if err != nil {
+		return nil, fmt.Errorf("error creating gRPC options: %w", err)
+	}
+
+	p := &Service{
 		streamConnPool:           []placementGRPCStream{},
 		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
 		faultyHostDetectDuration: fhdd,
 		raftNode:                 raftNode,
+		grpcServer:               grpc.NewServer(opts...),
+		clock:                    &clock.RealClock{},
+		closedCh:                 make(chan struct{}),
 	}
+
+	placementv1pb.RegisterPlacementServer(p.grpcServer, p)
+	return p, nil
 }
 
 // Run starts the placement service gRPC server.
-func (p *Service) Run(ctx context.Context, port string, certChain *daprCredentials.CertChain) error {
+// Blocks until the service is closed and all connections are drained.
+func (p *Service) Run(ctx context.Context, port string) error {
+	if p.closed.Load() {
+		return errors.New("placement service is closed")
+	}
+
+	if !p.running.CompareAndSwap(false, true) {
+		return errors.New("placement service is already running")
+	}
+
 	var err error
-	p.serverListener, err = net.Listen("tcp", fmt.Sprintf(":%s", port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 
-	opts, err := daprCredentials.GetServerOptions(certChain)
-	if err != nil {
-		return fmt.Errorf("error creating gRPC options: %w", err)
-	}
-	p.grpcServer = grpc.NewServer(opts...)
-	placementv1pb.RegisterPlacementServer(p.grpcServer, p)
+	log.Infof("starting placement service started on port %d", serverListener.Addr().(*net.TCPAddr).Port)
 
-	log.Infof("starting placement service started on port %d", p.serverListener.Addr().(*net.TCPAddr).Port)
-
-	stopErr := make(chan error, 1)
+	errCh := make(chan error)
 	go func() {
-		if err = p.grpcServer.Serve(p.serverListener); err != nil &&
-			!errors.Is(err, grpc.ErrServerStopped) {
-			stopErr <- fmt.Errorf("failed to serve: %w", err)
-			return
-		}
-		stopErr <- nil
+		errCh <- p.grpcServer.Serve(serverListener)
+		log.Info("placement service stopped")
 	}()
 
-	select {
-	case <-ctx.Done():
-		p.grpcServer.GracefulStop()
-		err = <-stopErr
-	case err = <-stopErr:
-		// nop
+	<-ctx.Done()
+
+	if p.closed.CompareAndSwap(false, true) {
+		close(p.closedCh)
 	}
-	log.Info("placement service stopped")
-	return err
+
+	p.grpcServer.GracefulStop()
+	p.wg.Wait()
+
+	return <-errCh
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
@@ -203,7 +218,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
-			p.lastHeartBeat.Store(req.Name, time.Now().UnixNano())
+			p.lastHeartBeat.Store(req.Name, p.clock.Now().UnixNano())
 
 			members := p.raftNode.FSM().State().Members()
 
@@ -223,7 +238,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						Name:      req.Name,
 						AppID:     req.Id,
 						Entities:  req.Entities,
-						UpdatedAt: time.Now().UnixNano(),
+						UpdatedAt: p.clock.Now().UnixNano(),
 					},
 				}
 			}
