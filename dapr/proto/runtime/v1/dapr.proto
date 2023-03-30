@@ -510,6 +510,11 @@ message TransactionalActorStateOperation {
   string operationType = 1;
   string key = 2;
   google.protobuf.Any value = 3;
+  // The metadata used for transactional operations.
+  //
+  // Common metadata property:
+  // - ttlInSeconds : the time to live in seconds for the stored value.
+  map<string, string> metadata = 4;
 }
 
 // InvokeActorRequest is the message to call an actor.
