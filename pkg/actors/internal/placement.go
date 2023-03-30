@@ -21,15 +21,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/dapr/kit/logger"
 
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.internal.placement")
@@ -39,7 +39,11 @@ const (
 	unlockOperation = "unlock"
 	updateOperation = "update"
 
-	placementReconnectInterval    = 500 * time.Millisecond
+	// Interval to wait for app health's readiness
+	placementReadinessWaitInterval = 500 * time.Millisecond
+	// Minimum and maximum reconnection intervals
+	placementReconnectMinInterval = 1 * time.Second
+	placementReconnectMaxInterval = 30 * time.Second
 	statusReportHeartbeatInterval = 1 * time.Second
 
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
@@ -133,7 +137,7 @@ func (p *ActorPlacement) Start() {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 
-	if established := p.establishStreamConn(); !established {
+	if !p.establishStreamConn() {
 		return
 	}
 
@@ -273,16 +277,26 @@ func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string)
 
 //nolint:nosnakecase
 func (p *ActorPlacement) establishStreamConn() (established bool) {
+	// Backoff for reconnecting in case of errors
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = placementReconnectMinInterval
+	bo.MaxInterval = placementReconnectMaxInterval
+	bo.MaxElapsedTime = 0 // Retry forever
+
+	logFailureShown := false
 	for !p.shutdown.Load() {
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthFn() {
-			time.Sleep(placementReconnectInterval)
+			// We are not using an exponential backoff here because we haven't begun to establish connections yet
+			time.Sleep(placementReadinessWaitInterval)
 			continue
 		}
 
 		serverAddr := p.serverAddr[p.serverIndex.Load()]
 
-		log.Debugf("try to connect to placement service: %s", serverAddr)
+		if !logFailureShown {
+			log.Debug("try to connect to placement service: " + serverAddr)
+		}
 
 		err := p.client.connectToServer(serverAddr)
 		if err == errEstablishingTLSConn {
@@ -290,13 +304,17 @@ func (p *ActorPlacement) establishStreamConn() (established bool) {
 		}
 
 		if err != nil {
-			log.Debugf("error connecting to placement service: %v", err)
+			if !logFailureShown {
+				log.Debugf("error connecting to placement service (will retry to connect in background): %v", err)
+				// Don't show the debug log more than once per each reconnection attempt
+				logFailureShown = true
+			}
 			p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-			time.Sleep(placementReconnectInterval)
+			time.Sleep(bo.NextBackOff())
 			continue
 		}
 
-		log.Debugf("established connection to placement service at %s", p.client.clientConn.Target())
+		log.Debug("established connection to placement service at " + p.client.clientConn.Target())
 		return true
 	}
 
