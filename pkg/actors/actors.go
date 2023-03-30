@@ -123,8 +123,6 @@ type actorsRuntime struct {
 	clock                  clock.WithTicker
 	internalActors         map[string]InternalActor
 	internalActorChannel   *internalActorChannel
-	healthHTTPClient       *nethttp.Client
-	healthEndpoint         string
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -271,7 +269,7 @@ func (a *actorsRuntime) Init() error {
 		health.WithFailureThreshold(4),
 		health.WithInterval(5*time.Second),
 		health.WithRequestTimeout(2*time.Second),
-		health.WithHTTPClient(a.healthHTTPClient),
+		health.WithHTTPClient(a.config.HealthHTTPClient),
 	)
 
 	return nil
@@ -282,7 +280,7 @@ func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
 		return
 	}
 
-	ch := health.StartEndpointHealthCheck(a.ctx, a.healthEndpoint+"/healthz", opts...)
+	ch := health.StartEndpointHealthCheck(a.ctx, a.config.HealthEndpoint+"/healthz", opts...)
 	for {
 		select {
 		case <-a.ctx.Done():
