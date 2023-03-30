@@ -21,9 +21,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-
 	"google.golang.org/grpc"
+
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 type client interface {

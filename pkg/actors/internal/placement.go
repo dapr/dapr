@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/concurrency"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
@@ -47,7 +48,7 @@ const (
 	// Minimum and maximum reconnection intervals
 	placementReconnectMinInterval = 1 * time.Second
 	placementReconnectMaxInterval = 30 * time.Second
-	statusReportHeartbeatInterval = 1 * time.Second
+	statusReportHeartbeatInterval = 10 * time.Second
 
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 )
@@ -124,8 +125,8 @@ func NewActorPlacement(opts Options) *ActorPlacement {
 	servers := addDNSResolverPrefix(opts.ServerAddr)
 
 	bo := backoff.NewExponentialBackOff()
-	bo.InitialInterval = 100 * time.Millisecond
-	bo.MaxInterval = 30 * time.Second
+	bo.InitialInterval = placementReconnectMinInterval
+	bo.MaxInterval = placementReconnectMaxInterval
 	bo.MaxElapsedTime = 0 // Retry forever.
 
 	return &ActorPlacement{
@@ -168,6 +169,7 @@ func (p *ActorPlacement) Start(ctx context.Context) error {
 
 	// Used to toggle logging of the first attempt to connect to placement.
 	firstAttempt := true
+	defer p.wg.Wait()
 	for {
 		if err := p.manageConnectionLoop(ctx, firstAttempt); err != nil {
 			if firstAttempt {
@@ -193,8 +195,10 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context, firstAttempt 
 	if p.shutdown.Load() {
 		return nil
 	}
-
+	// Ensure Close waits for this connection manager to exit before returning.
+	p.wg.Add(1)
 	defer p.wg.Wait()
+	defer p.wg.Done()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -205,7 +209,7 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context, firstAttempt 
 	}
 
 	client, err := newPlacementClient(ctx, serverAddr, p.grpcOpts)
-	if errors.Is(err, errEstablishingTLSConn) || errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) {
 		return nil
 	}
 	if err != nil {
@@ -215,69 +219,70 @@ func (p *ActorPlacement) manageConnectionLoop(ctx context.Context, firstAttempt 
 
 	log.Info("Connected to placement service at address " + serverAddr)
 
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer client.Close()
-		defer cancel()
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			defer client.Close()
+			defer cancel()
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-p.closedCh:
-				return
-			case <-p.clock.After(statusReportHeartbeatInterval):
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-p.closedCh:
+					return nil
+				case <-p.clock.After(placementReadinessWaitInterval):
+				}
+
+				// appHealthFn is the health status of actor service application. This allows placement to update
+				// the member list and hashing table quickly.
+				if !p.appHealthFn() {
+					// app is unresponsive, close the stream and disconnect from the placement service.
+					// Then Placement will remove this host from the member list.
+					log.Debug("Disconnecting from placement service by the unhealthy app")
+					return nil
+				}
 			}
+		},
 
-			// appHealthFn is the health status of actor service application. This allows placement to update
-			// the member list and hashing table quickly.
-			if !p.appHealthFn() {
-				// app is unresponsive, close the stream and disconnect from the placement service.
-				// Then Placement will remove this host from the member list.
-				log.Debug("Disconnecting from placement service by the unhealthy app")
-				return
+		// Establish receive channel to retrieve placement table update
+		func(ctx context.Context) error {
+			for {
+				resp, rErr := client.Recv()
+				if rErr != nil {
+					p.onPlacementError(rErr)
+					return nil
+				}
+				p.onPlacementOrder(ctx, resp)
 			}
-		}
-	}()
+		},
 
-	// Establish receive channel to retrieve placement table update
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer cancel()
+		// Send heartbeat to placement service to report the current member status.
+		func(ctx context.Context) error {
+			for {
+				sErr := client.Send(&v1pb.Host{
+					Name:     p.runtimeHostName,
+					Entities: p.actorTypes,
+					Id:       p.appID,
+					Load:     1, // Not used yet
+					// Port is redundant because Name should include port number
+				})
+				if sErr != nil {
+					// Return error to trigger reconnect.
+					diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
+					log.Debugf("failed to report status to placement service : %v", sErr)
+					return sErr
+				}
 
-		for {
-			resp, err := client.Recv()
-			if err != nil {
-				p.onPlacementError(err)
-				return
+				diag.DefaultMonitoring.ActorStatusReported("send")
+
+				select {
+				case <-p.clock.After(statusReportHeartbeatInterval):
+				case <-ctx.Done():
+					return nil
+				}
 			}
-			p.onPlacementOrder(ctx, resp)
-		}
-	}()
-
-	for {
-		err := client.Send(&v1pb.Host{
-			Name:     p.runtimeHostName,
-			Entities: p.actorTypes,
-			Id:       p.appID,
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
-		})
-		if err != nil {
-			diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
-			log.Debugf("failed to report status to placement service : %v", err)
-		}
-
-		diag.DefaultMonitoring.ActorStatusReported("send")
-
-		select {
-		case <-p.clock.Tick(statusReportHeartbeatInterval):
-		case <-ctx.Done():
-			return nil
-		}
-	}
+		},
+	).Run(ctx)
 }
 
 // Close shuts down server stream gracefully.
