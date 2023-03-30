@@ -134,10 +134,8 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	// Get versioning info, currently only v1 is supported.
 	headers := resp.Headers()
 	var version string
-	if val, ok := headers["dapr-app-config-version"]; ok {
-		if len(val.Values) == 1 {
-			version = val.Values[0]
-		}
+	if val, ok := headers["dapr-app-config-version"]; ok && len(val.Values) > 0 {
+		version = val.Values[0]
 	}
 
 	switch version {
@@ -321,7 +319,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	// Recover headers
-	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
+	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Add)
 	channelReq.Header.Set("content-type", req.ContentType())
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
