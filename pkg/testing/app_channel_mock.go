@@ -28,10 +28,6 @@ type FailingAppChannel struct {
 	KeyFunc func(req *invokev1.InvokeMethodRequest) string
 }
 
-func (f *FailingAppChannel) GetBaseAddress() string {
-	return ""
-}
-
 func (f *FailingAppChannel) GetAppConfig() (*config.ApplicationConfig, error) {
 	return nil, nil
 }

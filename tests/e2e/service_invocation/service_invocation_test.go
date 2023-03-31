@@ -25,13 +25,11 @@ import (
 	"testing"
 
 	guuid "github.com/google/uuid"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -528,6 +526,8 @@ func TestHeaders(t *testing.T) {
 			assert.Equal(t, "DaprValue1", requestHeaders["daprtest-request-1"][0])
 		_ = assert.NotEmpty(t, requestHeaders["daprtest-request-2"]) &&
 			assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
+		_ = assert.NotEmpty(t, requestHeaders["daprtest-multi"]) &&
+			assert.Equal(t, []string{"M'illumino", "d'immenso"}, requestHeaders["daprtest-multi"])
 		_ = assert.NotEmpty(t, requestHeaders["user-agent"]) &&
 			assert.NotNil(t, requestHeaders["user-agent"][0])
 		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
@@ -560,6 +560,8 @@ func TestHeaders(t *testing.T) {
 			assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		_ = assert.NotEmpty(t, responseHeaders["daprtest-response-2"]) &&
 			assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
+		_ = assert.NotEmpty(t, responseHeaders["daprtest-response-multi"]) &&
+			assert.Equal(t, []string{"DaprTest-Response-Multi-1", "DaprTest-Response-Multi-2"}, responseHeaders["daprtest-response-multi"])
 		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
 		if assert.NotNil(t, grpcTraceBinRs, "grpc-trace-bin is missing from the response") {
 			if assert.Equal(t, 1, len(grpcTraceBinRs), "grpc-trace-bin is missing from the response") {
@@ -577,6 +579,8 @@ func TestHeaders(t *testing.T) {
 			assert.Equal(t, "DaprTest-Trailer-Value-1", trailerHeaders["daprtest-trailer-1"][0])
 		_ = assert.NotEmpty(t, trailerHeaders["daprtest-trailer-2"]) &&
 			assert.Equal(t, "DaprTest-Trailer-Value-2", trailerHeaders["daprtest-trailer-2"][0])
+		_ = assert.NotEmpty(t, trailerHeaders["daprtest-trailer-multi"]) &&
+			assert.Equal(t, []string{"DaprTest-Trailer-Multi-1", "DaprTest-Trailer-Multi-2"}, trailerHeaders["daprtest-trailer-multi"])
 	})
 
 	t.Run("grpc-to-http", func(t *testing.T) {
@@ -615,6 +619,8 @@ func TestHeaders(t *testing.T) {
 			assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
 		_ = assert.NotEmpty(t, requestHeaders["Daprtest-Request-2"]) &&
 			assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
+		_ = assert.NotEmpty(t, requestHeaders["Daprtest-Multi"]) &&
+			assert.Equal(t, []string{"M'illumino", "d'immenso"}, requestHeaders["Daprtest-Multi"])
 		_ = assert.NotEmpty(t, requestHeaders["Traceparent"]) &&
 			assert.NotNil(t, requestHeaders["Traceparent"][0])
 		_ = assert.NotEmpty(t, requestHeaders["User-Agent"]) &&
@@ -641,6 +647,8 @@ func TestHeaders(t *testing.T) {
 			assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		_ = assert.NotEmpty(t, responseHeaders["daprtest-response-2"]) &&
 			assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
+		_ = assert.NotEmpty(t, responseHeaders["daprtest-response-multi"]) &&
+			assert.Equal(t, []string{"DaprTest-Response-Multi-1", "DaprTest-Response-Multi-2"}, responseHeaders["daprtest-response-multi"])
 
 		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
 		if assert.NotNil(t, grpcTraceBinRs, "grpc-trace-bin is missing from the response") {
@@ -689,6 +697,8 @@ func TestHeaders(t *testing.T) {
 			assert.Equal(t, "DaprValue1", requestHeaders["daprtest-request-1"][0])
 		_ = assert.NotEmpty(t, requestHeaders["daprtest-request-1"]) &&
 			assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
+		_ = assert.NotEmpty(t, requestHeaders["daprtest-multi"]) &&
+			assert.Equal(t, []string{"M'illumino", "d'immenso"}, requestHeaders["daprtest-multi"])
 		_ = assert.NotEmpty(t, requestHeaders["user-agent"]) &&
 			assert.NotNil(t, requestHeaders["user-agent"][0])
 		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
@@ -721,6 +731,8 @@ func TestHeaders(t *testing.T) {
 			assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 		_ = assert.NotEmpty(t, responseHeaders["Daprtest-Response-2"]) &&
 			assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
+		_ = assert.NotEmpty(t, responseHeaders["Daprtest-Response-Multi"]) &&
+			assert.Equal(t, []string{"DaprTest-Response-Multi-1", "DaprTest-Response-Multi-2"}, responseHeaders["Daprtest-Response-Multi"])
 		_ = assert.NotEmpty(t, responseHeaders["Traceparent"]) &&
 			assert.NotNil(t, responseHeaders["Traceparent"][0])
 	})
@@ -982,6 +994,8 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	json.Unmarshal([]byte(actualHeaders.Request), &requestHeaders)
 	json.Unmarshal([]byte(actualHeaders.Response), &responseHeaders)
 
+	t.Logf("requestHeaders: [%#v] - responseHeaders: [%#v]", requestHeaders, responseHeaders)
+
 	require.NoError(t, err)
 	_ = assert.NotEmpty(t, requestHeaders["Content-Type"]) &&
 		assert.True(t, strings.HasPrefix(requestHeaders["Content-Type"][0], "application/json"))
@@ -989,6 +1003,8 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 		assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
 	_ = assert.NotEmpty(t, requestHeaders["Daprtest-Request-2"]) &&
 		assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
+	_ = assert.NotEmpty(t, requestHeaders["Daprtest-Multi"]) &&
+		assert.Equal(t, []string{"M'illumino", "d'immenso"}, requestHeaders["Daprtest-Multi"])
 	_ = assert.NotEmpty(t, requestHeaders["Traceparent"]) &&
 		assert.NotNil(t, requestHeaders["Traceparent"][0])
 	_ = assert.NotEmpty(t, requestHeaders["User-Agent"]) &&
@@ -1006,6 +1022,8 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 	_ = assert.NotEmpty(t, responseHeaders["Daprtest-Response-2"]) &&
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
+	_ = assert.NotEmpty(t, responseHeaders["Daprtest-Response-Multi"]) &&
+		assert.Equal(t, []string{"DaprTest-Response-Multi-1", "DaprTest-Response-Multi-2"}, responseHeaders["Daprtest-Response-Multi"])
 	_ = assert.NotEmpty(t, responseHeaders["Traceparent"]) &&
 		assert.NotNil(t, responseHeaders["Traceparent"][0])
 }

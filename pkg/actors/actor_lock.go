@@ -22,19 +22,15 @@ import (
 var ErrMaxStackDepthExceeded = errors.New("maximum stack depth exceeded")
 
 type ActorLock struct {
-	methodLock    *sync.Mutex
-	requestLock   *sync.Mutex
+	methodLock    sync.Mutex
+	requestLock   sync.Mutex
 	activeRequest *string
-	stackDepth    *atomic.Int32
+	stackDepth    atomic.Int32
 	maxStackDepth int32
 }
 
-func NewActorLock(maxStackDepth int32) ActorLock {
-	return ActorLock{
-		methodLock:    &sync.Mutex{},
-		requestLock:   &sync.Mutex{},
-		activeRequest: nil,
-		stackDepth:    &atomic.Int32{},
+func NewActorLock(maxStackDepth int32) *ActorLock {
+	return &ActorLock{
 		maxStackDepth: maxStackDepth,
 	}
 }
