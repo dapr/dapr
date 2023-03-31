@@ -857,7 +857,7 @@ func TestGetSecret(t *testing.T) {
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:               apiServerLogger,
+			Logger:               logger.NewLogger("grpc.api.test"),
 			Resiliency:           resiliency.New(nil),
 			SecretStores:         fakeStores,
 			SecretsConfiguration: secretsConfiguration,
@@ -927,7 +927,7 @@ func TestGetBulkSecret(t *testing.T) {
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:               apiServerLogger,
+			Logger:               logger.NewLogger("grpc.api.test"),
 			Resiliency:           resiliency.New(nil),
 			SecretStores:         fakeStores,
 			SecretsConfiguration: secretsConfiguration,
@@ -1583,7 +1583,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
 				assert.NotNil(t, rsp)
-				assert.Nil(t, recvErr)
+				assert.NoError(t, recvErr)
 				if rsp.Items != nil {
 					assert.Equal(t, tt.expectedResponse, rsp.Items)
 				} else {
@@ -2293,14 +2293,10 @@ func TestExecuteStateTransaction(t *testing.T) {
 			return matchKeyFn(context.Background(), req, "error-key")
 		})).Return(errors.New("error to execute with key2"))
 
-	var fakeTransactionalStore state.TransactionalStore = fakeStore
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
-		transactionalStateStores: map[string]state.TransactionalStore{
-			"store1": fakeTransactionalStore,
-		},
-		resiliency: resiliency.New(nil),
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -2614,12 +2610,12 @@ const (
 
 func TestQueryState(t *testing.T) {
 	port, err := freeport.GetFreePort()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	fakeStore := &mockStateStoreQuerier{}
 	// simulate full result
 	fakeStore.MockQuerier.On("Query",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.QueryRequest) bool {
 			return len(req.Query.Sort) != 0 && req.Query.Page.Limit != 0
 		})).Return(
@@ -2633,7 +2629,7 @@ func TestQueryState(t *testing.T) {
 		}, nil)
 	// simulate empty data
 	fakeStore.MockQuerier.On("Query",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.QueryRequest) bool {
 			return len(req.Query.Sort) == 0 && req.Query.Page.Limit != 0
 		})).Return(
@@ -2642,15 +2638,18 @@ func TestQueryState(t *testing.T) {
 		}, nil)
 	// simulate error
 	fakeStore.MockQuerier.On("Query",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.QueryRequest) bool {
 			return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
 		})).Return(nil, errors.New("Query error"))
 
 	server := startTestServerAPI(port, &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
-		resiliency:  resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:      logger.NewLogger("grpc.api.test"),
+			StateStores: map[string]state.Store{"store1": fakeStore},
+			Resiliency:  resiliency.New(nil),
+		},
 	})
 	defer server.Stop()
 
@@ -2686,19 +2685,22 @@ func TestQueryState(t *testing.T) {
 		StoreName: "store1",
 		Query:     queryTestRequestSyntaxErr,
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	port, err := freeport.GetFreePort()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	server := startDaprAPIServer(
 		port,
 		&api{
-			id:          "fakeAPI",
-			stateStores: map[string]state.Store{"store1": &daprt.MockStateStore{}},
-			resiliency:  resiliency.New(nil),
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				Logger:      logger.NewLogger("grpc.api.test"),
+				StateStores: map[string]state.Store{"store1": &daprt.MockStateStore{}},
+				Resiliency:  resiliency.New(nil),
+			},
 		},
 		"")
 	defer server.Stop()
@@ -2710,7 +2712,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: "store1",
 	})
-	assert.Equal(t, codes.Unimplemented, status.Code(err))
+	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestStateStoreQuerierEncrypted(t *testing.T) {
@@ -2723,9 +2725,12 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	server := startDaprAPIServer(
 		port,
 		&api{
-			id:          "fakeAPI",
-			stateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
-			resiliency:  resiliency.New(nil),
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				Logger:      logger.NewLogger("grpc.api.test"),
+				StateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
+				Resiliency:  resiliency.New(nil),
+			},
 		},
 		"")
 	defer server.Stop()
@@ -2737,7 +2742,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: storeName,
 	})
-	assert.Equal(t, codes.Aborted, status.Code(err))
+	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestGetConfigurationAlpha1(t *testing.T) {
@@ -2903,10 +2908,14 @@ func TestStateAPIWithResiliency(t *testing.T) {
 	stateLoader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
 
 	fakeAPI := &api{
-		id:                       "fakeAPI",
-		stateStores:              map[string]state.Store{"failStore": failingStore},
-		transactionalStateStores: map[string]state.TransactionalStore{"failStore": failingStore},
-		resiliency:               resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"failStore": failingStore},
+		resiliency:  resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+	}
+	fakeAPI.UniversalAPI = &universalapi.UniversalAPI{
+		Logger:      logger.NewLogger("grpc.api.test"),
+		StateStores: fakeAPI.stateStores,
+		Resiliency:  fakeAPI.resiliency,
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")

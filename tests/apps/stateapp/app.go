@@ -611,12 +611,14 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("QueryState", err.Error())
 		}
-		res.States = make([]daprState, 0, len(resp.Results))
-		for _, r := range resp.Results {
-			res.States = append(res.States, daprState{
-				Key:   r.Key,
-				Value: &appState{Data: r.Data},
-			})
+		if resp != nil && len(resp.Results) > 0 {
+			res.States = make([]daprState, 0, len(resp.Results))
+			for _, r := range resp.Results {
+				res.States = append(res.States, daprState{
+					Key:   r.Key,
+					Value: &appState{Data: r.Data},
+				})
+			}
 		}
 	default:
 		statusCode = http.StatusInternalServerError

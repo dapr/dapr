@@ -85,7 +85,6 @@ type api struct {
 	stateStores                map[string]state.Store
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{}
-	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
 	actor                      actors.Actors
@@ -185,12 +184,6 @@ type APIOpts struct {
 
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
-	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range opts.StateStores {
-		if state.FeatureTransactional.IsPresent(store.Features()) {
-			transactionalStateStores[key] = store.(state.TransactionalStore)
-		}
-	}
 	api := &api{
 		id:                         opts.AppID,
 		appChannel:                 opts.AppChannel,
@@ -209,7 +202,6 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		maxRequestBodySize:         opts.MaxRequestBodySize,
-		transactionalStateStores:   transactionalStateStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
 		isStreamingEnabled:         opts.IsStreamingEnabled,
 		daprRunTimeVersion:         buildinfo.Version(),
@@ -217,6 +209,7 @@ func NewAPI(opts APIOpts) API {
 			AppID:                opts.AppID,
 			Logger:               log,
 			Resiliency:           opts.Resiliency,
+			StateStores:          opts.StateStores,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
 			LockStores:           opts.LockStores,
@@ -334,7 +327,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "state/{storeName}/query",
 			Version: apiVersionV1alpha1,
-			Handler: a.onQueryState,
+			Handler: a.onQueryStateHandler(),
 		},
 	}
 }
@@ -695,19 +688,19 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return nil, "", errors.New(msg.Message)
+		err := messages.ErrStateStoresNotConfigured
+		log.Debug(err)
+		universalFastHTTPErrorResponder(reqCtx, err)
+		return nil, "", err
 	}
 
 	storeName := a.getStateStoreName(reqCtx)
 
 	if a.stateStores[storeName] == nil {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrStateStoreNotFound, storeName))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return nil, "", errors.New(msg.Message)
+		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
+		log.Debug(err)
+		universalFastHTTPErrorResponder(reqCtx, err)
+		return nil, "", err
 	}
 	return a.stateStores[storeName], storeName, nil
 }
@@ -2370,23 +2363,23 @@ type stateTransactionRequestBodyOperation struct {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if len(a.stateStores) == 0 {
+		err := messages.ErrStateStoresNotConfigured
+		log.Debug(err)
+		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
-	_, ok := a.stateStores[storeName]
+	store, ok := a.stateStores[storeName]
 	if !ok {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrStateStoreNotFound, storeName))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
+		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
+		log.Debug(err)
+		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
 
-	transactionalStore, ok := a.transactionalStateStores[storeName]
+	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf(messages.ErrStateStoreNotSupported, storeName))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -2511,73 +2504,37 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
-	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
-	if err != nil {
-		// error has been already logged
-		return
-	}
-
-	querier, ok := store.(state.Querier)
-	if !ok {
-		msg := NewErrorResponse("ERR_METHOD_NOT_FOUND", fmt.Sprintf(messages.ErrNotFound, "Query"))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-		return
-	}
-
-	if encryption.EncryptedStateStore(storeName) {
-		msg := NewErrorResponse("ERR_STATE_QUERY", fmt.Sprintf(messages.ErrStateQuery, storeName, "cannot query encrypted store"))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	var req state.QueryRequest
-	if err = json.Unmarshal(reqCtx.PostBody(), &req.Query); err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-	req.Metadata = getMetadataFromRequest(reqCtx)
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*state.QueryResponse](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.QueryStateAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.QueryStateRequest, *runtimev1pb.QueryStateResponse]{
+			// We pass the input body manually rather than parsing it using protojson
+			SkipInputBody: true,
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateRequest, error) {
+				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
+				in.Metadata = getMetadataFromRequest(reqCtx)
+				in.Query = string(reqCtx.PostBody())
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.QueryStateResponse) (any, error) {
+				// We need to translate this to a JSON object because one of the fields must be returned as json.RawMessage
+				qresp := QueryResponse{
+					Results:  make([]QueryItem, len(out.Results)),
+					Token:    out.Token,
+					Metadata: out.Metadata,
+				}
+				for i := range out.Results {
+					qresp.Results[i].Key = stateLoader.GetOriginalStateKey(out.Results[i].Key)
+					if out.Results[i].Etag != "" {
+						qresp.Results[i].ETag = &out.Results[i].Etag
+					}
+					qresp.Results[i].Error = out.Results[i].Error
+					qresp.Results[i].Data = json.RawMessage(out.Results[i].Data)
+				}
+				return qresp, nil
+			},
+		},
 	)
-	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
-		return querier.Query(ctx, &req)
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateQuery, err == nil, elapsed)
-
-	if err != nil {
-		msg := NewErrorResponse("ERR_STATE_QUERY", fmt.Sprintf(messages.ErrStateQuery, storeName, err.Error()))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-	if resp == nil || len(resp.Results) == 0 {
-		respond(reqCtx, withEmpty())
-		return
-	}
-
-	qresp := QueryResponse{
-		Results:  make([]QueryItem, len(resp.Results)),
-		Token:    resp.Token,
-		Metadata: resp.Metadata,
-	}
-	for i := range resp.Results {
-		qresp.Results[i].Key = stateLoader.GetOriginalStateKey(resp.Results[i].Key)
-		qresp.Results[i].ETag = resp.Results[i].ETag
-		qresp.Results[i].Error = resp.Results[i].Error
-		qresp.Results[i].Data = json.RawMessage(resp.Results[i].Data)
-	}
-
-	b, _ := json.Marshal(qresp)
-	respond(reqCtx, withJSON(fasthttp.StatusOK, b))
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {

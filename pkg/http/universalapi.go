@@ -39,9 +39,12 @@ type UniversalFastHTTPHandlerOpts[T proto.Message, U proto.Message] struct {
 	// NOTE: Newly-implemented APIs should ensure that on the HTTP endpoint the response matches the protos to offer a consistent experience, and should NOT modify the output before it's sent to the client.
 	OutModifier func(out U) (any, error)
 
-	// Status code to return on successful responses
-	// Defaults to 200 (OK) if unset
+	// Status code to return on successful responses.
+	// Defaults to 200 (OK) if unset.
 	SuccessStatusCode int
+
+	// If true, skips parsing the body of the request in the input proto.
+	SkipInputBody bool
 
 	// When true, unpopulated fields in proto responses (i.e. fields whose value is the zero one) are included in the response too.
 	// Defaults to false.
@@ -61,17 +64,21 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 	}
 
 	return func(reqCtx *fasthttp.RequestCtx) {
-		// Read the response body and decode it as JSON using protojson
-		body := reqCtx.PostBody()
 		// Need to use some reflection magic to allocate a value for the pointer of the generic type T
 		in := reflect.New(rt).Interface().(T)
-		if len(body) > 0 {
-			err := pjsonDec.Unmarshal(body, in)
-			if err != nil {
-				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-				log.Debug(msg)
-				return
+
+		// Parse the body as JSON
+		if !opts.SkipInputBody {
+			// Read the response body and decode it as JSON using protojson
+			body := reqCtx.PostBody()
+			if len(body) > 0 {
+				err := pjsonDec.Unmarshal(body, in)
+				if err != nil {
+					msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+					respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+					log.Debug(msg)
+					return
+				}
 			}
 		}
 
