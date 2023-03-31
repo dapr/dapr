@@ -40,7 +40,6 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/concurrency"
 	configuration "github.com/dapr/dapr/pkg/config"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -1610,11 +1609,6 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	return nil
 }
 
-type bulkGetRes struct {
-	bulkGet      bool
-	bulkResponse []state.BulkGetResponse
-}
-
 func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool) ([]actorReminderReference, *ActorMetadata, error) {
 	if a.store == nil {
 		return nil, nil, errors.New("actors: state store does not exist or incorrectly configured")
@@ -1647,60 +1641,16 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			})
 		}
 
-		policyRunner := resiliency.NewRunner[*bulkGetRes](context.TODO(), policyDef)
-		bgr, err := policyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-			rBulkGet, rBulkResponse, rErr := a.store.BulkGet(ctx, getRequests)
-			if rErr != nil {
-				return &bulkGetRes{}, rErr
-			}
-			return &bulkGetRes{
-				bulkGet:      rBulkGet,
-				bulkResponse: rBulkResponse,
-			}, nil
+		policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](context.TODO(), policyDef)
+		bulkResponse, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+			return a.store.BulkGet(ctx, getRequests, state.BulkGetOpts{})
 		})
-		if bgr == nil {
-			bgr = &bulkGetRes{}
-		}
-		if bgr.bulkGet {
-			if err != nil {
-				return nil, nil, err
-			}
-		} else {
-			// TODO(artursouza): refactor this fallback into default implementation in contrib.
-			// if store doesn't support bulk get, fallback to call get() method one by one
-			limiter := concurrency.NewLimiter(actorMetadata.RemindersMetadata.PartitionCount)
-			bgr.bulkResponse = make([]state.BulkGetResponse, len(getRequests))
-			for i := range getRequests {
-				getRequest := getRequests[i]
-				bgr.bulkResponse[i].Key = getRequest.Key
 
-				fn := func(param interface{}) {
-					r := param.(*state.BulkGetResponse)
-					policyRunner := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
-					resp, ferr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-						return a.store.Get(ctx, &getRequest)
-					})
-					if ferr != nil {
-						r.Error = ferr.Error()
-						return
-					}
-
-					if resp == nil || len(resp.Data) == 0 {
-						r.Error = "data not found for reminder partition"
-						return
-					}
-
-					r.Data = json.RawMessage(resp.Data)
-					r.ETag = resp.ETag
-					r.Metadata = resp.Metadata
-				}
-
-				limiter.Execute(fn, &bgr.bulkResponse[i])
-			}
-			limiter.Wait()
+		if err != nil {
+			return nil, nil, err
 		}
 
-		for _, resp := range bgr.bulkResponse {
+		for _, resp := range bulkResponse {
 			partition := keyPartitionMap[resp.Key]
 			actorMetadata.RemindersMetadata.partitionsEtag[partition] = resp.ETag
 			if resp.Error != "" {

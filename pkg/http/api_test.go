@@ -4752,18 +4752,24 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Direct Transaction - 204 No Content", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		testTransactionalOperations := []state.TransactionalStateOperation{
-			state.SetRequest{
-				Key:   "fakeKey1",
-				Value: fakeBodyObject,
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
+			{
+				Operation: string(state.OperationUpsert),
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
 			},
-			state.DeleteRequest{
-				Key: "fakeKey1",
+			{
+				Operation: string(state.OperationDelete),
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
 			},
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
 
@@ -4777,16 +4783,16 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Post non-existent state store - 400 No State Store Found", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "non-existent-store")
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
-				Operation: state.Upsert,
+				Operation: string(state.OperationUpsert),
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: state.Delete,
+				Operation: string(state.OperationDelete),
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -4794,7 +4800,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
 		assert.NoError(t, err)
@@ -4805,7 +4811,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Invalid opperation - 400 ERR_NOT_SUPPORTED_STATE_OPERATION", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
 				Operation: "foo",
 				Request: map[string]interface{}{
@@ -4816,7 +4822,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
 
@@ -4830,10 +4836,10 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Invalid request obj - 400 ERR_MALFORMED_REQUEST", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		for _, operation := range []state.OperationType{state.Upsert, state.Delete} {
-			testTransactionalOperations := []state.TransactionalStateOperation{
+		for _, operation := range []state.OperationType{state.OperationUpsert, state.OperationDelete} {
+			testTransactionalOperations := []stateTransactionRequestBodyOperation{
 				{
-					Operation: operation,
+					Operation: string(operation),
 					Request: map[string]interface{}{
 						// Should cause the decorder to fail
 						"key":   []string{"fakeKey1"},
@@ -4843,7 +4849,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			}
 
 			// act
-			inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+			inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 				Operations: testTransactionalOperations,
 			})
 
@@ -4858,9 +4864,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Non Transactional State Store - 500 ERR_STATE_STORE_NOT_SUPPORTED", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", nonTransactionalStoreName)
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
-				Operation: state.Upsert,
+				Operation: string(state.OperationUpsert),
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
@@ -4869,7 +4875,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
 
@@ -4883,16 +4889,16 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Direct Transaction upstream failure - 500 ERR_STATE_TRANSACTION", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
-				Operation: state.Upsert,
+				Operation: string(state.OperationUpsert),
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: state.Delete,
+				Operation: string(state.OperationDelete),
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -4900,7 +4906,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 			Metadata: map[string]string{
 				"error": "true",

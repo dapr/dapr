@@ -979,13 +979,13 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("BulkSet", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(reqs []state.SetRequest) bool {
+	fakeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
 		return reqs[0].Key == goodStoreKey
 	})).Return(nil)
-	fakeStore.On("BulkSet", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(reqs []state.SetRequest) bool {
+	fakeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
@@ -1069,14 +1069,14 @@ func TestSaveState(t *testing.T) {
 func TestGetState(t *testing.T) {
 	// Setup mock store
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
+	fakeStore.On("Get", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == goodStoreKey
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: ptr.Of("test-etag"),
 		}, nil)
-	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
+	fakeStore.On("Get", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
 	})).Return(
 		nil,
@@ -1677,7 +1677,7 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 func TestGetBulkState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.GetRequest) bool {
 			return req.Key == goodStoreKey
 		})).Return(
@@ -1686,7 +1686,7 @@ func TestGetBulkState(t *testing.T) {
 			ETag: ptr.Of("test-etag"),
 		}, nil)
 	fakeStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.GetRequest) bool {
 			return req.Key == errorStoreKey
 		})).Return(
@@ -1799,12 +1799,12 @@ func TestGetBulkState(t *testing.T) {
 func TestDeleteState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Delete",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.DeleteRequest) bool {
 			return req.Key == goodStoreKey
 		})).Return(nil)
 	fakeStore.On("Delete",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.DeleteRequest) bool {
 			return req.Key == errorStoreKey
 		})).Return(errors.New("failed to delete state with key2"))
@@ -2272,7 +2272,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore := &daprt.TransactionalStoreMock{}
 	matchKeyFn := func(ctx context.Context, req *state.TransactionalStateRequest, key string) bool {
 		if len(req.Operations) == 1 {
-			if rr, ok := req.Operations[0].Request.(state.SetRequest); ok {
+			if rr, ok := req.Operations[0].(state.SetRequest); ok {
 				if rr.Key == "fakeAPI||"+key {
 					return true
 				}
@@ -2283,12 +2283,12 @@ func TestExecuteStateTransaction(t *testing.T) {
 		return false
 	}
 	fakeStore.On("Multi",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
 			return matchKeyFn(context.Background(), req, goodKey)
 		})).Return(nil)
 	fakeStore.On("Multi",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
 			return matchKeyFn(context.Background(), req, "error-key")
 		})).Return(errors.New("error to execute with key2"))
@@ -2325,7 +2325,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "upsert operation",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           goodKey,
 			value:         []byte("1"),
 			errorExcepted: false,
@@ -2334,7 +2334,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "delete operation",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           goodKey,
 			errorExcepted: false,
 			expectedError: codes.OK,
@@ -2350,7 +2350,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "error occurs when multi execute",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           "error-key",
 			errorExcepted: true,
 			expectedError: codes.Internal,
@@ -3088,7 +3088,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			StoreName: "failStore",
 			Operations: []*runtimev1pb.TransactionalStateOperation{
 				{
-					OperationType: string(state.Delete),
+					OperationType: string(state.OperationDelete),
 					Request: &commonv1pb.StateItem{
 						Key: "failingMultiKey",
 					},
@@ -3105,7 +3105,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			StoreName: "failStore",
 			Operations: []*runtimev1pb.TransactionalStateOperation{
 				{
-					OperationType: string(state.Delete),
+					OperationType: string(state.OperationDelete),
 					Request: &commonv1pb.StateItem{
 						Key: "timeoutMultiKey",
 					},

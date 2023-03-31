@@ -1023,8 +1023,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	if encryption.EncryptedStateStore(in.StoreName) {
 		for i, op := range operations {
-			if op.Operation == state.Upsert {
-				req := op.Request.(*state.SetRequest)
+			switch req := op.(type) {
+			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(in.StoreName, data)
 				if err != nil {
@@ -1034,7 +1034,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 
 				req.Value = val
-				operations[i].Request = req
+				operations[i] = req
 			}
 		}
 	}
@@ -1214,8 +1214,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	for _, op := range in.Operations {
 		var actorOp actors.TransactionalOperation
-		switch state.OperationType(op.OperationType) {
-		case state.Upsert:
+		switch op.OperationType {
+		case string(state.OperationUpsert):
 			setReq := map[string]any{
 				"key":   op.Key,
 				"value": op.Value.Value,
@@ -1229,7 +1229,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				Operation: actors.Upsert,
 				Request:   setReq,
 			}
-		case state.Delete:
+		case string(state.OperationDelete):
 			delReq := map[string]interface{}{
 				"key": op.Key,
 				// Actor state do not user other attributes from state request.

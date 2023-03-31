@@ -19,14 +19,11 @@ package wfengine_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/task"
@@ -38,153 +35,14 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
 
 const testAppID = "wf-app"
 
-// The fake state store code was copied from actors_test.go.
-// TODO: Find a way to share the code instead of copying it, if it makes sense to do so.
-
-type fakeStateStoreItem struct {
-	data []byte
-	etag *string
-}
-
-type fakeStateStore struct {
-	items map[string]*fakeStateStoreItem
-	lock  *sync.RWMutex
-}
-
 func fakeStore() state.Store {
-	return &fakeStateStore{
-		items: map[string]*fakeStateStoreItem{},
-		lock:  &sync.RWMutex{},
-	}
-}
-
-func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
-	etag, _ := uuid.NewRandom()
-	etagString := etag.String()
-	return &fakeStateStoreItem{
-		data: data,
-		etag: &etagString,
-	}
-}
-
-func (f *fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
-	return nil
-}
-
-func (f *fakeStateStore) Ping() error {
-	return nil
-}
-
-func (f *fakeStateStore) Features() []state.Feature {
-	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
-}
-
-func (f *fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	delete(f.items, req.Key)
-
-	return nil
-}
-
-func (f *fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
-	return nil
-}
-
-func (f *fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
-	f.lock.RLock()
-	defer f.lock.RUnlock()
-	item := f.items[req.Key]
-
-	if item == nil {
-		return &state.GetResponse{Data: nil, ETag: nil}, nil
-	}
-
-	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
-}
-
-func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	res := []state.BulkGetResponse{}
-	for _, oneRequest := range req {
-		oneResponse, err := f.Get(ctx, &state.GetRequest{
-			Key:      oneRequest.Key,
-			Metadata: oneRequest.Metadata,
-			Options:  oneRequest.Options,
-		})
-		if err != nil {
-			return false, nil, err
-		}
-
-		res = append(res, state.BulkGetResponse{
-			Key:  oneRequest.Key,
-			Data: oneResponse.Data,
-			ETag: oneResponse.ETag,
-		})
-	}
-
-	return true, res, nil
-}
-
-func (f *fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
-	b, _ := marshal(&req.Value, json.Marshal)
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	f.items[req.Key] = f.newItem(b)
-
-	return nil
-}
-
-func (f *fakeStateStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
-func (f *fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	return nil
-}
-
-func (f *fakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	// First we check all eTags
-	for _, o := range request.Operations {
-		var eTag *string
-		key := ""
-		if o.Operation == state.Upsert {
-			key = o.Request.(state.SetRequest).Key
-			eTag = o.Request.(state.SetRequest).ETag
-		} else if o.Operation == state.Delete {
-			key = o.Request.(state.DeleteRequest).Key
-			eTag = o.Request.(state.DeleteRequest).ETag
-		}
-		item := f.items[key]
-		if eTag != nil && item != nil {
-			if *eTag != *item.etag {
-				return fmt.Errorf("etag does not match for key %v", key)
-			}
-		}
-		if eTag != nil && item == nil {
-			return fmt.Errorf("etag does not match for key not found %v", key)
-		}
-	}
-
-	// Now we can perform the operation.
-	for _, o := range request.Operations {
-		if o.Operation == state.Upsert {
-			req := o.Request.(state.SetRequest)
-			b, _ := marshal(req.Value, json.Marshal)
-			f.items[req.Key] = f.newItem(b)
-		} else if o.Operation == state.Delete {
-			req := o.Request.(state.DeleteRequest)
-			delete(f.items, req.Key)
-		}
-	}
-
-	return nil
+	return daprt.NewFakeStateStore()
 }
 
 // Copied from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16

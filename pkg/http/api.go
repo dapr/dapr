@@ -2363,6 +2363,16 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	return metadata
 }
 
+type stateTransactionRequestBody struct {
+	Operations []stateTransactionRequestBodyOperation `json:"operations"`
+	Metadata   map[string]string                      `json:"metadata,omitempty"`
+}
+
+type stateTransactionRequestBodyOperation struct {
+	Operation string      `json:"operation"`
+	Request   interface{} `json:"request"`
+}
+
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
@@ -2389,7 +2399,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	body := reqCtx.PostBody()
-	var req state.TransactionalStateRequest
+	var req stateTransactionRequestBody
 	if err := json.Unmarshal(body, &req); err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -2414,7 +2424,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	operations := make([]state.TransactionalStateOperation, len(req.Operations))
 	for i, o := range req.Operations {
 		switch o.Operation {
-		case state.Upsert:
+		case string(state.OperationUpsert):
 			var upsertReq state.SetRequest
 			err := mapstructure.Decode(o.Request, &upsertReq)
 			if err != nil {
@@ -2432,7 +2442,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				return
 			}
 			operations[i] = upsertReq
-		case state.Delete:
+		case string(state.OperationDelete):
 			var delReq state.DeleteRequest
 			err := mapstructure.Decode(o.Request, &delReq)
 			if err != nil {
@@ -2462,8 +2472,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if encryption.EncryptedStateStore(storeName) {
 		for i, op := range operations {
-			if op.Operation == state.Upsert {
-				req := op.Request.(*state.SetRequest)
+			switch req := op.(type) {
+			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(storeName, data)
 				if err != nil {
@@ -2476,7 +2486,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				}
 
 				req.Value = val
-				operations[i].Request = req
+				operations[i] = req
 			}
 		}
 	}
