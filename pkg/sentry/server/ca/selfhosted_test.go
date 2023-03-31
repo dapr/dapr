@@ -18,6 +18,7 @@ import (
 	"crypto/x509"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,15 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/config"
 )
+
+var writePerm os.FileMode
+
+func init() {
+	writePerm = 0o600
+	if runtime.GOOS == "windows" {
+		writePerm = 0o666
+	}
+}
 
 func Test_selhosted_store(t *testing.T) {
 	t.Run("storing file should write to disk with correct permissions", func(t *testing.T) {
@@ -52,15 +62,15 @@ func Test_selhosted_store(t *testing.T) {
 
 		info, err := os.Stat(rootFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		assert.Equal(t, os.FileMode(writePerm), info.Mode().Perm())
 
 		info, err = os.Stat(issuerFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		assert.Equal(t, os.FileMode(writePerm), info.Mode().Perm())
 
 		info, err = os.Stat(keyFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		assert.Equal(t, os.FileMode(writePerm), info.Mode().Perm())
 
 		b, err := os.ReadFile(rootFile)
 		assert.NoError(t, err)
@@ -159,13 +169,13 @@ func Test_selfhosted_get(t *testing.T) {
 			}
 
 			if test.rootFile != nil {
-				require.NoError(t, os.WriteFile(rootFile, *test.rootFile, 0o600))
+				require.NoError(t, os.WriteFile(rootFile, *test.rootFile, writePerm))
 			}
 			if test.issuer != nil {
-				require.NoError(t, os.WriteFile(issuerFile, *test.issuer, 0o600))
+				require.NoError(t, os.WriteFile(issuerFile, *test.issuer, writePerm))
 			}
 			if test.key != nil {
-				require.NoError(t, os.WriteFile(keyFile, *test.key, 0o600))
+				require.NoError(t, os.WriteFile(keyFile, *test.key, writePerm))
 			}
 
 			got, ok, err := s.get(context.Background())
