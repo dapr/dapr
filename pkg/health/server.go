@@ -33,14 +33,15 @@ type Server interface {
 }
 
 type server struct {
-	ready atomic.Bool
+	ready *atomic.Bool
 	log   logger.Logger
 }
 
 // NewServer returns a new healthz server.
 func NewServer(log logger.Logger) Server {
 	return &server{
-		log: log,
+		log:   log,
+		ready: &atomic.Bool{},
 	}
 }
 

@@ -86,24 +86,19 @@ func (imr *InvokeMethodResponse) WithContentType(contentType string) *InvokeMeth
 
 // WithHeaders sets gRPC response header metadata.
 func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodResponse {
-	imr.r.Headers = MetadataToInternalMetadata(headers)
+	imr.r.Headers = metadataToInternalMetadata(headers)
 	return imr
 }
 
 // WithFastHTTPHeaders populates HTTP response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithHTTPHeaders(headers map[string][]string) *InvokeMethodResponse {
-	imr.r.Headers = MetadataToInternalMetadata(headers)
+	imr.r.Headers = metadataToInternalMetadata(headers)
 	return imr
 }
 
 // WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
-	md := DaprInternalMetadata{}
-	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = &internalv1pb.ListStringValue{
-			Values: []string{string(value)},
-		}
-	})
+	md := fasthttpHeadersToInternalMetadata(header)
 	if len(md) > 0 {
 		imr.r.Headers = md
 	}
@@ -112,7 +107,7 @@ func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHe
 
 // WithTrailers sets Trailer in internal InvokeMethodResponse.
 func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethodResponse {
-	imr.r.Trailers = MetadataToInternalMetadata(trailer)
+	imr.r.Trailers = metadataToInternalMetadata(trailer)
 	return imr
 }
 
