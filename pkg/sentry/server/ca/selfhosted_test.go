@@ -62,15 +62,15 @@ func Test_selhosted_store(t *testing.T) {
 
 		info, err := os.Stat(rootFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(writePerm), info.Mode().Perm())
+		assert.Equal(t, writePerm, info.Mode().Perm())
 
 		info, err = os.Stat(issuerFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(writePerm), info.Mode().Perm())
+		assert.Equal(t, writePerm, info.Mode().Perm())
 
 		info, err = os.Stat(keyFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(writePerm), info.Mode().Perm())
+		assert.Equal(t, writePerm, info.Mode().Perm())
 
 		b, err := os.ReadFile(rootFile)
 		assert.NoError(t, err)
