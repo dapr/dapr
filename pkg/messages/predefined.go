@@ -94,13 +94,6 @@ const (
 	ErrConfigurationGet                 = "failed to get %s from Configuration store %s: %s"
 	ErrConfigurationSubscribe           = "failed to subscribe %s from Configuration store %s: %s"
 	ErrConfigurationUnsubscribe         = "failed to unsubscribe to configuration request %s: %s"
-
-	// Lock.
-	ErrLockStoresNotConfigured    = "lock store is not configured"
-	ErrResourceIDEmpty            = "ResourceId is empty in lock store %s"
-	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
-	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
-	ErrLockStoreNotFound          = "lock store %s not found"
 )
 
 var (
@@ -110,6 +103,15 @@ var (
 	ErrSecretPermissionDenied   = APIError{"access denied by policy to get %q from %q", "ERR_PERMISSION_DENIED", http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrSecretGet                = APIError{"failed getting secret with key %s from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrBulkSecretGet            = APIError{"failed getting secrets from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
+
+	// Lock.
+	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
+	ErrResourceIDEmpty            = APIError{"ResourceId is empty in lock store %s", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrLockOwnerEmpty             = APIError{"LockOwner is empty in lock store %s", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrExpiryInSecondsNotPositive = APIError{"ExpiryInSeconds is not positive in lock store %s", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrLockStoreNotFound          = APIError{"lock store %s not found", "ERR_LOCK_STORE_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrTryLockFailed              = APIError{"failed to try acquiring lock: %s", "ERR_TRY_LOCK", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrUnlockFailed               = APIError{"failed to release lock: %s", "ERR_UNLOCK", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Workflow.
 	ErrStartWorkflow                 = APIError{"error starting workflow %s with error %s", "ERR_START_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
@@ -121,5 +123,5 @@ var (
 	ErrTerminateWorkflow             = APIError{"error terminating workflow %s", "ERR_TERMINATE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", "ERR_WORKFLOW_EVENT_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow %s", "ERR_RAISE_EVENT_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrTimerParse                    = APIError{"error parsing time - %s", "ERR_WORKFLOW_TIME_PARSE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrTimerParse                    = APIError{"error parsing time: %s", "ERR_WORKFLOW_TIME_PARSE", http.StatusInternalServerError, grpcCodes.Internal}
 )

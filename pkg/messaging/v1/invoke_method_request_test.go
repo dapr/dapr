@@ -400,29 +400,46 @@ func TestRequestProtoWithData(t *testing.T) {
 }
 
 func TestAddHeaders(t *testing.T) {
-	req := NewInvokeMethodRequest("test_method")
-	defer req.Close()
-	header := fasthttp.RequestHeader{}
-	header.Add("Dapr-Reentrant-Id", "test")
-	req.AddHeaders(&header)
+	t.Run("single value", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method")
+		defer req.Close()
+		header := fasthttp.RequestHeader{}
+		header.Add("Dapr-Reentrant-Id", "test")
+		req.AddHeaders(&header)
 
-	assert.NotNil(t, req.r.Metadata)
-	assert.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
-	assert.Equal(t, "test", req.r.Metadata["Dapr-Reentrant-Id"].Values[0])
-}
+		require.NotNil(t, req.r.Metadata)
+		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
+		require.NotEmpty(t, req.r.Metadata["Dapr-Reentrant-Id"].Values)
+		assert.Equal(t, "test", req.r.Metadata["Dapr-Reentrant-Id"].Values[0])
+	})
 
-func TestAddHeadersDoesNotOverwrite(t *testing.T) {
-	header := fasthttp.RequestHeader{}
-	header.Add("Dapr-Reentrant-Id", "test")
-	req := NewInvokeMethodRequest("test_method").WithFastHTTPHeaders(&header)
-	defer req.Close()
+	t.Run("multiple values", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method")
+		defer req.Close()
+		header := fasthttp.RequestHeader{}
+		header.Add("Dapr-Reentrant-Id", "test")
+		header.Add("Dapr-Reentrant-Id", "test2")
+		req.AddHeaders(&header)
 
-	header.Set("Dapr-Reentrant-Id", "test2")
-	req.AddHeaders(&header)
+		require.NotNil(t, req.r.Metadata)
+		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
+		require.NotEmpty(t, req.r.Metadata["Dapr-Reentrant-Id"].Values)
+		assert.Equal(t, []string{"test", "test2"}, req.r.Metadata["Dapr-Reentrant-Id"].Values)
+	})
 
-	assert.NotNil(t, req.r.Metadata)
-	assert.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
-	assert.Equal(t, "test", req.r.Metadata["Dapr-Reentrant-Id"].Values[0])
+	t.Run("does not overwrite", func(t *testing.T) {
+		header := fasthttp.RequestHeader{}
+		header.Add("Dapr-Reentrant-Id", "test")
+		req := NewInvokeMethodRequest("test_method").WithFastHTTPHeaders(&header)
+		defer req.Close()
+
+		header.Set("Dapr-Reentrant-Id", "test2")
+		req.AddHeaders(&header)
+
+		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
+		require.NotEmpty(t, req.r.Metadata["Dapr-Reentrant-Id"].Values)
+		assert.Equal(t, "test", req.r.Metadata["Dapr-Reentrant-Id"].Values[0])
+	})
 }
 
 func TestWithCustomHTTPMetadata(t *testing.T) {

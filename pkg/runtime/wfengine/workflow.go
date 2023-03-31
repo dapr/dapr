@@ -16,6 +16,7 @@ package wfengine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -448,10 +449,14 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 	// Reminders need to have unique names or else they may not fire in certain race conditions.
 	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
 	wfLogger.Debugf("%s: creating '%s' reminder with DueTime = %s", actorID, reminderName, delay)
+	dataEnc, err := json.Marshal(data)
+	if err != nil {
+		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: WorkflowActorType,
 		ActorID:   actorID,
-		Data:      data,
+		Data:      dataEnc,
 		DueTime:   delay.String(),
 		Name:      reminderName,
 		Period:    wf.reminderInterval.String(),
