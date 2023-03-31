@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )
 
@@ -23,10 +24,11 @@ func TestNewFastHTTPHandler(t *testing.T) {
 	expectedContentLength := len(expectedBody)
 	expectedHost := "foobar.com"
 	expectedRemoteAddr := "1.2.3.4:6789"
-	expectedHeader := map[string]string{
-		"Foo-Bar":         "baz",
-		"Abc":             "defg",
-		"XXX-Remote-Addr": "123.43.4543.345",
+	expectedHeader := map[string][]string{
+		"Foo-Bar":         {"baz"},
+		"Abc":             {"defg"},
+		"XXX-Remote-Addr": {"123.43.4543.345"},
+		"Multi":           {"hello", "world"},
 	}
 	expectedURL, err := url.ParseRequestURI(expectedRequestURI)
 	if err != nil {
@@ -82,14 +84,14 @@ func TestNewFastHTTPHandler(t *testing.T) {
 		}
 
 		for k, expectedV := range expectedHeader {
-			v := r.Header.Get(k)
-			if v != expectedV {
-				t.Fatalf("unexpected header value %q for key %q. Expecting %q", v, k, expectedV)
-			}
+			v := r.Header.Values(k)
+			assert.Equalf(t, expectedV, v, "unexpected header values %q for key %q. Expecting %q", v, k, expectedV)
 		}
 
 		w.Header().Set("Header1", "value1")
 		w.Header().Set("Header2", "value2")
+		w.Header().Add("Multi", "value1")
+		w.Header().Add("Multi", "value2")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(body) //nolint:errcheck
 	}
@@ -104,7 +106,9 @@ func TestNewFastHTTPHandler(t *testing.T) {
 	req.Header.SetHost(expectedHost)
 	req.BodyWriter().Write([]byte(expectedBody)) //nolint:errcheck
 	for k, v := range expectedHeader {
-		req.Header.Set(k, v)
+		for _, h := range v {
+			req.Header.Add(k, h)
+		}
 	}
 
 	remoteAddr, err := net.ResolveTCPAddr("tcp", expectedRemoteAddr)
@@ -129,6 +133,8 @@ func TestNewFastHTTPHandler(t *testing.T) {
 	if string(resp.Header.Peek("Header2")) != "value2" {
 		t.Fatalf("unexpected header value: %q. Expecting %q", resp.Header.Peek("Header2"), "value2")
 	}
+	mh := resp.Header.PeekAll("Multi")
+	assert.Equal(t, [][]byte{[]byte("value1"), []byte("value2")}, mh)
 	if string(resp.Body()) != expectedBody {
 		t.Fatalf("unexpected response body %q. Expecting %q", resp.Body(), expectedBody)
 	}

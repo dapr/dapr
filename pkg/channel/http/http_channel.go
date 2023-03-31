@@ -16,7 +16,6 @@ package http
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -67,48 +66,20 @@ type Channel struct {
 
 // ChannelConfiguration is the configuration used to create an HTTP AppChannel.
 type ChannelConfiguration struct {
-	Port                 int
+	Client               *http.Client
+	Endpoint             string
 	MaxConcurrency       int
 	Pipeline             httpMiddleware.Pipeline
 	TracingSpec          config.TracingSpec
-	SslEnabled           bool
 	MaxRequestBodySizeMB int
-	ReadBufferSizeKB     int
-	AllowInsecureTLS     bool
 }
 
 // CreateLocalChannel creates an HTTP AppChannel.
-//
-//nolint:gosec
 func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error) {
-	var tlsConfig *tls.Config
-	scheme := httpScheme
-	if config.SslEnabled {
-		tlsConfig = &tls.Config{
-			InsecureSkipVerify: true,
-		}
-		if !config.AllowInsecureTLS {
-			tlsConfig.MinVersion = channel.AppChannelMinTLSVersion
-		}
-		scheme = httpsScheme
-	}
-
 	c := &Channel{
-		pipeline: config.Pipeline,
-		client: &http.Client{
-			Transport: &http.Transport{
-				ReadBufferSize:         config.ReadBufferSizeKB << 10,
-				MaxResponseHeaderBytes: int64(config.ReadBufferSizeKB) << 10,
-				MaxConnsPerHost:        1024,
-				MaxIdleConns:           64, // A local channel connects to a single host
-				MaxIdleConnsPerHost:    64,
-				TLSClientConfig:        tlsConfig,
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
-		baseAddress:           fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, config.Port),
+		pipeline:              config.Pipeline,
+		client:                config.Client,
+		baseAddress:           config.Endpoint,
 		tracingSpec:           config.TracingSpec,
 		appHeaderToken:        auth.GetAppToken(),
 		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
@@ -119,11 +90,6 @@ func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error)
 	}
 
 	return c, nil
-}
-
-// GetBaseAddress returns the application base address.
-func (h *Channel) GetBaseAddress() string {
-	return h.baseAddress
 }
 
 // GetAppConfig gets application config from user application
@@ -149,10 +115,8 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	// Get versioning info, currently only v1 is supported.
 	headers := resp.Headers()
 	var version string
-	if val, ok := headers["dapr-app-config-version"]; ok {
-		if len(val.Values) == 1 {
-			version = val.Values[0]
-		}
+	if val, ok := headers["dapr-app-config-version"]; ok && len(val.Values) > 0 {
+		version = val.Values[0]
 	}
 
 	switch version {
@@ -336,7 +300,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	// Recover headers
-	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
+	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Add)
 	channelReq.Header.Set("content-type", req.ContentType())
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
