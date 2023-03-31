@@ -22,7 +22,6 @@ import (
 	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
-	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
@@ -94,9 +93,7 @@ func main() {
 	// events (as well as wanting to terminate the program on signals).
 	caMngrFactory := func() *concurrency.RunnerManager {
 		return concurrency.NewRunnerManager(
-			func(ctx context.Context) error {
-				return sentry.NewSentryCA().Start(ctx, config)
-			},
+			sentry.New(config).Start,
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
