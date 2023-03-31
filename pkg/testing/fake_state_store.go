@@ -109,7 +109,7 @@ func (f *FakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest, op
 }
 
 func (f *FakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
-	b, _ := json.Marshal(&req.Value)
+	b, _ := marshal(&req.Value)
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.Items[req.Key] = f.NewItem(b)
@@ -155,7 +155,7 @@ func (f *FakeStateStore) Multi(ctx context.Context, request *state.Transactional
 	for _, o := range request.Operations {
 		switch req := o.(type) {
 		case state.SetRequest:
-			b, _ := json.Marshal(req.Value)
+			b, _ := marshal(req.Value)
 			f.Items[req.Key] = f.NewItem(b)
 		case state.DeleteRequest:
 			delete(f.Items, req.Key)
@@ -163,4 +163,15 @@ func (f *FakeStateStore) Multi(ctx context.Context, request *state.Transactional
 	}
 
 	return nil
+}
+
+// Adapted from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16
+func marshal(val interface{}) ([]byte, error) {
+	var err error = nil
+	bt, ok := val.([]byte)
+	if !ok {
+		bt, err = json.Marshal(val)
+	}
+
+	return bt, err
 }

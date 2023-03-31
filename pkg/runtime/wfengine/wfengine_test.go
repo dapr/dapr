@@ -28,6 +28,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/state"
@@ -114,19 +115,19 @@ func TestEmptyWorkflow(t *testing.T) {
 		t.Run(opt(engine), func(t *testing.T) {
 			preStartTime := time.Now().UTC()
 			id, err := client.ScheduleNewOrchestration(ctx, "EmptyWorkflow")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.Equal(t, id, metadata.InstanceID)
-					assert.True(t, metadata.IsComplete())
-					assert.GreaterOrEqual(t, metadata.CreatedAt, preStartTime)
-					assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
-					assert.Empty(t, metadata.SerializedInput)
-					assert.Empty(t, metadata.SerializedOutput)
-					assert.Empty(t, metadata.SerializedCustomStatus)
-					assert.Nil(t, metadata.FailureDetails)
-				}
-			}
+			require.NoError(t, err)
+
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+
+			assert.Equal(t, id, metadata.InstanceID)
+			assert.True(t, metadata.IsComplete())
+			assert.GreaterOrEqual(t, metadata.CreatedAt, preStartTime)
+			assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
+			assert.Empty(t, metadata.SerializedInput)
+			assert.Empty(t, metadata.SerializedOutput)
+			assert.Empty(t, metadata.SerializedCustomStatus)
+			assert.Nil(t, metadata.FailureDetails)
 		})
 	}
 }
@@ -145,13 +146,12 @@ func TestSingleTimerWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "SingleTimer")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
 		})
 	}
 }
@@ -183,14 +183,13 @@ func TestSingleActivityWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"))
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `"世界"`, metadata.SerializedInput)
-					assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
-				}
-			}
+			require.NoError(t, err)
+
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `"世界"`, metadata.SerializedInput)
+			assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
 		})
 	}
 }
@@ -315,13 +314,12 @@ func TestContinueAsNewWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `10`, metadata.SerializedOutput)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
 		})
 	}
 }
@@ -386,10 +384,9 @@ func TestRecreateRunningWorkflowFails(t *testing.T) {
 
 			// Attempting to start a second workflow with the same ID should fail
 			_, err = client.ScheduleNewOrchestration(ctx, "SleepyWorkflow", api.WithInstanceID(id))
-			if assert.Error(t, err) {
-				// We expect that the workflow instance ID is included in the error message
-				assert.Contains(t, err.Error(), id)
-			}
+			require.Error(t, err)
+			// We expect that the workflow instance ID is included in the error message
+			assert.Contains(t, err.Error(), id)
 		})
 	}
 }
@@ -425,17 +422,15 @@ func TestRetryWorkflowOnTimeout(t *testing.T) {
 			actualCallCount = 0
 
 			id, err := client.ScheduleNewOrchestration(ctx, "FlakyWorkflow")
-			if assert.NoError(t, err) {
-				// Add a 5 second timeout so that the test doesn't take forever if something isn't working
-				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				defer cancel()
+			require.NoError(t, err)
+			// Add a 5 second timeout so that the test doesn't take forever if something isn't working
+			timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
 
-				metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
-				}
-			}
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
 		})
 	}
 }
@@ -477,17 +472,15 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 			actualCallCount = 0
 
 			id, err := client.ScheduleNewOrchestration(ctx, "FlakyWorkflow")
-			if assert.NoError(t, err) {
-				// Add a 5 second timeout so that the test doesn't take forever if something isn't working
-				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				defer cancel()
+			require.NoError(t, err)
+			// Add a 5 second timeout so that the test doesn't take forever if something isn't working
+			timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
 
-				metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
-				}
-			}
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
 		})
 	}
 }
