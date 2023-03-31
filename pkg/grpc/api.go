@@ -43,7 +43,6 @@ import (
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -98,7 +97,6 @@ type api struct {
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
-	lockStores                 map[string]lock.Store
 	pubsubAdapter              runtimePubsub.Adapter
 	id                         string
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -112,135 +110,6 @@ type api struct {
 	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	daprRunTimeVersion         string
 	createAppCallbackListener  func() (int, error)
-}
-
-func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
-	// 1. validate
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.LockOwner == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.ExpiryInSeconds <= 0 {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrExpiryInSecondsNotPositive, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 2. find lock component
-	store, ok := a.lockStores[req.StoreName]
-	if !ok {
-		return &runtimev1pb.TryLockResponse{}, status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
-	}
-	// 3. convert request
-	compReq := TryLockRequestToComponentRequest(req)
-	// modify key
-	var err error
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 4. delegate to the component
-	compResp, err := store.TryLock(ctx, compReq)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 5. convert response
-	resp := TryLockResponseToGrpcResponse(compResp)
-	return resp, nil
-}
-
-func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error) {
-	// 1. validate
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
-		return newInternalErrorUnlockResponse(), err
-	}
-	if req.LockOwner == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 2. find store component
-	store, ok := a.lockStores[req.StoreName]
-	if !ok {
-		return newInternalErrorUnlockResponse(), status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
-	}
-	// 3. convert request
-	compReq := UnlockGrpcToComponentRequest(req)
-	// modify key
-	var err error
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 4. delegate to the component
-	compResp, err := store.Unlock(ctx, compReq)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 5. convert response
-	resp := UnlockResponseToGrpcResponse(compResp)
-	return resp, nil
-}
-
-func newInternalErrorUnlockResponse() *runtimev1pb.UnlockResponse {
-	return &runtimev1pb.UnlockResponse{
-		Status: runtimev1pb.UnlockResponse_INTERNAL_ERROR, //nolint:nosnakecase
-	}
-}
-
-func TryLockRequestToComponentRequest(req *runtimev1pb.TryLockRequest) *lock.TryLockRequest {
-	result := &lock.TryLockRequest{}
-	if req == nil {
-		return result
-	}
-	result.ResourceID = req.ResourceId
-	result.LockOwner = req.LockOwner
-	result.ExpiryInSeconds = req.ExpiryInSeconds
-	return result
-}
-
-func TryLockResponseToGrpcResponse(compResponse *lock.TryLockResponse) *runtimev1pb.TryLockResponse {
-	result := &runtimev1pb.TryLockResponse{}
-	if compResponse == nil {
-		return result
-	}
-	result.Success = compResponse.Success
-	return result
-}
-
-func UnlockGrpcToComponentRequest(req *runtimev1pb.UnlockRequest) *lock.UnlockRequest {
-	result := &lock.UnlockRequest{}
-	if req == nil {
-		return result
-	}
-	result.ResourceID = req.ResourceId
-	result.LockOwner = req.LockOwner
-	return result
-}
-
-func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.UnlockResponse {
-	result := &runtimev1pb.UnlockResponse{}
-	if compResp == nil {
-		return result
-	}
-	result.Status = runtimev1pb.UnlockResponse_Status(compResp.Status) //nolint:nosnakecase
-	return result
 }
 
 // APIOpts contains options for NewAPI.
@@ -277,10 +146,12 @@ func NewAPI(opts APIOpts) API {
 	}
 	return &api{
 		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:                opts.AppID,
 			Logger:               apiServerLogger,
 			Resiliency:           opts.Resiliency,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			LockStores:           opts.LockStores,
 			WorkflowComponents:   opts.WorkflowComponents,
 		},
 		directMessaging:            opts.DirectMessaging,
@@ -293,7 +164,6 @@ func NewAPI(opts APIOpts) API {
 		transactionalStateStores:   transactionalStateStores,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		lockStores:                 opts.LockStores,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
 		tracingSpec:                opts.TracingSpec,
 		accessControlList:          opts.AccessControlList,
@@ -700,11 +570,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	// try bulk get first
+	var key string
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
-		key, err1 := stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
-		if err1 != nil {
-			return &runtimev1pb.GetBulkStateResponse{}, err1
+		key, err = stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
+		if err != nil {
+			return &runtimev1pb.GetBulkStateResponse{}, err
 		}
 		r := state.GetRequest{
 			Key:      key,
@@ -746,55 +617,58 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
 		}
-		return bulkResp, nil
-	}
-
-	// if store doesn't support bulk get, fallback to call get() method one by one
-	limiter := concurrency.NewLimiter(int(in.Parallelism))
-	n := len(reqs)
-	resultCh := make(chan *runtimev1pb.BulkStateItem, n)
-	for i := 0; i < n; i++ {
-		fn := func(param interface{}) {
-			req := param.(*state.GetRequest)
-			policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
-			res, policyErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-				return store.Get(ctx, req)
-			})
-
-			item := &runtimev1pb.BulkStateItem{
-				Key: stateLoader.GetOriginalStateKey(req.Key),
+	} else {
+		// if store doesn't support bulk get, fallback to call get() method one by one
+		bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(reqs))
+		limiter := concurrency.NewLimiter(int(in.Parallelism))
+		for i := range reqs {
+			bulkResp.Items[i] = &runtimev1pb.BulkStateItem{
+				Key: reqs[i].Key,
 			}
 
-			if policyErr != nil {
-				item.Error = policyErr.Error()
-			} else if res != nil {
-				item.Data = res.Data
-				item.Etag = stringValueOrEmpty(res.ETag)
-				item.Metadata = res.Metadata
+			fn := func(iAny any) {
+				rI := iAny.(int)
+				policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
+				res, rErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
+					return store.Get(ctx, &reqs[rI])
+				})
+
+				item := &runtimev1pb.BulkStateItem{
+					Key: stateLoader.GetOriginalStateKey(reqs[rI].Key),
+				}
+
+				if rErr != nil {
+					item.Error = rErr.Error()
+				} else if res != nil {
+					item.Data = res.Data
+					item.Etag = stringValueOrEmpty(res.ETag)
+					item.Metadata = res.Metadata
+				}
+				bulkResp.Items[rI] = item
 			}
-			resultCh <- item
+			limiter.Execute(fn, i)
 		}
-		limiter.Execute(fn, &reqs[i])
+		limiter.Wait()
 	}
-	limiter.Wait()
-	// collect result
-	for i := 0; i < n; i++ {
-		item := <-resultCh
 
-		if encryption.EncryptedStateStore(in.StoreName) {
-			val, err := encryption.TryDecryptValue(in.StoreName, item.Data)
-			if err != nil {
-				item.Error = err.Error()
-				apiServerLogger.Debug(err)
-
+	if encryption.EncryptedStateStore(in.StoreName) {
+		for i := range bulkResp.Items {
+			if bulkResp.Items[i].Error != "" || len(bulkResp.Items[i].Data) == 0 {
 				continue
 			}
 
-			item.Data = val
-		}
+			val, err := encryption.TryDecryptValue(in.StoreName, bulkResp.Items[i].Data)
+			if err != nil {
+				apiServerLogger.Debugf("Bulk get error: %v", err)
+				bulkResp.Items[i].Data = nil
+				bulkResp.Items[i].Error = err.Error()
+				continue
+			}
 
-		bulkResp.Items = append(bulkResp.Items, item)
+			bulkResp.Items[i].Data = val
+		}
 	}
+
 	return bulkResp, nil
 }
 
@@ -1397,10 +1271,13 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		var actorOp actors.TransactionalOperation
 		switch state.OperationType(op.OperationType) {
 		case state.Upsert:
-			setReq := map[string]interface{}{
+			setReq := map[string]any{
 				"key":   op.Key,
 				"value": op.Value.Value,
 				// Actor state do not user other attributes from state request.
+			}
+			if meta := op.GetMetadata(); len(meta) > 0 {
+				setReq["metadata"] = meta
 			}
 
 			actorOp = actors.TransactionalOperation{

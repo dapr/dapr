@@ -12,14 +12,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package actors
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -100,7 +105,6 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	config := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          config.ApplicationConfig{},
 	})
 	a := NewActors(ActorsOpts{
 		StateStore:     store,
@@ -135,9 +139,7 @@ func TestInternalActorCall(t *testing.T) {
 	internalActors := make(map[string]InternalActor)
 	internalActors[testActorType] = &mockInternalActor{TestOutput: testOutput}
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
 	req := invokev1.NewInvokeMethodRequest(testMethod).
 		WithActor(testActorType, testActorID).
@@ -146,9 +148,7 @@ func TestInternalActorCall(t *testing.T) {
 	defer req.Close()
 
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 	defer resp.Close()
 
 	if assert.NoError(t, err) && assert.NotNil(t, resp) {
@@ -160,9 +160,8 @@ func TestInternalActorCall(t *testing.T) {
 
 		// Verify the actor got all the expected inputs (which are echoed back to us)
 		info, err := decodeTestResponse(data)
-		if !assert.NoError(t, err) || !assert.NotNil(t, info) {
-			return
-		}
+		require.NoError(t, err)
+		require.NotNil(t, info)
 		assert.Equal(t, testActorID, info.ActorID)
 		assert.Equal(t, testMethod, info.MethodName)
 		assert.Equal(t, []byte(testInput), info.Input)
@@ -178,38 +177,38 @@ func TestInternalActorReminder(t *testing.T) {
 	internalActors := make(map[string]InternalActor)
 	internalActors[testActorType] = ia
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
-	testReminder := &Reminder{
-		ActorType: testActorType,
-		ActorID:   "myActor",
-		DueTime:   "2s",
-		Period:    "2s",
-		Name:      "reminder1",
-		Data: testReminderData{
-			SomeBytes:  []byte("こんにちは！"),
-			SomeInt:    42,
-			SomeString: "Hello!",
-		},
+	period, _ := reminders.NewReminderPeriod("2s")
+	data, _ := json.Marshal(testReminderData{
+		SomeBytes:  []byte("こんにちは！"),
+		SomeInt:    42,
+		SomeString: "Hello!",
+	})
+	testReminder := &reminders.Reminder{
+		ActorType:      testActorType,
+		ActorID:        "myActor",
+		RegisteredTime: time.Now().Add(2 * time.Second),
+		DueTime:        "2s",
+		Period:         period,
+		Name:           "reminder1",
+		Data:           data,
 	}
-	if err = testActorRuntime.executeReminder(testReminder); !assert.NoError(t, err) {
-		return
-	}
-	if !assert.Len(t, ia.InvokedReminders, 1) {
-		return
-	}
+	err = testActorRuntime.executeReminder(testReminder, false)
+	require.NoError(t, err)
+	require.Len(t, ia.InvokedReminders, 1)
 	invokedReminder := ia.InvokedReminders[0]
 	assert.Equal(t, testReminder.ActorID, invokedReminder.ActorID)
 	assert.Equal(t, testReminder.Name, invokedReminder.Name)
 	assert.Equal(t, testReminder.DueTime, invokedReminder.DueTime)
-	assert.Equal(t, testReminder.Period, invokedReminder.Period)
+	assert.Equal(t, testReminder.Period.String(), invokedReminder.Period)
 
 	// Reminder data gets marshaled to JSON and unmarshaled back to map[string]interface{}
 	var actualData testReminderData
 	DecodeInternalActorReminderData(invokedReminder.Data, &actualData)
-	assert.Equal(t, testReminder.Data, actualData)
+	enc, err := json.Marshal(actualData)
+	require.NoError(t, err)
+	assert.Equal(t, []byte(testReminder.Data), enc)
 }
 
 func TestInternalActorDeactivation(t *testing.T) {
@@ -221,9 +220,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 	internalActors := make(map[string]InternalActor)
 	internalActors[testActorType] = ia
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
 	// Call the internal actor to "activate" it
 	req := invokev1.NewInvokeMethodRequest("Foo").WithActor(testActorType, testActorID)
@@ -231,24 +228,23 @@ func TestInternalActorDeactivation(t *testing.T) {
 
 	var resp *invokev1.InvokeMethodResponse
 	resp, err = testActorRuntime.callLocalActor(context.Background(), req)
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 	defer resp.Close()
 
 	assert.NoError(t, err)
 
 	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.
-	if err = testActorRuntime.deactivateActor(testActorType, testActorID); assert.NoError(t, err) {
-		if assert.Len(t, ia.DeactivationCalls, 1) {
-			assert.Equal(t, testActorID, ia.DeactivationCalls[0])
-		}
+	err = testActorRuntime.deactivateActor(testActorType, testActorID)
+	require.NoError(t, err)
+	if assert.Len(t, ia.DeactivationCalls, 1) {
+		assert.Equal(t, testActorID, ia.DeactivationCalls[0])
 	}
 }
 
 func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
 	info := new(invokeMethodCallInfo)
-	if err := DecodeInternalActorData(data, info); err != nil {
+	err := DecodeInternalActorData(data, info)
+	if err != nil {
 		return nil, err
 	}
 	return info, nil
@@ -260,9 +256,7 @@ func TestInternalActorsNotCounted(t *testing.T) {
 	internalActors := make(map[string]InternalActor)
 	internalActors[InternalActorTypePrefix+"wfengine.workflow"] = &mockInternalActor{}
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 	actorCounts := testActorRuntime.GetActiveActorsCount(context.Background())
 	assert.Empty(t, actorCounts)
 }

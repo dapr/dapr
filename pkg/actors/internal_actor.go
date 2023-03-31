@@ -82,11 +82,6 @@ func (c *internalActorChannel) GetAppConfig() (*config.ApplicationConfig, error)
 	return config, nil
 }
 
-// GetBaseAddress implements channel.AppChannel
-func (internalActorChannel) GetBaseAddress() string {
-	return ""
-}
-
 // HealthProbe implements channel.AppChannel
 func (internalActorChannel) HealthProbe(ctx context.Context) (bool, error) {
 	return true, nil
