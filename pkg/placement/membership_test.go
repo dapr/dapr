@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -42,12 +43,13 @@ func TestMembershipChangeWorker(t *testing.T) {
 	var (
 		serverAddress string
 		testServer    *Service
+		clock         *clocktesting.FakeClock
 	)
 
 	setupEach := func(t *testing.T) context.CancelFunc {
 		ctx, cancel := context.WithCancel(context.Background())
 		var cancelServer context.CancelFunc
-		serverAddress, testServer, cancelServer = newTestPlacementServer(t, testRaftServer)
+		serverAddress, testServer, clock, cancelServer = newTestPlacementServer(t, testRaftServer)
 		testServer.hasLeadership.Store(true)
 		membershipStopCh := make(chan struct{})
 
@@ -60,8 +62,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}()
 
 		return func() {
-			cancelServer()
 			cancel()
+			cancelServer()
 			select {
 			case <-membershipStopCh:
 			case <-time.After(time.Second):
@@ -85,7 +87,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// wait until all host member change requests are flushed
 		assert.Eventually(t, func() bool {
 			return len(testServer.raftNode.FSM().State().Members()) == 3
-		}, disseminateTimerInterval+100*time.Millisecond, 10*time.Millisecond)
+		}, disseminateTimerInterval+500*time.Millisecond, time.Millisecond)
 	}
 
 	t.Run("successful dissemination", func(t *testing.T) {
@@ -93,8 +95,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// arrange
 		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
-		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
+
 		done := make(chan bool)
 		go func() {
 			for {
@@ -120,7 +122,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		select {
 		case <-done:
-		case <-time.After(disseminateTimerInterval + 100*time.Millisecond):
+		case <-time.After(disseminateTimerInterval + 500*time.Millisecond):
 			t.Error("dissemination did not happen in time")
 		}
 
@@ -133,13 +135,14 @@ func TestMembershipChangeWorker(t *testing.T) {
 		require.Equal(t, 1, nStreamConnPool)
 		assert.Eventually(t, func() bool {
 			return nStreamConnPool == len(testServer.raftNode.FSM().State().Members())
-		}, time.Second, 10*time.Millisecond, testServer.raftNode.FSM().State().Members())
+		}, time.Second, time.Millisecond, testServer.raftNode.FSM().State().Members())
 
 		// wait until table dissemination.
-		assert.Eventually(t, func() bool {
+		require.Eventually(t, func() bool {
+			clock.Step(disseminateTimerInterval)
 			return testServer.memberUpdateCount.Load() == 0 &&
 				testServer.faultyHostDetectDuration.Load() == int64(faultyHostDetectDefaultDuration)
-		}, disseminateTimerInterval*10, 10*time.Millisecond,
+		}, time.Second*5, time.Millisecond,
 			"flushed all member updates and faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
@@ -152,18 +155,19 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		// faulty host detector removes all members if heartbeat does not happen
 		assert.Eventually(t, func() bool {
+			clock.Step(disseminateTimerInterval)
 			return len(testServer.raftNode.FSM().State().Members()) == 0
-		}, faultyHostDetectInitialDuration+100*time.Millisecond, 10*time.Millisecond)
+		}, 5*time.Second, time.Millisecond)
 	})
 }
 
 func TestCleanupHeartBeats(t *testing.T) {
-	_, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
+	_, testServer, clock, cleanup := newTestPlacementServer(t, testRaftServer)
 	testServer.hasLeadership.Store(true)
 	maxClients := 3
 
 	for i := 0; i < maxClients; i++ {
-		testServer.lastHeartBeat.Store(fmt.Sprintf("10.0.0.%d:1001", i), time.Now().UnixNano())
+		testServer.lastHeartBeat.Store(fmt.Sprintf("10.0.0.%d:1001", i), clock.Now().UnixNano())
 	}
 
 	getCount := func() int {
@@ -184,7 +188,7 @@ func TestCleanupHeartBeats(t *testing.T) {
 
 func TestPerformTableUpdate(t *testing.T) {
 	const testClients = 10
-	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
+	serverAddress, testServer, clock, cleanup := newTestPlacementServer(t, testRaftServer)
 	testServer.hasLeadership.Store(true)
 
 	// arrange
@@ -195,8 +199,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	clientUpToDateCh := make(chan struct{}, testClients)
 
 	for i := 0; i < testClients; i++ {
-		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
 		clientRecvData = append(clientRecvData, map[string]int64{})
@@ -210,7 +213,7 @@ func TestPerformTableUpdate(t *testing.T) {
 				}
 				if placementOrder != nil {
 					clientRecvDataLock.Lock()
-					clientRecvData[clientID][placementOrder.Operation] = time.Now().UnixNano()
+					clientRecvData[clientID][placementOrder.Operation] = clock.Now().UnixNano()
 					clientRecvDataLock.Unlock()
 					// Check if the table is up to date.
 					if placementOrder.Operation == "update" {
@@ -307,7 +310,7 @@ func TestPerformTableUpdate(t *testing.T) {
 
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	const testClients = 100
-	serverAddress, testServer, cleanup := newTestPlacementServer(t, testRaftServer)
+	serverAddress, testServer, clock, cleanup := newTestPlacementServer(t, testRaftServer)
 	testServer.hasLeadership.Store(true)
 	var (
 		overArrLock sync.Mutex
@@ -321,16 +324,14 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	startFlag.Store(false)
 	wg.Add(testClients)
 	for i := 0; i < testClients; i++ {
-		conn, stream, err := newTestClient(serverAddress)
-		if err != nil {
-			t.Fatal(err)
-		}
+		conn, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
 		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {
 			defer wg.Done()
 			var start time.Time
 			for {
+				clock.Step(time.Second)
 				placementOrder, streamErr := clientStream.Recv()
 				if streamErr != nil {
 					return
@@ -339,9 +340,9 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 					if placementOrder.Operation == "lock" {
 						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
 							if clientID == 1 {
-								fmt.Println("client 1 lock", time.Now())
+								fmt.Println("client 1 lock", clock.Now())
 							}
-							start = time.Now()
+							start = clock.Now()
 						}
 					}
 					if placementOrder.Operation == "update" {
@@ -350,10 +351,10 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 					if placementOrder.Operation == "unlock" {
 						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
 							if clientID == 1 {
-								fmt.Println("client 1 unlock", time.Now())
+								fmt.Println("client 1 unlock", clock.Now())
 							}
 							overArrLock.Lock()
-							overArr[clientID] = time.Since(start).Milliseconds()
+							overArr[clientID] = clock.Since(start).Milliseconds()
 							overArrLock.Unlock()
 						}
 					}
@@ -377,7 +378,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 		testServer.streamConnPoolLock.RLock()
 		defer testServer.streamConnPoolLock.RUnlock()
 		return len(testServer.streamConnPool) == testClients
-	}, time.Second, time.Millisecond*10)
+	}, time.Second*5, time.Millisecond)
 
 	testServer.streamConnPoolLock.RLock()
 	streamConnPool := make([]placementGRPCStream, len(testServer.streamConnPool))
@@ -391,13 +392,6 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 		require.NoError(t, testServer.disseminateOperation(context.Background(), []placementGRPCStream{host}, "update", mockMessage))
 		require.NoError(t, testServer.disseminateOperation(context.Background(), []placementGRPCStream{host}, "unlock", mockMessage))
 	}
-	// fmt.Println("start lock ", time.Now())
-	// testServer.disseminateOperation(streamConnPool, "lock", mockMessage)
-	// fmt.Println("all lock  ", time.Now())
-	// testServer.disseminateOperation(streamConnPool, "update", mockMessage)
-	// fmt.Println("all update", time.Now())
-	// testServer.disseminateOperation(streamConnPool, "unlock", mockMessage)
-	// fmt.Println("all unlock", time.Now())
 	startFlag.Store(false)
 	var max int64
 	overArrLock.Lock()

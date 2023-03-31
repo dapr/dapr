@@ -358,15 +358,23 @@ func TestResponseHeader(t *testing.T) {
 		resp.Header.Set("Header1", "Value1")
 		resp.Header.Set("Header2", "Value2")
 		resp.Header.Set("Header3", "Value3")
+		resp.Header.Add("Multi", "foo")
+		resp.Header.Add("Multi", "bar")
 
 		imr := NewInvokeMethodResponse(0, "OK", nil).
 			WithFastHTTPHeaders(&resp.Header)
 		defer imr.Close()
 		mheader := imr.Headers()
 
+		require.NotEmpty(t, mheader)
+		require.NotEmpty(t, mheader["Header1"])
 		assert.Equal(t, "Value1", mheader["Header1"].GetValues()[0])
+		require.NotEmpty(t, mheader["Header2"])
 		assert.Equal(t, "Value2", mheader["Header2"].GetValues()[0])
+		require.NotEmpty(t, mheader["Header3"])
 		assert.Equal(t, "Value3", mheader["Header3"].GetValues()[0])
+		require.NotEmpty(t, mheader["Multi"])
+		assert.Equal(t, []string{"foo", "bar"}, mheader["Multi"].GetValues())
 	})
 }
 
