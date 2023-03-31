@@ -107,5 +107,11 @@ func generateWorkloadCert(sig x509.SignatureAlgorithm, ttl, skew time.Duration, 
 	cert.SignatureAlgorithm = sig
 	cert.URIs = []*url.URL{id.URL()}
 
+	// TODO: @joshvanl: before v1.11, daprd was matching on `cluster.local` for
+	// the DNS name so without this, daprd->daprd connections would fail. This is
+	// no longer the case, but we need to keep this here for backwards
+	// compatibility. Remove after v1.12.
+	cert.DNSNames = append(cert.DNSNames, "cluster.local")
+
 	return cert, nil
 }
