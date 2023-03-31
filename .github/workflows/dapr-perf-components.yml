@@ -436,7 +436,9 @@ jobs:
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
-        run: make setup-test-components
+        run: |
+          make setup-test-components
+          make setup-components-perf-test
       - name: Run pub-sub subscribe http components performance tests
         if: env.TEST_PREFIX != ''
         run: make test-perf-pubsub-subscribe-http-components
