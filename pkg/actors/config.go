@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	"net/http"
 	"time"
 
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
@@ -35,6 +36,8 @@ type Config struct {
 	Reentrancy                    daprAppConfig.ReentrancyConfig
 	RemindersStoragePartitions    int
 	EntityConfigs                 map[string]EntityConfig
+	HealthHTTPClient              *http.Client
+	HealthEndpoint                string
 }
 
 // Remap of daprAppConfig.EntityConfig but with more useful types for actors.go.
@@ -63,6 +66,8 @@ type ConfigOpts struct {
 	Port               int
 	Namespace          string
 	AppConfig          daprAppConfig.ApplicationConfig
+	HealthHTTPClient   *http.Client
+	HealthEndpoint     string
 }
 
 // NewConfig returns the actor runtime configuration.
@@ -77,6 +82,8 @@ func NewConfig(opts ConfigOpts) Config {
 		HostedActorTypes:              opts.AppConfig.Entities,
 		Reentrancy:                    opts.AppConfig.Reentrancy,
 		RemindersStoragePartitions:    opts.AppConfig.RemindersStoragePartitions,
+		HealthHTTPClient:              opts.HealthHTTPClient,
+		HealthEndpoint:                opts.HealthEndpoint,
 		HeartbeatInterval:             defaultHeartbeatInterval,
 		ActorDeactivationScanInterval: defaultActorScanInterval,
 		ActorIdleTimeout:              defaultActorIdleTimeout,

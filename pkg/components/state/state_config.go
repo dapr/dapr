@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	statesConfigurationLock sync.Mutex
+	statesConfigurationLock sync.RWMutex
 	statesConfiguration     = map[string]*StoreConfiguration{}
 	namespace               = os.Getenv("NAMESPACE")
 )
@@ -55,8 +55,8 @@ func SaveStateConfiguration(storeName string, metadata map[string]string) error 
 	}
 
 	statesConfigurationLock.Lock()
-	defer statesConfigurationLock.Unlock()
 	statesConfiguration[storeName] = &StoreConfiguration{keyPrefixStrategy: strategy}
+	statesConfigurationLock.Unlock()
 	return nil
 }
 
@@ -64,28 +64,29 @@ func GetModifiedStateKey(key, storeName, appID string) (string, error) {
 	if err := checkKeyIllegal(key); err != nil {
 		return "", err
 	}
+
 	stateConfiguration := getStateConfiguration(storeName)
 	switch stateConfiguration.keyPrefixStrategy {
 	case strategyNone:
 		return key, nil
 	case strategyStoreName:
-		return fmt.Sprintf("%s%s%s", storeName, daprSeparator, key), nil
+		return storeName + daprSeparator + key, nil
 	case strategyAppid:
 		if appID == "" {
 			return key, nil
 		}
-		return fmt.Sprintf("%s%s%s", appID, daprSeparator, key), nil
+		return appID + daprSeparator + key, nil
 	case strategyNamespace:
 		if appID == "" {
 			return key, nil
 		}
 		if namespace == "" {
 			// if namespace is empty, fallback to app id strategy
-			return fmt.Sprintf("%s%s%s", appID, daprSeparator, key), nil
+			return appID + daprSeparator + key, nil
 		}
-		return fmt.Sprintf("%s.%s%s%s", namespace, appID, daprSeparator, key), nil
+		return namespace + "." + appID + daprSeparator + key, nil
 	default:
-		return fmt.Sprintf("%s%s%s", stateConfiguration.keyPrefixStrategy, daprSeparator, key), nil
+		return stateConfiguration.keyPrefixStrategy + daprSeparator + key, nil
 	}
 }
 
@@ -98,13 +99,26 @@ func GetOriginalStateKey(modifiedStateKey string) string {
 }
 
 func getStateConfiguration(storeName string) *StoreConfiguration {
+	statesConfigurationLock.RLock()
+	c := statesConfiguration[storeName]
+	if c != nil {
+		statesConfigurationLock.RUnlock()
+		return c
+	}
+	statesConfigurationLock.RUnlock()
+
+	// Acquire a write lock now to update the value in cache
 	statesConfigurationLock.Lock()
 	defer statesConfigurationLock.Unlock()
-	c := statesConfiguration[storeName]
-	if c == nil {
-		c = &StoreConfiguration{keyPrefixStrategy: strategyDefault}
-		statesConfiguration[storeName] = c
+
+	// Try checking the cache again after acquiring a write lock, in case another goroutine has created the object
+	c = statesConfiguration[storeName]
+	if c != nil {
+		return c
 	}
+
+	c = &StoreConfiguration{keyPrefixStrategy: strategyDefault}
+	statesConfiguration[storeName] = c
 
 	return c
 }
