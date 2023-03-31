@@ -1303,11 +1303,11 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](reqCtx,
+	policyRunner := resiliency.NewRunner[struct{}](reqCtx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkSet(ctx, reqs)
+	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 

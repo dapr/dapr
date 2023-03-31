@@ -701,20 +701,27 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		return empty, err
 	}
 
-	reqs := []state.SetRequest{}
-	for _, s := range in.States {
-		key, err1 := stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
-		if err1 != nil {
-			return empty, err1
+	l := len(in.States)
+	if l == 0 {
+		return empty, nil
+	}
+
+	reqs := make([]state.SetRequest, l)
+	for i, s := range in.States {
+		var key string
+		key, err = stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
+		if err != nil {
+			return empty, err
 		}
 		req := state.SetRequest{
 			Key:      key,
 			Metadata: s.Metadata,
 		}
 
-		if contentType, ok := req.Metadata[contribMetadata.ContentType]; ok && contentType == contenttype.JSONContentType {
-			if err1 = json.Unmarshal(s.Value, &req.Value); err1 != nil {
-				return empty, err1
+		if req.Metadata[contribMetadata.ContentType] == contenttype.JSONContentType {
+			err = json.Unmarshal(s.Value, &req.Value)
+			if err != nil {
+				return empty, err
 			}
 		} else {
 			req.Value = s.Value
@@ -739,7 +746,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			req.Value = val
 		}
 
-		reqs = append(reqs, req)
+		reqs[i] = req
 	}
 
 	start := time.Now()
@@ -747,6 +754,10 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
+		// If there's a single request, perform it in non-bulk
+		if len(reqs) == 1 {
+			return nil, store.Set(ctx, &reqs[0])
+		}
 		return nil, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
