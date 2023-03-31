@@ -20,8 +20,8 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
-	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
-	github.com/hashicorp/go-hclog v1.4.0
+	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
+	github.com/hashicorp/go-hclog v1.5.0
 	github.com/hashicorp/go-msgpack/v2 v2.1.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru/v2 v2.0.2
@@ -29,6 +29,7 @@ require (
 	github.com/hashicorp/raft-boltdb v0.0.0-20230125174641-2a8082862702
 	github.com/jhump/protoreflect v1.15.1
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/labstack/gommon v0.4.0
 	github.com/microsoft/durabletask-go v0.1.4
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
@@ -55,7 +56,7 @@ require (
 	golang.org/x/net v0.8.0
 	golang.org/x/sync v0.1.0
 	google.golang.org/genproto v0.0.0-20230306155012-7f2fa6fef1f4
-	google.golang.org/grpc v1.53.0
+	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.26.3
@@ -259,7 +260,6 @@ require (
 	github.com/kubemq-io/protobuf v1.3.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/labd/commercetools-go-sdk v1.2.0 // indirect
-	github.com/labstack/gommon v0.3.1
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.1 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect

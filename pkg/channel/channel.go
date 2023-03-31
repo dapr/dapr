@@ -31,7 +31,6 @@ const (
 
 // AppChannel is an abstraction over communications with user code.
 type AppChannel interface {
-	GetBaseAddress() string
 	GetAppConfig() (*config.ApplicationConfig, error)
 	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	HealthProbe(ctx context.Context) (bool, error)

@@ -47,7 +47,6 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -86,7 +85,6 @@ type api struct {
 	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	lockStores                 map[string]lock.Store
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{}
 	transactionalStateStores   map[string]state.TransactionalStore
@@ -204,7 +202,6 @@ func NewAPI(opts APIOpts) API {
 		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
-		lockStores:                 opts.LockStores,
 		secretStores:               opts.SecretStores,
 		secretsConfiguration:       opts.SecretsConfiguration,
 		configurationStores:        opts.ConfigurationStores,
@@ -220,11 +217,13 @@ func NewAPI(opts APIOpts) API {
 		isStreamingEnabled:         opts.IsStreamingEnabled,
 		daprRunTimeVersion:         buildinfo.Version(),
 		universal: &universalapi.UniversalAPI{
+			AppID:                opts.AppID,
 			Logger:               log,
 			Resiliency:           opts.Resiliency,
 			CryptoProviders:      opts.CryptoProviders,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			LockStores:           opts.LockStores,
 			WorkflowComponents:   opts.WorkflowsComponents,
 		},
 	}
@@ -533,23 +532,6 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) constructDistributedLockEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "lock/{storeName}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onLock,
-		},
-		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "unlock/{storeName}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onUnlock,
-		},
-	}
-}
-
 func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 	body := reqCtx.PostBody()
@@ -784,25 +766,6 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 	return a.stateStores[storeName], storeName, nil
 }
 
-func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lock.Store, string, error) {
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		msg := NewErrorResponse("ERR_LOCK_STORE_NOT_CONFIGURED", messages.ErrLockStoresNotConfigured)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return nil, "", errors.New(msg.Message)
-	}
-
-	storeName := a.getStateStoreName(reqCtx)
-
-	if a.lockStores[storeName] == nil {
-		msg := NewErrorResponse("ERR_LOCK_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrLockStoreNotFound, storeName))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return nil, "", errors.New(msg.Message)
-	}
-	return a.lockStores[storeName], storeName, nil
-}
-
 // Route:   "workflows/{workflowComponent}/{workflowName}/{instanceId}",
 // Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
@@ -1000,88 +963,6 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		}
 	}
 	return nil
-}
-
-func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
-	store, storeName, err := a.getLockStoreWithRequestValidation(reqCtx)
-	if err != nil {
-		log.Debug(err)
-		return
-	}
-
-	req := lock.TryLockRequest{}
-	err = json.Unmarshal(reqCtx.PostBody(), &req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	req.ResourceID, err = lockLoader.GetModifiedLockKey(req.ResourceID, storeName, a.id)
-	if err != nil {
-		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
-	policyRunner := resiliency.NewRunner[*lock.TryLockResponse](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Lock),
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*lock.TryLockResponse, error) {
-		return store.TryLock(ctx, &req)
-	})
-	if err != nil {
-		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
-	b, _ := json.Marshal(resp)
-	respond(reqCtx, withJSON(200, b))
-}
-
-func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
-	store, storeName, err := a.getLockStoreWithRequestValidation(reqCtx)
-	if err != nil {
-		log.Debug(err)
-		return
-	}
-
-	req := &lock.UnlockRequest{}
-	err = json.Unmarshal(reqCtx.PostBody(), req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	req.ResourceID, err = lockLoader.GetModifiedLockKey(req.ResourceID, storeName, a.id)
-	if err != nil {
-		msg := NewErrorResponse("ERR_UNLOCK", err.Error())
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
-	policyRunner := resiliency.NewRunner[*lock.UnlockResponse](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Lock),
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*lock.UnlockResponse, error) {
-		return store.Unlock(ctx, req)
-	})
-	if err != nil {
-		msg := NewErrorResponse("ERR_UNLOCK", err.Error())
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
-	b, _ := json.Marshal(resp)
-	respond(reqCtx, withJSON(200, b))
 }
 
 func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -1645,7 +1526,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if resp != nil {
 		headers := resp.Headers()
 		if len(headers) > 0 {
-			invokev1.InternalMetadataToHTTPHeader(reqCtx, headers, reqCtx.Response.Header.Set)
+			invokev1.InternalMetadataToHTTPHeader(reqCtx, headers, reqCtx.Response.Header.Add)
 		}
 	}
 
@@ -1969,11 +1850,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	method := reqCtx.UserValue(methodParam).(string)
 
-	metadata := make(map[string][]string, reqCtx.Request.Header.Len())
-	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
-		metadata[string(key)] = []string{string(value)}
-	})
-
 	policyDef := a.resiliency.ActorPreLockPolicy(actorType, actorID)
 
 	req := invokev1.NewInvokeMethodRequest(method).
@@ -1981,8 +1857,8 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
 		WithRawDataBytes(reqCtx.PostBody()).
 		WithContentType(string(reqCtx.Request.Header.ContentType())).
-		// Save headers to metadata
-		WithMetadata(metadata)
+		// Save headers to internal metadata
+		WithFastHTTPHeaders(&reqCtx.Request.Header)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
 	}
@@ -2018,7 +1894,8 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 	defer resp.Close()
 
-	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
+	// Use Add to ensure headers are appended and not replaced
+	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Add)
 	body, err := resp.RawDataFull()
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))

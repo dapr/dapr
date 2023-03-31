@@ -48,10 +48,7 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 		}
 
 		ctx, span := startTracingClientSpanFromHTTPContext(ctx, path, spec)
-		headers := make(map[string]string)
-		ctx.Request.Header.VisitAll(func(key []byte, value []byte) {
-			headers[string(key)] = string(value)
-		})
+
 		next(ctx)
 
 		// Add span attributes only if it is sampled, which reduced the perf impact.
@@ -69,6 +66,7 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 		// Check if response has traceparent header and add if absent
 		if ctx.Response.Header.Peek(TraceparentHeader) == nil {
 			span = diagUtils.SpanFromContext(ctx)
+			// Using Header.Set here because we want to overwrite any header that may exist
 			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
 		}
 
@@ -83,9 +81,12 @@ func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
 	m := map[string]string{}
 
 	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
-		k := strings.ToLower(string(key))
-		if strings.HasPrefix(k, daprHeaderPrefix) {
-			m[k] = string(value)
+		if len(key) < (len(daprHeaderPrefix) + 1) {
+			return
+		}
+		ks := strings.ToLower(string(key))
+		if ks[0:len(daprHeaderPrefix)] == daprHeaderPrefix {
+			m[ks] = string(value)
 		}
 	})
 
