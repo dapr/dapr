@@ -168,7 +168,7 @@ func TestActorState(t *testing.T) {
 			assert.Eventually(t, func() bool {
 				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
 				return err == nil && code == http.StatusNoContent && string(resp) == ""
-			}, 10*time.Second, time.Second/2, "state should be deleted after TTL: %s", code)
+			}, 10*time.Second, time.Second/2, "state should be deleted after TTL: %s:%d", resp, code)
 		})
 	})
 
