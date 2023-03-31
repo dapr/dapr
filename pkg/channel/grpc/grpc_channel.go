@@ -66,11 +66,6 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	return c
 }
 
-// GetBaseAddress returns the application base address.
-func (g *Channel) GetBaseAddress() string {
-	return g.baseAddress
-}
-
 // GetAppConfig gets application config from user application.
 func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	return nil, nil
