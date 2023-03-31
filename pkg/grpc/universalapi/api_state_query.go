@@ -89,7 +89,7 @@ func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.Que
 	}
 
 	if resp == nil || len(resp.Results) == 0 {
-		return nil, nil
+		return &runtimev1pb.QueryStateResponse{}, nil
 	}
 
 	ret := &runtimev1pb.QueryStateResponse{

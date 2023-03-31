@@ -2522,7 +2522,7 @@ func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 			},
 			OutModifier: func(out *runtimev1pb.QueryStateResponse) (any, error) {
 				// We need to translate this to a JSON object because one of the fields must be returned as json.RawMessage
-				qresp := QueryResponse{
+				qresp := &QueryResponse{
 					Results:  make([]QueryItem, len(out.Results)),
 					Token:    out.Token,
 					Metadata: out.Metadata,
