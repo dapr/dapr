@@ -192,6 +192,9 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 					Request: map[string]interface{}{
 						"key":   "key1",
 						"value": data,
+						"metadata": map[string]string{
+							"ttlInSeconds": "100",
+						},
 					},
 				},
 				{
@@ -230,6 +233,9 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 						OperationType: "upsert",
 						Key:           "key1",
 						Value:         &anypb.Any{Value: data},
+						Metadata: map[string]string{
+							"ttlInSeconds": "100",
+						},
 					},
 					{
 						OperationType: "delete",
