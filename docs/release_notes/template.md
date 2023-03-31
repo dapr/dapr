@@ -126,7 +126,6 @@ Verify the control plane pods are running and are healthy:
 ```
 $ dapr status -k
   NAME                   NAMESPACE    HEALTHY  STATUS   REPLICAS  VERSION  AGE  CREATED
-  dapr-dashboard         dapr-system  True     Running  1         $dapr_dashboard_version    15s  $today 13:07.39
   dapr-sidecar-injector  dapr-system  True     Running  1         $dapr_version   15s  $today 13:07.39
   dapr-sentry            dapr-system  True     Running  1         $dapr_version   15s  $today 13:07.39
   dapr-operator          dapr-system  True     Running  1         $dapr_version   15s  $today 13:07.39
