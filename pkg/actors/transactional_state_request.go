@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/mitchellh/mapstructure"
+	"golang.org/x/exp/maps"
 
 	"github.com/dapr/components-contrib/state"
 )
@@ -115,9 +116,10 @@ func (t TransactionalOperation) StateOperation(baseKey string, opts StateOperati
 
 // TransactionalUpsert defines a key/value pair for an upsert operation.
 type TransactionalUpsert struct {
-	Key   string  `json:"key"`
-	Value any     `json:"value"`
-	ETag  *string `json:"etag,omitempty"`
+	Key      string            `json:"key"`
+	Value    any               `json:"value"`
+	ETag     *string           `json:"etag,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // StateOperation returns the state.TransactionalStateOperation object.
@@ -126,12 +128,18 @@ func (t TransactionalUpsert) StateOperation(baseKey string, opts StateOperationO
 		return op, errors.New("missing key")
 	}
 
+	if len(t.Metadata) == 0 {
+		t.Metadata = opts.Metadata
+	} else {
+		maps.Copy(t.Metadata, opts.Metadata)
+	}
+
 	return state.TransactionalStateOperation{
 		Operation: state.Upsert,
 		Request: state.SetRequest{
 			Key:         baseKey + t.Key,
 			Value:       t.Value,
-			Metadata:    opts.Metadata,
+			Metadata:    t.Metadata,
 			ETag:        t.ETag,
 			ContentType: opts.ContentType,
 		},
