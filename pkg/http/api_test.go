@@ -49,7 +49,9 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	workflowContrib "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -59,6 +61,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -932,7 +935,11 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 }
 
 func getFakeDirectMessageResponse() *invokev1.InvokeMethodResponse {
-	return invokev1.NewInvokeMethodResponse(200, "OK", nil).
+	return getFakeDirectMessageResponseWithStatusCode(fasthttp.StatusOK)
+}
+
+func getFakeDirectMessageResponseWithStatusCode(code int) *invokev1.InvokeMethodResponse {
+	return invokev1.NewInvokeMethodResponse(int32(code), fasthttp.StatusMessage(code), nil).
 		WithRawDataString("fakeDirectMessageResponse").
 		WithContentType("application/json")
 }
@@ -976,6 +983,38 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging without querystring - 201 Created", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponseWithStatusCode(fasthttp.StatusCreated)
+		defer fakeDirectMessageResponse.Close()
+
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 201, resp.StatusCode)
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
@@ -1388,6 +1427,33 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
+	t.Run("Test invoke direct message does not retry on 200", func(t *testing.T) {
+		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
+		fakeData := []byte("allgood")
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 1, failingDirectMessaging.Failure.CallCount("allgood"))
+	})
+
+	t.Run("Test invoke direct message does not retry on 2xx", func(t *testing.T) {
+		failingDirectMessaging.SuccessStatusCode = 201
+		defer func() {
+			failingDirectMessaging.SuccessStatusCode = 0
+		}()
+
+		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
+		fakeData := []byte("allgood2")
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		assert.Equal(t, 201, resp.StatusCode)
+		assert.Equal(t, 1, failingDirectMessaging.Failure.CallCount("allgood2"))
+	})
+
 	t.Run("Test invoke direct message retries with resiliency", func(t *testing.T) {
 		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
 		fakeData := []byte("failingKey")
@@ -1760,7 +1826,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -1790,7 +1856,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -1964,9 +2030,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		reminderResponse := actors.Reminder{
-			// Functions are not JSON encodable. This will force the error condition
-			Data: func() {},
+		reminderResponse := reminders.Reminder{
+			// This is not valid JSON
+			Data: json.RawMessage(`foo`),
 		}
 
 		mockActors := new(actors.MockActors)
@@ -1991,7 +2057,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 			Callback:  "",
@@ -2022,7 +2088,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -2230,7 +2296,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+		getSubscriptionsFn: func() []runtimePubsub.Subscription {
 			return []runtimePubsub.Subscription{
 				{
 					PubsubName:      "test",
@@ -2244,7 +2310,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 						},
 					},
 				},
-			}, nil
+			}
 		},
 	}
 	// PutMetadata only stroes string(request body)
@@ -2769,17 +2835,21 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 	storeName := "store1"
 
-	lockStores := map[string]lock.Store{
-		storeName: fakeLockStore,
-	}
+	l := logger.NewLogger("fakeLogger")
+	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
 	testAPI := &api{
-		resiliency: resiliency.New(nil),
-		lockStores: lockStores,
+		universal: &universalapi.UniversalAPI{
+			Logger: l,
+			LockStores: map[string]lock.Store{
+				storeName: fakeLockStore,
+			},
+			Resiliency: resiliencyConfig,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructDistributedLockEndpoints())
 
 	t.Run("Lock with valid request", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/lock/store1"
+		apiPath := apiVersionV1alpha1 + "/lock/store1"
 
 		req := lock.TryLockRequest{
 			ResourceID:      "1",
@@ -2800,7 +2870,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 
 	t.Run("Lock with invalid resource id", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/lock/store1"
+		apiPath := apiVersionV1alpha1 + "/lock/store1"
 
 		req := lock.TryLockRequest{
 			ResourceID:      "",
@@ -2811,14 +2881,14 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
 	})
 
 	t.Run("Lock with invalid owner", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/lock/store1"
+		apiPath := apiVersionV1alpha1 + "/lock/store1"
 
 		req := lock.TryLockRequest{
 			ResourceID:      "1",
@@ -2829,14 +2899,14 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
 	})
 
 	t.Run("Lock with invalid expiry", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/lock/store1"
+		apiPath := apiVersionV1alpha1 + "/lock/store1"
 
 		req := lock.TryLockRequest{
 			ResourceID: "1",
@@ -2846,14 +2916,14 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
 	})
 
 	t.Run("Unlock with valid request", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/unlock/store1"
+		apiPath := apiVersionV1alpha1 + "/unlock/store1"
 
 		req := lock.UnlockRequest{
 			ResourceID: "1",
@@ -2867,13 +2937,13 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
+		rspMap := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap)
 		assert.Equal(t, float64(0), rspMap["status"])
 	})
 
 	t.Run("Unlock with invalid resource id", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/unlock/store1"
+		apiPath := apiVersionV1alpha1 + "/unlock/store1"
 
 		req := lock.UnlockRequest{
 			ResourceID: "",
@@ -2883,17 +2953,15 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		b, _ := json.Marshal(&req)
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
-		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
-		assert.NotNil(t, rspMap)
-		assert.Equal(t, float64(3), rspMap["status"])
+		assert.Contains(t, string(resp.RawBody), "ERR_MALFORMED_REQUEST")
+		assert.Contains(t, string(resp.RawBody), "ResourceId is empty in lock store store1")
 	})
 
 	t.Run("Unlock with invalid resource id that returns 500", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/unlock/store1"
+		apiPath := apiVersionV1alpha1 + "/unlock/store1"
 
 		req := lock.UnlockRequest{
 			ResourceID: "error",
@@ -2910,11 +2978,11 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 
 	t.Run("Unlock with invalid owner", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/unlock/store1"
+		apiPath := apiVersionV1alpha1 + "/unlock/store1"
 
 		req := lock.UnlockRequest{
 			ResourceID: "1",
-			LockOwner:  "",
+			LockOwner:  "not-owner",
 		}
 
 		b, _ := json.Marshal(&req)
@@ -2927,6 +2995,282 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
 		assert.Equal(t, float64(3), rspMap["status"])
+	})
+}
+
+func TestV1Alpha1Workflow(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	var fakeWorkflowComponent workflowContrib.Workflow = &fakeWorkflowComponent{}
+
+	componentName := "dapr"
+
+	workflowComponents := map[string]workflowContrib.Workflow{
+		componentName: fakeWorkflowComponent,
+	}
+	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency)
+	testAPI := &api{
+		resiliency: resiliencyConfig,
+		universal: &universalapi.UniversalAPI{
+			Logger:             logger.NewLogger("fakeLogger"),
+			WorkflowComponents: workflowComponents,
+			Resiliency:         resiliencyConfig,
+		},
+	}
+
+	fakeServer.StartServer(testAPI.constructWorkflowEndpoints())
+
+	/////////////////////
+	// START API TESTS //
+	/////////////////////
+	t.Run("Start with no workflow type", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//instanceID/start"
+
+		req := workflowContrib.StartRequest{
+			WorkflowName: "Non-existent-workflow",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_NAME_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrWorkflowNameMissing.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Start with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//workflow-type/instanceID/start"
+
+		req := workflowContrib.StartRequest{
+			WorkflowName: "Non-existent-workflow",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Start with non existent component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/workflowName/instanceID/start"
+
+		req := workflowContrib.StartRequest{
+			WorkflowName: "Non-existent-workflow",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Start with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr/workflowName//start"
+
+		req := workflowContrib.StartRequest{
+			WorkflowName: "Non-existent-workflow",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Start with valid URL path", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'start' method implemented to simply return nil
+
+		apiPath := "v1.0-alpha1/workflows/dapr/workflowName/instanceID/start"
+
+		req := workflowContrib.StartRequest{
+			WorkflowName: "Non-existent-workflow",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
+
+	/////////////////////
+	// GET API TESTS ////
+	/////////////////////
+	t.Run("Get with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//instanceID"
+
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Get with non existent workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID"
+
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Get with valid api call", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'get' method implemented to simply return
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID"
+
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
+
+	/////////////////////////
+	// TERMINATE API TESTS //
+	/////////////////////////
+	t.Run("Terminate with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//terminate"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Terminate with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//instanceID/terminate"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Terminate with non existent component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/terminate"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Terminate with valid API path", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'terminate' method implemented to simply return nil
+
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/terminate"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
+
+	///////////////////////////
+	// RAISE EVENT API TESTS //
+	///////////////////////////
+	t.Run("Raise Event with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//raiseEvent/eventName"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Raise Event with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//instanceID/raiseEvent/fakeEvent"
+
+		req := workflowContrib.RaiseEventRequest{
+			InstanceID: "",
+			EventName:  "",
+			Input:      nil,
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Raise Event with non existent component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/raiseEvent/fakeEvent"
+
+		req := workflowContrib.RaiseEventRequest{
+			InstanceID: "",
+			EventName:  "",
+			Input:      nil,
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Raise Event with valid API path", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'RaiseEvent' method implemented to simply return nil
+
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/raiseEvent/fakeEvent"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
 	})
 }
 
@@ -3277,14 +3621,14 @@ func TestV1StateEndpoints(t *testing.T) {
 		"store1":    fakeStore,
 		"failStore": failingStore,
 	}
-	fakeTransactionalStores := map[string]state.TransactionalStore{
-		"store1":    fakeStore.(state.TransactionalStore),
-		"failStore": failingStore,
-	}
 	testAPI := &api{
-		stateStores:              fakeStores,
-		transactionalStateStores: fakeTransactionalStores,
-		resiliency:               resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency),
+		stateStores: fakeStores,
+		resiliency:  resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency),
+	}
+	testAPI.universal = &universalapi.UniversalAPI{
+		Logger:      logger.NewLogger("fakeLogger"),
+		StateStores: fakeStores,
+		Resiliency:  testAPI.resiliency,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -3301,11 +3645,14 @@ func TestV1StateEndpoints(t *testing.T) {
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
 				testAPI.stateStores = nil
+				testAPI.universal.StateStores = nil
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 500, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+
 				testAPI.stateStores = fakeStores
+				testAPI.universal.StateStores = fakeStores
 
 				// act
 				resp = fakeServer.DoRequest(method, apiPath, nil, nil)
@@ -3321,7 +3668,6 @@ func TestV1StateEndpoints(t *testing.T) {
 			"v1.0/state/store1/",
 			"v1.0/state/store1/bulk",
 			"v1.0/state/store1/transaction",
-			"v1.0-alpha1/state/store1/query",
 		}
 
 		for _, apiPath := range apiPaths {
@@ -3571,7 +3917,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp = fakeServer.DoRequest("POST", apiPath, []byte(queryTestRequestSyntaxErr), nil)
 		// assert
-		assert.Equal(t, 400, resp.StatusCode)
+		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	t.Run("get state request retries with resiliency", func(t *testing.T) {
@@ -3807,22 +4153,28 @@ func TestV1StateEndpoints(t *testing.T) {
 func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		stateStores: map[string]state.Store{"store1": fakeStateStore{}},
-		resiliency:  resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			Logger:      logger.NewLogger("fakeLogger"),
+			StateStores: map[string]state.Store{"store1": fakeStateStore{}},
+			Resiliency:  resiliency.New(nil),
+		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
 	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/store1/query", nil, nil)
 	// assert
-	assert.Equal(t, 404, resp.StatusCode)
-	assert.Equal(t, "ERR_METHOD_NOT_FOUND", resp.ErrorBody["errorCode"])
+	assert.Equal(t, 500, resp.StatusCode)
+	assert.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", resp.ErrorBody["errorCode"])
 }
 
 func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		stateStores: map[string]state.Store{"store1": fakeStateStoreQuerier{}},
-		resiliency:  resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			Logger:      logger.NewLogger("fakeLogger"),
+			StateStores: map[string]state.Store{"store1": fakeStateStoreQuerier{}},
+			Resiliency:  resiliency.New(nil),
+		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
@@ -3835,15 +4187,19 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	storeName := "encrypted-store1"
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		stateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
-		resiliency:  resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			Logger:      logger.NewLogger("fakeLogger"),
+			StateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
+			Resiliency:  resiliency.New(nil),
+		},
 	}
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
 	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/"+storeName+"/query", nil, nil)
 	// assert
-	assert.Equal(t, 400, resp.StatusCode)
+	assert.Equal(t, 500, resp.StatusCode)
+	assert.Contains(t, string(resp.RawBody), "cannot query encrypted store")
 }
 
 const (
@@ -3941,7 +4297,7 @@ func (c fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bo
 	return false, nil, nil
 }
 
-func (c fakeStateStore) Init(metadata state.Metadata) error {
+func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
@@ -4266,7 +4622,7 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 	return nil, errors.New("get key error: value not found")
 }
 
-func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
+func (c fakeConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	c.counter = 0 //nolint:staticcheck
 	return nil
 }
@@ -4282,13 +4638,17 @@ func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configura
 	return nil
 }
 
+func (c *fakeConfigurationStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 type fakeLockStore struct{}
 
 func (l fakeLockStore) Ping() error {
 	return nil
 }
 
-func (l *fakeLockStore) InitLockStore(metadata lock.Metadata) error {
+func (l *fakeLockStore) InitLockStore(ctx context.Context, metadata lock.Metadata) error {
 	return nil
 }
 
@@ -4327,7 +4687,7 @@ func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*l
 		return &lock.UnlockResponse{}, errors.New("empty request")
 	}
 
-	if req.LockOwner == "" {
+	if req.LockOwner == "not-owner" {
 		return &lock.UnlockResponse{
 			Status: 3,
 		}, nil
@@ -4346,6 +4706,46 @@ func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*l
 	return &lock.UnlockResponse{
 		Status: 0,
 	}, nil
+}
+
+func (l *fakeLockStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
+type fakeWorkflowComponent struct{}
+
+func (l *fakeWorkflowComponent) Init(metadata workflowContrib.Metadata) error {
+	return nil
+}
+
+func (l *fakeWorkflowComponent) Start(ctx context.Context, req *workflowContrib.StartRequest) (*workflowContrib.WorkflowReference, error) {
+	responseReference := &workflowContrib.WorkflowReference{
+		InstanceID: "",
+	}
+	return responseReference, nil
+}
+
+func (l *fakeWorkflowComponent) Terminate(ctx context.Context, req *workflowContrib.WorkflowReference) error {
+	return nil
+}
+
+func (l *fakeWorkflowComponent) Get(ctx context.Context, req *workflowContrib.WorkflowReference) (*workflowContrib.StateResponse, error) {
+	stateResponse := &workflowContrib.StateResponse{
+		WFInfo: workflowContrib.WorkflowReference{
+			InstanceID: "",
+		},
+		StartTime: "2006-01-02T15:04:05Z", // This is just a dummy time format
+		Metadata:  map[string]string{},
+	}
+	return stateResponse, nil
+}
+
+func (l *fakeWorkflowComponent) RaiseEvent(ctx context.Context, req *workflowContrib.RaiseEventRequest) error {
+	return nil
+}
+
+func (l *fakeWorkflowComponent) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {
@@ -4383,13 +4783,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		"store1":                fakeStore,
 		"storeNonTransactional": fakeStoreNonTransactional,
 	}
-	fakeTransactionalStores := map[string]state.TransactionalStore{
-		"store1": fakeStore.(state.TransactionalStore),
-	}
 	testAPI := &api{
-		stateStores:              fakeStores,
-		transactionalStateStores: fakeTransactionalStores,
-		resiliency:               resiliency.New(nil),
+		stateStores: fakeStores,
+		resiliency:  resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

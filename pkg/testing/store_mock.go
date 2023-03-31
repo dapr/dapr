@@ -52,7 +52,7 @@ func (_m *MockConfigurationStore) Get(ctx context.Context, req *configuration.Ge
 }
 
 // Init provides a mock function with given fields: metadata
-func (_m *MockConfigurationStore) Init(metadata configuration.Metadata) error {
+func (_m *MockConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	ret := _m.Called(metadata)
 
 	var r0 error
@@ -63,6 +63,10 @@ func (_m *MockConfigurationStore) Init(metadata configuration.Metadata) error {
 	}
 
 	return r0
+}
+
+func (_m *MockConfigurationStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 // Subscribe provides a mock function with given fields: ctx, req, handler
@@ -113,8 +117,12 @@ func (f *FailingConfigurationStore) Get(ctx context.Context, req *configuration.
 	return &configuration.GetResponse{}, nil
 }
 
-func (f *FailingConfigurationStore) Init(metadata configuration.Metadata) error {
+func (f *FailingConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
+}
+
+func (f *FailingConfigurationStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (f *FailingConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {

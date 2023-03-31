@@ -10,7 +10,7 @@
                         "EQ": { "person.org": "Finance" }
                     },
                     {
-                        "IN": { "state": [ "CA", "WA" ] }
+                        "IN": { "state": ["CA", "WA"] }
                     }
                 ]
             }

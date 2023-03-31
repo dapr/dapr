@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"net"
 	"strconv"
 	"testing"
 	"time"
@@ -26,56 +27,74 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-const testStreamSendLatency = 50 * time.Millisecond
+const testStreamSendLatency = time.Second
 
-func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) {
-	testServer := NewPlacementService(raftServer)
+func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
+	t.Helper()
 
-	port, _ := freeport.GetFreePort()
+	testServer, err := NewPlacementService(raftServer, nil)
+	require.NoError(t, err)
+	clock := clocktesting.NewFakeClock(time.Now())
+	testServer.clock = clock
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+
+	serverStopped := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		testServer.Run(strconv.Itoa(port), nil)
+		close(serverStopped)
+		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
 	}()
 
-	// Wait until test server starts
-	time.Sleep(100 * time.Millisecond)
+	assert.Eventually(t, func() bool {
+		conn, err := net.Dial("tcp", ":"+strconv.Itoa(port))
+		if err == nil {
+			conn.Close()
+		}
+		return err == nil
+	}, time.Second*5, time.Millisecond, "server did not start in time")
 
 	cleanUpFn := func() {
-		testServer.hasLeadership.Store(false)
-		testServer.Shutdown()
+		cancel()
+		select {
+		case <-serverStopped:
+		case <-time.After(time.Second * 5):
+			t.Error("server did not stop in time")
+		}
 	}
 
 	serverAddress := "127.0.0.1:" + strconv.Itoa(port)
-	return serverAddress, testServer, cleanUpFn
+	return serverAddress, testServer, clock, cleanUpFn
 }
 
-func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient, error) { //nolint:nosnakecase
-	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, nil, err
-	}
+func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	require.NoError(t, err)
+
 	client := v1pb.NewPlacementClient(conn)
 	stream, err := client.ReportDaprStatus(context.Background())
-	if err != nil {
-		conn.Close()
-		return nil, nil, err
-	}
+	require.NoError(t, err)
 
-	return conn, stream, nil
+	return conn, stream
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
 	// set up
-	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
+	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(false)
 
 	// arrange
-	conn, stream, err := newTestClient(serverAddress)
-	assert.NoError(t, err)
+	conn, stream := newTestClient(t, serverAddress)
 
 	host := &v1pb.Host{
 		Name:     "127.0.0.1:50102",
@@ -87,7 +106,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 
 	// act
 	stream.Send(host)
-	_, err = stream.Recv()
+	_, err := stream.Recv()
 	s, ok := status.FromError(err)
 
 	// assert
@@ -97,17 +116,16 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 
 	// tear down
 	conn.Close()
-	cleanup()
 }
 
 func TestMemberRegistration_Leadership(t *testing.T) {
-	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	serverAddress, testServer, clock, cleanup := newTestPlacementServer(t, testRaftServer)
+	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(true)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
-		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
 
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50102",
@@ -118,20 +136,23 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		}
 
 		// act
-		stream.Send(host)
+		require.NoError(t, stream.Send(host))
 
 		// assert
-		select {
-		case memberChange := <-testServer.membershipCh:
-			assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-			assert.Equal(t, host.Name, memberChange.host.Name)
-			assert.Equal(t, host.Id, memberChange.host.AppID)
-			assert.EqualValues(t, host.Entities, memberChange.host.Entities)
-			assert.Equal(t, 1, len(testServer.streamConnPool))
-
-		case <-time.After(testStreamSendLatency):
-			assert.True(t, false, "no membership change")
-		}
+		assert.Eventually(t, func() bool {
+			clock.Step(disseminateTimerInterval)
+			select {
+			case memberChange := <-testServer.membershipCh:
+				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
+				assert.Equal(t, host.Name, memberChange.host.Name)
+				assert.Equal(t, host.Id, memberChange.host.AppID)
+				assert.EqualValues(t, host.Entities, memberChange.host.Entities)
+				assert.Equal(t, 1, len(testServer.streamConnPool))
+				return true
+			default:
+				return false
+			}
+		}, testStreamSendLatency, time.Millisecond, "no membership change")
 
 		// act
 		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
@@ -153,8 +174,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
-		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{
@@ -167,20 +187,23 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		stream.Send(host)
 
 		// assert
-		select {
-		case memberChange := <-testServer.membershipCh:
-			assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-			assert.Equal(t, host.Name, memberChange.host.Name)
-			assert.Equal(t, host.Id, memberChange.host.AppID)
-			assert.EqualValues(t, host.Entities, memberChange.host.Entities)
-			testServer.streamConnPoolLock.Lock()
-			l := len(testServer.streamConnPool)
-			testServer.streamConnPoolLock.Unlock()
-			assert.Equal(t, 1, l)
-
-		case <-time.After(testStreamSendLatency):
-			require.True(t, false, "no membership change")
-		}
+		assert.Eventually(t, func() bool {
+			clock.Step(disseminateTimerInterval)
+			select {
+			case memberChange := <-testServer.membershipCh:
+				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
+				assert.Equal(t, host.Name, memberChange.host.Name)
+				assert.Equal(t, host.Id, memberChange.host.AppID)
+				assert.EqualValues(t, host.Entities, memberChange.host.Entities)
+				testServer.streamConnPoolLock.Lock()
+				l := len(testServer.streamConnPool)
+				testServer.streamConnPoolLock.Unlock()
+				assert.Equal(t, 1, l)
+				return true
+			default:
+				return false
+			}
+		}, testStreamSendLatency, time.Millisecond, "no membership change")
 
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario
@@ -202,8 +225,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("non actor host", func(t *testing.T) {
 		// arrange
-		conn, stream, err := newTestClient(serverAddress)
-		assert.NoError(t, err)
+		conn, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{
@@ -218,7 +240,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// assert
 		select {
 		case <-testServer.membershipCh:
-			require.True(t, false, "should not have any membership change")
+			require.Fail(t, "should not have any membership change")
 
 		case <-time.After(testStreamSendLatency):
 			require.True(t, true)
@@ -227,8 +249,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
-		conn.Close()
+		assert.NoError(t, conn.Close())
 	})
-
-	cleanup()
 }

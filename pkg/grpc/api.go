@@ -43,7 +43,6 @@ import (
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -90,12 +89,9 @@ type api struct {
 	appChannel                 channel.AppChannel
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
-	workflowComponents         map[string]workflows.Workflow
-	transactionalStateStores   map[string]state.TransactionalStore
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
-	lockStores                 map[string]lock.Store
 	pubsubAdapter              runtimePubsub.Adapter
 	id                         string
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -106,137 +102,8 @@ type api struct {
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
-	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
+	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	daprRunTimeVersion         string
-}
-
-func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
-	// 1. validate
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.LockOwner == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.ExpiryInSeconds <= 0 {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrExpiryInSecondsNotPositive, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 2. find lock component
-	store, ok := a.lockStores[req.StoreName]
-	if !ok {
-		return &runtimev1pb.TryLockResponse{}, status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
-	}
-	// 3. convert request
-	compReq := TryLockRequestToComponentRequest(req)
-	// modify key
-	var err error
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 4. delegate to the component
-	compResp, err := store.TryLock(ctx, compReq)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 5. convert response
-	resp := TryLockResponseToGrpcResponse(compResp)
-	return resp, nil
-}
-
-func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error) {
-	// 1. validate
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
-		return newInternalErrorUnlockResponse(), err
-	}
-	if req.LockOwner == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 2. find store component
-	store, ok := a.lockStores[req.StoreName]
-	if !ok {
-		return newInternalErrorUnlockResponse(), status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
-	}
-	// 3. convert request
-	compReq := UnlockGrpcToComponentRequest(req)
-	// modify key
-	var err error
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 4. delegate to the component
-	compResp, err := store.Unlock(ctx, compReq)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 5. convert response
-	resp := UnlockResponseToGrpcResponse(compResp)
-	return resp, nil
-}
-
-func newInternalErrorUnlockResponse() *runtimev1pb.UnlockResponse {
-	return &runtimev1pb.UnlockResponse{
-		Status: runtimev1pb.UnlockResponse_INTERNAL_ERROR, //nolint:nosnakecase
-	}
-}
-
-func TryLockRequestToComponentRequest(req *runtimev1pb.TryLockRequest) *lock.TryLockRequest {
-	result := &lock.TryLockRequest{}
-	if req == nil {
-		return result
-	}
-	result.ResourceID = req.ResourceId
-	result.LockOwner = req.LockOwner
-	result.ExpiryInSeconds = req.ExpiryInSeconds
-	return result
-}
-
-func TryLockResponseToGrpcResponse(compResponse *lock.TryLockResponse) *runtimev1pb.TryLockResponse {
-	result := &runtimev1pb.TryLockResponse{}
-	if compResponse == nil {
-		return result
-	}
-	result.Success = compResponse.Success
-	return result
-}
-
-func UnlockGrpcToComponentRequest(req *runtimev1pb.UnlockRequest) *lock.UnlockRequest {
-	result := &lock.UnlockRequest{}
-	if req == nil {
-		return result
-	}
-	result.ResourceID = req.ResourceId
-	result.LockOwner = req.LockOwner
-	return result
-}
-
-func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.UnlockResponse {
-	result := &runtimev1pb.UnlockResponse{}
-	if compResp == nil {
-		return result
-	}
-	result.Status = runtimev1pb.UnlockResponse_Status(compResp.Status) //nolint:nosnakecase
-	return result
 }
 
 // APIOpts contains options for NewAPI.
@@ -260,23 +127,21 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
-	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
-	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range opts.StateStores {
-		if state.FeatureTransactional.IsPresent(store.Features()) {
-			transactionalStateStores[key] = store.(state.TransactionalStore)
-		}
-	}
 	return &api{
 		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:                opts.AppID,
 			Logger:               apiServerLogger,
 			Resiliency:           opts.Resiliency,
+			StateStores:          opts.StateStores,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
+			LockStores:           opts.LockStores,
+			WorkflowComponents:   opts.WorkflowComponents,
 		},
 		directMessaging:            opts.DirectMessaging,
 		actor:                      opts.Actor,
@@ -285,11 +150,8 @@ func NewAPI(opts APIOpts) API {
 		appChannel:                 opts.AppChannel,
 		pubsubAdapter:              opts.PubsubAdapter,
 		stateStores:                opts.StateStores,
-		transactionalStateStores:   transactionalStateStores,
-		workflowComponents:         opts.WorkflowComponents,
 		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		lockStores:                 opts.LockStores,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
 		tracingSpec:                opts.TracingSpec,
 		accessControlList:          opts.AccessControlList,
@@ -352,7 +214,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			ID:              a.id,
+			Source:          a.id,
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
 			Data:            body,
@@ -560,7 +422,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				ID:              a.id,
+				Source:          a.id,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
@@ -687,7 +549,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	bulkResp := &runtimev1pb.GetBulkStateResponse{}
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return bulkResp, err
 	}
 
@@ -696,11 +558,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	// try bulk get first
+	var key string
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
-		key, err1 := stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
-		if err1 != nil {
-			return &runtimev1pb.GetBulkStateResponse{}, err1
+		key, err = stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
+		if err != nil {
+			return &runtimev1pb.GetBulkStateResponse{}, err
 		}
 		r := state.GetRequest{
 			Key:      key,
@@ -742,65 +605,72 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
 		}
-		return bulkResp, nil
-	}
-
-	// if store doesn't support bulk get, fallback to call get() method one by one
-	limiter := concurrency.NewLimiter(int(in.Parallelism))
-	n := len(reqs)
-	resultCh := make(chan *runtimev1pb.BulkStateItem, n)
-	for i := 0; i < n; i++ {
-		fn := func(param interface{}) {
-			req := param.(*state.GetRequest)
-			policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
-			res, policyErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-				return store.Get(ctx, req)
-			})
-
-			item := &runtimev1pb.BulkStateItem{
-				Key: stateLoader.GetOriginalStateKey(req.Key),
+	} else {
+		// if store doesn't support bulk get, fallback to call get() method one by one
+		bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(reqs))
+		limiter := concurrency.NewLimiter(int(in.Parallelism))
+		for i := range reqs {
+			bulkResp.Items[i] = &runtimev1pb.BulkStateItem{
+				Key: reqs[i].Key,
 			}
 
-			if policyErr != nil {
-				item.Error = policyErr.Error()
-			} else if res != nil {
-				item.Data = res.Data
-				item.Etag = stringValueOrEmpty(res.ETag)
-				item.Metadata = res.Metadata
+			fn := func(iAny any) {
+				rI := iAny.(int)
+				policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
+				res, rErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
+					return store.Get(ctx, &reqs[rI])
+				})
+
+				item := &runtimev1pb.BulkStateItem{
+					Key: stateLoader.GetOriginalStateKey(reqs[rI].Key),
+				}
+
+				if rErr != nil {
+					item.Error = rErr.Error()
+				} else if res != nil {
+					item.Data = res.Data
+					item.Etag = stringValueOrEmpty(res.ETag)
+					item.Metadata = res.Metadata
+				}
+				bulkResp.Items[rI] = item
 			}
-			resultCh <- item
+			limiter.Execute(fn, i)
 		}
-		limiter.Execute(fn, &reqs[i])
+		limiter.Wait()
 	}
-	limiter.Wait()
-	// collect result
-	for i := 0; i < n; i++ {
-		item := <-resultCh
 
-		if encryption.EncryptedStateStore(in.StoreName) {
-			val, err := encryption.TryDecryptValue(in.StoreName, item.Data)
-			if err != nil {
-				item.Error = err.Error()
-				apiServerLogger.Debug(err)
-
+	if encryption.EncryptedStateStore(in.StoreName) {
+		for i := range bulkResp.Items {
+			if bulkResp.Items[i].Error != "" || len(bulkResp.Items[i].Data) == 0 {
 				continue
 			}
 
-			item.Data = val
-		}
+			val, err := encryption.TryDecryptValue(in.StoreName, bulkResp.Items[i].Data)
+			if err != nil {
+				apiServerLogger.Debugf("Bulk get error: %v", err)
+				bulkResp.Items[i].Data = nil
+				bulkResp.Items[i].Error = err.Error()
+				continue
+			}
 
-		bulkResp.Items = append(bulkResp.Items, item)
+			bulkResp.Items[i].Data = val
+		}
 	}
+
 	return bulkResp, nil
 }
 
 func (a *api) getStateStore(name string) (state.Store, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return nil, status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
+	if len(a.stateStores) == 0 {
+		err := messages.ErrStateStoresNotConfigured
+		apiServerLogger.Debug(err)
+		return nil, err
 	}
 
 	if a.stateStores[name] == nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, name)
+		err := messages.ErrStateStoreNotFound.WithFormat(name)
+		apiServerLogger.Debug(err)
+		return nil, err
 	}
 	return a.stateStores[name], nil
 }
@@ -808,7 +678,7 @@ func (a *api) getStateStore(name string) (state.Store, error) {
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
@@ -868,7 +738,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return empty, err
 	}
 
@@ -932,71 +802,6 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	return empty, nil
 }
 
-func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
-	ret := &runtimev1pb.QueryStateResponse{}
-
-	store, err := a.getStateStore(in.StoreName)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-
-	querier, ok := store.(state.Querier)
-	if !ok {
-		err = status.Errorf(codes.Unimplemented, messages.ErrNotFound, "Query")
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-
-	if encryption.EncryptedStateStore(in.StoreName) {
-		err = status.Errorf(codes.Aborted, messages.ErrStateQuery, in.GetStoreName(), "cannot query encrypted store")
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-
-	var req state.QueryRequest
-	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-	req.Metadata = in.GetMetadata()
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*state.QueryResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
-		return querier.Query(ctx, &req)
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.StateQuery, err == nil, elapsed)
-
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateQuery, in.GetStoreName(), err.Error())
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-
-	if resp == nil || len(resp.Results) == 0 {
-		return ret, nil
-	}
-
-	ret.Results = make([]*runtimev1pb.QueryStateItem, len(resp.Results))
-	ret.Token = resp.Token
-	ret.Metadata = resp.Metadata
-
-	for i := range resp.Results {
-		ret.Results[i] = &runtimev1pb.QueryStateItem{
-			Key:  stateLoader.GetOriginalStateKey(resp.Results[i].Key),
-			Data: resp.Results[i].Data,
-		}
-	}
-
-	return ret, nil
-}
-
 // stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
 func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
 	e, ok := err.(*state.ETagError)
@@ -1018,7 +823,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return empty, err
 	}
 
@@ -1064,7 +869,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return empty, err
 	}
 
@@ -1116,19 +921,13 @@ func extractEtag(req *commonv1pb.StateItem) (bool, string) {
 }
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+	store, storeErr := a.getStateStore(in.StoreName)
+	if storeErr != nil {
+		// Error has already been logged
+		return &emptypb.Empty{}, storeErr
 	}
 
-	if a.stateStores[in.StoreName] == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, in.StoreName)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
-	}
-
-	transactionalStore, ok := a.transactionalStateStores[in.StoreName]
+	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok {
 		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, in.StoreName)
 		apiServerLogger.Debug(err)
@@ -1217,15 +1016,15 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](ctx,
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   in.Metadata,
 	}
-	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, transactionalStore.Multi(ctx, storeReq)
+	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, transactionalStore.Multi(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1393,10 +1192,13 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		var actorOp actors.TransactionalOperation
 		switch state.OperationType(op.OperationType) {
 		case state.Upsert:
-			setReq := map[string]interface{}{
+			setReq := map[string]any{
 				"key":   op.Key,
 				"value": op.Value.Value,
 				// Actor state do not user other attributes from state request.
+			}
+			if meta := op.GetMetadata(); len(meta) > 0 {
+				setReq["metadata"] = meta
 			}
 
 			actorOp = actors.TransactionalOperation{
@@ -1551,12 +1353,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions, err := a.getSubscriptionsFn()
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetMetadataResponse{}, err
-	}
+	subscriptions := a.getSubscriptionsFn()
 	ps := []*runtimev1pb.PubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, &runtimev1pb.PubsubSubscription{
@@ -1603,136 +1400,6 @@ func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.Pu
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
 	return &emptypb.Empty{}, nil
-}
-
-func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	req := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-	response, err := workflowRun.Get(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-
-	id := &runtimev1pb.WorkflowReference{
-		InstanceId: response.WFInfo.InstanceID,
-	}
-
-	t, err := time.Parse(time.RFC3339, response.StartTime)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTimerParse, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-
-	res := &runtimev1pb.GetWorkflowResponse{
-		InstanceId: id.InstanceId,
-		StartTime:  t.Unix(),
-		Metadata:   response.Metadata,
-	}
-	return res, nil
-}
-
-func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error) {
-	if in.WorkflowName == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrWorkflowNameMissing)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	wf := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-
-	var inputMap map[string]interface{}
-	json.Unmarshal(in.Input, &inputMap)
-	req := workflows.StartRequest{
-		WorkflowReference: wf,
-		Options:           in.Options,
-		WorkflowName:      in.WorkflowName,
-		Input:             inputMap,
-	}
-
-	resp, err := workflowRun.Start(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrStartWorkflow, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-	ret := &runtimev1pb.WorkflowReference{
-		InstanceId: resp.InstanceID,
-	}
-	return ret, nil
-}
-
-func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	req := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-
-	err := workflowRun.Terminate(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, nil
-	}
-	return &runtimev1pb.TerminateWorkflowResponse{}, nil
 }
 
 // Shutdown the sidecar.

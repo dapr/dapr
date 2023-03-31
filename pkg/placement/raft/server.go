@@ -14,14 +14,17 @@ limitations under the License.
 package raft
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
+	"k8s.io/utils/clock"
 )
 
 const (
@@ -55,6 +58,8 @@ type Server struct {
 
 	config        *raft.Config
 	raft          *raft.Raft
+	lock          sync.RWMutex
+	raftReady     chan struct{}
 	raftStore     *raftboltdb.BoltStore
 	raftTransport *raft.NetworkTransport
 
@@ -63,25 +68,42 @@ type Server struct {
 	snapStore   raft.SnapshotStore
 
 	raftLogStorePath string
+
+	clock clock.Clock
+}
+
+type Options struct {
+	ID           string
+	InMem        bool
+	Peers        []PeerInfo
+	LogStorePath string
+	Clock        clock.Clock
 }
 
 // New creates Raft server node.
-func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
-	raftBind := raftAddressForID(id, peers)
+func New(opts Options) *Server {
+	raftBind := raftAddressForID(opts.ID, opts.Peers)
 	if raftBind == "" {
 		return nil
 	}
 
+	cl := opts.Clock
+	if cl == nil {
+		cl = &clock.RealClock{}
+	}
+
 	return &Server{
-		id:               id,
-		inMem:            inMem,
+		id:               opts.ID,
+		inMem:            opts.InMem,
 		raftBind:         raftBind,
-		peers:            peers,
-		raftLogStorePath: logStorePath,
+		peers:            opts.Peers,
+		raftLogStorePath: opts.LogStorePath,
+		clock:            cl,
+		raftReady:        make(chan struct{}),
 	}
 }
 
-func tryResolveRaftAdvertiseAddr(bindAddr string) (*net.TCPAddr, error) {
+func (s *Server) tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr string) (*net.TCPAddr, error) {
 	// HACKHACK: Kubernetes POD DNS A record population takes some time
 	// to look up the address after StatefulSet POD is deployed.
 	var err error
@@ -91,16 +113,23 @@ func tryResolveRaftAdvertiseAddr(bindAddr string) (*net.TCPAddr, error) {
 		if err == nil {
 			return addr, nil
 		}
-		time.Sleep(nameResolveRetryInterval)
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-s.clock.After(nameResolveRetryInterval):
+			// nop
+		}
 	}
 	return nil, err
 }
 
 // StartRaft starts Raft node with Raft protocol configuration. if config is nil,
 // the default config will be used.
-func (s *Server) StartRaft(config *raft.Config) error {
+func (s *Server) StartRaft(ctx context.Context, config *raft.Config) error {
 	// If we have an unclean exit then attempt to close the Raft store.
 	defer func() {
+		s.lock.RLock()
+		defer s.lock.RUnlock()
 		if s.raft == nil && s.raftStore != nil {
 			if err := s.raftStore.Close(); err != nil {
 				logging.Errorf("failed to close log storage: %v", err)
@@ -110,7 +139,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 
 	s.fsm = newFSM()
 
-	addr, err := tryResolveRaftAdvertiseAddr(s.raftBind)
+	addr, err := s.tryResolveRaftAdvertiseAddr(ctx, s.raftBind)
 	if err != nil {
 		return err
 	}
@@ -193,14 +222,34 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		}
 	}
 
+	s.lock.Lock()
 	s.raft, err = raft.NewRaft(s.config, s.fsm, s.logStore, s.stableStore, s.snapStore, s.raftTransport)
+	s.lock.Unlock()
 	if err != nil {
 		return err
 	}
+	close(s.raftReady)
 
 	logging.Infof("Raft server is starting on %s...", s.raftBind)
+	<-ctx.Done()
+	logging.Info("Raft server is shutting down ...")
 
-	return err
+	closeErr := s.raftTransport.Close()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	if s.raftStore != nil {
+		closeErr = errors.Join(closeErr, s.raftStore.Close())
+	}
+	closeErr = errors.Join(closeErr, s.raft.Shutdown().Error())
+
+	if closeErr != nil {
+		return fmt.Errorf("error shutting down raft server: %w", closeErr)
+	}
+
+	logging.Info("Raft server shutdown")
+
+	return nil
 }
 
 func (s *Server) bootstrapConfig(peers []PeerInfo) (*raft.Configuration, error) {
@@ -241,13 +290,22 @@ func (s *Server) FSM() *FSM {
 }
 
 // Raft returns raft node.
-func (s *Server) Raft() *raft.Raft {
-	return s.raft
+func (s *Server) Raft(ctx context.Context) (*raft.Raft, error) {
+	select {
+	case <-s.raftReady:
+	case <-ctx.Done():
+		return nil, errors.New("raft server is not ready in time")
+	}
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.raft, nil
 }
 
 // IsLeader returns true if the current node is leader.
 func (s *Server) IsLeader() bool {
-	return s.raft.State() == raft.Leader
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.raft != nil && s.raft.State() == raft.Leader
 }
 
 // ApplyCommand applies command log to state machine to upsert or remove members.
@@ -255,6 +313,9 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 	if !s.IsLeader() {
 		return false, errors.New("this is not the leader node")
 	}
+
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	cmdLog, err := makeRaftLogCommand(cmdType, data)
 	if err != nil {
@@ -268,18 +329,4 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 
 	resp := future.Response()
 	return resp.(bool), nil
-}
-
-// Shutdown shutdown raft server gracefully.
-func (s *Server) Shutdown() {
-	if s.raft != nil {
-		s.raftTransport.Close()
-		future := s.raft.Shutdown()
-		if err := future.Error(); err != nil {
-			logging.Warnf("error shutting down raft: %v", err)
-		}
-		if s.raftStore != nil {
-			s.raftStore.Close()
-		}
-	}
 }

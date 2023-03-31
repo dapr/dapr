@@ -1,6 +1,7 @@
 package ca
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/x509"
@@ -33,7 +34,7 @@ var log = logger.NewLogger("dapr.sentry.ca")
 // Responsibilities include loading trust anchors and issuer certs, providing safe access to the trust bundle,
 // Validating and signing CSRs.
 type CertificateAuthority interface {
-	LoadOrStoreTrustBundle() error
+	LoadOrStoreTrustBundle(ctx context.Context) error
 	GetCACertBundle() TrustRootBundler
 	SignCSR(csrPem []byte, subject string, identity *identity.Bundle, ttl time.Duration, isCA bool) (*SignedCertificate, error)
 	ValidateCSR(csr *x509.CertificateRequest) error
@@ -44,8 +45,7 @@ func NewCertificateAuthority(config config.SentryConfig) (CertificateAuthority, 
 	switch config.CAStore {
 	default:
 		return &defaultCA{
-			config:     config,
-			issuerLock: &sync.RWMutex{},
+			config: config,
 		}, nil
 	}
 }
@@ -53,7 +53,7 @@ func NewCertificateAuthority(config config.SentryConfig) (CertificateAuthority, 
 type defaultCA struct {
 	bundle     *trustRootBundle
 	config     config.SentryConfig
-	issuerLock *sync.RWMutex
+	issuerLock sync.RWMutex
 }
 
 type SignedCertificate struct {
@@ -64,8 +64,8 @@ type SignedCertificate struct {
 // LoadOrStoreTrustBundle loads the root cert and issuer cert from the configured secret store.
 // Validation is performed and a protected trust bundle is created holding the trust anchors
 // and issuer credentials. If successful, a watcher is launched to keep track of the issuer expiration.
-func (c *defaultCA) LoadOrStoreTrustBundle() error {
-	bundle, err := c.validateAndBuildTrustBundle()
+func (c *defaultCA) LoadOrStoreTrustBundle(ctx context.Context) error {
+	bundle, err := c.validateAndBuildTrustBundle(ctx)
 	if err != nil {
 		return err
 	}
@@ -129,10 +129,10 @@ func (c *defaultCA) ValidateCSR(csr *x509.CertificateRequest) error {
 	return nil
 }
 
-func shouldCreateCerts(conf config.SentryConfig) bool {
-	exists, err := certs.CredentialsExist(conf)
+func shouldCreateCerts(ctx context.Context, conf config.SentryConfig) bool {
+	exists, err := certs.CredentialsExist(ctx, conf)
 	if err != nil {
-		log.Errorf("error checking if credentials exist: %s", err)
+		log.Errorf("Error checking if credentials exist: %s", err)
 	}
 	if exists {
 		return false
@@ -166,7 +166,7 @@ func detectCertificates(path string) error {
 	}
 }
 
-func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
+func (c *defaultCA) validateAndBuildTrustBundle(ctx context.Context) (*trustRootBundle, error) {
 	var (
 		issuerCreds     *certs.Credentials
 		rootCertBytes   []byte
@@ -174,7 +174,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 	)
 
 	// certs exist on disk or getting created, load them when ready
-	if !shouldCreateCerts(c.config) {
+	if !shouldCreateCerts(ctx, c.config) {
 		err := detectCertificates(c.config.RootCertPath)
 		if err != nil {
 			return nil, err
@@ -194,14 +194,14 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		issuerCertBytes = certChain.Cert
 	} else {
 		// create self signed root and issuer certs
-		log.Info("root and issuer certs not found: generating self signed CA")
+		log.Info("Root and issuer certs not found: generating self signed CA")
 		var err error
-		issuerCreds, rootCertBytes, issuerCertBytes, err = c.generateRootAndIssuerCerts()
+		issuerCreds, rootCertBytes, issuerCertBytes, err = c.generateRootAndIssuerCerts(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("error generating trust root bundle: %w", err)
 		}
 
-		log.Info("self signed certs generated and persisted successfully")
+		log.Info("Self-signed certs generated and persisted successfully")
 	}
 
 	// load trust anchors
@@ -219,7 +219,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 	}, nil
 }
 
-func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []byte, error) {
+func (c *defaultCA) generateRootAndIssuerCerts(ctx context.Context) (*certs.Credentials, []byte, []byte, error) {
 	rootKey, err := certs.GenerateECPrivateKey()
 	if err != nil {
 		return nil, nil, nil, err
@@ -230,7 +230,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 		return nil, nil, nil, err
 	}
 	// store credentials so that next time sentry restarts it'll load normally
-	err = certs.StoreCredentials(c.config, rootCertPem, issuerCertPem, issuerKeyPem)
+	err = certs.StoreCredentials(ctx, c.config, rootCertPem, issuerCertPem, issuerKeyPem)
 	if err != nil {
 		return nil, nil, nil, err
 	}

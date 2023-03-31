@@ -235,7 +235,7 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 	}
 
 	// Loading from the state store is only expected in process failure recovery scenarios.
-	wfLogger.Infof("%s: loading activity state", actorID)
+	wfLogger.Debugf("%s: loading activity state", actorID)
 	req := actors.GetStateRequest{
 		ActorType: ActivityActorType,
 		ActorID:   actorID,
@@ -287,10 +287,14 @@ func getActivityInvocationKey(generation uint64) string {
 func (a *activityActor) createReliableReminder(ctx context.Context, actorID string, data any) error {
 	const reminderName = "run-activity"
 	wfLogger.Debugf("%s: creating '%s' reminder for immediate execution", actorID, reminderName)
+	dataEnc, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: ActivityActorType,
 		ActorID:   actorID,
-		Data:      data,
+		Data:      dataEnc,
 		DueTime:   "0s",
 		Name:      reminderName,
 		Period:    a.reminderInterval.String(),

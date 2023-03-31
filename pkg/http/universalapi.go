@@ -38,6 +38,17 @@ type UniversalFastHTTPHandlerOpts[T proto.Message, U proto.Message] struct {
 	// The response could be a proto object (which will be serialized with protojson) or any other object (serialized with the standard JSON package). If the response is nil, a 204 (no content) response is sent to the client, with no data in the body.
 	// NOTE: Newly-implemented APIs should ensure that on the HTTP endpoint the response matches the protos to offer a consistent experience, and should NOT modify the output before it's sent to the client.
 	OutModifier func(out U) (any, error)
+
+	// Status code to return on successful responses.
+	// Defaults to 200 (OK) if unset.
+	SuccessStatusCode int
+
+	// If true, skips parsing the body of the request in the input proto.
+	SkipInputBody bool
+
+	// When true, unpopulated fields in proto responses (i.e. fields whose value is the zero one) are included in the response too.
+	// Defaults to false.
+	ProtoResponseEmitUnpopulated bool
 }
 
 // UniversalFastHTTPHandler wraps a UniversalAPI method into a FastHTTP handler.
@@ -53,17 +64,21 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 	}
 
 	return func(reqCtx *fasthttp.RequestCtx) {
-		// Read the response body and decode it as JSON using protojson
-		body := reqCtx.PostBody()
 		// Need to use some reflection magic to allocate a value for the pointer of the generic type T
 		in := reflect.New(rt).Interface().(T)
-		if len(body) > 0 {
-			err := pjsonDec.Unmarshal(body, in)
-			if err != nil {
-				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-				log.Debug(msg)
-				return
+
+		// Parse the body as JSON
+		if !opts.SkipInputBody {
+			// Read the response body and decode it as JSON using protojson
+			body := reqCtx.PostBody()
+			if len(body) > 0 {
+				err := pjsonDec.Unmarshal(body, in)
+				if err != nil {
+					msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+					respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+					log.Debug(msg)
+					return
+				}
 			}
 		}
 
@@ -91,9 +106,14 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 			return
 		}
 
+		// Set success status code to 200 if none is specified
+		if opts.SuccessStatusCode == 0 {
+			opts.SuccessStatusCode = fasthttp.StatusOK
+		}
+
 		// If we do not have an output modifier, respond right away
 		if opts.OutModifier == nil {
-			universalFastHTTPProtoResponder(reqCtx, res)
+			universalFastHTTPProtoResponder(reqCtx, res, opts.SuccessStatusCode, opts.ProtoResponseEmitUnpopulated)
 			return
 		}
 
@@ -109,19 +129,46 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 		case nil:
 			respond(reqCtx, withEmpty())
 			return
+		case *UniversalHTTPRawResponse:
+			universalFastHTTPRawResponder(reqCtx, m, opts.SuccessStatusCode)
+			return
 		case protoreflect.ProtoMessage:
-			universalFastHTTPProtoResponder(reqCtx, m)
+			universalFastHTTPProtoResponder(reqCtx, m, opts.SuccessStatusCode, opts.ProtoResponseEmitUnpopulated)
 			return
 		default:
-			universalFastHTTPJSONResponder(reqCtx, m)
+			universalFastHTTPJSONResponder(reqCtx, m, opts.SuccessStatusCode)
 			return
 		}
 	}
 }
 
-func universalFastHTTPProtoResponder(reqCtx *fasthttp.RequestCtx, m protoreflect.ProtoMessage) {
+// Contains a pre-serialized response as well as its content type.
+// An OutModifier can return this object if it needs to serialize the response itself.
+type UniversalHTTPRawResponse struct {
+	// Body of the response.
+	Body []byte
+	// Optional value for the Content-Type header to send.
+	ContentType string
+	// Optional status code; if empty, uses the default SuccessStatusCode.
+	StatusCode int
+}
+
+func universalFastHTTPRawResponder(reqCtx *fasthttp.RequestCtx, m *UniversalHTTPRawResponse, statusCode int) {
+	if m.StatusCode > 0 {
+		statusCode = m.StatusCode
+	}
+	if m.ContentType != "" {
+		reqCtx.Response.Header.SetContentType(m.ContentType)
+	}
+
+	respond(reqCtx, with(statusCode, m.Body))
+}
+
+func universalFastHTTPProtoResponder(reqCtx *fasthttp.RequestCtx, m protoreflect.ProtoMessage, statusCode int, emitUnpopulated bool) {
 	// Encode the response as JSON using protojson
-	respBytes, err := protojson.Marshal(m)
+	respBytes, err := protojson.MarshalOptions{
+		EmitUnpopulated: emitUnpopulated,
+	}.Marshal(m)
 	if err != nil {
 		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -129,10 +176,10 @@ func universalFastHTTPProtoResponder(reqCtx *fasthttp.RequestCtx, m protoreflect
 		return
 	}
 
-	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
+	respond(reqCtx, withJSON(statusCode, respBytes))
 }
 
-func universalFastHTTPJSONResponder(reqCtx *fasthttp.RequestCtx, m any) {
+func universalFastHTTPJSONResponder(reqCtx *fasthttp.RequestCtx, m any, statusCode int) {
 	// Encode the response as JSON using the regular JSON package
 	respBytes, err := json.Marshal(m)
 	if err != nil {
@@ -142,7 +189,7 @@ func universalFastHTTPJSONResponder(reqCtx *fasthttp.RequestCtx, m any) {
 		return
 	}
 
-	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
+	respond(reqCtx, withJSON(statusCode, respBytes))
 }
 
 func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {

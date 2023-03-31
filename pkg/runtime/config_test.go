@@ -25,10 +25,9 @@ func TestNewConfig(t *testing.T) {
 	c := NewRuntimeConfig(NewRuntimeConfigOpts{
 		ID:                           "app1",
 		PlacementAddresses:           []string{"localhost:5050"},
-		controlPlaneAddress:          "localhost:5051",
+		ControlPlaneAddress:          "localhost:5051",
 		AllowedOrigins:               "*",
-		GlobalConfig:                 "config",
-		ComponentsPath:               "components",
+		ResourcesPath:                []string{"components"},
 		AppProtocol:                  "http",
 		Mode:                         "kubernetes",
 		HTTPPort:                     3500,
@@ -55,8 +54,8 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
 	assert.Equal(t, "localhost:5051", c.Kubernetes.ControlPlaneAddress)
 	assert.Equal(t, "*", c.AllowedOrigins)
-	assert.Equal(t, "config", c.GlobalConfig)
-	assert.Equal(t, "components", c.Standalone.ComponentsPath)
+	_ = assert.Len(t, c.Standalone.ResourcesPath, 1) &&
+		assert.Equal(t, "components", c.Standalone.ResourcesPath[0])
 	assert.Equal(t, "http", string(c.ApplicationProtocol))
 	assert.Equal(t, "kubernetes", string(c.Mode))
 	assert.Equal(t, 3500, c.HTTPPort)

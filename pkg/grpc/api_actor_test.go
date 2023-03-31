@@ -122,7 +122,7 @@ func TestGetActorState(t *testing.T) {
 	})
 
 	t.Run("Get actor state - OK", func(t *testing.T) {
-		data := []byte("{ \"data\": 123 }")
+		data := []byte(`{ "data": 123 }`)
 		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
@@ -192,6 +192,9 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 					Request: map[string]interface{}{
 						"key":   "key1",
 						"value": data,
+						"metadata": map[string]string{
+							"ttlInSeconds": "100",
+						},
 					},
 				},
 				{
@@ -230,6 +233,9 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 						OperationType: "upsert",
 						Key:           "key1",
 						Value:         &anypb.Any{Value: data},
+						Metadata: map[string]string{
+							"ttlInSeconds": "100",
+						},
 					},
 					{
 						OperationType: "delete",

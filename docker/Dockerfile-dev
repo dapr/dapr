@@ -1,7 +1,7 @@
 # Based on https://github.com/microsoft/vscode-dev-containers/tree/v0.224.3/containers/go/.devcontainer/base.Dockerfile
 
-# [Choice] Go version: 1, 1.19, etc
-ARG GOVERSION=1.19
+# [Choice] Go version: 1, 1.20, etc
+ARG GOVERSION=1.20
 FROM golang:${GOVERSION}-bullseye
 
 # [Option] Install zsh
@@ -15,7 +15,7 @@ ARG DAPR_CLI_VERSION="latest"
 ARG PROTOC_VERSION="21.12"
 ARG PROTOC_GEN_GO_VERSION="1.28.1"
 ARG PROTOC_GEN_GO_GRPC_VERSION="1.2.0"
-ARG GOLANGCI_LINT_VERSION="1.50.1"
+ARG GOLANGCI_LINT_VERSION="1.51.2"
 
 # This Dockerfile adds a non-root 'dapr' user with sudo access. However, for Linux,
 # this user's GID/UID must match your local user UID/GID to avoid permission issues

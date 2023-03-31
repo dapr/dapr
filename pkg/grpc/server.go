@@ -212,28 +212,34 @@ func (s *server) generateWorkloadCert() error {
 
 func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	intr := make([]grpcGo.UnaryServerInterceptor, 0, 6)
-	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 3)
+	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 5)
 
 	intr = append(intr, metadata.SetMetadataInContextUnary)
 
 	if len(s.apiSpec.Allowed) > 0 {
-		s.logger.Info("enabled API access list on gRPC server")
-		intr = append(intr, setAPIEndpointsMiddlewareUnary(s.apiSpec.Allowed))
+		s.logger.Info("Enabled API access list on gRPC server")
+		unary, stream := setAPIEndpointsMiddlewares(s.apiSpec.Allowed)
+		if unary != nil && stream != nil {
+			intr = append(intr, unary)
+			intrStream = append(intrStream, stream)
+		}
 	}
 
 	if s.authToken != "" {
-		s.logger.Info("enabled token authentication on gRPC server")
-		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, authConsts.APITokenHeader))
+		s.logger.Info("Enabled token authentication on gRPC server")
+		unary, stream := getAPIAuthenticationMiddlewares(s.authToken, authConsts.APITokenHeader)
+		intr = append(intr, unary)
+		intrStream = append(intrStream, stream)
 	}
 
 	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
-		s.logger.Info("enabled gRPC tracing middleware")
+		s.logger.Info("Enabled gRPC tracing middleware")
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
 		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
 	if s.metricSpec.Enabled {
-		s.logger.Info("enabled gRPC metrics middleware")
+		s.logger.Info("Enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 
 		if s.kind == apiServer {
@@ -244,7 +250,9 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	}
 
 	if s.config.EnableAPILogging && s.infoLogger != nil {
-		intr = append(intr, s.getGRPCAPILoggingInfo())
+		unary, stream := s.getGRPCAPILoggingMiddlewares()
+		intr = append(intr, unary)
+		intrStream = append(intrStream, stream)
 	}
 
 	return []grpcGo.ServerOption{
@@ -274,6 +282,12 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 				return &s.tlsCert, nil
 			},
 		}
+
+		// In the internal server, enforce minimum version TLS 1.2
+		if s.kind == internalServer {
+			tlsConfig.MinVersion = tls.VersionTLS12
+		}
+
 		ta := credentials.NewTLS(&tlsConfig)
 
 		opts = append(opts, grpcGo.Creds(ta))
@@ -325,18 +339,31 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 	return percentagePassed >= renewWhenPercentagePassed
 }
 
-func (s *server) getGRPCAPILoggingInfo() grpcGo.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (interface{}, error) {
-		if s.infoLogger != nil && info != nil {
-			fields := make(map[string]any, 2)
-			fields["method"] = info.FullMethod
-			if meta, ok := metadata.FromIncomingContext(ctx); ok {
-				if val, ok := meta["user-agent"]; ok && len(val) > 0 {
-					fields["useragent"] = val[0]
-				}
-			}
-			s.infoLogger.WithFields(fields).Info("gRPC API Called")
-		}
-		return handler(ctx, req)
+func (s *server) getGRPCAPILoggingMiddlewares() (grpcGo.UnaryServerInterceptor, grpcGo.StreamServerInterceptor) {
+	if s.infoLogger == nil {
+		return nil, nil
 	}
+	return func(ctx context.Context, req any, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (any, error) {
+			if info != nil {
+				s.printAPILog(ctx, info.FullMethod)
+			}
+			return handler(ctx, req)
+		},
+		func(srv any, stream grpcGo.ServerStream, info *grpcGo.StreamServerInfo, handler grpcGo.StreamHandler) error {
+			if info != nil {
+				s.printAPILog(stream.Context(), info.FullMethod)
+			}
+			return handler(srv, stream)
+		}
+}
+
+func (s *server) printAPILog(ctx context.Context, method string) {
+	fields := make(map[string]any, 2)
+	fields["method"] = method
+	if meta, ok := metadata.FromIncomingContext(ctx); ok {
+		if val, ok := meta["user-agent"]; ok && len(val) > 0 {
+			fields["useragent"] = val[0]
+		}
+	}
+	s.infoLogger.WithFields(fields).Info("gRPC API Called")
 }

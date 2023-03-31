@@ -1,6 +1,7 @@
 package ca
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -10,11 +11,11 @@ import (
 	"encoding/pem"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
@@ -95,22 +96,18 @@ func cleanupCredentials() {
 func TestCertValidity(t *testing.T) {
 	t.Run("valid cert", func(t *testing.T) {
 		cert := getTestCSR("test.a.com")
-		certAuth := defaultCA{
-			issuerLock: &sync.RWMutex{},
-		}
+		certAuth := defaultCA{}
 
 		err := certAuth.ValidateCSR(cert)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("invalid cert", func(t *testing.T) {
 		cert := getTestCSR("")
-		certAuth := defaultCA{
-			issuerLock: &sync.RWMutex{},
-		}
+		certAuth := defaultCA{}
 
 		err := certAuth.ValidateCSR(cert)
-		assert.NotNil(t, err)
+		assert.Error(t, err)
 	})
 }
 
@@ -125,10 +122,11 @@ func TestSignCSR(t *testing.T) {
 		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
-		certAuth.LoadOrStoreTrustBundle()
+		err := certAuth.LoadOrStoreTrustBundle(context.Background())
+		require.NoError(t, err)
 
 		resp, err := certAuth.SignCSR(certPem, "test-subject", nil, time.Hour*24, false)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, time.Now().UTC().Add(time.Hour*24+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
 	})
@@ -143,10 +141,11 @@ func TestSignCSR(t *testing.T) {
 		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
-		certAuth.LoadOrStoreTrustBundle()
+		err := certAuth.LoadOrStoreTrustBundle(context.Background())
+		require.NoError(t, err)
 
 		resp, err := certAuth.SignCSR(certPem, "test-subject", nil, time.Hour*-1, false)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, time.Now().UTC().Add(workloadCertTTL+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
 	})
@@ -158,10 +157,11 @@ func TestSignCSR(t *testing.T) {
 		certPem := []byte("")
 
 		certAuth := getTestCertAuth()
-		certAuth.LoadOrStoreTrustBundle()
+		err := certAuth.LoadOrStoreTrustBundle(context.Background())
+		require.NoError(t, err)
 
-		_, err := certAuth.SignCSR(certPem, "", nil, time.Hour*24, false)
-		assert.NotNil(t, err)
+		_, err = certAuth.SignCSR(certPem, "", nil, time.Hour*24, false)
+		assert.Error(t, err)
 	})
 
 	t.Run("valid identity", func(t *testing.T) {
@@ -174,11 +174,12 @@ func TestSignCSR(t *testing.T) {
 		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
-		certAuth.LoadOrStoreTrustBundle()
+		err := certAuth.LoadOrStoreTrustBundle(context.Background())
+		require.NoError(t, err)
 
 		bundle := identity.NewBundle("app", "default", "public")
 		resp, err := certAuth.SignCSR(certPem, "test-subject", bundle, time.Hour*24, false)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 
 		oidSubjectAlternativeName := asn1.ObjectIdentifier{2, 5, 29, 17}
@@ -217,7 +218,7 @@ func TestCACertsGeneration(t *testing.T) {
 	defer cleanupCredentials()
 
 	ca := getTestCertAuth()
-	err := ca.LoadOrStoreTrustBundle()
+	err := ca.LoadOrStoreTrustBundle(context.Background())
 
 	assert.NoError(t, err)
 	assert.True(t, len(ca.GetCACertBundle().GetRootCertPem()) > 0)
@@ -230,13 +231,13 @@ func TestShouldCreateCerts(t *testing.T) {
 		defer cleanupCredentials()
 
 		a := getTestCertAuth()
-		r := shouldCreateCerts(a.(*defaultCA).config)
+		r := shouldCreateCerts(context.Background(), a.(*defaultCA).config)
 		assert.False(t, r)
 	})
 
 	t.Run("certs do not exist, should create", func(t *testing.T) {
 		a := getTestCertAuth()
-		r := shouldCreateCerts(a.(*defaultCA).config)
+		r := shouldCreateCerts(context.Background(), a.(*defaultCA).config)
 		assert.True(t, r)
 	})
 }

@@ -21,7 +21,6 @@ healthapp \
 hellodapr \
 stateapp \
 secretapp \
-workflowsapp \
 service_invocation \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
@@ -39,6 +38,7 @@ actorapp \
 actorclientapp \
 actorfeatures \
 actorinvocationapp \
+actorstate \
 actorreentrancy \
 runtime \
 runtime_init \
@@ -115,6 +115,10 @@ $(error cannot find get minikube node ip address. ensure that you have minikube 
 endif
 endif
 
+ifeq ($(WINDOWS_VERSION),)
+WINDOWS_VERSION=ltsc2022
+endif
+
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
@@ -169,7 +173,8 @@ build-push-e2e-app-$(1): check-e2e-env check-e2e-cache
 		--dockerfile "$(DOCKERFILE)" \
 		--target-os "$(TARGET_OS)" \
 		--target-arch "$(TARGET_ARCH)" \
-		--cache-registry "$(DAPR_CACHE_REGISTRY)"
+		--cache-registry "$(DAPR_CACHE_REGISTRY)" \
+		--windows-version "$(WINDOWS_VERSION)"
 endef
 
 # Generate test app image build-push targets
@@ -235,7 +240,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -379,7 +384,6 @@ setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
 	$(HELM) repo add stable https://charts.helm.sh/stable
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
-	$(HELM) repo add wener https://wenerme.github.io/charts
 	$(HELM) repo update
 
 # setup tailscale
@@ -417,20 +421,6 @@ setup-test-env-kafka:
 # delete kafka from cluster
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
-
-# install temporal to the cluster
-setup-test-env-temporal:
-	$(HELM) install --set server.replicaCount=1 \
-					--set cassandra.config.cluster_size=1 \
-					--set prometheus.enabled=false \
-					--set grafana.enabled=false \
-					--set elasticsearch.enabled=false \
-					dapr-temporal wener/temporal -f ./tests/config/temporal_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 15m0s
-
-# delete temporal from cluster
-delete-test-env-temporal:
-	$(HELM) del dapr-temporal --namespace $(DAPR_TEST_NAMESPACE) 
-
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:

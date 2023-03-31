@@ -10,7 +10,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// ConvertRequest convert a fasthttp.Request to an http.Request
+// ConvertRequest converts a fasthttp.Request to an http.Request.
 // forServer should be set to true when the http.Request is going to passed to a http.Handler.
 //
 // The http.Request must not be used after the fasthttp handler has returned!
@@ -25,8 +25,12 @@ func ConvertRequest(ctx *fasthttp.RequestCtx, r *http.Request, forServer bool) e
 	}
 
 	r.Method = b2s(ctx.Method())
-	r.Proto = "HTTP/1.1"
-	r.ProtoMajor = 1
+	r.Proto = b2s(ctx.Request.Header.Protocol())
+	if r.Proto == "HTTP/2" {
+		r.ProtoMajor = 2
+	} else {
+		r.ProtoMajor = 1
+	}
 	r.ProtoMinor = 1
 	r.ContentLength = int64(len(body))
 	r.RemoteAddr = ctx.RemoteAddr().String()
@@ -55,7 +59,7 @@ func ConvertRequest(ctx *fasthttp.RequestCtx, r *http.Request, forServer bool) e
 		case "Transfer-Encoding":
 			r.TransferEncoding = append(r.TransferEncoding, sv)
 		default:
-			r.Header.Set(sk, sv)
+			r.Header.Add(sk, sv)
 		}
 	})
 

@@ -15,7 +15,9 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -60,32 +62,32 @@ func (s *server) Run(ctx context.Context, port int) error {
 
 	//nolint:gosec
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: router,
+		Addr:        fmt.Sprintf(":%d", port),
+		Handler:     router,
+		BaseContext: func(_ net.Listener) context.Context { return ctx },
 	}
 
+	serveErr := make(chan error, 1)
 	go func() {
-		select {
-		case <-ctx.Done():
-			s.log.Info("Healthz server is shutting down")
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-			defer cancel()
-			err := srv.Shutdown(shutdownCtx)
-			if err != nil {
-				s.log.Errorf("Error while shutting down healthz server: %v", err)
-			}
+		s.log.Infof("Healthz server is listening on %s", srv.Addr)
+		err := srv.ListenAndServe()
+		if !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+			return
 		}
+		serveErr <- nil
 	}()
 
-	s.log.Infof("Healthz server is listening on %s", srv.Addr)
-
-	// Blocking call
-	err := srv.ListenAndServe()
-	if err != http.ErrServerClosed {
+	select {
+	case err := <-serveErr:
 		return err
+	case <-ctx.Done():
+		// nop
 	}
-
-	return nil
+	s.log.Info("Healthz server is shutting down")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	return errors.Join(srv.Shutdown(shutdownCtx), <-serveErr)
 }
 
 // healthz is a health endpoint handler.

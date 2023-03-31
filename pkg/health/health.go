@@ -15,11 +15,14 @@ package health
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"sync/atomic"
 	"time"
 
-	clocklib "github.com/benbjohnson/clock"
-	"github.com/valyala/fasthttp"
+	kclock "k8s.io/utils/clock"
+
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -27,8 +30,10 @@ const (
 	failureThreshold  = 2
 	requestTimeout    = time.Second * 2
 	interval          = time.Second * 5
-	successStatusCode = 200
+	successStatusCode = http.StatusOK
 )
+
+var healthLogger = logger.NewLogger("health")
 
 // Option is a function that applies a health check option.
 type Option func(o *healthCheckOptions)
@@ -38,8 +43,9 @@ type healthCheckOptions struct {
 	requestTimeout    time.Duration
 	failureThreshold  int32
 	interval          time.Duration
+	client            *http.Client
 	successStatusCode int
-	clock             clocklib.Clock
+	clock             kclock.WithTicker
 }
 
 // StartEndpointHealthCheck starts a health check on the specified address with the given options.
@@ -54,24 +60,28 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 	}
 	signalChan := make(chan bool, 1)
 
+	ticker := options.clock.NewTicker(options.interval)
+	ch := ticker.C()
+
 	go func() {
 		failureCount := &atomic.Int32{}
+
+		client := options.client
+		if client == nil {
+			client = &http.Client{}
+		}
+
 		if options.initialDelay > 0 {
-			options.clock.Sleep(options.initialDelay)
+			select {
+			case <-options.clock.After(options.initialDelay):
+			case <-ctx.Done():
+			}
 		}
-
-		client := &fasthttp.Client{
-			MaxConnsPerHost:           5, // Limit Keep-Alive connections
-			ReadTimeout:               options.requestTimeout,
-			MaxIdemponentCallAttempts: 1,
-		}
-
-		ticker := options.clock.Ticker(options.interval)
 
 		for {
 			select {
-			case <-ticker.C:
-				go doHealthCheck(client, endpointAddress, signalChan, failureCount, options)
+			case <-ch:
+				go doHealthCheck(client, endpointAddress, options.requestTimeout, signalChan, failureCount, options)
 			case <-ctx.Done():
 				return
 			}
@@ -80,17 +90,17 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 	return signalChan
 }
 
-func doHealthCheck(client *fasthttp.Client, endpointAddress string, signalChan chan bool, failureCount *atomic.Int32, options *healthCheckOptions) {
-	req := fasthttp.AcquireRequest()
-	req.SetRequestURI(endpointAddress)
-	req.Header.SetMethod(fasthttp.MethodGet)
-	defer fasthttp.ReleaseRequest(req)
+func doHealthCheck(client *http.Client, endpointAddress string, timeout time.Duration, signalChan chan bool, failureCount *atomic.Int32, options *healthCheckOptions) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpointAddress, nil)
+	if err != nil {
+		healthLogger.Errorf("Failed to create healthcheck request: %v", err)
+		return
+	}
 
-	resp := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(resp)
-
-	err := client.DoTimeout(req, resp, options.requestTimeout)
-	if err != nil || resp.StatusCode() != options.successStatusCode {
+	res, err := client.Do(req)
+	if err != nil || res.StatusCode != options.successStatusCode {
 		if failureCount.Add(1) >= options.failureThreshold {
 			failureCount.Store(options.failureThreshold - 1)
 			signalChan <- false
@@ -98,6 +108,11 @@ func doHealthCheck(client *fasthttp.Client, endpointAddress string, signalChan c
 	} else {
 		signalChan <- true
 		failureCount.Store(0)
+	}
+	if res != nil {
+		// Drain before closing
+		_, _ = io.Copy(io.Discard, res.Body)
+		_ = res.Body.Close()
 	}
 }
 
@@ -107,7 +122,7 @@ func applyDefaults(o *healthCheckOptions) {
 	o.requestTimeout = requestTimeout
 	o.successStatusCode = successStatusCode
 	o.interval = interval
-	o.clock = clocklib.New()
+	o.clock = &kclock.RealClock{}
 }
 
 // WithInitialDelay sets the initial delay for the health check.
@@ -131,6 +146,13 @@ func WithRequestTimeout(timeout time.Duration) Option {
 	}
 }
 
+// WithHTTPClient sets the http.Client to use.
+func WithHTTPClient(client *http.Client) Option {
+	return func(o *healthCheckOptions) {
+		o.client = client
+	}
+}
+
 // WithSuccessStatusCode sets the status code for the health check.
 func WithSuccessStatusCode(code int) Option {
 	return func(o *healthCheckOptions) {
@@ -146,7 +168,7 @@ func WithInterval(interval time.Duration) Option {
 }
 
 // WithClock sets a custom clock (for mocking time).
-func WithClock(clock clocklib.Clock) Option {
+func WithClock(clock kclock.WithTicker) Option {
 	return func(o *healthCheckOptions) {
 		o.clock = clock
 	}

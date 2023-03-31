@@ -26,12 +26,9 @@ const (
 	ErrMalformedRequestData = "can't serialize request data field: %s"
 
 	// State.
-	ErrStateStoresNotConfigured = "state store is not configured"
-	ErrStateStoreNotFound       = "state store %s is not found"
-	ErrStateGet                 = "fail to get %s from state store %s: %s"
-	ErrStateDelete              = "failed deleting state with key %s: %s"
-	ErrStateSave                = "failed saving state in state store %s: %s"
-	ErrStateQuery               = "failed query in state store %s: %s"
+	ErrStateGet    = "fail to get %s from state store %s: %s"
+	ErrStateDelete = "failed deleting state with key %s: %s"
+	ErrStateSave   = "failed saving state in state store %s: %s"
 
 	// StateTransaction.
 	ErrStateStoreNotSupported     = "state store %s doesn't support transaction"
@@ -85,7 +82,8 @@ const (
 	ErrMetadataGet = "failed deserializing metadata: %s"
 
 	// Healthz.
-	ErrHealthNotReady = "dapr is not ready"
+	ErrHealthNotReady         = "dapr is not ready"
+	ErrOutboundHealthNotReady = "dapr outbound is not ready"
 
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
@@ -93,31 +91,40 @@ const (
 	ErrConfigurationGet                 = "failed to get %s from Configuration store %s: %s"
 	ErrConfigurationSubscribe           = "failed to subscribe %s from Configuration store %s: %s"
 	ErrConfigurationUnsubscribe         = "failed to unsubscribe to configuration request %s: %s"
-
-	// Lock.
-	ErrLockStoresNotConfigured    = "lock store is not configured"
-	ErrResourceIDEmpty            = "ResourceId is empty in lock store %s"
-	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
-	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
-	ErrLockStoreNotFound          = "lock store %s not found"
-
-	// Workflow
-	ErrWorkflowNameMissing           = "workflow name is not configured"
-	ErrMissingOrEmptyInstance        = "no instance or empty instance was provided"
-	ErrMissingWorkflowType           = "missing workflow type"
-	ErrNoOrMissingWorkflowComponent  = "no component or empty component was provided"
-	ErWorkflowrComponentDoesNotExist = "provided component does not exist %s"
-	ErrWorkflowGetResponse           = "error while getting workflow info %s"
-	ErrStartWorkflow                 = "error starting workflow %s"
-	ErrTerminateWorkflow             = "error terminating workflow %s"
-	ErrTimerParse                    = "error parsing time - %s"
 )
 
 var (
+	// State.
+	ErrStateStoresNotConfigured = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
+	ErrStateStoreNotFound       = APIError{"state store %s is not found", "ERR_STATE_STORE_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrStateQueryFailed         = APIError{"failed query in state store %s: %s", "ERR_STATE_QUERY", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrStateQueryUnsupported    = APIError{"state store does not support querying", "ERR_STATE_STORE_NOT_SUPPORTED", http.StatusInternalServerError, grpcCodes.Internal}
+
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
 	ErrSecretStoreNotFound      = APIError{"failed finding secret store with key %s", "ERR_SECRET_STORE_NOT_FOUND", http.StatusUnauthorized, grpcCodes.InvalidArgument}
 	ErrSecretPermissionDenied   = APIError{"access denied by policy to get %q from %q", "ERR_PERMISSION_DENIED", http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrSecretGet                = APIError{"failed getting secret with key %s from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrBulkSecretGet            = APIError{"failed getting secrets from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
+
+	// Lock.
+	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
+	ErrResourceIDEmpty            = APIError{"ResourceId is empty in lock store %s", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrLockOwnerEmpty             = APIError{"LockOwner is empty in lock store %s", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrExpiryInSecondsNotPositive = APIError{"ExpiryInSeconds is not positive in lock store %s", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrLockStoreNotFound          = APIError{"lock store %s not found", "ERR_LOCK_STORE_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrTryLockFailed              = APIError{"failed to try acquiring lock: %s", "ERR_TRY_LOCK", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrUnlockFailed               = APIError{"failed to release lock: %s", "ERR_UNLOCK", http.StatusInternalServerError, grpcCodes.Internal}
+
+	// Workflow.
+	ErrStartWorkflow                 = APIError{"error starting workflow %s with error %s", "ERR_START_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrWorkflowGetResponse           = APIError{"error while getting workflow info on instance %s with error %s", "ERR_GET_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrWorkflowNameMissing           = APIError{"workflow name is not configured", "ERR_WORKFLOW_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrWorkflowComponentDoesNotExist = APIError{"workflow component %s does not exist", "ERR_WORKFLOW_COMPONENT_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", "ERR_INSTANCE_ID_PROVIDED_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrNoOrMissingWorkflowComponent  = APIError{"no workflow component was provided", "ERR_WORKFLOW_COMPONENT_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrTerminateWorkflow             = APIError{"error terminating workflow %s", "ERR_TERMINATE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", "ERR_WORKFLOW_EVENT_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow %s", "ERR_RAISE_EVENT_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrTimerParse                    = APIError{"error parsing time: %s", "ERR_WORKFLOW_TIME_PARSE", http.StatusInternalServerError, grpcCodes.Internal}
 )

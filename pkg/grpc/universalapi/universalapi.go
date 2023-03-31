@@ -16,7 +16,10 @@ limitations under the License.
 package universalapi
 
 import (
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -24,8 +27,12 @@ import (
 
 // UniversalAPI contains the implementation of gRPC APIs that are also used by the HTTP server.
 type UniversalAPI struct {
+	AppID                string
 	Logger               logger.Logger
 	Resiliency           resiliency.Provider
+	StateStores          map[string]state.Store
 	SecretStores         map[string]secretstores.SecretStore
 	SecretsConfiguration map[string]config.SecretsScope
+	LockStores           map[string]lock.Store
+	WorkflowComponents   map[string]workflows.Workflow
 }

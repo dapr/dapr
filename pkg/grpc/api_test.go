@@ -306,13 +306,15 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 	interceptors := []grpc.UnaryServerInterceptor{
 		metadata.SetMetadataInContextUnary,
 	}
+	streamInterceptors := []grpc.StreamServerInterceptor{}
 	if token != "" {
-		interceptors = append(interceptors,
-			setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token"),
-		)
+		unary, stream := getAPIAuthenticationMiddlewares(token, "dapr-api-token")
+		interceptors = append(interceptors, unary)
+		streamInterceptors = append(streamInterceptors, stream)
 	}
 	opts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(interceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
 		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
 	}
 
@@ -384,30 +386,50 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
 		md := grpcMetadata.Pairs("dapr-api-token", token)
 		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
-		_, err := client.InvokeService(ctx, req)
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.NotFound, s.Code())
-		assert.Equal(t, "Not Found", s.Message())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
 
-		errInfo := s.Details()[0].(*epb.ErrorInfo)
-		assert.Equal(t, 1, len(s.Details()))
-		assert.Equal(t, "404", errInfo.Metadata["http.code"])
-		assert.Equal(t, "fakeDirectMessageResponse", errInfo.Metadata["http.error_message"])
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.NotFound, s.Code())
+			assert.Equal(t, "Not Found", s.Message())
+
+			errInfo := s.Details()[0].(*epb.ErrorInfo)
+			assert.Equal(t, 1, len(s.Details()))
+			assert.Equal(t, "404", errInfo.Metadata["http.code"])
+			assert.Equal(t, "fakeDirectMessageResponse", errInfo.Metadata["http.error_message"])
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// The request was invalid so we should get an error about the actor runtime (which means we passed the auth middleware and are hitting the API as expected)
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			assert.ErrorContains(t, err, "actor runtime")
+		})
 	})
 
 	t.Run("invalid token", func(t *testing.T) {
@@ -434,24 +456,46 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
-		md := grpcMetadata.Pairs("dapr-api-token", "4567")
+		md := grpcMetadata.Pairs("dapr-api-token", "bad, bad token")
 		ctx := grpcMetadata.NewOutgoingContext(context.Background(), md)
-		_, err := client.InvokeService(ctx, req)
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.Unauthenticated, s.Code())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
+
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// We should get an Unauthenticated error
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
 	})
 
 	t.Run("missing token", func(t *testing.T) {
@@ -478,22 +522,45 @@ func TestAPIToken(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
 		client := runtimev1pb.NewDaprClient(clientConn)
-		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "fakeAppID",
-			Message: &commonv1pb.InvokeRequest{
-				Method: "fakeMethod",
-				Data:   &anypb.Any{Value: []byte("testData")},
-			},
-		}
-		_, err := client.InvokeService(context.Background(), req)
+		ctx := context.Background()
 
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.Unauthenticated, s.Code())
+		t.Run("unary", func(t *testing.T) {
+			// act
+			req := &runtimev1pb.InvokeServiceRequest{
+				Id: "fakeAppID",
+				Message: &commonv1pb.InvokeRequest{
+					Method: "fakeMethod",
+					Data:   &anypb.Any{Value: []byte("testData")},
+				},
+			}
+			_, err := client.InvokeService(ctx, req)
+
+			// assert
+			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
+
+		t.Run("stream", func(t *testing.T) {
+			// We use a low-level gRPC method to invoke a method as a stream (even unary methods are streams, internally)
+			stream, err := clientConn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true, ClientStreams: true}, "/"+runtimev1pb.Dapr_ServiceDesc.ServiceName+"/InvokeActor")
+			require.NoError(t, err)
+			defer stream.CloseSend()
+
+			// Send a message in the stream since it will be waiting for our input
+			err = stream.SendMsg(&emptypb.Empty{})
+			require.NoError(t, err)
+
+			// We should get an Unauthenticated error
+			var m any
+			err = stream.RecvMsg(&m)
+			assert.Error(t, err)
+			s, ok := status.FromError(err)
+			assert.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, s.Code())
+		})
 	})
 }
 
@@ -790,7 +857,7 @@ func TestGetSecret(t *testing.T) {
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:               apiServerLogger,
+			Logger:               logger.NewLogger("grpc.api.test"),
 			Resiliency:           resiliency.New(nil),
 			SecretStores:         fakeStores,
 			SecretsConfiguration: secretsConfiguration,
@@ -860,7 +927,7 @@ func TestGetBulkSecret(t *testing.T) {
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:               apiServerLogger,
+			Logger:               logger.NewLogger("grpc.api.test"),
 			Resiliency:           resiliency.New(nil),
 			SecretStores:         fakeStores,
 			SecretsConfiguration: secretsConfiguration,
@@ -912,13 +979,13 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("BulkSet", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(reqs []state.SetRequest) bool {
+	fakeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
 		return reqs[0].Key == goodStoreKey
 	})).Return(nil)
-	fakeStore.On("BulkSet", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(reqs []state.SetRequest) bool {
+	fakeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
@@ -1002,14 +1069,14 @@ func TestSaveState(t *testing.T) {
 func TestGetState(t *testing.T) {
 	// Setup mock store
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
+	fakeStore.On("Get", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == goodStoreKey
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: ptr.Of("test-etag"),
 		}, nil)
-	fakeStore.On("Get", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *state.GetRequest) bool {
+	fakeStore.On("Get", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
 	})).Return(
 		nil,
@@ -1516,7 +1583,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
 				assert.NotNil(t, rsp)
-				assert.Nil(t, recvErr)
+				assert.NoError(t, recvErr)
 				if rsp.Items != nil {
 					assert.Equal(t, tt.expectedResponse, rsp.Items)
 				} else {
@@ -1610,7 +1677,7 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 func TestGetBulkState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.GetRequest) bool {
 			return req.Key == goodStoreKey
 		})).Return(
@@ -1619,7 +1686,7 @@ func TestGetBulkState(t *testing.T) {
 			ETag: ptr.Of("test-etag"),
 		}, nil)
 	fakeStore.On("Get",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.GetRequest) bool {
 			return req.Key == errorStoreKey
 		})).Return(
@@ -1732,12 +1799,12 @@ func TestGetBulkState(t *testing.T) {
 func TestDeleteState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Delete",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.DeleteRequest) bool {
 			return req.Key == goodStoreKey
 		})).Return(nil)
 	fakeStore.On("Delete",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.DeleteRequest) bool {
 			return req.Key == errorStoreKey
 		})).Return(errors.New("failed to delete state with key2"))
@@ -2216,24 +2283,20 @@ func TestExecuteStateTransaction(t *testing.T) {
 		return false
 	}
 	fakeStore.On("Multi",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
 			return matchKeyFn(context.Background(), req, goodKey)
 		})).Return(nil)
 	fakeStore.On("Multi",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
 			return matchKeyFn(context.Background(), req, "error-key")
 		})).Return(errors.New("error to execute with key2"))
 
-	var fakeTransactionalStore state.TransactionalStore = fakeStore
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
-		transactionalStateStores: map[string]state.TransactionalStore{
-			"store1": fakeTransactionalStore,
-		},
-		resiliency: resiliency.New(nil),
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -2339,7 +2402,7 @@ func TestGetMetadata(t *testing.T) {
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() ([]runtimePubsub.Subscription, error) {
+		getSubscriptionsFn: func() []runtimePubsub.Subscription {
 			return []runtimePubsub.Subscription{
 				{
 					PubsubName:      "test",
@@ -2353,7 +2416,7 @@ func TestGetMetadata(t *testing.T) {
 						},
 					},
 				},
-			}, nil
+			}
 		},
 	}
 	fakeAPI.extendedMetadata.Store("testKey", "testValue")
@@ -2547,12 +2610,12 @@ const (
 
 func TestQueryState(t *testing.T) {
 	port, err := freeport.GetFreePort()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	fakeStore := &mockStateStoreQuerier{}
 	// simulate full result
 	fakeStore.MockQuerier.On("Query",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.QueryRequest) bool {
 			return len(req.Query.Sort) != 0 && req.Query.Page.Limit != 0
 		})).Return(
@@ -2566,7 +2629,7 @@ func TestQueryState(t *testing.T) {
 		}, nil)
 	// simulate empty data
 	fakeStore.MockQuerier.On("Query",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.QueryRequest) bool {
 			return len(req.Query.Sort) == 0 && req.Query.Page.Limit != 0
 		})).Return(
@@ -2575,15 +2638,18 @@ func TestQueryState(t *testing.T) {
 		}, nil)
 	// simulate error
 	fakeStore.MockQuerier.On("Query",
-		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.QueryRequest) bool {
 			return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
 		})).Return(nil, errors.New("Query error"))
 
 	server := startTestServerAPI(port, &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
-		resiliency:  resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:      logger.NewLogger("grpc.api.test"),
+			StateStores: map[string]state.Store{"store1": fakeStore},
+			Resiliency:  resiliency.New(nil),
+		},
 	})
 	defer server.Stop()
 
@@ -2619,19 +2685,22 @@ func TestQueryState(t *testing.T) {
 		StoreName: "store1",
 		Query:     queryTestRequestSyntaxErr,
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	port, err := freeport.GetFreePort()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	server := startDaprAPIServer(
 		port,
 		&api{
-			id:          "fakeAPI",
-			stateStores: map[string]state.Store{"store1": &daprt.MockStateStore{}},
-			resiliency:  resiliency.New(nil),
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				Logger:      logger.NewLogger("grpc.api.test"),
+				StateStores: map[string]state.Store{"store1": &daprt.MockStateStore{}},
+				Resiliency:  resiliency.New(nil),
+			},
 		},
 		"")
 	defer server.Stop()
@@ -2643,7 +2712,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: "store1",
 	})
-	assert.Equal(t, codes.Unimplemented, status.Code(err))
+	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestStateStoreQuerierEncrypted(t *testing.T) {
@@ -2656,9 +2725,12 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	server := startDaprAPIServer(
 		port,
 		&api{
-			id:          "fakeAPI",
-			stateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
-			resiliency:  resiliency.New(nil),
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				Logger:      logger.NewLogger("grpc.api.test"),
+				StateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
+				Resiliency:  resiliency.New(nil),
+			},
 		},
 		"")
 	defer server.Stop()
@@ -2670,7 +2742,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: storeName,
 	})
-	assert.Equal(t, codes.Aborted, status.Code(err))
+	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestGetConfigurationAlpha1(t *testing.T) {
@@ -2836,10 +2908,14 @@ func TestStateAPIWithResiliency(t *testing.T) {
 	stateLoader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
 
 	fakeAPI := &api{
-		id:                       "fakeAPI",
-		stateStores:              map[string]state.Store{"failStore": failingStore},
-		transactionalStateStores: map[string]state.TransactionalStore{"failStore": failingStore},
-		resiliency:               resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"failStore": failingStore},
+		resiliency:  resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+	}
+	fakeAPI.UniversalAPI = &universalapi.UniversalAPI{
+		Logger:      logger.NewLogger("grpc.api.test"),
+		StateStores: fakeAPI.stateStores,
+		Resiliency:  fakeAPI.resiliency,
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -3369,8 +3445,12 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 
 type mockConfigStore struct{}
 
-func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
+func (m *mockConfigStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
+}
+
+func (m *mockConfigStore) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
@@ -3425,59 +3505,20 @@ func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.Un
 	return nil
 }
 
-func TestTryLockRequestToComponentRequest(t *testing.T) {
-	req := TryLockRequestToComponentRequest(&runtimev1pb.TryLockRequest{
-		StoreName:       "redis",
-		ResourceId:      "resourceId",
-		LockOwner:       "owner1",
-		ExpiryInSeconds: 1000,
-	})
-	assert.True(t, req.ResourceID == "resourceId")
-	assert.True(t, req.LockOwner == "owner1")
-	assert.True(t, req.ExpiryInSeconds == 1000)
-	req = TryLockRequestToComponentRequest(nil)
-	assert.NotNil(t, req)
-}
-
-func TestTryLockResponseToGrpcResponse(t *testing.T) {
-	resp := TryLockResponseToGrpcResponse(&lock.TryLockResponse{
-		Success: true,
-	})
-	assert.True(t, resp.Success)
-	resp2 := TryLockResponseToGrpcResponse(nil)
-	assert.NotNil(t, resp2)
-}
-
-func TestUnlockGrpcToComponentRequest(t *testing.T) {
-	req := UnlockGrpcToComponentRequest(&runtimev1pb.UnlockRequest{
-		StoreName:  "redis",
-		ResourceId: "resourceId",
-		LockOwner:  "owner1",
-	})
-	assert.True(t, req.ResourceID == "resourceId")
-	assert.True(t, req.LockOwner == "owner1")
-	req = UnlockGrpcToComponentRequest(nil)
-	assert.NotNil(t, req)
-}
-
-//nolint:nosnakecase
-func TestUnlockResponseToGrpcResponse(t *testing.T) {
-	resp := UnlockResponseToGrpcResponse(&lock.UnlockResponse{Status: lock.Success})
-	assert.True(t, resp.Status == runtimev1pb.UnlockResponse_SUCCESS)
-	resp2 := UnlockResponseToGrpcResponse(nil)
-	assert.NotNil(t, resp2)
-}
-
 func TestTryLock(t *testing.T) {
+	l := logger.NewLogger("fakeLogger")
+	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
+
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
 		})
 		req := &runtimev1pb.TryLockRequest{
-			StoreName: "abc",
+			StoreName:       "abc",
+			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = FailedPrecondition desc = lock store is not configured", err.Error())
+		assert.Equal(t, "api error: code = FailedPrecondition desc = lock store is not configured", err.Error())
 	})
 
 	t.Run("InvalidArgument: ResourceID empty", func(t *testing.T) {
@@ -3486,14 +3527,15 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 		req := &runtimev1pb.TryLockRequest{
-			StoreName: "abc",
+			StoreName:       "mock",
+			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = ResourceId is empty in lock store mock", err.Error())
 	})
 
 	t.Run("InvalidArgument: LockOwner empty", func(t *testing.T) {
@@ -3502,15 +3544,17 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
 		req := &runtimev1pb.TryLockRequest{
-			StoreName:  "abc",
-			ResourceId: "resource",
+			StoreName:       "mock",
+			ResourceId:      "resource",
+			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = LockOwner is empty in lock store mock", err.Error())
 	})
 
 	t.Run("InvalidArgument: ExpiryInSeconds is not positive", func(t *testing.T) {
@@ -3519,17 +3563,19 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
 
 		req := &runtimev1pb.TryLockRequest{
-			StoreName:  "abc",
-			ResourceId: "resource",
-			LockOwner:  "owner",
+			StoreName:       "mock",
+			ResourceId:      "resource",
+			LockOwner:       "owner",
+			ExpiryInSeconds: 0,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = ExpiryInSeconds is not positive in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = ExpiryInSeconds is not positive in lock store mock", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock store not found", func(t *testing.T) {
@@ -3538,6 +3584,7 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3549,10 +3596,10 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 1,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = lock store abc not found", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock store abc not found", err.Error())
 	})
 
-	t.Run("Success", func(t *testing.T) {
+	t.Run("successful", func(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
@@ -3567,6 +3614,7 @@ func TestTryLock(t *testing.T) {
 			}, nil
 		})
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3583,8 +3631,12 @@ func TestTryLock(t *testing.T) {
 }
 
 func TestUnlock(t *testing.T) {
+	l := logger.NewLogger("fakeLogger")
+	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
+
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
+			Resiliency:  resiliencyConfig,
 			TracingSpec: config.TracingSpec{},
 		})
 
@@ -3592,7 +3644,7 @@ func TestUnlock(t *testing.T) {
 			StoreName: "abc",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = FailedPrecondition desc = lock store is not configured", err.Error())
+		assert.Equal(t, "api error: code = FailedPrecondition desc = lock store is not configured", err.Error())
 	})
 
 	t.Run("InvalidArgument: ResourceId empty", func(t *testing.T) {
@@ -3601,15 +3653,15 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName: "abc",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock owner empty", func(t *testing.T) {
@@ -3618,15 +3670,15 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
 			ResourceId: "resource",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock store not found", func(t *testing.T) {
@@ -3635,8 +3687,8 @@ func TestUnlock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -3645,10 +3697,10 @@ func TestUnlock(t *testing.T) {
 			LockOwner:  "owner",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "rpc error: code = InvalidArgument desc = lock store abc not found", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock store abc not found", err.Error())
 	})
 
-	t.Run("normal", func(t *testing.T) {
+	t.Run("successful", func(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
@@ -3662,8 +3714,8 @@ func TestUnlock(t *testing.T) {
 			}, nil
 		})
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
+			Resiliency: resiliencyConfig,
+			LockStores: map[string]lock.Store{"mock": mockLockStore},
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "mock",
@@ -3671,7 +3723,7 @@ func TestUnlock(t *testing.T) {
 			LockOwner:  "owner",
 		}
 		resp, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
 	})
 }
