@@ -15,6 +15,7 @@ package runtime
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -212,6 +213,7 @@ type DaprRuntime struct {
 	appHealthReady            func() // Invoked the first time the app health becomes ready
 	appHealthLock             *sync.Mutex
 	bulkSubLock               *sync.Mutex
+	appHTTPClient             *nethttp.Client
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -308,6 +310,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		dl := newComponentDenyList(globalConfig.Spec.ComponentsSpec.Deny)
 		rt.componentAuthorizers = append(rt.componentAuthorizers, dl.IsAllowed)
 	}
+
+	rt.initAppHTTPClient()
 
 	return rt
 }
@@ -2433,6 +2437,8 @@ func (a *DaprRuntime) initActors() error {
 		Port:               a.runtimeConfig.InternalGRPCPort,
 		Namespace:          a.namespace,
 		AppConfig:          a.appConfig,
+		HealthHTTPClient:   a.appHTTPClient,
+		HealthEndpoint:     a.getAppHTTPEndpoint(),
 	})
 
 	act := actors.NewActors(actors.ActorsOpts{
@@ -2979,16 +2985,58 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 	return nil
 }
 
+// Returns the HTTP endpoint for the app.
+func (a *DaprRuntime) getAppHTTPEndpoint() string {
+	port := strconv.Itoa(a.runtimeConfig.ApplicationPort)
+	if a.runtimeConfig.AppSSL {
+		return "https://" + channel.DefaultChannelAddress + ":" + port
+	} else {
+		return "http://" + channel.DefaultChannelAddress + ":" + port
+	}
+}
+
+// Initializes the appHTTPClient property.
+func (a *DaprRuntime) initAppHTTPClient() {
+	var tlsConfig *tls.Config
+	if a.runtimeConfig.AppSSL {
+		tlsConfig = &tls.Config{
+			//nolint:gosec
+			InsecureSkipVerify: true,
+			// For 1.11
+			MinVersion: channel.AppChannelMinTLSVersion,
+		}
+		// TODO: Remove when the feature is finalized
+		if a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS) {
+			tlsConfig.MinVersion = 0
+		}
+	}
+
+	// Initialize this property in the object, and then pass it to the HTTP channel and the actors runtime (for health checks)
+	// We want to re-use the same client so TCP sockets can be re-used efficiently across everything that communicates with the app
+	// This is especially useful if the app supports HTTP/2
+	a.appHTTPClient = &nethttp.Client{
+		Transport: &nethttp.Transport{
+			ReadBufferSize:         a.runtimeConfig.ReadBufferSize << 10,
+			MaxResponseHeaderBytes: int64(a.runtimeConfig.ReadBufferSize) << 10,
+			MaxConnsPerHost:        1024,
+			MaxIdleConns:           64, // A local channel connects to a single host
+			MaxIdleConnsPerHost:    64,
+			TLSClientConfig:        tlsConfig,
+		},
+		CheckRedirect: func(req *nethttp.Request, via []*nethttp.Request) error {
+			return nethttp.ErrUseLastResponse
+		},
+	}
+}
+
 func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) httpChannel.ChannelConfiguration {
 	return httpChannel.ChannelConfiguration{
-		Port:                 a.runtimeConfig.ApplicationPort,
+		Client:               a.appHTTPClient,
+		Endpoint:             a.getAppHTTPEndpoint(),
 		MaxConcurrency:       a.runtimeConfig.MaxConcurrency,
 		Pipeline:             pipeline,
 		TracingSpec:          a.globalConfig.GetTracingSpec(),
-		SslEnabled:           a.runtimeConfig.AppSSL,
 		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
-		ReadBufferSizeKB:     a.runtimeConfig.ReadBufferSize,
-		AllowInsecureTLS:     a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS),
 	}
 }
 

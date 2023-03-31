@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/dapr/dapr v1.7.4
-	google.golang.org/grpc v1.53.0
+	google.golang.org/grpc v1.54.0
 	google.golang.org/grpc/examples v0.0.0-20220818173707-97cb7b1653d7
 	google.golang.org/protobuf v1.30.0
 )

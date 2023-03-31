@@ -43,20 +43,6 @@ func (_m *MockAppChannel) GetAppConfig() (*config.ApplicationConfig, error) {
 	return r0, r1
 }
 
-// GetBaseAddress provides a mock function with given fields:
-func (_m *MockAppChannel) GetBaseAddress() string {
-	ret := _m.Called()
-
-	var r0 string
-	if rf, ok := ret.Get(0).(func() string); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(string)
-	}
-
-	return r0
-}
-
 // HealthProbe provides a mock function with given fields: ctx
 func (_m *MockAppChannel) HealthProbe(ctx context.Context) (bool, error) {
 	ret := _m.Called(ctx)
