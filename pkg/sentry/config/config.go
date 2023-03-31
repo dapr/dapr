@@ -20,7 +20,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/dapr/kit/logger"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
@@ -50,8 +49,6 @@ const (
 	// DefaultIssuerKeyFilename is the filename that holds the issuer key.
 	DefaultIssuerKeyFilename = "issuer.key"
 )
-
-var log = logger.NewLogger("dapr.sentry.config")
 
 // Config holds the configuration for the Certificate Authority.
 type Config struct {

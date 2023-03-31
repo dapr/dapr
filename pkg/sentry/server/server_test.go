@@ -283,12 +283,15 @@ func Test_Run(t *testing.T) {
 			}()
 
 			require.Eventually(t, func() bool {
-				conn, err := net.Dial("tcp", fmt.Sprintf(":%d", port))
-				defer conn.Close()
+				var conn net.Conn
+				conn, err = net.Dial("tcp", fmt.Sprintf(":%d", port))
+				if err == nil {
+					conn.Close()
+				}
 				return err == nil
 			}, time.Second, 10*time.Millisecond)
 
-			conn, err := grpc.DialContext(ctx, fmt.Sprintf(":%d", port), grpc.WithInsecure())
+			conn, err := grpc.DialContext(ctx, fmt.Sprintf(":%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				assert.NoError(t, conn.Close())

@@ -18,13 +18,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dapr/kit/logger"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
-
-var log = logger.NewLogger("dapr.sentry.identity.common")
 
 // Validate validates the common rules for all requests.
 func Validate(_ context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {

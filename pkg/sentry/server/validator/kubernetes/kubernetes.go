@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dapr/kit/logger"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	kauthapi "k8s.io/api/authentication/v1"
@@ -38,6 +37,7 @@ import (
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	"github.com/dapr/dapr/pkg/sentry/server/validator/internal"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -164,7 +164,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	if err != nil {
 		return spiffeid.TrustDomain{}, fmt.Errorf("%s: failed to parse kubernetes token: %s", errPrefix, err)
 	}
-	if err := ptoken.Claims.Valid(); err != nil {
+	if err = ptoken.Claims.Valid(); err != nil {
 		return spiffeid.TrustDomain{}, fmt.Errorf("%s: invalid kubernetes token: %s", errPrefix, err)
 	}
 

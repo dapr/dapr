@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/dapr/kit/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.sentry.server")

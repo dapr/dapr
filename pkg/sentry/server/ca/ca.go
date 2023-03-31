@@ -23,7 +23,6 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	"github.com/dapr/kit/logger"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.sentry.ca")
@@ -90,7 +90,7 @@ type caBundle struct {
 }
 
 func New(ctx context.Context, conf config.Config) (Interface, error) {
-	var store store
+	var castore store
 	if config.IsKubernetesHosted() {
 		log.Info("using kubernetes secret store for trust bundle storage")
 
@@ -103,17 +103,17 @@ func New(ctx context.Context, conf config.Config) (Interface, error) {
 			return nil, err
 		}
 
-		store = &kube{
+		castore = &kube{
 			config:    conf,
 			namespace: security.CurrentNamespace(),
 			client:    client,
 		}
 	} else {
 		log.Info("using local file system for trust bundle storage")
-		store = &selfhosted{config: conf}
+		castore = &selfhosted{config: conf}
 	}
 
-	bundle, ok, err := store.get(ctx)
+	bundle, ok, err := castore.get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func New(ctx context.Context, conf config.Config) (Interface, error) {
 
 		log.Info("root and issuer certs generated")
 
-		if err := store.store(ctx, bundle); err != nil {
+		if err := castore.store(ctx, bundle); err != nil {
 			return nil, err
 		}
 

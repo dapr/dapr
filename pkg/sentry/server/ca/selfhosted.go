@@ -35,7 +35,7 @@ func (s *selfhosted) store(_ context.Context, bundle caBundle) error {
 		{s.config.IssuerCertPath, bundle.issChainPEM},
 		{s.config.IssuerKeyPath, bundle.issKeyPEM},
 	} {
-		if err := os.WriteFile(f.name, f.data, 0600); err != nil {
+		if err := os.WriteFile(f.name, f.data, 0o600); err != nil {
 			return err
 		}
 	}

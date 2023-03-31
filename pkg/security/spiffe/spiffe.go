@@ -22,7 +22,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 )
 
-// Parsed is a parsed SPIFFE ID acording to the Dapr SPIFFE ID path format.
+// Parsed is a parsed SPIFFE ID according to the Dapr SPIFFE ID path format.
 type Parsed struct {
 	TrustDomain string
 	Namespace   string

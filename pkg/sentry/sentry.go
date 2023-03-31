@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/dapr/kit/logger"
 	"k8s.io/client-go/rest"
 
 	"github.com/dapr/dapr/pkg/security"
@@ -32,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	valkube "github.com/dapr/dapr/pkg/sentry/server/validator/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/server/validator/selfhosted"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.sentry")
@@ -77,12 +77,12 @@ func (s *sentry) Start(ctx context.Context) error {
 		MTLSEnabled:             true,
 		// Override the request source to our in memory CA since _we_ are sentry!
 		OverrideCertRequestSource: func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
-			csr, err := x509.ParseCertificateRequest(csrDER)
-			if err != nil {
+			csr, csrErr := x509.ParseCertificateRequest(csrDER)
+			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("invalid_csr")
-				return nil, err
+				return nil, csrErr
 			}
-			certs, err := camngr.SignIdentity(ctx, &ca.SignRequest{
+			certs, csrErr := camngr.SignIdentity(ctx, &ca.SignRequest{
 				PublicKey:          csr.PublicKey.(crypto.PublicKey),
 				SignatureAlgorithm: csr.SignatureAlgorithm,
 				TrustDomain:        s.conf.TrustDomain,
@@ -93,9 +93,9 @@ func (s *sentry) Start(ctx context.Context) error {
 				// matched on the DNS SAN `cluster.local`(!).
 				DNS: []string{"cluster.local"},
 			})
-			if err != nil {
+			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("ca_error")
-				return nil, err
+				return nil, csrErr
 			}
 			return certs, nil
 		},

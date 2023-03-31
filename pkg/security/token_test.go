@@ -20,11 +20,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dapr/kit/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestAPIToken(t *testing.T) {
@@ -106,7 +106,7 @@ func Test_getKubernetesIdentityToken(t *testing.T) {
 		},
 	}
 
-	var origFS = rootFS
+	origFS := rootFS
 	t.Cleanup(func() {
 		rootFS = origFS
 	})
@@ -123,8 +123,8 @@ func Test_getKubernetesIdentityToken(t *testing.T) {
 			} {
 				if tt.token != nil {
 					path := filepath.Join(rootFS, tt.path)
-					require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700))
-					require.NoError(t, os.WriteFile(path, []byte(*tt.token), 0600))
+					require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+					require.NoError(t, os.WriteFile(path, []byte(*tt.token), 0o600))
 				}
 			}
 

@@ -33,7 +33,6 @@ func Test_interface(t *testing.T) {
 }
 
 func Test_startRotation(t *testing.T) {
-
 	t.Run("if context is cancelled, expect return", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

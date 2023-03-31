@@ -18,17 +18,18 @@ import (
 	"crypto/x509"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
-	"github.com/stretchr/testify/assert"
 )
 
 func Test_kube_get(t *testing.T) {
 	rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
+	//nolint:dogsled
 	rootPEM2, _, _, _ := genCrt(t, "root2", nil, nil)
 	intPEM, intCrt, intPKPEM, intPK := genCrt(t, "int", rootCrt, rootPK)
 

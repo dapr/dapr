@@ -28,11 +28,9 @@ import (
 
 func Test_selhosted_store(t *testing.T) {
 	t.Run("storing file should write to disk with correct permissions", func(t *testing.T) {
-		dir := t.TempDir()
-
-		rootFile := filepath.Join(dir, "root.pem")
-		issuerFile := filepath.Join(dir, "issuer.pem")
-		keyFile := filepath.Join(dir, "key.pem")
+		rootFile := filepath.Join(t.TempDir(), "root.pem")
+		issuerFile := filepath.Join(t.TempDir(), "issuer.pem")
+		keyFile := filepath.Join(t.TempDir(), "key.pem")
 
 		s := &selfhosted{
 			config: config.Config{
@@ -42,7 +40,7 @@ func Test_selhosted_store(t *testing.T) {
 			},
 		}
 
-		assert.NoError(t, s.store(nil, caBundle{
+		assert.NoError(t, s.store(context.Background(), caBundle{
 			trustAnchors: []byte("root"),
 			issChainPEM:  []byte("issuer"),
 			issKeyPEM:    []byte("key"),
@@ -54,15 +52,15 @@ func Test_selhosted_store(t *testing.T) {
 
 		info, err := os.Stat(rootFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
 		info, err = os.Stat(issuerFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
 		info, err = os.Stat(keyFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
 		b, err := os.ReadFile(rootFile)
 		assert.NoError(t, err)
@@ -149,9 +147,9 @@ func Test_selfhosted_get(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			rootFile := filepath.Join(dir + "root.pem")
-			issuerFile := filepath.Join(dir + "issuer.pem")
-			keyFile := filepath.Join(dir + "key.pem")
+			rootFile := filepath.Join(dir, "root.pem")
+			issuerFile := filepath.Join(dir, "issuer.pem")
+			keyFile := filepath.Join(dir, "key.pem")
 			s := &selfhosted{
 				config: config.Config{
 					RootCertPath:   rootFile,
@@ -161,17 +159,17 @@ func Test_selfhosted_get(t *testing.T) {
 			}
 
 			if test.rootFile != nil {
-				require.NoError(t, os.WriteFile(rootFile, *test.rootFile, 0600))
+				require.NoError(t, os.WriteFile(rootFile, *test.rootFile, 0o600))
 			}
 			if test.issuer != nil {
-				require.NoError(t, os.WriteFile(issuerFile, *test.issuer, 0600))
+				require.NoError(t, os.WriteFile(issuerFile, *test.issuer, 0o600))
 			}
 			if test.key != nil {
-				require.NoError(t, os.WriteFile(keyFile, *test.key, 0600))
+				require.NoError(t, os.WriteFile(keyFile, *test.key, 0o600))
 			}
 
-			caBundle, ok, err := s.get(context.Background())
-			assert.Equal(t, test.expBundle, caBundle)
+			got, ok, err := s.get(context.Background())
+			assert.Equal(t, test.expBundle, got)
 			assert.Equal(t, test.expOk, ok)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 		})

@@ -263,7 +263,7 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		return nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
 	}
 
-	if err := resp.GetValidUntil().CheckValid(); err != nil {
+	if err = resp.GetValidUntil().CheckValid(); err != nil {
 		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
 		return nil, fmt.Errorf("error parsing ValidUntil: %w", err)
 	}
@@ -274,22 +274,6 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 	}
 
 	return workloadcert, nil
-}
-
-func (x *x509source) updateTrustAnchorFromFile(filepath string) error {
-	rootPEMs, err := os.ReadFile(filepath)
-	if err != nil {
-		return fmt.Errorf("failed to read trust anchors file %q: %s", filepath, err)
-	}
-
-	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
-	if err != nil {
-		return fmt.Errorf("failed to decode trust anchors: %s", err)
-	}
-
-	x.trustAnchors.SetX509Authorities(trustAnchorCerts)
-
-	return nil
 }
 
 // renewalTime is 70% through the certificate validity period.

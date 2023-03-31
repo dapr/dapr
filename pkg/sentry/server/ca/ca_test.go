@@ -89,13 +89,15 @@ func Test_New(t *testing.T) {
 		int1PEM, int1Crt, _, int1PK := genCrt(t, "int1", rootCrt, rootPK)
 		int2PEM, int2Crt, int2PKPEM, int2PK := genCrt(t, "int2", int1Crt, int1PK)
 
+		//nolint:gocritic
 		rootFileContents := append(rootPEM, rootPEM2...)
+		//nolint:gocritic
 		issuerFileContents := append(int2PEM, int1PEM...)
 		issuerKeyFileContents := int2PKPEM
 
-		require.NoError(t, os.WriteFile(rootCertPath, rootFileContents, 0600))
-		require.NoError(t, os.WriteFile(issuerCertPath, issuerFileContents, 0600))
-		require.NoError(t, os.WriteFile(issuerKeyPath, issuerKeyFileContents, 0600))
+		require.NoError(t, os.WriteFile(rootCertPath, rootFileContents, 0o600))
+		require.NoError(t, os.WriteFile(issuerCertPath, issuerFileContents, 0o600))
+		require.NoError(t, os.WriteFile(issuerKeyPath, issuerKeyFileContents, 0o600))
 
 		caImp, err := New(context.Background(), config)
 		require.NoError(t, err)
@@ -138,13 +140,15 @@ func Test_SignIdentity(t *testing.T) {
 		int1PEM, int1Crt, _, int1PK := genCrt(t, "int1", rootCrt, rootPK)
 		int2PEM, int2Crt, int2PKPEM, _ := genCrt(t, "int2", int1Crt, int1PK)
 
+		//nolint:gocritic
 		rootFileContents := append(rootPEM, rootPEM2...)
+		//nolint:gocritic
 		issuerFileContents := append(int2PEM, int1PEM...)
 		issuerKeyFileContents := int2PKPEM
 
-		require.NoError(t, os.WriteFile(rootCertPath, rootFileContents, 0600))
-		require.NoError(t, os.WriteFile(issuerCertPath, issuerFileContents, 0600))
-		require.NoError(t, os.WriteFile(issuerKeyPath, issuerKeyFileContents, 0600))
+		require.NoError(t, os.WriteFile(rootCertPath, rootFileContents, 0o600))
+		require.NoError(t, os.WriteFile(issuerCertPath, issuerFileContents, 0o600))
+		require.NoError(t, os.WriteFile(issuerKeyPath, issuerKeyFileContents, 0o600))
 
 		ca, err := New(context.Background(), config)
 		require.NoError(t, err)

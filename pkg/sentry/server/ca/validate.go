@@ -31,7 +31,7 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (caBundle, error)
 	}
 
 	for _, cert := range trustAnchorsX509 {
-		if err := cert.CheckSignatureFrom(cert); err != nil {
+		if err = cert.CheckSignatureFrom(cert); err != nil {
 			return caBundle{}, fmt.Errorf("certificate in trust anchor is not self-signed: %w", err)
 		}
 	}
@@ -39,7 +39,8 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (caBundle, error)
 	// Strip comments from anchor certificates.
 	trustAnchors = nil
 	for _, cert := range trustAnchorsX509 {
-		trustAnchor, err := pem.EncodeX509(cert)
+		var trustAnchor []byte
+		trustAnchor, err = pem.EncodeX509(cert)
 		if err != nil {
 			return caBundle{}, fmt.Errorf("failed to re-encode trust anchor: %w", err)
 		}
@@ -55,7 +56,7 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (caBundle, error)
 	// add the root CA to the issuer chain.
 	if len(issChain) > 1 {
 		lastCert := issChain[len(issChain)-1]
-		if err := lastCert.CheckSignatureFrom(lastCert); err == nil {
+		if err = lastCert.CheckSignatureFrom(lastCert); err == nil {
 			issChain = issChain[:len(issChain)-1]
 		}
 	}

@@ -855,7 +855,7 @@ func TestValidate(t *testing.T) {
 
 			kubeCl := kubefake.NewSimpleClientset(kobjs...)
 			kubeCl.Fake.PrependReactor("create", "tokenreviews", test.reactor(t))
-			client := clientfake.NewFakeClientWithScheme(scheme, kobjs...)
+			client := clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(kobjs...).Build()
 
 			if test.config != nil {
 				require.NoError(t, client.Create(context.Background(), test.config))
