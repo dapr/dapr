@@ -8,7 +8,7 @@ require (
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.10.3
+	github.com/dapr/components-contrib v1.10.5
 	github.com/dapr/kit v0.0.5-0.20230307192505-b5bafe889a81
 	github.com/fasthttp/router v1.4.15
 	github.com/ghodss/yaml v1.0.0
