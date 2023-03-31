@@ -30,9 +30,9 @@ func Test_selhosted_store(t *testing.T) {
 	t.Run("storing file should write to disk with correct permissions", func(t *testing.T) {
 		dir := t.TempDir()
 
-		rootFile := filepath.Join(dir + "root.pem")
-		issuerFile := filepath.Join(dir + "issuer.pem")
-		keyFile := filepath.Join(dir + "key.pem")
+		rootFile := filepath.Join(dir, "root.pem")
+		issuerFile := filepath.Join(dir, "issuer.pem")
+		keyFile := filepath.Join(dir, "key.pem")
 
 		s := &selfhosted{
 			config: config.Config{
@@ -54,15 +54,15 @@ func Test_selhosted_store(t *testing.T) {
 
 		info, err := os.Stat(rootFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0600), info.Mode())
+		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
 
 		info, err = os.Stat(issuerFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0600), info.Mode())
+		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
 
 		info, err = os.Stat(keyFile)
 		assert.NoError(t, err)
-		assert.Equal(t, os.FileMode(0600), info.Mode())
+		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
 
 		b, err := os.ReadFile(rootFile)
 		assert.NoError(t, err)
