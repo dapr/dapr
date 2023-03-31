@@ -4085,11 +4085,8 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		req := &state.TransactionalStateRequest{
 			Operations: []state.TransactionalStateOperation{
-				{
-					Operation: state.Delete,
-					Request: map[string]string{
-						"key": "failingMultiKey",
-					},
+				state.DeleteRequest{
+					Key: "failingMultiKey",
 				},
 			},
 		}
@@ -4106,11 +4103,8 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		req := &state.TransactionalStateRequest{
 			Operations: []state.TransactionalStateOperation{
-				{
-					Operation: state.Delete,
-					Request: map[string]string{
-						"key": "timeoutMultiKey",
-					},
+				state.DeleteRequest{
+					Key: "timeoutMultiKey",
 				},
 			},
 		}
@@ -4221,6 +4215,8 @@ const (
 )
 
 type fakeStateStore struct {
+	state.BulkStore
+
 	counter int
 }
 
@@ -4229,30 +4225,6 @@ func (c fakeStateStore) GetComponentMetadata() map[string]string {
 }
 
 func (c fakeStateStore) Ping() error {
-	return nil
-}
-
-func (c fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
-	for i := range req {
-		r := req[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := c.Delete(ctx, &r)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	for i := range req {
-		s := req[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := c.Set(ctx, &s)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -4279,13 +4251,8 @@ func (c fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.
 	return nil, nil
 }
 
-// BulkGet performs a bulks get operations.
-func (c fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	return false, nil, nil
-}
-
 func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
-	c.counter = 0 //nolint:staticcheck
+	c.counter = 0
 	return nil
 }
 
@@ -4786,18 +4753,12 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	t.Run("Direct Transaction - 204 No Content", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 		testTransactionalOperations := []state.TransactionalStateOperation{
-			{
-				Operation: state.Upsert,
-				Request: map[string]interface{}{
-					"key":   "fakeKey1",
-					"value": fakeBodyObject,
-				},
+			state.SetRequest{
+				Key:   "fakeKey1",
+				Value: fakeBodyObject,
 			},
-			{
-				Operation: state.Delete,
-				Request: map[string]interface{}{
-					"key": "fakeKey1",
-				},
+			state.DeleteRequest{
+				Key: "fakeKey1",
 			},
 		}
 

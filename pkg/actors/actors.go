@@ -660,13 +660,10 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 				upsert.Metadata = make(map[string]string)
 			}
 			upsert.Metadata[metadataPartitionKey] = partitionKey
-			operations[i] = state.TransactionalStateOperation{
-				Request: state.SetRequest{
-					Key:      key,
-					Value:    upsert.Value,
-					Metadata: upsert.Metadata,
-				},
-				Operation: state.Upsert,
+			operations[i] = state.SetRequest{
+				Key:      key,
+				Value:    upsert.Value,
+				Metadata: upsert.Metadata,
 			}
 		case Delete:
 			var delete TransactionalDelete
@@ -675,12 +672,9 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 				return err
 			}
 			key := a.constructActorStateKey(req.ActorType, req.ActorID, delete.Key)
-			operations[i] = state.TransactionalStateOperation{
-				Request: state.DeleteRequest{
-					Key:      key,
-					Metadata: metadata,
-				},
-				Operation: state.Delete,
+			operations[i] = state.DeleteRequest{
+				Key:      key,
+				Metadata: metadata,
 			}
 		default:
 			return fmt.Errorf("operation type %s not supported", o.Operation)

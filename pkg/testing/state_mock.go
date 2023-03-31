@@ -190,16 +190,12 @@ func (f *FailingStatestore) Get(ctx context.Context, req *state.GetRequest) (*st
 	return res, nil
 }
 
-func (f *FailingStatestore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	if f.BulkFailKey != "" {
+func (f *FailingStatestore) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
 		err := f.Failure.PerformFailure(f.BulkFailKey)
 		if err != nil {
-			return true, nil, err
+			return nil, err
 		}
-	}
-
-	// This makes the code fall back to individual gets, which is basically what we'd mimic here anyway.
-	return false, nil, nil
+		return []state.BulkGetResponse{}, nil
 }
 
 func (f *FailingStatestore) Init(ctx context.Context, metadata state.Metadata) error {

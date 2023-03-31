@@ -209,7 +209,7 @@ func (f *fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state
 	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
 }
 
-func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
 	res := []state.BulkGetResponse{}
 	for _, oneRequest := range req {
 		oneResponse, err := f.Get(ctx, &state.GetRequest{
@@ -218,7 +218,7 @@ func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (b
 			Options:  oneRequest.Options,
 		})
 		if err != nil {
-			return false, nil, err
+			return nil, err
 		}
 
 		res = append(res, state.BulkGetResponse{
@@ -228,7 +228,7 @@ func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (b
 		})
 	}
 
-	return true, res, nil
+	return res, nil
 }
 
 func (f *fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
@@ -255,12 +255,13 @@ func (f *fakeStateStore) Multi(ctx context.Context, request *state.Transactional
 	for _, o := range request.Operations {
 		var eTag *string
 		key := ""
-		if o.Operation == state.Upsert {
-			key = o.Request.(state.SetRequest).Key
-			eTag = o.Request.(state.SetRequest).ETag
-		} else if o.Operation == state.Delete {
-			key = o.Request.(state.DeleteRequest).Key
-			eTag = o.Request.(state.DeleteRequest).ETag
+		switch req := o.(type) {
+		case state.SetRequest:
+			key = req.Key
+			eTag = req.ETag
+		case state.DeleteRequest:
+			key = req.Key
+			eTag = req.ETag
 		}
 		item := f.items[key]
 		if eTag != nil && item != nil {
@@ -275,12 +276,11 @@ func (f *fakeStateStore) Multi(ctx context.Context, request *state.Transactional
 
 	// Now we can perform the operation.
 	for _, o := range request.Operations {
-		if o.Operation == state.Upsert {
-			req := o.Request.(state.SetRequest)
+		switch req := o.(type) {
+		case state.SetRequest:
 			b, _ := json.Marshal(req.Value)
 			f.items[req.Key] = f.newItem(b)
-		} else if o.Operation == state.Delete {
-			req := o.Request.(state.DeleteRequest)
+		case state.DeleteRequest:
 			delete(f.items, req.Key)
 		}
 	}

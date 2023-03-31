@@ -47,7 +47,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -589,11 +588,6 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-type bulkGetRes struct {
-	bulkGet   bool
-	responses []state.BulkGetResponse
-}
-
 func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
@@ -647,78 +641,33 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyDef := a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore)
-	bgrPolicyRunner := resiliency.NewRunner[*bulkGetRes](reqCtx, policyDef)
-	bgr, rErr := bgrPolicyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-		rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, reqs)
-		return &bulkGetRes{
-			bulkGet:   rBulkGet,
-			responses: rBulkResponse,
-		}, rErr
+	bgrPolicyRunner := resiliency.NewRunner[[]state.BulkGetResponse](reqCtx, policyDef)
+	responses, rErr := bgrPolicyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+		return store.BulkGet(ctx, reqs, state.BulkGetOpts{
+			Parallelism: req.Parallelism,
+		})
 	})
-	elapsed := diag.ElapsedSince(start)
 
+	elapsed := diag.ElapsedSince(start)
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
-	if bgr == nil {
-		bgr = &bulkGetRes{}
+	if rErr != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
 	}
 
-	if bgr.bulkGet {
-		// if store supports bulk get
-		if rErr != nil {
-			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-			log.Debug(msg)
-			return
+	for i := 0; i < len(responses) && i < len(req.Keys); i++ {
+		bulkResp[i].Key = stateLoader.GetOriginalStateKey(responses[i].Key)
+		if responses[i].Error != "" {
+			log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
+			bulkResp[i].Error = responses[i].Error
+		} else {
+			bulkResp[i].Data = json.RawMessage(responses[i].Data)
+			bulkResp[i].ETag = responses[i].ETag
+			bulkResp[i].Metadata = responses[i].Metadata
 		}
-
-		for i := 0; i < len(bgr.responses) && i < len(req.Keys); i++ {
-			bulkResp[i].Key = stateLoader.GetOriginalStateKey(bgr.responses[i].Key)
-			if bgr.responses[i].Error != "" {
-				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, bgr.responses[i].Error)
-				bulkResp[i].Error = bgr.responses[i].Error
-			} else {
-				bulkResp[i].Data = json.RawMessage(bgr.responses[i].Data)
-				bulkResp[i].ETag = bgr.responses[i].ETag
-				bulkResp[i].Metadata = bgr.responses[i].Metadata
-			}
-		}
-	} else {
-		// if store doesn't support bulk get, fallback to call get() method one by one
-		limiter := concurrency.NewLimiter(req.Parallelism)
-
-		for i, k := range req.Keys {
-			bulkResp[i].Key = k
-
-			fn := func(param interface{}) {
-				r := param.(*BulkGetResponse)
-				k, err := stateLoader.GetModifiedStateKey(r.Key, storeName, a.id)
-				if err != nil {
-					log.Debug(err)
-					r.Error = err.Error()
-					return
-				}
-
-				policyRunner := resiliency.NewRunner[*state.GetResponse](reqCtx, policyDef)
-				resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-					return store.Get(ctx, &state.GetRequest{
-						Key:      k,
-						Metadata: metadata,
-					})
-				})
-				if err != nil {
-					log.Debugf("Bulk get: error getting key %s: %v", r.Key, err)
-					r.Error = err.Error()
-				} else if resp != nil {
-					r.Data = json.RawMessage(resp.Data)
-					r.ETag = resp.ETag
-					r.Metadata = resp.Metadata
-				}
-			}
-
-			limiter.Execute(fn, &bulkResp[i])
-		}
-		limiter.Wait()
 	}
 
 	if encryption.EncryptedStateStore(storeName) {
@@ -2482,10 +2431,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(err)
 				return
 			}
-			operations[i] = state.TransactionalStateOperation{
-				Request:   upsertReq,
-				Operation: state.Upsert,
-			}
+			operations[i] = upsertReq
 		case state.Delete:
 			var delReq state.DeleteRequest
 			err := mapstructure.Decode(o.Request, &delReq)
@@ -2503,10 +2449,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(msg)
 				return
 			}
-			operations[i] = state.TransactionalStateOperation{
-				Request:   delReq,
-				Operation: state.Delete,
-			}
+			operations[i] = delReq
 		default:
 			msg := NewErrorResponse(
 				"ERR_NOT_SUPPORTED_STATE_OPERATION",
