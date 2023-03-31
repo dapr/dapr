@@ -614,7 +614,6 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// try bulk get first
 	var key string
 	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
@@ -633,9 +632,10 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policyDef := a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore)
-	bgrPolicyRunner := resiliency.NewRunner[[]state.BulkGetResponse](reqCtx, policyDef)
-	responses, rErr := bgrPolicyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+	policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](reqCtx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+	)
+	responses, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
 		return store.BulkGet(ctx, reqs, state.BulkGetOpts{
 			Parallelism: req.Parallelism,
 		})
@@ -644,9 +644,9 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	elapsed := diag.ElapsedSince(start)
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
-	if rErr != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_BULK_GET", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
@@ -687,7 +687,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
+	if len(a.stateStores) == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -882,20 +882,20 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		}
 		defer req.Close()
 
-		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
-		_, err := policyRunner(func(ctx context.Context) (any, error) {
+		policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
+		_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
 			rResp, rErr := h.appChannel.InvokeMethod(ctx, req)
 			if rErr != nil {
-				return nil, rErr
+				return struct{}{}, rErr
 			}
 			if rResp != nil {
 				defer rResp.Close()
 			}
 
 			if rResp != nil && rResp.Status().Code != nethttp.StatusOK {
-				return nil, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().Code)
+				return struct{}{}, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().Code)
 			}
-			return nil, nil
+			return struct{}{}, nil
 		})
 		if err != nil {
 			log.Errorf("error sending configuration item to the app: %v", err)
@@ -1300,6 +1300,10 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+		// If there's a single request, perform it in non-bulk
+		if len(reqs) == 1 {
+			return struct{}{}, store.Set(ctx, &reqs[0])
+		}
 		return struct{}{}, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)

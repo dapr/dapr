@@ -747,15 +747,15 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](ctx,
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
+	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
 		// If there's a single request, perform it in non-bulk
 		if len(reqs) == 1 {
-			return nil, store.Set(ctx, &reqs[0])
+			return struct{}{}, store.Set(ctx, &reqs[0])
 		}
-		return nil, store.BulkSet(ctx, reqs)
+		return struct{}{}, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 

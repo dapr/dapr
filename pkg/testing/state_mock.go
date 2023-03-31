@@ -187,11 +187,33 @@ func (f *FailingStatestore) Get(ctx context.Context, req *state.GetRequest) (*st
 }
 
 func (f *FailingStatestore) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
-	err := f.Failure.PerformFailure(f.BulkFailKey)
-	if err != nil {
-		return nil, err
+	if f.BulkFailKey != "" {
+		err := f.Failure.PerformFailure(f.BulkFailKey)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return []state.BulkGetResponse{}, nil
+
+	// Return keys one by one
+	res := []state.BulkGetResponse{}
+	for i := range req {
+		r, err := f.Get(ctx, &req[i])
+		if err != nil {
+			res = append(res, state.BulkGetResponse{
+				Key:   req[i].Key,
+				Error: err.Error(),
+			})
+			continue
+		}
+		res = append(res, state.BulkGetResponse{
+			Key:         req[i].Key,
+			Data:        r.Data,
+			ETag:        r.ETag,
+			ContentType: r.ContentType,
+			Metadata:    r.Metadata,
+		})
+	}
+	return res, nil
 }
 
 func (f *FailingStatestore) Init(ctx context.Context, metadata state.Metadata) error {
