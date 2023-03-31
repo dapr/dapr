@@ -45,17 +45,6 @@ func fakeStore() state.Store {
 	return daprt.NewFakeStateStore()
 }
 
-// Copied from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16
-func marshal(val interface{}, marshaler func(interface{}) ([]byte, error)) ([]byte, error) {
-	var err error = nil
-	bt, ok := val.([]byte)
-	if !ok {
-		bt, err = marshaler(val)
-	}
-
-	return bt, err
-}
-
 type mockPlacement struct{}
 
 func (p *mockPlacement) AddHostedActorType(actorType string) error {

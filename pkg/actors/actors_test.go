@@ -2068,7 +2068,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.OperationUpsert, res.Operation)
+		require.Equal(t, state.OperationUpsert, res.Operation())
 
 		// Uses a pointer
 		op = TransactionalOperation{
@@ -2080,7 +2080,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err = op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.OperationUpsert, res.Operation)
+		require.Equal(t, state.OperationUpsert, res.Operation())
 
 		// Missing key
 		op = TransactionalOperation{
@@ -2100,7 +2100,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.OperationDelete, res.Operation)
+		require.Equal(t, state.OperationDelete, res.Operation())
 
 		// Uses a pointer
 		op = TransactionalOperation{
@@ -2111,7 +2111,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err = op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.OperationDelete, res.Operation)
+		require.Equal(t, state.OperationDelete, res.Operation())
 
 		// Missing key
 		op = TransactionalOperation{

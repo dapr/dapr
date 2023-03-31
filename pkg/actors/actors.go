@@ -1441,17 +1441,11 @@ func (a *actorsRuntime) migrateRemindersForActorType(ctx context.Context, actorT
 	}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(i+1))
-		stateOperations[i] = state.TransactionalStateOperation{
-			Operation: state.Upsert,
-			Request:   a.saveRemindersInPartitionRequest(stateKey, actorRemindersPartitions[i], nil, stateMetadata),
-		}
+		stateOperations[i] = a.saveRemindersInPartitionRequest(stateKey, actorRemindersPartitions[i], nil, stateMetadata)
 	}
 
 	// Also create a request to save the new metadata, so the new "metadataID" becomes the new de facto referenced list for reminders
-	stateOperations[len(stateOperations)-1] = state.TransactionalStateOperation{
-		Operation: state.Upsert,
-		Request:   a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata),
-	}
+	stateOperations[len(stateOperations)-1] = a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata)
 
 	// Perform all operations in a transaction
 	err = a.executeStateStoreTransaction(ctx, stateOperations, stateMetadata)
@@ -1499,7 +1493,6 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 		bulkResponse, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
 			return a.store.BulkGet(ctx, getRequests, state.BulkGetOpts{})
 		})
-
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1524,7 +1517,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 
 			// We can't pre-allocate "list" with the needed capacity because we don't know how many items are in each partition
 			// However, we can limit the number of times we call "append" on list in a way that could cause the slice to be re-allocated, by managing a separate list here with a fixed capacity and modify "list" just once at per iteration on "bulkResponse".
-			batchList := []actorReminderReference{}
+			batchList := make([]actorReminderReference, len(batch))
 			for j := range batch {
 				batchList[j] = actorReminderReference{
 					actorMetadataID:           actorMetadata.ID,
@@ -1665,14 +1658,8 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 			metadataPartitionKey: databasePartitionKey,
 		}
 		stateOperations := []state.TransactionalStateOperation{
-			{
-				Operation: state.Upsert,
-				Request:   a.saveRemindersInPartitionRequest(stateKey, remindersInPartition, etag, stateMetadata),
-			},
-			{
-				Operation: state.Upsert,
-				Request:   a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata),
-			},
+			a.saveRemindersInPartitionRequest(stateKey, remindersInPartition, etag, stateMetadata),
+			a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata),
 		}
 		rErr = a.executeStateStoreTransaction(ctx, stateOperations, stateMetadata)
 		if rErr != nil {
@@ -1791,14 +1778,8 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder *reminders.R
 			metadataPartitionKey: databasePartitionKey,
 		}
 		stateOperations := []state.TransactionalStateOperation{
-			{
-				Operation: state.Upsert,
-				Request:   a.saveRemindersInPartitionRequest(stateKey, remindersInPartition, etag, stateMetadata),
-			},
-			{
-				Operation: state.Upsert,
-				Request:   a.saveActorTypeMetadataRequest(reminder.ActorType, actorMetadata, stateMetadata),
-			},
+			a.saveRemindersInPartitionRequest(stateKey, remindersInPartition, etag, stateMetadata),
+			a.saveActorTypeMetadataRequest(reminder.ActorType, actorMetadata, stateMetadata),
 		}
 		rErr = a.executeStateStoreTransaction(ctx, stateOperations, stateMetadata)
 		if rErr != nil {

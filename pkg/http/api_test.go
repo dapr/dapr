@@ -4253,7 +4253,7 @@ func (c fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.
 }
 
 func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
-	c.counter = 0
+	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 

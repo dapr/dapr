@@ -19,8 +19,9 @@ import (
 	"fmt"
 	"sync"
 
-	state "github.com/dapr/components-contrib/state"
 	"github.com/google/uuid"
+
+	state "github.com/dapr/components-contrib/state"
 )
 
 type FakeStateStoreItem struct {
@@ -31,13 +32,12 @@ type FakeStateStoreItem struct {
 type FakeStateStore struct {
 	Items map[string]*FakeStateStoreItem
 
-	lock *sync.RWMutex
+	lock sync.RWMutex
 }
 
 func NewFakeStateStore() *FakeStateStore {
 	return &FakeStateStore{
 		Items: map[string]*FakeStateStoreItem{},
-		lock:  &sync.RWMutex{},
 	}
 }
 

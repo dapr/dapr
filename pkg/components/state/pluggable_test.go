@@ -917,7 +917,6 @@ func TestMappers(t *testing.T) {
 		}
 
 		t.Run("toTransact should return err when type is unrecognized", func(t *testing.T) {
-
 			req, err := toTransactOperation(failingTransactOperation{})
 			assert.Nil(t, req)
 			assert.ErrorIs(t, err, ErrTransactOperationNotSupported)
