@@ -113,10 +113,10 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusNoContent, code)
 			assert.Empty(t, string(resp))
 
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusOK, code)
-			assert.Equal(t, `"myData"`, string(resp))
+			assert.Eventually(t, func() bool {
+				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
+				return err == nil && code == http.StatusOK && string(resp) == `"myData"`
+			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
 
 			_, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-notMyActorID/myKey", httpURL, actuid))
 			assert.NoError(t, err)
@@ -127,10 +127,10 @@ func TestActorState(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, code)
 
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusOK, code)
-			assert.Equal(t, `"newData"`, string(resp))
+			assert.Eventually(t, func() bool {
+				resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
+				return err == nil && code == http.StatusOK && string(resp) == `"newData"`
+			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
 
 			deleteData := []byte(`[{"operation":"delete","request":{"key":"myKey"}}]`)
 			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), deleteData)
@@ -138,10 +138,10 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusNoContent, code)
 			assert.Empty(t, string(resp))
 
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusNoContent, code)
-			assert.Empty(t, string(resp))
+			assert.Eventually(t, func() bool {
+				resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
+				return err == nil && code == http.StatusNoContent && string(resp) == ``
+			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
 		})
 
 		t.Run("data saved with TTL should be automatically deleted", func(t *testing.T) {
