@@ -35,7 +35,11 @@ func (w *MockWorkflow) Start(ctx context.Context, req *workflowContrib.StartRequ
 }
 
 func (w *MockWorkflow) Terminate(ctx context.Context, req *workflowContrib.WorkflowReference) error {
+	if req.InstanceID == "errorInstanceId" {
+		return errors.New("error encountered in terminate")
+	}
 	return nil
+
 }
 
 func (w *MockWorkflow) Get(ctx context.Context, req *workflowContrib.WorkflowReference) (*workflowContrib.StateResponse, error) {

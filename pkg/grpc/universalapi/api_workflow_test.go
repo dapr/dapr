@@ -27,8 +27,9 @@ import (
 )
 
 var (
-	PauseWorkflow  = "PauseWorkflow"
-	ResumeWorkflow = "ResumeWorkflow"
+	TerminateWorkflow = "TerminateWorkflow"
+	PauseWorkflow     = "PauseWorkflow"
+	ResumeWorkflow    = "ResumeWorkflow"
 )
 
 func TestPauseResumeWorkflow(t *testing.T) {
@@ -45,6 +46,45 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		errorExcepted     bool
 		expectedError     messages.APIError
 	}{
+		{
+			testName:          "No instance id present in terminate request",
+			apiToBetested:     TerminateWorkflow,
+			instanceID:        "",
+			workflowComponent: "fakeWorkflow",
+			errorExcepted:     true,
+			expectedError:     messages.ErrMissingOrEmptyInstance,
+		},
+		{
+			testName:          "No workflow component provided in terminate request",
+			apiToBetested:     TerminateWorkflow,
+			instanceID:        "inst1",
+			workflowComponent: "",
+			errorExcepted:     true,
+			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
+		},
+		{
+			testName:          "workflow component does not exist in terminate request",
+			apiToBetested:     TerminateWorkflow,
+			instanceID:        "inst1",
+			workflowComponent: "fakeWorkflowNotExist",
+			errorExcepted:     true,
+			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
+		},
+		{
+			testName:          "terminate for this instance throws error",
+			apiToBetested:     TerminateWorkflow,
+			instanceID:        "errorInstanceId",
+			workflowComponent: "fakeWorkflow",
+			errorExcepted:     true,
+			expectedError:     messages.ErrTerminateWorkflow.WithFormat("errorInstanceId"),
+		},
+		{
+			testName:          "All is well in terminate request",
+			apiToBetested:     TerminateWorkflow,
+			instanceID:        "instanceId1",
+			workflowComponent: "fakeWorkflow",
+			errorExcepted:     false,
+		},
 		{
 			testName:          "No instance id present in pause request",
 			apiToBetested:     PauseWorkflow,
@@ -143,6 +183,8 @@ func TestPauseResumeWorkflow(t *testing.T) {
 				_, err = fakeAPI.PauseWorkflowAlpha1(context.Background(), req)
 			} else if tt.apiToBetested == ResumeWorkflow {
 				_, err = fakeAPI.ResumeWorkflowAlpha1(context.Background(), req)
+			} else if tt.apiToBetested == TerminateWorkflow {
+				_, err = fakeAPI.TerminateWorkflowAlpha1(context.Background(), req)
 			}
 
 			if !tt.errorExcepted {

@@ -712,11 +712,12 @@ message StartWorkflowRequest {
 }
 
 message WorkflowActivityRequest {
-  string instance_id = 1;
-  string workflow_component = 2;
+  string instance_id = 1 [json_name = "instanceId"];
+  string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
 message WorkflowActivityResponse {
+  // Empty
 }
 
 message RaiseEventWorkflowRequest {

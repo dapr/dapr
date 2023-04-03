@@ -287,19 +287,19 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
 			Version: apiVersionV1alpha1,
-			Handler: a.onPauseWorkflowHandler(),
+			Handler: a.onWorkflowActivityHandler(a.universal.PauseWorkflowAlpha1),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
 			Version: apiVersionV1alpha1,
-			Handler: a.onResumeWorkflowHandler(),
+			Handler: a.onWorkflowActivityHandler(a.universal.ResumeWorkflowAlpha1),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
-			Handler: a.onTerminateWorkflowHandler(),
+			Handler: a.onWorkflowActivityHandler(a.universal.TerminateWorkflowAlpha1),
 		},
 	}
 }
@@ -798,9 +798,12 @@ func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
 		})
 }
 
-func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
+type workflowActivityHandler = func(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error)
+
+// This is a common handler for TerminateWorkflow, PauseWorkflow and ResumeWorkflow
+func (a *api) onWorkflowActivityHandler(handler workflowActivityHandler) fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.TerminateWorkflowAlpha1,
+		handler,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.WorkflowActivityRequest, *runtimev1pb.WorkflowActivityResponse]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
