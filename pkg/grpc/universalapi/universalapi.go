@@ -19,6 +19,7 @@ import (
 	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -31,6 +32,7 @@ type UniversalAPI struct {
 	Logger               logger.Logger
 	Resiliency           resiliency.Provider
 	CryptoProviders      map[string]contribCrypto.SubtleCrypto
+	StateStores          map[string]state.Store
 	SecretStores         map[string]secretstores.SecretStore
 	SecretsConfiguration map[string]config.SecretsScope
 	LockStores           map[string]lock.Store

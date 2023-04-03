@@ -26,12 +26,9 @@ const (
 	ErrMalformedRequestData = "can't serialize request data field: %s"
 
 	// State.
-	ErrStateStoresNotConfigured = "state store is not configured"
-	ErrStateStoreNotFound       = "state store %s is not found"
-	ErrStateGet                 = "fail to get %s from state store %s: %s"
-	ErrStateDelete              = "failed deleting state with key %s: %s"
-	ErrStateSave                = "failed saving state in state store %s: %s"
-	ErrStateQuery               = "failed query in state store %s: %s"
+	ErrStateGet    = "fail to get %s from state store %s: %s"
+	ErrStateDelete = "failed deleting state with key %s: %s"
+	ErrStateSave   = "failed saving state in state store %s: %s"
 
 	// StateTransaction.
 	ErrStateStoreNotSupported     = "state store %s doesn't support transaction"
@@ -99,6 +96,12 @@ const (
 var (
 	// Generic.
 	ErrBadRequest = APIError{"invalid request: %v", "ERR_BAD_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+
+	// State.
+	ErrStateStoresNotConfigured = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
+	ErrStateStoreNotFound       = APIError{"state store %s is not found", "ERR_STATE_STORE_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrStateQueryFailed         = APIError{"failed query in state store %s: %s", "ERR_STATE_QUERY", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrStateQueryUnsupported    = APIError{"state store does not support querying", "ERR_STATE_STORE_NOT_SUPPORTED", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
