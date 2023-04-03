@@ -39,7 +39,6 @@ func (w *MockWorkflow) Terminate(ctx context.Context, req *workflowContrib.Workf
 		return errors.New("error encountered in terminate")
 	}
 	return nil
-
 }
 
 func (w *MockWorkflow) Get(ctx context.Context, req *workflowContrib.WorkflowReference) (*workflowContrib.StateResponse, error) {

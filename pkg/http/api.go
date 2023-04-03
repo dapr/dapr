@@ -828,32 +828,6 @@ func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
 		})
 }
 
-func (a *api) onPauseWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.PauseWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.WorkflowActivityRequest, *runtimev1pb.WorkflowActivityResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityRequest, error) {
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				return in, nil
-			},
-			SuccessStatusCode: fasthttp.StatusAccepted,
-		})
-}
-
-func (a *api) onResumeWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.ResumeWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.WorkflowActivityRequest, *runtimev1pb.WorkflowActivityResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityRequest, error) {
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				return in, nil
-			},
-			SuccessStatusCode: fasthttp.StatusAccepted,
-		})
-}
-
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {

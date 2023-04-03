@@ -116,6 +116,7 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 	return ret, nil
 }
 
+// TerminateWorkflowAlpha1 is the API handler for terminating a workflow
 func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
 	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
 	if workflowComponent == nil {
@@ -165,6 +166,7 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 	return &runtimev1pb.RaiseEventWorkflowResponse{}, nil
 }
 
+// PauseWorkflowAlpha1 is the API handler for pausing a workflow
 func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
 	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
 	if workflowComponent == nil {
@@ -173,6 +175,7 @@ func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 	return a.workflowActivity(ctx, in, workflowComponent.Pause, messages.ErrPauseWorkflow)
 }
 
+// ResumeWorkflowAlpha1 is the API handler for resuming a workflow
 func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
 	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
 	if workflowComponent == nil {
@@ -181,6 +184,7 @@ func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb
 	return a.workflowActivity(ctx, in, workflowComponent.Resume, messages.ErrResumeWorkflow)
 }
 
+// workflowActivity is a helper function to handle workflow requests for pause, resume, and terminate
 func (a *UniversalAPI) workflowActivity(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest, method func(context.Context, *workflows.WorkflowReference) error, methodErr messages.APIError) (*runtimev1pb.WorkflowActivityResponse, error) {
 	if in.InstanceId == "" {
 		err := messages.ErrMissingOrEmptyInstance
