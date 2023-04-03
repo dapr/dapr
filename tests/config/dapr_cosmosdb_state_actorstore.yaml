@@ -48,6 +48,7 @@ scopes:
 - actordotnet
 - actorpython
 - actorphp
+- actorstate
 - resiliencyapp
 - resiliencyappgrpc
 - perf-actor-activation-service
