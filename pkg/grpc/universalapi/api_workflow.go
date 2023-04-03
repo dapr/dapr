@@ -122,36 +122,6 @@ func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev
 		return a.workflowActivity(ctx, in, nil, messages.ErrTerminateWorkflow)
 	}
 	return a.workflowActivity(ctx, in, workflowComponent.Terminate, messages.ErrTerminateWorkflow)
-	// if in.InstanceId == "" {
-	// 	err := messages.ErrMissingOrEmptyInstance
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// if in.WorkflowComponent == "" {
-	// 	err := messages.ErrNoOrMissingWorkflowComponent
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	// if workflowComponent == nil {
-	// 	err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// req := workflows.WorkflowReference{
-	// 	InstanceID: in.InstanceId,
-	// }
-
-	// err := workflowComponent.Terminate(ctx, &req)
-	// if err != nil {
-	// 	err = messages.ErrTerminateWorkflow.WithFormat(in.InstanceId)
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-	// return &runtimev1pb.WorkflowActivityResponse{}, nil
 }
 
 func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
@@ -201,36 +171,6 @@ func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 		return a.workflowActivity(ctx, in, nil, messages.ErrPauseWorkflow)
 	}
 	return a.workflowActivity(ctx, in, workflowComponent.Pause, messages.ErrPauseWorkflow)
-	// if in.InstanceId == "" {
-	// 	err := messages.ErrMissingOrEmptyInstance
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// if in.WorkflowComponent == "" {
-	// 	err := messages.ErrNoOrMissingWorkflowComponent
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	// if workflowComponent == nil {
-	// 	err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// req := workflows.WorkflowReference{
-	// 	InstanceID: in.InstanceId,
-	// }
-
-	// err := workflowComponent.Pause(ctx, &req)
-	// if err != nil {
-	// 	err = messages.ErrPauseWorkflow.WithFormat(in.InstanceId)
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-	// return &runtimev1pb.WorkflowActivityResponse{}, nil
 }
 
 func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
@@ -239,36 +179,6 @@ func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb
 		return a.workflowActivity(ctx, in, nil, messages.ErrPauseWorkflow)
 	}
 	return a.workflowActivity(ctx, in, workflowComponent.Resume, messages.ErrResumeWorkflow)
-	// if in.InstanceId == "" {
-	// 	err := messages.ErrMissingOrEmptyInstance
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// if in.WorkflowComponent == "" {
-	// 	err := messages.ErrNoOrMissingWorkflowComponent
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	// if workflowComponent == nil {
-	// 	err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-
-	// req := workflows.WorkflowReference{
-	// 	InstanceID: in.InstanceId,
-	// }
-
-	// err := workflowComponent.Resume(ctx, &req)
-	// if err != nil {
-	// 	err = messages.ErrResumeWorkflow.WithFormat(in.InstanceId)
-	// 	a.Logger.Debug(err)
-	// 	return &runtimev1pb.WorkflowActivityResponse{}, err
-	// }
-	// return &runtimev1pb.WorkflowActivityResponse{}, nil
 }
 
 func (a *UniversalAPI) workflowActivity(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest, method func(context.Context, *workflows.WorkflowReference) error, methodErr messages.APIError) (*runtimev1pb.WorkflowActivityResponse, error) {
