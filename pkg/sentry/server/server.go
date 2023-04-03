@@ -120,12 +120,19 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, status.Error(codes.InvalidArgument, "invalid signature")
 	}
 
+	// TODO: @joshvanl: before v1.11, daprd was matching on
+	// `<app-id>.<namespace>.svc.cluster.local` DNS SAN name so without this,
+	// daprd->daprd connections would fail. This is no longer the case since we
+	// now match with SPIFFE URI SAN, but we need to keep this here for backwards
+	// compatibility. Remove after v1.12.
 	var dns []string
-	if req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector" {
+	switch {
+	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
 		dns = []string{fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.Namespace)}
-	}
-	if req.Namespace == security.CurrentNamespace() && req.Id == "dapr-operator" {
+	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-operator":
 		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)}
+	default:
+		dns = []string{fmt.Sprintf("%s.%s.svc", req.Id, req.Namespace)}
 	}
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{

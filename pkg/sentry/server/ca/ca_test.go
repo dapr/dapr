@@ -32,6 +32,11 @@ import (
 
 func Test_New(t *testing.T) {
 	t.Run("if no existing bundle exist, new should generate a new bundle", func(t *testing.T) {
+		os.Setenv("NAMESPACE", "dapr-test")
+		t.Cleanup(func() {
+			os.Unsetenv("NAMESPACE")
+		})
+
 		dir := t.TempDir()
 		rootCertPath := filepath.Join(dir, "root.cert")
 		issuerCertPath := filepath.Join(dir, "issuer.cert")
@@ -40,6 +45,7 @@ func Test_New(t *testing.T) {
 			RootCertPath:   rootCertPath,
 			IssuerCertPath: issuerCertPath,
 			IssuerKeyPath:  issuerKeyPath,
+			TrustDomain:    "test.example.com",
 		}
 
 		_, err := New(context.Background(), config)
@@ -59,10 +65,12 @@ func Test_New(t *testing.T) {
 		rootCertX509, err := pem.DecodePEMCertificates(rootCert)
 		require.NoError(t, err)
 		require.Len(t, rootCertX509, 1)
+		assert.Equal(t, []string{"test.example.com"}, rootCertX509[0].Subject.Organization)
 
 		issuerCertX509, err := pem.DecodePEMCertificates(issuerCert)
 		require.NoError(t, err)
 		require.Len(t, issuerCertX509, 1)
+		assert.Equal(t, []string{"spiffe://test.example.com/ns/dapr-test/dapr-sentry"}, issuerCertX509[0].Subject.Organization)
 
 		issuerKeyPK, err := pem.DecodePEMPrivateKey(issuerKey)
 		require.NoError(t, err)
@@ -170,8 +178,8 @@ func Test_SignIdentity(t *testing.T) {
 		assert.Equal(t, clientCert[1], int2Crt)
 		assert.Equal(t, clientCert[2], int1Crt)
 
-		assert.Len(t, clientCert[0].DNSNames, 3)
-		assert.ElementsMatch(t, clientCert[0].DNSNames, []string{"cluster.local", "my-app-id.my-test-namespace.svc.cluster.local", "example.com"})
+		assert.Len(t, clientCert[0].DNSNames, 2)
+		assert.ElementsMatch(t, clientCert[0].DNSNames, []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"})
 
 		require.Len(t, clientCert[0].URIs, 1)
 		assert.Equal(t, clientCert[0].URIs[0].String(), "spiffe://example.test.dapr.io/ns/my-test-namespace/my-app-id")

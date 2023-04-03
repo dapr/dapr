@@ -22,6 +22,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 )
 
@@ -62,14 +64,14 @@ func generateBaseCert(ttl, skew time.Duration) (*x509.Certificate, error) {
 }
 
 // generateRootCert returns a CA root x509 Certificate.
-func generateRootCert(skew time.Duration) (*x509.Certificate, error) {
+func generateRootCert(trustDomain string, skew time.Duration) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(caTTL, skew)
 	if err != nil {
 		return nil, err
 	}
 
 	cert.KeyUsage |= x509.KeyUsageCertSign
-	cert.Subject = pkix.Name{Organization: []string{"cluster.local"}}
+	cert.Subject = pkix.Name{Organization: []string{trustDomain}}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
@@ -77,19 +79,28 @@ func generateRootCert(skew time.Duration) (*x509.Certificate, error) {
 }
 
 // generateIssuerCert returns a CA issuing x509 Certificate.
-func generateIssuerCert(skew time.Duration) (*x509.Certificate, error) {
+func generateIssuerCert(trustDomain string, skew time.Duration) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(caTTL, skew)
 	if err != nil {
 		return nil, err
 	}
 
+	sentryID, err := (spiffe.Parsed{
+		TrustDomain: trustDomain,
+		Namespace:   security.CurrentNamespace(),
+		AppID:       "dapr-sentry",
+	}).ToID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate sentry ID: %w", err)
+	}
+
 	cert.KeyUsage |= x509.KeyUsageCertSign | x509.KeyUsageCRLSign
-	cert.Subject = pkix.Name{Organization: []string{"dapr.io/sentry"}}
+	cert.Subject = pkix.Name{Organization: []string{sentryID.String()}}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
 
-	// TODO: @joshvanl: remove once placement and operator are no longer using
+	// TODO: @joshvanl: remove in v1.12, once placement and operator are no longer using
 	// the issuer cert for serving(!).
 	cert.DNSNames = append(cert.DNSNames, "cluster.local")
 
@@ -106,12 +117,6 @@ func generateWorkloadCert(sig x509.SignatureAlgorithm, ttl, skew time.Duration, 
 	cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth)
 	cert.SignatureAlgorithm = sig
 	cert.URIs = []*url.URL{id.URL()}
-
-	// TODO: @joshvanl: before v1.11, daprd was matching on `cluster.local` for
-	// the DNS name so without this, daprd->daprd connections would fail. This is
-	// no longer the case, but we need to keep this here for backwards
-	// compatibility. Remove after v1.12.
-	cert.DNSNames = append(cert.DNSNames, "cluster.local")
 
 	return cert, nil
 }
