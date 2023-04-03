@@ -170,8 +170,8 @@ func Test_SignIdentity(t *testing.T) {
 		assert.Equal(t, clientCert[1], int2Crt)
 		assert.Equal(t, clientCert[2], int1Crt)
 
-		assert.Len(t, clientCert[0].DNSNames, 2)
-		assert.ElementsMatch(t, clientCert[0].DNSNames, []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"})
+		assert.Len(t, clientCert[0].DNSNames, 3)
+		assert.ElementsMatch(t, clientCert[0].DNSNames, []string{"cluster.local", "my-app-id.my-test-namespace.svc.cluster.local", "example.com"})
 
 		require.Len(t, clientCert[0].URIs, 1)
 		assert.Equal(t, clientCert[0].URIs[0].String(), "spiffe://example.test.dapr.io/ns/my-test-namespace/my-app-id")
