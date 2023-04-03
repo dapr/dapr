@@ -132,7 +132,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-operator":
 		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)}
 	default:
-		dns = []string{fmt.Sprintf("%s.%s.svc", req.Id, req.Namespace)}
+		dns = []string{fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)}
 	}
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
