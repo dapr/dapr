@@ -118,11 +118,11 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 
 // TerminateWorkflowAlpha1 is the API handler for terminating a workflow
 func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
-		return a.workflowActivity(ctx, in, nil, messages.ErrTerminateWorkflow)
+	var method func(context.Context, *workflows.WorkflowReference) error
+	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
+		method = a.WorkflowComponents[in.WorkflowComponent].Terminate
 	}
-	return a.workflowActivity(ctx, in, workflowComponent.Terminate, messages.ErrTerminateWorkflow)
+	return a.workflowActivity(ctx, in, method, messages.ErrTerminateWorkflow)
 }
 
 func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
@@ -168,20 +168,20 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 
 // PauseWorkflowAlpha1 is the API handler for pausing a workflow
 func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
-		return a.workflowActivity(ctx, in, nil, messages.ErrPauseWorkflow)
+	var method func(context.Context, *workflows.WorkflowReference) error
+	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
+		method = a.WorkflowComponents[in.WorkflowComponent].Pause
 	}
-	return a.workflowActivity(ctx, in, workflowComponent.Pause, messages.ErrPauseWorkflow)
+	return a.workflowActivity(ctx, in, method, messages.ErrPauseWorkflow)
 }
 
 // ResumeWorkflowAlpha1 is the API handler for resuming a workflow
 func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
-		return a.workflowActivity(ctx, in, nil, messages.ErrPauseWorkflow)
+	var method func(context.Context, *workflows.WorkflowReference) error
+	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
+		method = a.WorkflowComponents[in.WorkflowComponent].Resume
 	}
-	return a.workflowActivity(ctx, in, workflowComponent.Resume, messages.ErrResumeWorkflow)
+	return a.workflowActivity(ctx, in, method, messages.ErrResumeWorkflow)
 }
 
 // workflowActivity is a helper function to handle workflow requests for pause, resume, and terminate

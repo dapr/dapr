@@ -183,7 +183,7 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.Workfl
 
 func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workflows.WorkflowReference) error {
 	if req.InstanceID == "" {
-		return fmt.Errorf("a workflow instance ID is required")
+		return errors.New("a workflow instance ID is required")
 	}
 
 	if err := c.client.SuspendOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
@@ -196,7 +196,7 @@ func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workfl
 
 func (c *workflowEngineComponent) ResumeWorkflow(ctx context.Context, req *workflows.WorkflowReference) error {
 	if req.InstanceID == "" {
-		return fmt.Errorf("a workflow instance ID is required")
+		return errors.New("a workflow instance ID is required")
 	}
 
 	if err := c.client.ResumeOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
