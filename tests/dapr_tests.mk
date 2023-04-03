@@ -38,6 +38,7 @@ actorapp \
 actorclientapp \
 actorfeatures \
 actorinvocationapp \
+actorstate \
 actorreentrancy \
 runtime \
 runtime_init \
