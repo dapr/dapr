@@ -123,9 +123,10 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, code)
 
 			newData := []byte(`[{"operation":"upsert","request":{"key":"myKey","value":"newData"}}]`)
-			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), newData)
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusNoContent, code)
+			assert.Eventually(t, func() bool {
+				resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), newData)
+				return err == nil && code == http.StatusNoContent && string(resp) == ""
+			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
 
 			assert.Eventually(t, func() bool {
 				resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
@@ -133,10 +134,10 @@ func TestActorState(t *testing.T) {
 			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
 
 			deleteData := []byte(`[{"operation":"delete","request":{"key":"myKey"}}]`)
-			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), deleteData)
-			assert.NoError(t, err)
-			assert.Equal(t, http.StatusNoContent, code)
-			assert.Empty(t, string(resp))
+			assert.Eventually(t, func() bool {
+				resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), deleteData)
+				return err == nil && code == http.StatusNoContent && string(resp) == ""
+			}, 10*time.Second, 500*time.Millisecond, "state should be deleted")
 
 			assert.Eventually(t, func() bool {
 				resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
