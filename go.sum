@@ -114,8 +114,6 @@ github.com/DataDog/datadog-go v3.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3
 github.com/DataDog/zstd v1.5.0/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
 github.com/DataDog/zstd v1.5.2 h1:vUG4lAyuPCXO0TLbXvPv7EB7cNK1QV/luu55UHLrrn8=
 github.com/DataDog/zstd v1.5.2/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
-github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230327134753-c1df8bfd5f5e h1:DMIKmXtEl4IkX/seVNdd8mSnxKqYt8198AzVLqAZlD8=
-github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230327134753-c1df8bfd5f5e/go.mod h1:vYex1j1yvAS6y5CK7m3aA7ozg5GGZt7Biqz3/i4c6Rw=
 github.com/HdrHistogram/hdrhistogram-go v1.1.2/go.mod h1:yDgFjdqOqDEKOvasDdhWNXYg9BVp4O+o5f6V/ehm6Oo=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
@@ -364,8 +362,10 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/kit v0.0.5-0.20230326103136-eadb01f64f28 h1:nAR95MhDIjMgyM/idC+sYy/AhdgFhKeVLfjCK2PYxf0=
-github.com/dapr/kit v0.0.5-0.20230326103136-eadb01f64f28/go.mod h1:uKuSJi2Ofj02OixDrpzCFKk+lETrQxQtVIra+wfyzsw=
+github.com/dapr/components-contrib v1.10.6-0.20230403173010-9a27383b0118 h1:uout0/UVqswLjHJXx9OEiYp8IKuAVs/Hbv//iT8j2+0=
+github.com/dapr/components-contrib v1.10.6-0.20230403173010-9a27383b0118/go.mod h1:12CLMFf5gFf43lKGicM6MYB9rSrkAjWZbEFVfx48P5g=
+github.com/dapr/kit v0.0.5-0.20230401092230-30d122f67bdc h1:VZ+VUTUc1baDyTkvdTRnW1rOKnPwLe+3K5kLncMLe74=
+github.com/dapr/kit v0.0.5-0.20230401092230-30d122f67bdc/go.mod h1:uKuSJi2Ofj02OixDrpzCFKk+lETrQxQtVIra+wfyzsw=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

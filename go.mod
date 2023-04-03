@@ -9,8 +9,8 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.10.4-0.20230325223448-2266e7ad440a
-	github.com/dapr/kit v0.0.5-0.20230326103136-eadb01f64f28
+	github.com/dapr/components-contrib v1.10.6-0.20230403173010-9a27383b0118
+	github.com/dapr/kit v0.0.5-0.20230401092230-30d122f67bdc
 	github.com/fasthttp/router v1.4.18
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.2.3
@@ -424,5 +424,3 @@ replace (
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20230327134753-c1df8bfd5f5e
