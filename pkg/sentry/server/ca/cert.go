@@ -22,9 +22,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 )
 
 const (
@@ -100,8 +101,8 @@ func generateIssuerCert(trustDomain string, skew time.Duration) (*x509.Certifica
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
 
-	// TODO: @joshvanl: remove in v1.12, once placement and operator are no longer using
-	// the issuer cert for serving(!).
+	// TODO: @joshvanl: remove in v1.12, once placement and operator are no
+	// longer using the issuer cert for serving(!).
 	cert.DNSNames = append(cert.DNSNames, "cluster.local")
 
 	return cert, nil
