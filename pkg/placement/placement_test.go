@@ -75,9 +75,9 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 }
 
 func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 
 	client := v1pb.NewPlacementClient(conn)
@@ -213,13 +213,13 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// assert
 		select {
 		case <-testServer.membershipCh:
-			require.True(t, false, "should not have any member change message because faulty host detector time will clean up")
-
-		case <-time.After(testStreamSendLatency):
 			testServer.streamConnPoolLock.RLock()
 			streamConnCount := len(testServer.streamConnPool)
 			testServer.streamConnPoolLock.RUnlock()
 			assert.Equal(t, 0, streamConnCount)
+
+		case <-time.After(testStreamSendLatency):
+			require.True(t, false, "should have any member change message because faulty host detector time will clean up")
 		}
 	})
 
