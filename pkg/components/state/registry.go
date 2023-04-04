@@ -38,6 +38,12 @@ func NewRegistry() *Registry {
 	}
 }
 
+func (s *Registry) HasComponent(name, version, logName string) bool {
+	_, ok := s.getStateStore(name, version, logName)
+
+	return ok
+}
+
 // RegisterComponent adds a new state store to the registry.
 func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) state.Store, names ...string) {
 	for _, name := range names {
