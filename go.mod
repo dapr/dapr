@@ -319,7 +319,6 @@ require (
 	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.12.0+incompatible // indirect
-	github.com/sergi/go-diff v1.2.0 // indirect
 	github.com/shirou/gopsutil/v3 v3.22.2 // indirect
 	github.com/sijms/go-ora/v2 v2.6.5 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
@@ -421,8 +420,10 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => ../components-contrib
-
+// replace github.com/dapr/components-contrib => ../components-contrib
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
+
+// TODO: Temporary until changes in components-contrib are merged.
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.10.2-0.20230404174722-f5a309b50d3b
