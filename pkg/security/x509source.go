@@ -46,7 +46,7 @@ import (
 
 const (
 	sentrySignTimeout = time.Second * 5
-	sentryMaxRetries  = 100
+	sentryMaxRetries  = 10
 )
 
 type renewFn func(context.Context) (*x509.Certificate, error)
