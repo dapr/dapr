@@ -2194,28 +2194,33 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 
 func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.readyStatus {
-		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		msg := messages.ErrHealthNotReady
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
-	} else {
-		matchAppID := string(reqCtx.QueryArgs().Peek("app-id"))
-		if matchAppID != "" && matchAppID != a.id {
-			msg := NewErrorResponse("ERR_HEALTH_APPID_NOT_MATCH", messages.ErrHealthAppIDNotMatch)
-			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		} else {
-			respond(reqCtx, withEmpty())
-		}
+		return
 	}
+
+	// If we have an "appid" parameter in the query string, we will return an error if the ID of this app is not the value of the requested "appid"
+	// This is used by some components (e.g. Consul nameresolver) to check if the app was replaced with a different one
+	matchAppID := reqCtx.QueryArgs().Peek("appid")
+	if len(matchAppID) > 0 && string(matchAppID) != a.id {
+		msg := messages.ErrHealthAppIDNotMatch
+		universalFastHTTPErrorResponder(reqCtx, msg)
+		log.Debug(msg)
+		return
+	}
+
+	respond(reqCtx, withEmpty())
 }
 
 func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.outboundReadyStatus {
-		msg := NewErrorResponse("ERR_OUTBOUND_HEALTH_NOT_READY", messages.ErrOutboundHealthNotReady)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		msg := messages.ErrOutboundHealthNotReady
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
-	} else {
-		respond(reqCtx, withEmpty())
+		return
 	}
+	respond(reqCtx, withEmpty())
 }
 
 func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {

@@ -5024,14 +5024,14 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	t.Run("Healthz - 500 No AppId Match", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
 		testAPI.MarkStatusAsReady()
-		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"app-id": "not-test"})
+		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": "not-test"})
 		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	t.Run("Healthz - 204 AppId Match", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
 		testAPI.MarkStatusAsReady()
-		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"app-id": appId})
+		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": appId})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
