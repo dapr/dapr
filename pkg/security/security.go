@@ -182,8 +182,8 @@ func (p *provider) Start(ctx context.Context) error {
 						log.Info("trust anchors file changed, reloading trust anchors")
 
 						p.sec.source.lock.Lock()
-						if err := p.sec.source.updateTrustAnchorFromFile(p.trustAnchorsFile); err != nil {
-							log.Errorf("failed to read trust anchors file %q: %s", p.trustAnchorsFile, err)
+						if uErr := p.sec.source.updateTrustAnchorFromFile(p.trustAnchorsFile); uErr != nil {
+							log.Errorf("failed to read trust anchors file %q: %s", p.trustAnchorsFile, uErr)
 						}
 						p.sec.source.lock.Unlock()
 					}
