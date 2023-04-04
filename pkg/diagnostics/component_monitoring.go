@@ -28,6 +28,7 @@ const (
 	StateTransaction         = "transaction"
 	BulkGet                  = "bulk_get"
 	BulkDelete               = "bulk_delete"
+	CryptoOp                 = "crypto_op"
 )
 
 // componentMetrics holds dapr runtime metrics for components.
@@ -56,6 +57,9 @@ type componentMetrics struct {
 
 	secretCount   *stats.Int64Measure
 	secretLatency *stats.Float64Measure
+
+	cryptoCount   *stats.Int64Measure
+	cryptoLatency *stats.Float64Measure
 
 	appID     string
 	enabled   bool
@@ -145,6 +149,14 @@ func newComponentMetrics() *componentMetrics {
 			"component/secret/latencies",
 			"The latency of the response from the secret component.",
 			stats.UnitMilliseconds),
+		cryptoCount: stats.Int64(
+			"component/crypto/count",
+			"The number of operations performed on the crypto component.",
+			stats.UnitDimensionless),
+		cryptoLatency: stats.Float64(
+			"component/crypto/latencies",
+			"The latency of the response from the crypto component.",
+			stats.UnitMilliseconds),
 	}
 }
 
@@ -172,6 +184,8 @@ func (c *componentMetrics) Init(appID, namespace string) error {
 		diagUtils.NewMeasureView(c.configurationCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.secretLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(c.secretCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(c.cryptoLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(c.cryptoCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 	)
 }
 
@@ -341,6 +355,23 @@ func (c *componentMetrics) SecretInvoked(ctx context.Context, component, operati
 				ctx,
 				diagUtils.WithTags(c.secretLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.secretLatency.M(elapsed))
+		}
+	}
+}
+
+// CryptoInvoked records the metrics for a crypto event.
+func (c *componentMetrics) CryptoInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
+	if c.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(c.cryptoCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+			c.cryptoCount.M(1))
+
+		if elapsed > 0 {
+			stats.RecordWithTags(
+				ctx,
+				diagUtils.WithTags(c.cryptoLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+				c.cryptoLatency.M(elapsed))
 		}
 	}
 }

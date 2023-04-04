@@ -87,6 +87,7 @@ import (
 	wfs "github.com/dapr/components-contrib/workflows"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
@@ -99,6 +100,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/middleware"
@@ -133,6 +135,7 @@ var componentCategoriesNeedProcess = []components.Category{
 	components.CategoryStateStore,
 	components.CategoryMiddleware,
 	components.CategoryConfiguration,
+	components.CategoryCryptoProvider,
 	components.CategoryLock,
 	components.CategoryWorkflow,
 }
@@ -223,6 +226,9 @@ type DaprRuntime struct {
 	lockStoreRegistry *lockLoader.Registry
 	lockStores        map[string]lock.Store
 
+	cryptoProviderRegistry *cryptoLoader.Registry
+	cryptoProviders        map[string]contribCrypto.SubtleCrypto
+
 	pendingComponents          chan componentsV1alpha1.Component
 	pendingComponentDependents map[string][]componentsV1alpha1.Component
 
@@ -245,6 +251,7 @@ type ComponentRegistry struct {
 	OutputBindings  map[string]bindings.OutputBinding
 	SecretStores    map[string]secretstores.SecretStore
 	PubSubs         map[string]pubsub.PubSub
+	CryptoProviders map[string]contribCrypto.SubtleCrypto
 	Workflows       map[string]wfs.Workflow
 }
 
@@ -293,6 +300,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretsConfiguration:       map[string]config.SecretsScope{},
 		configurationStores:        map[string]configuration.Store{},
 		lockStores:                 map[string]lock.Store{},
+		cryptoProviders:            map[string]contribCrypto.SubtleCrypto{},
 		workflowComponents:         map[string]wfs.Workflow{},
 		pendingComponents:          make(chan componentsV1alpha1.Component),
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
@@ -466,6 +474,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.stateStoreRegistry = opts.stateRegistry
 	a.configurationStoreRegistry = opts.configurationRegistry
 	a.bindingsRegistry = opts.bindingRegistry
+	a.cryptoProviderRegistry = opts.cryptoProviderRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
 	a.workflowComponentRegistry = opts.workflowComponentRegistry
@@ -1447,6 +1456,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		StateStores:                 a.stateStores,
 		WorkflowsComponents:         a.workflowComponents,
 		LockStores:                  a.lockStores,
+		CryptoProviders:             a.cryptoProviders,
 		SecretStores:                a.secretStores,
 		SecretsConfiguration:        a.secretsConfiguration,
 		ConfigurationStores:         a.configurationStores,
@@ -1552,6 +1562,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		WorkflowComponents:          a.workflowComponents,
 		SecretsConfiguration:        a.secretsConfiguration,
 		ConfigurationStores:         a.configurationStores,
+		CryptoProviders:             a.cryptoProviders,
 		LockStores:                  a.lockStores,
 		PubsubAdapter:               a.getPublishAdapter(),
 		DirectMessaging:             a.directMessaging,
@@ -2647,6 +2658,8 @@ func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp c
 		return a.initPubSub(comp)
 	case components.CategorySecretStore:
 		return a.initSecretStore(comp)
+	case components.CategoryCryptoProvider:
+		return a.initCryptoProvider(comp)
 	case components.CategoryStateStore:
 		return a.initState(comp)
 	case components.CategoryConfiguration:
@@ -2702,6 +2715,9 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	}
 	for name, component := range a.configurationStores {
 		closeComponent(component, "configuration store "+name, &merr)
+	}
+	for name, component := range a.cryptoProviders {
+		closeComponent(component, "crypto provider "+name, &merr)
 	}
 	for name, component := range a.workflowComponents {
 		closeComponent(component, "workflow "+name, &merr)
@@ -3058,6 +3074,25 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 			},
 		}
 	}
+}
+
+func (a *DaprRuntime) initCryptoProvider(c componentsV1alpha1.Component) error {
+	fName := c.LogName()
+	component, err := a.cryptoProviderRegistry.Create(c.Spec.Type, c.Spec.Version, fName)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		return NewInitError(CreateComponentFailure, fName, err)
+	}
+
+	err = component.Init(context.TODO(), contribCrypto.Metadata{Base: a.toBaseMetadata(c)})
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		return NewInitError(InitComponentFailure, fName, err)
+	}
+
+	a.cryptoProviders[c.ObjectMeta.Name] = component
+	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
+	return nil
 }
 
 func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
