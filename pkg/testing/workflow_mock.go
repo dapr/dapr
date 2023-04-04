@@ -62,3 +62,7 @@ func (w *MockWorkflow) Resume(ctx context.Context, req *workflowContrib.Workflow
 	}
 	return nil
 }
+
+func (w *MockWorkflow) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
