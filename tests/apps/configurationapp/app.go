@@ -31,7 +31,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
@@ -144,7 +143,7 @@ func getHTTP(keys []string) (string, error) {
 	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + buildQueryParams(keys)
 	resp, err := httpClient.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("error getting key-values from config store. err: %s", err.Error())
+		return "", fmt.Errorf("error getting key-values from config store. err: %w", err)
 	}
 	defer resp.Body.Close()
 	respInBytes, _ := io.ReadAll(resp.Body)
@@ -157,7 +156,7 @@ func getGRPC(keys []string) (string, error) {
 		Keys:      keys,
 	})
 	if err != nil {
-		return "", fmt.Errorf("error getting key-values from config store. err: %s", err.Error())
+		return "", fmt.Errorf("error getting key-values from config store. err: %w", err)
 	}
 	items := res.GetItems()
 	respInBytes, _ := json.Marshal(items)
@@ -206,18 +205,18 @@ func subscribeGRPC(keys []string) (string, error) {
 		Keys:      keys,
 	})
 	if err != nil {
-		return "", fmt.Errorf("error subscribing config updates: %s", err)
+		return "", fmt.Errorf("error subscribing config updates: %w", err)
 	}
 	res, err := client.Recv()
 	if errors.Is(err, io.EOF) {
-		return "", fmt.Errorf("error subscribe: channel closed before receiving ID")
+		return "", fmt.Errorf("error subscribe: stream closed before receiving ID")
 	}
 	if err != nil {
-		return "", fmt.Errorf("error subscribe: %s", err)
+		return "", fmt.Errorf("error subscribe: %w", err)
 	}
 	subscriptionID := res.GetId()
 	go subscribeHandlerGRPC(client)
-	log.Printf("App subscribed to config changes with subscription id: %s\n", subscriptionID)
+	log.Printf("App subscribed to config changes with subscription id: %s", subscriptionID)
 	return subscriptionID, nil
 }
 
@@ -225,11 +224,11 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationAlpha1Cl
 	for {
 		rsp, err := client.Recv()
 		if errors.Is(err, io.EOF) || rsp == nil {
-			log.Printf("Dapr subscribe finished")
+			log.Print("Dapr subscribe finished")
 			break
 		}
 		if err != nil {
-			log.Printf("Error receiving config updates: %s", err)
+			log.Printf("Error receiving config updates: %v", err)
 			break
 		}
 		subscribeID := rsp.GetId()
@@ -242,7 +241,7 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationAlpha1Cl
 		}
 		receivedItemsInBytes, _ := json.Marshal(configurationItems)
 		receivedItems := string(receivedItemsInBytes)
-		log.Printf("SubscriptionID: %s, Received item: %s\n", subscribeID, receivedItems)
+		log.Printf("SubscriptionID: %s, Received item: %s", subscribeID, receivedItems)
 		lock.Lock()
 		if receivedUpdates[subscribeID] == nil {
 			receivedUpdates[subscribeID] = make([]string, 10)
@@ -256,18 +255,18 @@ func subscribeHTTP(keys []string) (string, error) {
 	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/subscribe" + buildQueryParams(keys)
 	resp, err := httpClient.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("error subscribing config updates: %s", err)
+		return "", fmt.Errorf("error subscribing config updates: %w", err)
 	}
 	defer resp.Body.Close()
 	sub, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("error reading subscription Id: %s", err)
+		return "", fmt.Errorf("error reading subscription Id: %w", err)
 	}
 	var subscriptionID string
 	if !strings.Contains(string(sub), "errorCode") {
 		var subid map[string]interface{}
 		json.Unmarshal(sub, &subid)
-		log.Printf("App subscribed to config changes with subscription id: %s\n", subid["id"])
+		log.Printf("App subscribed to config changes with subscription id: %s", subid["id"])
 		subscriptionID = subid["id"].(string)
 	} else {
 		return "", fmt.Errorf("error subscribing to config updates: %s", string(sub))
@@ -305,7 +304,7 @@ func unsubscribeHTTP(subscriptionID string) (string, error) {
 	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/" + subscriptionID + "/unsubscribe"
 	resp, err := httpClient.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("error unsubscribing config updates: %s", err.Error())
+		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
 	}
 	defer resp.Body.Close()
 	respInBytes, _ := io.ReadAll(resp.Body)
@@ -318,7 +317,7 @@ func unsubscribeGRPC(subscriptionID string) (string, error) {
 		Id:        subscriptionID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("error unsubscribing config updates: %s", err)
+		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
 	}
 	if !resp.Ok {
 		return "", fmt.Errorf("error unsubscribing config updates: %s", resp.GetMessage())
@@ -359,7 +358,7 @@ func configurationUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	receivedItemsInBytes, _ := json.Marshal(updateEvent.Items)
 	receivedItems := string(receivedItemsInBytes)
 
-	log.Printf("SubscriptionID: %s, Received item: %s\n", subID, receivedItems)
+	log.Printf("SubscriptionID: %s, Received item: %s", subID, receivedItems)
 	lock.Lock()
 	defer lock.Unlock()
 	if receivedUpdates[subID] == nil {

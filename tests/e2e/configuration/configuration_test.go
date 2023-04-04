@@ -223,7 +223,7 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string) {
 	require.NoError(t, err, "error getting received messages")
 	var receivedMessages receivedMessagesResponse
 	err = json.Unmarshal(getResp, &receivedMessages)
-	require.NoError(t, err, "error unmarshalling received messages response, got %s", string(getResp))
+	require.NoErrorf(t, err, "error unmarshalling received messages response, got %s", string(getResp))
 	require.ElementsMatch(t, expectedUpdates, receivedMessages.ReceivedUpdates, "expected %s, got %s", expectedUpdates, receivedMessages.ReceivedUpdates)
 }
 
