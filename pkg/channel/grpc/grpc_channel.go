@@ -19,6 +19,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,7 +36,10 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.channel-grpc")
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
@@ -169,4 +173,53 @@ func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
 // SetAppHealth sets the apphealth.AppHealth object.
 func (g *Channel) SetAppHealth(ah *apphealth.AppHealth) {
 	g.appHealth = ah
+}
+
+// StartPingStream starts the Ping bi-directional stream with apps that use the callback channel.
+func (g *Channel) StartPingStream(parentCtx context.Context, firstPingTimeout time.Duration) error {
+	ctx, cancel := context.WithCancel(parentCtx)
+	client := runtimev1pb.NewDaprAppChannelCallbackClient(g.conn)
+	stream, err := client.Ping(ctx)
+	if err != nil {
+		cancel()
+		return fmt.Errorf("failed to create Ping stream: %w", err)
+	}
+
+	// In background, listen for incoming pings
+	// We are also waiting for the first one
+	firstPing := make(chan struct{}, 1)
+	go func() {
+		for parentCtx.Err() == nil && stream.Context().Err() == nil {
+			in := emptyPbPool.Get()
+			innerErr := stream.RecvMsg(in)
+			emptyPbPool.Put(in)
+			if innerErr != nil {
+				// Could be a context canceled error
+				log.Warnf("Error while receiving ping from app callback channel: %v", innerErr)
+				break
+			}
+
+			if firstPing != nil {
+				close(firstPing)
+				firstPing = nil
+			}
+		}
+
+		// Close the stream, the connection, and return
+		log.Info("Closing app callback channel")
+		cancel()
+		g.conn.Close()
+		return
+	}()
+
+	// Wait for the first ping
+	select {
+	case <-firstPing:
+		// nop
+	case <-time.After(firstPingTimeout):
+		cancel()
+		return fmt.Errorf("failed to receive first ping in %v", firstPingTimeout)
+	}
+
+	return nil
 }

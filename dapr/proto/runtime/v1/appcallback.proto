@@ -54,6 +54,13 @@ service AppCallbackHealthCheck {
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse) {}
 }
 
+// DaprAppChannelCallback V1 is an extension to AppCallback that allows creating a bi-directional stream used for pings.
+// The app uses this to check that the connection with Dapr is still open.
+service DaprAppChannelCallback {
+  // Bi-directional streaming that allows each side to send a "ping".
+  rpc Ping (stream google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}
+
 // AppCallbackAlpha V1 is an optional extension to AppCallback V1 to opt
 // for Alpha RPCs.
 service AppCallbackAlpha {

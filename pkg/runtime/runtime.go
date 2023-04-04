@@ -60,6 +60,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
+	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
@@ -215,6 +216,7 @@ type DaprRuntime struct {
 	appHealth                 *apphealth.AppHealth
 	appHealthReady            func() // Invoked the first time the app health becomes ready
 	appHealthLock             *sync.Mutex
+	appCallbackListener       *appCallbackListener
 	bulkSubLock               *sync.Mutex
 	appHTTPClient             *nethttp.Client
 
@@ -514,6 +516,52 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = a.getGRPCAPI()
 
+	// If we're using the callback channel, set the handler for that
+	var callbackChannelConnected chan struct{}
+	if a.runtimeConfig.EnableCallbackChannel {
+		// Set the "createAppCallbackListener" handler in the gRPC API object
+		// This also enables the "ConnectAppCallback" method
+		a.daprGRPCAPI.SetCreateAppCallbackListener(a.createAppCallbackListener)
+
+		// Create the appCallbackListener and set the callback for when new connections are established
+		// On the first connection only we also need to send a signal to using "callbackChannelConnected" - a few lines below, this method will block waiting for the signal to indicate that a connection was established
+		callbackChannelConnected = make(chan struct{})
+		firstCallbackConnection := sync.Once{}
+		a.appCallbackListener = &appCallbackListener{
+			OnAppCallbackConnection: func(conn net.Conn) {
+				// Set the localConnCreateFn to use the connection we just received
+				a.grpc.SetLocalConnCreateFn(a.grpc.LocalConnCreatorFromNetConn(conn))
+
+				// Create the app channel
+				ch, innerErr := a.grpc.GetAppChannel()
+				if innerErr != nil {
+					log.Errorf("Failed to establish callback channel with app: %v", innerErr)
+					return
+				}
+
+				// Establish the ping channel and wait for the first response
+				innerErr = ch.(*grpcChannel.Channel).StartPingStream(a.ctx, 30*time.Second)
+				if innerErr != nil {
+					log.Errorf("Failed to receive ping from app on callback channel: %v", err)
+					return
+				}
+
+				// On the first successful connection only, send a signal that the app can continue setting up
+				firstCallbackConnection.Do(func() {
+					close(callbackChannelConnected)
+					callbackChannelConnected = nil
+				})
+
+				// Store the app channel
+				a.appChannel = ch
+
+				a.daprHTTPAPI.SetAppChannel(a.appChannel)
+				a.daprGRPCAPI.SetAppChannel(a.appChannel)
+				a.directMessaging.SetAppChannel(a.appChannel)
+			},
+		}
+	}
+
 	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
@@ -548,17 +596,36 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
 
-	a.blockUntilAppIsReady()
+	if !a.runtimeConfig.EnableCallbackChannel {
+		a.blockUntilAppIsReady()
 
-	err = a.createAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+		err = a.createAppChannel()
+		if err != nil {
+			log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+		}
+
+		a.daprHTTPAPI.SetAppChannel(a.appChannel)
+		a.daprGRPCAPI.SetAppChannel(a.appChannel)
+		a.directMessaging.SetAppChannel(a.appChannel)
+	} else {
+		// If we're using the callback channel, we need to wait until the app establishes a connection
+		log.Info("Waiting for the application to establish the callback channel")
+		// Select also on shutdown signal so we don't block if users try to stop daprd
+		stopCh := ShutdownSignal()
+		select {
+		case <-stopCh:
+			a.ShutdownWithWait()
+			return nil
+		case <-callbackChannelConnected:
+			// Nop, just continue
+		}
+		signal.Stop(stopCh)
+		log.Info("Callback channel connected for the application")
 	}
-	a.daprHTTPAPI.SetAppChannel(a.appChannel)
-	a.daprGRPCAPI.SetAppChannel(a.appChannel)
-	a.directMessaging.SetAppChannel(a.appChannel)
 
-	a.initDirectMessaging(a.nameResolver)
+	if a.runtimeConfig.MaxConcurrency > 0 {
+		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+	}
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)

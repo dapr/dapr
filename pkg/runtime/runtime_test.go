@@ -5681,6 +5681,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	rt.namespace = "test"
 	rt.runtimeConfig.mtlsEnabled = true
 	assert.Nil(t, rt.initActors())
+	rt.running.Store(true)
 
 	rt.running.Store(true)
 	go sendSigterm(rt)
@@ -5731,6 +5732,7 @@ func TestTraceShutdown(t *testing.T) {
 	tpStore := newOpentelemetryTracerProviderStore()
 	require.NoError(t, rt.setupTracing(rt.hostAddress, tpStore))
 	assert.NotNil(t, rt.tracerProvider)
+	rt.running.Store(true)
 
 	rt.running.Store(true)
 	go sendSigterm(rt)

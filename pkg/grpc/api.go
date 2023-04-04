@@ -77,10 +77,14 @@ type API interface {
 	// Dapr Service methods
 	runtimev1pb.DaprServer
 
+	// DaprAppChannelServer Service methods
+	runtimev1pb.DaprAppChannelServer
+
 	// Methods internal to the object
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
+	SetCreateAppCallbackListener(func() (int, error))
 }
 
 type api struct {
@@ -105,6 +109,7 @@ type api struct {
 	getComponentsCapabilitesFn func() map[string][]string
 	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	daprRunTimeVersion         string
+	createAppCallbackListener  func() (int, error)
 }
 
 // APIOpts contains options for NewAPI.

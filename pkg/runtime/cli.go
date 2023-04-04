@@ -52,6 +52,8 @@ func FromFlags() (*DaprRuntime, error) {
 	daprAPIGRPCPort := flag.String("dapr-grpc-port", strconv.Itoa(DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
+	enableCallbackChannel := flag.Bool("enable-callback-channel", false, "Use the callback channel for communicating with the app")
+	callbackChannelPortPtr := flag.String("callback-channel-port", "0", "The port for the callback channel; if 0 (default), use a random one")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
 	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
@@ -245,6 +247,25 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
+	var callbackChannelPort int
+	if *enableCallbackChannel {
+		if applicationPort > 0 {
+			return nil, errors.New("flag 'app-port' must not be defined when 'enable-callback-channel' is set")
+		}
+
+		// When the callback channel is enabled, override the app protocol to force the use of gRPC
+		// No need to warn the user since Dapr won't attempt making connections to the app anyways
+		appProtocol = string(GRPCProtocol)
+
+		// Parse the port used for the callback channel
+		if callbackChannelPortPtr != nil && *callbackChannelPortPtr != "" {
+			callbackChannelPort, _ = strconv.Atoi(*callbackChannelPortPtr)
+		}
+		if callbackChannelPort < 1 {
+			callbackChannelPort = 0
+		}
+	}
+
 	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
 	if len(daprAPIListenAddressList) == 0 {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
@@ -290,6 +311,8 @@ func FromFlags() (*DaprRuntime, error) {
 		APIListenAddresses:           daprAPIListenAddressList,
 		PublicPort:                   publicPort,
 		AppPort:                      applicationPort,
+		EnableCallbackChannel:        *enableCallbackChannel,
+		CallbackChannelPort:          callbackChannelPort,
 		ProfilePort:                  profPort,
 		EnableProfiling:              *enableProfiling,
 		MaxConcurrency:               concurrency,

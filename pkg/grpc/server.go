@@ -162,8 +162,14 @@ func (s *server) StartNonBlocking() error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
+
 			if s.workflowEngine != nil {
 				s.workflowEngine.ConfigureGrpc(server)
+			}
+
+			// Register the DaprAppCallback only if the callback channel is enabled
+			if s.api.(*api).createAppCallbackListener != nil {
+				runtimev1pb.RegisterDaprAppChannelServer(server, s.api)
 			}
 		}
 
