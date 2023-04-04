@@ -90,7 +90,7 @@ func TestActorState(t *testing.T) {
 			resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", initActorURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			assert.Empty(t, resp)
+			assert.Empty(t, resp, "%s", resp)
 
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/doesnotexist", httpURL, actuid))
 			assert.NoError(t, err)
@@ -113,36 +113,35 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusNoContent, code)
 			assert.Empty(t, string(resp))
 
-			assert.Eventually(t, func() bool {
-				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
-				return err == nil && code == http.StatusOK && string(resp) == `"myData"`
-			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+			assert.Equal(t, `"myData"`, string(resp))
 
 			_, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-notMyActorID/myKey", httpURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusBadRequest, code)
 
 			newData := []byte(`[{"operation":"upsert","request":{"key":"myKey","value":"newData"}}]`)
-			assert.Eventually(t, func() bool {
-				resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), newData)
-				return err == nil && code == http.StatusNoContent && string(resp) == ""
-			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
+			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), newData)
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusNoContent, code)
 
-			assert.Eventually(t, func() bool {
-				resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
-				return err == nil && code == http.StatusOK && string(resp) == `"newData"`
-			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+			assert.Equal(t, `"newData"`, string(resp))
 
 			deleteData := []byte(`[{"operation":"delete","request":{"key":"myKey"}}]`)
-			assert.Eventually(t, func() bool {
-				resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), deleteData)
-				return err == nil && code == http.StatusNoContent && string(resp) == ""
-			}, 10*time.Second, 500*time.Millisecond, "state should be deleted")
+			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), deleteData)
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusNoContent, code)
+			assert.Empty(t, string(resp))
 
-			assert.Eventually(t, func() bool {
-				resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
-				return err == nil && code == http.StatusNoContent && string(resp) == ``
-			}, 10*time.Second, 500*time.Millisecond, "state should be saved")
+			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myKey", httpURL, actuid))
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusNoContent, code)
+			assert.Empty(t, string(resp))
 		})
 
 		t.Run("data saved with TTL should be automatically deleted", func(t *testing.T) {
@@ -169,7 +168,7 @@ func TestActorState(t *testing.T) {
 			assert.Eventually(t, func() bool {
 				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
 				return err == nil && code == http.StatusNoContent && string(resp) == ""
-			}, 10*time.Second, time.Second/2, "state should be deleted after TTL: %s:%d", resp, code)
+			}, 10*time.Second, time.Second/2, "state should be deleted after TTL: %s", code)
 		})
 	})
 
