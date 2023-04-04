@@ -27,9 +27,10 @@ import (
 	"sync"
 	"time"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/gorilla/mux"
 	"github.com/redis/go-redis/v9"
+
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"github.com/dapr/dapr/tests/apps/utils"
 )
@@ -179,7 +180,7 @@ func getKeyValues(w http.ResponseWriter, r *http.Request) {
 	} else if protocol == "grpc" {
 		response, err = getGRPC(keys)
 	} else {
-		err = fmt.Errorf("Unknown protocol in Get call: %s", protocol)
+		err = fmt.Errorf("unknown protocol in Get call: %s", protocol)
 	}
 	if err != nil {
 		sendResponse(w, http.StatusInternalServerError, err.Error())
@@ -231,7 +232,7 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationAlpha1Cl
 			log.Printf("Error receiving config updates: %s", err)
 			break
 		}
-		subscribeId := rsp.GetId()
+		subscribeID := rsp.GetId()
 		configurationItems := make(map[string]*Item)
 		for key, item := range rsp.GetItems() {
 			configurationItems[key] = &Item{
@@ -241,12 +242,12 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationAlpha1Cl
 		}
 		receivedItemsInBytes, _ := json.Marshal(configurationItems)
 		receivedItems := string(receivedItemsInBytes)
-		log.Printf("SubscriptionID: %s, Received item: %s\n", subscribeId, receivedItems)
+		log.Printf("SubscriptionID: %s, Received item: %s\n", subscribeID, receivedItems)
 		lock.Lock()
-		if receivedUpdates[subscribeId] == nil {
-			receivedUpdates[subscribeId] = make([]string, 10)
+		if receivedUpdates[subscribeID] == nil {
+			receivedUpdates[subscribeID] = make([]string, 10)
 		}
-		receivedUpdates[subscribeId] = append(receivedUpdates[subscribeId], receivedItems)
+		receivedUpdates[subscribeID] = append(receivedUpdates[subscribeID], receivedItems)
 		lock.Unlock()
 	}
 }
@@ -290,7 +291,7 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 	} else if protocol == "grpc" {
 		subscriptionID, err = subscribeGRPC(keys)
 	} else {
-		err = fmt.Errorf("Unknown protocol in Subscribe call: %s", protocol)
+		err = fmt.Errorf("unknown protocol in Subscribe call: %s", protocol)
 	}
 
 	if err != nil {
@@ -337,13 +338,13 @@ func stopSubscription(w http.ResponseWriter, r *http.Request) {
 	} else if protocol == "grpc" {
 		response, err = unsubscribeGRPC(subscriptionID)
 	} else {
-		err = fmt.Errorf("Unknown protocol in unsubscribe call: %s", protocol)
+		err = fmt.Errorf("unknown protocol in unsubscribe call: %s", protocol)
 	}
 	if err != nil {
 		sendResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	sendResponse(w, http.StatusOK, string(response))
+	sendResponse(w, http.StatusOK, response)
 }
 
 // configurationUpdateHandler is the handler for receiving updates from config store

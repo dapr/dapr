@@ -167,7 +167,7 @@ func testGet(t *testing.T, appExternalUrl string, protocol string) {
 	itemsInBytes, _ := json.Marshal(items)
 	resp, statusCode, err := utils.HTTPPostWithStatus(updateUrl, itemsInBytes)
 	require.NoError(t, err, "error updating key values")
-	require.Equal(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
+	require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
 
 	keys := getKeys(items)
 	keysInBytes, _ := json.Marshal(keys)
@@ -180,8 +180,8 @@ func testGet(t *testing.T, appExternalUrl string, protocol string) {
 	require.NoError(t, err, "error unmarshalling response")
 	expectedItemsInBytes, _ := json.Marshal(items)
 	expectedItems := string(expectedItemsInBytes)
-	require.Equal(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, appResp.Message)
-	require.Equal(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
+	require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, appResp.Message)
+	require.Equalf(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
 }
 
 func testSubscribe(t *testing.T, appExternalUrl string, protocol string) {
@@ -196,7 +196,7 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string) {
 	var appResp appResponse
 	err = json.Unmarshal(resp, &appResp)
 	require.NoError(t, err, "error unmarshalling response")
-	require.Equal(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, appResp.Message)
+	require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, appResp.Message)
 
 	subscriptionId = appResp.Message
 	time.Sleep(defaultWaitTime) // Waiting for subscribe operation to complete
@@ -205,7 +205,7 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string) {
 	itemsInBytes, _ := json.Marshal(items)
 	resp, statusCode, err = utils.HTTPPostWithStatus(updateUrl, itemsInBytes)
 	require.NoError(t, err, "error updating key values")
-	require.Equal(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
+	require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
 
 	time.Sleep(defaultWaitTime) // Waiting for update operation to complete
 
@@ -248,7 +248,7 @@ func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string) {
 	var receivedMessages receivedMessagesResponse
 	err = json.Unmarshal(getResp, &receivedMessages)
 	require.NoError(t, err, "error unmarshalling received messages response, got %s", string(getResp))
-	require.Equal(t, expectedUpdates, receivedMessages.ReceivedUpdates, "expected %s, got %s", expectedUpdates, receivedMessages.ReceivedUpdates)
+	require.Equalf(t, expectedUpdates, receivedMessages.ReceivedUpdates, "expected %s, got %s", expectedUpdates, receivedMessages.ReceivedUpdates)
 }
 
 var apps []struct {
@@ -281,7 +281,7 @@ func TestConfiguration(t *testing.T) {
 		componentNameInBytes, _ := json.Marshal(componentName)
 		resp, statusCode, err := utils.HTTPPostWithStatus(url, componentNameInBytes)
 		require.NoError(t, err, "error initializing configuration updater")
-		require.Equal(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
+		require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
 		for _, protocol := range protocols {
 			for _, tt := range configurationTests {
 				t.Run(tt.name, func(t *testing.T) {
