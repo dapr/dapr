@@ -86,7 +86,11 @@ type DaprClient interface {
 	// Get Workflow details
 	GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
 	// Terminate Workflow
-	TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*TerminateWorkflowResponse, error)
+	TerminateWorkflowAlpha1(ctx context.Context, in *WorkflowActivityRequest, opts ...grpc.CallOption) (*WorkflowActivityResponse, error)
+	// Pause Workflow
+	PauseWorkflowAlpha1(ctx context.Context, in *WorkflowActivityRequest, opts ...grpc.CallOption) (*WorkflowActivityResponse, error)
+	// Resume Workflow
+	ResumeWorkflowAlpha1(ctx context.Context, in *WorkflowActivityRequest, opts ...grpc.CallOption) (*WorkflowActivityResponse, error)
 	// Raise Event for a Workflow
 	RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*RaiseEventWorkflowResponse, error)
 	// Shutdown the sidecar
@@ -394,9 +398,27 @@ func (c *daprClient) GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowReque
 	return out, nil
 }
 
-func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*TerminateWorkflowResponse, error) {
-	out := new(TerminateWorkflowResponse)
+func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *WorkflowActivityRequest, opts ...grpc.CallOption) (*WorkflowActivityResponse, error) {
+	out := new(WorkflowActivityResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/TerminateWorkflowAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, in *WorkflowActivityRequest, opts ...grpc.CallOption) (*WorkflowActivityResponse, error) {
+	out := new(WorkflowActivityResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PauseWorkflowAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, in *WorkflowActivityRequest, opts ...grpc.CallOption) (*WorkflowActivityResponse, error) {
+	out := new(WorkflowActivityResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ResumeWorkflowAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +509,11 @@ type DaprServer interface {
 	// Get Workflow details
 	GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
 	// Terminate Workflow
-	TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error)
+	TerminateWorkflowAlpha1(context.Context, *WorkflowActivityRequest) (*WorkflowActivityResponse, error)
+	// Pause Workflow
+	PauseWorkflowAlpha1(context.Context, *WorkflowActivityRequest) (*WorkflowActivityResponse, error)
+	// Resume Workflow
+	ResumeWorkflowAlpha1(context.Context, *WorkflowActivityRequest) (*WorkflowActivityResponse, error)
 	// Raise Event for a Workflow
 	RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*RaiseEventWorkflowResponse, error)
 	// Shutdown the sidecar
@@ -588,8 +614,14 @@ func (UnimplementedDaprServer) StartWorkflowAlpha1(context.Context, *StartWorkfl
 func (UnimplementedDaprServer) GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error) {
+func (UnimplementedDaprServer) TerminateWorkflowAlpha1(context.Context, *WorkflowActivityRequest) (*WorkflowActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TerminateWorkflowAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) PauseWorkflowAlpha1(context.Context, *WorkflowActivityRequest) (*WorkflowActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseWorkflowAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) ResumeWorkflowAlpha1(context.Context, *WorkflowActivityRequest) (*WorkflowActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResumeWorkflowAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*RaiseEventWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RaiseEventWorkflowAlpha1 not implemented")
@@ -1153,7 +1185,7 @@ func _Dapr_GetWorkflowAlpha1_Handler(srv interface{}, ctx context.Context, dec f
 }
 
 func _Dapr_TerminateWorkflowAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TerminateWorkflowRequest)
+	in := new(WorkflowActivityRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -1165,7 +1197,43 @@ func _Dapr_TerminateWorkflowAlpha1_Handler(srv interface{}, ctx context.Context,
 		FullMethod: "/dapr.proto.runtime.v1.Dapr/TerminateWorkflowAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).TerminateWorkflowAlpha1(ctx, req.(*TerminateWorkflowRequest))
+		return srv.(DaprServer).TerminateWorkflowAlpha1(ctx, req.(*WorkflowActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_PauseWorkflowAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).PauseWorkflowAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/PauseWorkflowAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).PauseWorkflowAlpha1(ctx, req.(*WorkflowActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ResumeWorkflowAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ResumeWorkflowAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/ResumeWorkflowAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ResumeWorkflowAlpha1(ctx, req.(*WorkflowActivityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1332,6 +1400,14 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TerminateWorkflowAlpha1",
 			Handler:    _Dapr_TerminateWorkflowAlpha1_Handler,
+		},
+		{
+			MethodName: "PauseWorkflowAlpha1",
+			Handler:    _Dapr_PauseWorkflowAlpha1_Handler,
+		},
+		{
+			MethodName: "ResumeWorkflowAlpha1",
+			Handler:    _Dapr_ResumeWorkflowAlpha1_Handler,
 		},
 		{
 			MethodName: "RaiseEventWorkflowAlpha1",
