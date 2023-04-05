@@ -719,7 +719,7 @@ func TestRaiseEvent(t *testing.T) {
 func TestPauseResumeWorkflow(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("PauseWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
-		task := ctx.CreateTimer(1 * time.Second)
+		task := ctx.CreateTimer(4 * time.Second)
 		if err := task.Await(nil); err != nil {
 			return nil, err
 		}
