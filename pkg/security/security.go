@@ -15,6 +15,7 @@ package security
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -45,6 +46,11 @@ type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error
 type Handler interface {
 	GRPCServerOption() grpc.ServerOption
 	GRPCServerOptionNoClientAuth() grpc.ServerOption
+
+	TLSServerConfigBasicTLS() *tls.Config
+
+	CurrentTrustAnchors() ([]byte, error)
+	WatchTrustAnchors(context.Context, chan<- []byte)
 }
 
 // Provider is the security provider.
@@ -236,6 +242,40 @@ func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return grpc.Creds(
 		grpccredentials.TLSServerCredentials(s.source),
 	)
+}
+
+// WatchTrustAnchors watches for changes to the trust domains and returns the
+// PEM encoded trust domain roots.
+// Returns when the given context is canceled.
+func (s *security) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []byte) {
+	sub := make(chan struct{})
+	s.source.lock.Lock()
+	s.source.trustAnchorSubscribers = append(s.source.trustAnchorSubscribers, sub)
+	s.source.lock.Unlock()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-sub:
+			caBundle, err := s.CurrentTrustAnchors()
+			if err != nil {
+				log.Errorf("failed to marshal trust anchors: %s", err)
+				continue
+			}
+
+			select {
+			case trustAnchors <- caBundle:
+			case <-ctx.Done():
+			}
+		}
+	}
+}
+
+// CurrentTrustAnchors returns the current trust anchors for this Dapr
+// installation.
+func (s *security) CurrentTrustAnchors() ([]byte, error) {
+	return s.source.trustAnchors.Marshal()
 }
 
 // CurrentNamespace returns the namespace of this workload.
