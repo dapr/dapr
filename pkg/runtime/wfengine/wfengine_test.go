@@ -736,7 +736,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, id, metadata.InstanceID)
 					client.SuspendOrchestration(ctx, id, "PauseWFReasonTest")
-					time.Sleep(4 * time.Second)
+					time.Sleep(5 * time.Second)
 					wfTestLog.Infof("status of workflow %s is %s", id, metadata.RuntimeStatus)
 					assert.True(t, metadata.IsRunning())
 					client.ResumeOrchestration(ctx, id, "ResumeWFReasonTest")
