@@ -116,37 +116,13 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 	return ret, nil
 }
 
-func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := messages.ErrMissingOrEmptyInstance
-		a.Logger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
+// TerminateWorkflowAlpha1 is the API handler for terminating a workflow
+func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
+	var method func(context.Context, *workflows.WorkflowReference) error
+	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
+		method = a.WorkflowComponents[in.WorkflowComponent].Terminate
 	}
-
-	if in.WorkflowComponent == "" {
-		err := messages.ErrNoOrMissingWorkflowComponent
-		a.Logger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
-		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
-		a.Logger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	req := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-
-	err := workflowComponent.Terminate(ctx, &req)
-	if err != nil {
-		err = messages.ErrTerminateWorkflow.WithFormat(in.InstanceId)
-		a.Logger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-	return &runtimev1pb.TerminateWorkflowResponse{}, nil
+	return a.workflowActivity(ctx, in, method, messages.ErrTerminateWorkflow)
 }
 
 func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
@@ -188,4 +164,56 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
 	}
 	return &runtimev1pb.RaiseEventWorkflowResponse{}, nil
+}
+
+// PauseWorkflowAlpha1 is the API handler for pausing a workflow
+func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
+	var method func(context.Context, *workflows.WorkflowReference) error
+	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
+		method = a.WorkflowComponents[in.WorkflowComponent].Pause
+	}
+	return a.workflowActivity(ctx, in, method, messages.ErrPauseWorkflow)
+}
+
+// ResumeWorkflowAlpha1 is the API handler for resuming a workflow
+func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
+	var method func(context.Context, *workflows.WorkflowReference) error
+	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
+		method = a.WorkflowComponents[in.WorkflowComponent].Resume
+	}
+	return a.workflowActivity(ctx, in, method, messages.ErrResumeWorkflow)
+}
+
+// workflowActivity is a helper function to handle workflow requests for pause, resume, and terminate
+func (a *UniversalAPI) workflowActivity(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest, method func(context.Context, *workflows.WorkflowReference) error, methodErr messages.APIError) (*runtimev1pb.WorkflowActivityResponse, error) {
+	if in.InstanceId == "" {
+		err := messages.ErrMissingOrEmptyInstance
+		a.Logger.Debug(err)
+		return &runtimev1pb.WorkflowActivityResponse{}, err
+	}
+
+	if in.WorkflowComponent == "" {
+		err := messages.ErrNoOrMissingWorkflowComponent
+		a.Logger.Debug(err)
+		return &runtimev1pb.WorkflowActivityResponse{}, err
+	}
+
+	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
+	if workflowComponent == nil {
+		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
+		a.Logger.Debug(err)
+		return &runtimev1pb.WorkflowActivityResponse{}, err
+	}
+
+	req := workflows.WorkflowReference{
+		InstanceID: in.InstanceId,
+	}
+
+	err := method(ctx, &req)
+	if err != nil {
+		err = methodErr.WithFormat(in.InstanceId)
+		a.Logger.Debug(err)
+		return &runtimev1pb.WorkflowActivityResponse{}, err
+	}
+	return &runtimev1pb.WorkflowActivityResponse{}, nil
 }
