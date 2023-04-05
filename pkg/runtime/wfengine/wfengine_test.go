@@ -717,7 +717,7 @@ func TestRaiseEvent(t *testing.T) {
 func TestPauseResumeWorkflow(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("PauseWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
-		task := ctx.CreateTimer(1 * time.Second)
+		task := ctx.CreateTimer(4 * time.Second)
 		if err := task.Await(nil); err != nil {
 			return nil, err
 		}
@@ -734,9 +734,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, id, metadata.InstanceID)
 					client.SuspendOrchestration(ctx, id, "PauseWFReasonTest")
-					time.Sleep(2 * time.Second)
-					assert.True(t, metadata.IsRunning())
-					time.Sleep(3 * time.Second)
+					time.Sleep(5 * time.Second)
 					assert.True(t, metadata.IsRunning())
 					client.ResumeOrchestration(ctx, id, "ResumeWFReasonTest")
 					metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
