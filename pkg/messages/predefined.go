@@ -135,5 +135,7 @@ var (
 	ErrTerminateWorkflow             = APIError{"error terminating workflow %s", "ERR_TERMINATE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", "ERR_WORKFLOW_EVENT_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow %s", "ERR_RAISE_EVENT_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrPauseWorkflow                 = APIError{"error pausing workflow %s", "ERR_PAUSE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrResumeWorkflow                = APIError{"error resuming workflow %s", "ERR_RESUME_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrTimerParse                    = APIError{"error parsing time: %s", "ERR_WORKFLOW_TIME_PARSE", http.StatusInternalServerError, grpcCodes.Internal}
 )

@@ -554,6 +554,40 @@ func TestRaiseEvent(t *testing.T) {
 	}
 }
 
+func TestPauseResumeWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("PauseWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		task := ctx.CreateTimer(1 * time.Second)
+		if err := task.Await(nil); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "PauseWorkflow")
+			if assert.NoError(t, err) {
+				metadata, err := client.WaitForOrchestrationStart(ctx, id)
+				if assert.NoError(t, err) {
+					assert.Equal(t, id, metadata.InstanceID)
+					client.SuspendOrchestration(ctx, id, "PauseWFReasonTest")
+					time.Sleep(2 * time.Second)
+					assert.True(t, metadata.IsRunning())
+					time.Sleep(3 * time.Second)
+					assert.True(t, metadata.IsRunning())
+					client.ResumeOrchestration(ctx, id, "ResumeWFReasonTest")
+					metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
+					assert.True(t, metadata.IsComplete())
+					assert.Nil(t, metadata.FailureDetails)
+				}
+			}
+		})
+	}
+}
+
 func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
 	var client backend.TaskHubClient
 	engine := getEngine()
