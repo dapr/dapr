@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -115,6 +116,7 @@ type APIOpts struct {
 	SecretStores                map[string]secretstores.SecretStore
 	SecretsConfiguration        map[string]config.SecretsScope
 	ConfigurationStores         map[string]configuration.Store
+	CryptoProviders             map[string]contribCrypto.SubtleCrypto
 	WorkflowComponents          map[string]workflows.Workflow
 	LockStores                  map[string]lock.Store
 	PubsubAdapter               runtimePubsub.Adapter
@@ -137,6 +139,7 @@ func NewAPI(opts APIOpts) API {
 			AppID:                opts.AppID,
 			Logger:               apiServerLogger,
 			Resiliency:           opts.Resiliency,
+			CryptoProviders:      opts.CryptoProviders,
 			StateStores:          opts.StateStores,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,

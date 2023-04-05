@@ -9,8 +9,8 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.10.4-0.20230325223448-2266e7ad440a
-	github.com/dapr/kit v0.0.5-0.20230326103136-eadb01f64f28
+	github.com/dapr/components-contrib v1.10.6-0.20230404052155-66d9f643c4b8
+	github.com/dapr/kit v0.0.5-0.20230401092230-30d122f67bdc
 	github.com/fasthttp/router v1.4.18
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.2.3
@@ -145,6 +145,7 @@ require (
 	github.com/camunda/zeebe/clients/go/v8 v8.1.8 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/chebyrash/promise v0.0.0-20220530143319-1123826567d6 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
 	github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.13.0 // indirect
 	github.com/cloudevents/sdk-go/v2 v2.13.0 // indirect
@@ -369,7 +370,7 @@ require (
 	golang.org/x/term v0.6.0 // indirect
 	golang.org/x/text v0.8.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.6.0 // indirect
+	golang.org/x/tools v0.7.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/api v0.111.0 // indirect

@@ -35,6 +35,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -173,6 +174,7 @@ type APIOpts struct {
 	SecretStores                map[string]secretstores.SecretStore
 	SecretsConfiguration        map[string]config.SecretsScope
 	ConfigurationStores         map[string]configuration.Store
+	CryptoProviders             map[string]contribCrypto.SubtleCrypto
 	PubsubAdapter               runtimePubsub.Adapter
 	Actor                       actors.Actors
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -210,6 +212,7 @@ func NewAPI(opts APIOpts) API {
 			AppID:                opts.AppID,
 			Logger:               log,
 			Resiliency:           opts.Resiliency,
+			CryptoProviders:      opts.CryptoProviders,
 			StateStores:          opts.StateStores,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
@@ -285,9 +288,21 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
+			Version: apiVersionV1alpha1,
+			Handler: a.onWorkflowActivityHandler(a.universal.PauseWorkflowAlpha1),
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
+			Version: apiVersionV1alpha1,
+			Handler: a.onWorkflowActivityHandler(a.universal.ResumeWorkflowAlpha1),
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
-			Handler: a.onTerminateWorkflowHandler(),
+			Handler: a.onWorkflowActivityHandler(a.universal.TerminateWorkflowAlpha1),
 		},
 	}
 }
@@ -786,11 +801,14 @@ func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
 		})
 }
 
-func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
+type workflowActivityHandler = func(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error)
+
+// This is a common handler for TerminateWorkflow, PauseWorkflow and ResumeWorkflow
+func (a *api) onWorkflowActivityHandler(handler workflowActivityHandler) fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.TerminateWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *runtimev1pb.TerminateWorkflowResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
+		handler,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.WorkflowActivityRequest, *runtimev1pb.WorkflowActivityResponse]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil

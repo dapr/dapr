@@ -24,6 +24,7 @@ const (
 	CategoryWorkflow       Category = "workflow"
 	CategoryMiddleware     Category = "middleware"
 	CategoryConfiguration  Category = "configuration"
+	CategoryCryptoProvider Category = "crypto"
 	CategoryLock           Category = "lock"
 	CategoryNameResolution Category = "nameresolution"
 )
