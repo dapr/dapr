@@ -43,6 +43,8 @@ import (
 
 const testAppID = "wf-app"
 
+var wfTestLog = logger.NewLogger("wfengine_test")
+
 // The fake state store code was copied from actors_test.go.
 // TODO: Find a way to share the code instead of copying it, if it makes sense to do so.
 
@@ -735,6 +737,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 					assert.Equal(t, id, metadata.InstanceID)
 					client.SuspendOrchestration(ctx, id, "PauseWFReasonTest")
 					time.Sleep(4 * time.Second)
+					wfTestLog.Infof("status of workflow %s is %s", id, metadata.RuntimeStatus)
 					assert.True(t, metadata.IsRunning())
 					client.ResumeOrchestration(ctx, id, "ResumeWFReasonTest")
 					metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
