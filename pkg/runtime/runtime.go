@@ -307,10 +307,12 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
-		workflowEngine:             wfengine.NewWorkflowEngine(),
-		appHealthReady:             nil,
-		appHealthLock:              &sync.Mutex{},
-		bulkSubLock:                &sync.Mutex{},
+		workflowEngine: wfengine.NewWorkflowEngine(&wfengine.WFConfig{
+			AppID: runtimeConfig.ID,
+		}),
+		appHealthReady: nil,
+		appHealthLock:  &sync.Mutex{},
+		bulkSubLock:    &sync.Mutex{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}

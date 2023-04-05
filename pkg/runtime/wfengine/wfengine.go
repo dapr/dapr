@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -29,8 +30,7 @@ import (
 )
 
 const (
-	WorkflowActorType = actors.InternalActorTypePrefix + "wfengine.workflow"
-	ActivityActorType = actors.InternalActorTypePrefix + "wfengine.activity"
+	defaultNamespace = "default"
 )
 
 type WorkflowEngine struct {
@@ -49,15 +49,32 @@ type WorkflowEngine struct {
 }
 
 var (
+	WorkflowActorType   = actors.InternalActorTypePrefix + "wfengine.workflow"
+	ActivityActorType   = actors.InternalActorTypePrefix + "wfengine.activity"
 	wfLogger            = logger.NewLogger("dapr.runtime.wfengine")
 	errExecutionAborted = errors.New("execution aborted")
 )
+
+// WFConfig is the configuration for the workflow engine
+type WFConfig struct {
+	AppID string
+}
+
+func getNamespace() string {
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		namespace = defaultNamespace
+	}
+	return namespace
+}
 
 func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine() *WorkflowEngine {
+func NewWorkflowEngine(config *WFConfig) *WorkflowEngine {
+	WorkflowActorType = WorkflowActorType + "." + config.AppID + "." + getNamespace()
+	ActivityActorType = ActivityActorType + "." + config.AppID + "." + getNamespace()
 	// In order to lazily start the engine (i.e. when it is invoked
 	// by the application when it registers workflows / activities or by
 	// an API call to interact with the engine) we need to inject the engine

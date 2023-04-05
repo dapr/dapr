@@ -762,7 +762,9 @@ func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClie
 }
 
 func getEngine() *wfengine.WorkflowEngine {
-	engine := wfengine.NewWorkflowEngine()
+	engine := wfengine.NewWorkflowEngine(&wfengine.WFConfig{
+		AppID: "test",
+	})
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
