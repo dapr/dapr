@@ -118,7 +118,13 @@ service Dapr {
   rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
 
   // Terminate Workflow
-  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
+  rpc TerminateWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
+
+  // Pause Workflow
+  rpc PauseWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
+
+  // Resume Workflow
+  rpc ResumeWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
 
   // Raise Event for a Workflow
   rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (RaiseEventWorkflowResponse) {}
@@ -246,7 +252,7 @@ message SaveStateRequest {
 // QueryStateRequest is the message to query state store.
 message QueryStateRequest {
   // The name of state store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The query in JSON format.
   string query = 2;
@@ -705,12 +711,13 @@ message StartWorkflowRequest {
   bytes input = 5;
 }
 
-message TerminateWorkflowRequest {
+message WorkflowActivityRequest {
   string instance_id = 1 [json_name = "instanceId"];
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-message TerminateWorkflowResponse {
+message WorkflowActivityResponse {
+  // Empty
 }
 
 message RaiseEventWorkflowRequest {
