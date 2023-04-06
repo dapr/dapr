@@ -87,6 +87,54 @@ func (UnlockResponse_Status) EnumDescriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{53, 0}
 }
 
+type SubtleGetKeyAlpha1Request_KeyFormat int32
+
+const (
+	// PEM (PKIX) (default)
+	SubtleGetKeyAlpha1Request_PEM SubtleGetKeyAlpha1Request_KeyFormat = 0
+	// JSON (JSON Web Key) as string
+	SubtleGetKeyAlpha1Request_JSON SubtleGetKeyAlpha1Request_KeyFormat = 1
+)
+
+// Enum value maps for SubtleGetKeyAlpha1Request_KeyFormat.
+var (
+	SubtleGetKeyAlpha1Request_KeyFormat_name = map[int32]string{
+		0: "PEM",
+		1: "JSON",
+	}
+	SubtleGetKeyAlpha1Request_KeyFormat_value = map[string]int32{
+		"PEM":  0,
+		"JSON": 1,
+	}
+)
+
+func (x SubtleGetKeyAlpha1Request_KeyFormat) Enum() *SubtleGetKeyAlpha1Request_KeyFormat {
+	p := new(SubtleGetKeyAlpha1Request_KeyFormat)
+	*p = x
+	return p
+}
+
+func (x SubtleGetKeyAlpha1Request_KeyFormat) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SubtleGetKeyAlpha1Request_KeyFormat) Descriptor() protoreflect.EnumDescriptor {
+	return file_dapr_proto_runtime_v1_dapr_proto_enumTypes[1].Descriptor()
+}
+
+func (SubtleGetKeyAlpha1Request_KeyFormat) Type() protoreflect.EnumType {
+	return &file_dapr_proto_runtime_v1_dapr_proto_enumTypes[1]
+}
+
+func (x SubtleGetKeyAlpha1Request_KeyFormat) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SubtleGetKeyAlpha1Request_KeyFormat.Descriptor instead.
+func (SubtleGetKeyAlpha1Request_KeyFormat) EnumDescriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{54, 0}
+}
+
 // InvokeServiceRequest represents the request message for Service invocation.
 type InvokeServiceRequest struct {
 	state         protoimpl.MessageState
@@ -3626,6 +3674,1007 @@ func (x *UnlockResponse) GetStatus() UnlockResponse_Status {
 	return UnlockResponse_SUCCESS
 }
 
+// SubtleGetKeyAlpha1Request is the request object for SubtleGetKeyAlpha1.
+type SubtleGetKeyAlpha1Request struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name of the component
+	ComponentName string `protobuf:"bytes,1,opt,name=component_name,json=componentName,proto3" json:"component_name,omitempty"`
+	// Name (or name/version) of the key to use in the key vault
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Response format
+	Format SubtleGetKeyAlpha1Request_KeyFormat `protobuf:"varint,3,opt,name=format,proto3,enum=dapr.proto.runtime.v1.SubtleGetKeyAlpha1Request_KeyFormat" json:"format,omitempty"`
+}
+
+func (x *SubtleGetKeyAlpha1Request) Reset() {
+	*x = SubtleGetKeyAlpha1Request{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[54]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleGetKeyAlpha1Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleGetKeyAlpha1Request) ProtoMessage() {}
+
+func (x *SubtleGetKeyAlpha1Request) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[54]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleGetKeyAlpha1Request.ProtoReflect.Descriptor instead.
+func (*SubtleGetKeyAlpha1Request) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *SubtleGetKeyAlpha1Request) GetComponentName() string {
+	if x != nil {
+		return x.ComponentName
+	}
+	return ""
+}
+
+func (x *SubtleGetKeyAlpha1Request) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SubtleGetKeyAlpha1Request) GetFormat() SubtleGetKeyAlpha1Request_KeyFormat {
+	if x != nil {
+		return x.Format
+	}
+	return SubtleGetKeyAlpha1Request_PEM
+}
+
+// SubtleGetKeyAlpha1Response is the response for SubtleGetKeyAlpha1.
+type SubtleGetKeyAlpha1Response struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name (or name/version) of the key.
+	// This is returned as response too in case there is a version.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Public key, encoded in the requested format
+	PublicKey string `protobuf:"bytes,2,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+}
+
+func (x *SubtleGetKeyAlpha1Response) Reset() {
+	*x = SubtleGetKeyAlpha1Response{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[55]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleGetKeyAlpha1Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleGetKeyAlpha1Response) ProtoMessage() {}
+
+func (x *SubtleGetKeyAlpha1Response) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[55]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleGetKeyAlpha1Response.ProtoReflect.Descriptor instead.
+func (*SubtleGetKeyAlpha1Response) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *SubtleGetKeyAlpha1Response) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SubtleGetKeyAlpha1Response) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+// SubtleEncryptAlpha1Request is the request for SubtleEncryptAlpha1.
+type SubtleEncryptAlpha1Request struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name of the component
+	ComponentName string `protobuf:"bytes,1,opt,name=component_name,json=componentName,proto3" json:"component_name,omitempty"`
+	// Message to encrypt.
+	Plaintext []byte `protobuf:"bytes,2,opt,name=plaintext,proto3" json:"plaintext,omitempty"`
+	// Algorithm to use, as in the JWA standard.
+	Algorithm string `protobuf:"bytes,3,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	// Name (or name/version) of the key.
+	KeyName string `protobuf:"bytes,4,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`
+	// Nonce / initialization vector.
+	// Ignored with asymmetric ciphers.
+	Nonce []byte `protobuf:"bytes,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	// Associated Data when using AEAD ciphers (optional).
+	AssociatedData []byte `protobuf:"bytes,6,opt,name=associated_data,json=associatedData,proto3" json:"associated_data,omitempty"`
+}
+
+func (x *SubtleEncryptAlpha1Request) Reset() {
+	*x = SubtleEncryptAlpha1Request{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[56]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleEncryptAlpha1Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleEncryptAlpha1Request) ProtoMessage() {}
+
+func (x *SubtleEncryptAlpha1Request) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[56]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleEncryptAlpha1Request.ProtoReflect.Descriptor instead.
+func (*SubtleEncryptAlpha1Request) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *SubtleEncryptAlpha1Request) GetComponentName() string {
+	if x != nil {
+		return x.ComponentName
+	}
+	return ""
+}
+
+func (x *SubtleEncryptAlpha1Request) GetPlaintext() []byte {
+	if x != nil {
+		return x.Plaintext
+	}
+	return nil
+}
+
+func (x *SubtleEncryptAlpha1Request) GetAlgorithm() string {
+	if x != nil {
+		return x.Algorithm
+	}
+	return ""
+}
+
+func (x *SubtleEncryptAlpha1Request) GetKeyName() string {
+	if x != nil {
+		return x.KeyName
+	}
+	return ""
+}
+
+func (x *SubtleEncryptAlpha1Request) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *SubtleEncryptAlpha1Request) GetAssociatedData() []byte {
+	if x != nil {
+		return x.AssociatedData
+	}
+	return nil
+}
+
+// SubtleEncryptAlpha1Response is the response for SubtleEncryptAlpha1.
+type SubtleEncryptAlpha1Response struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Encrypted ciphertext.
+	Ciphertext []byte `protobuf:"bytes,1,opt,name=ciphertext,proto3" json:"ciphertext,omitempty"`
+	// Authentication tag.
+	// This is nil when not using an authenticated cipher.
+	Tag []byte `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
+}
+
+func (x *SubtleEncryptAlpha1Response) Reset() {
+	*x = SubtleEncryptAlpha1Response{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[57]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleEncryptAlpha1Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleEncryptAlpha1Response) ProtoMessage() {}
+
+func (x *SubtleEncryptAlpha1Response) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[57]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleEncryptAlpha1Response.ProtoReflect.Descriptor instead.
+func (*SubtleEncryptAlpha1Response) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *SubtleEncryptAlpha1Response) GetCiphertext() []byte {
+	if x != nil {
+		return x.Ciphertext
+	}
+	return nil
+}
+
+func (x *SubtleEncryptAlpha1Response) GetTag() []byte {
+	if x != nil {
+		return x.Tag
+	}
+	return nil
+}
+
+// SubtleDecryptAlpha1Request is the request for SubtleDecryptAlpha1.
+type SubtleDecryptAlpha1Request struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name of the component
+	ComponentName string `protobuf:"bytes,1,opt,name=component_name,json=componentName,proto3" json:"component_name,omitempty"`
+	// Message to decrypt.
+	Ciphertext []byte `protobuf:"bytes,2,opt,name=ciphertext,proto3" json:"ciphertext,omitempty"`
+	// Algorithm to use, as in the JWA standard.
+	Algorithm string `protobuf:"bytes,3,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	// Name (or name/version) of the key.
+	KeyName string `protobuf:"bytes,4,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`
+	// Nonce / initialization vector.
+	// Ignored with asymmetric ciphers.
+	Nonce []byte `protobuf:"bytes,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	// Authentication tag.
+	// This is nil when not using an authenticated cipher.
+	Tag []byte `protobuf:"bytes,6,opt,name=tag,proto3" json:"tag,omitempty"`
+	// Associated Data when using AEAD ciphers (optional).
+	AssociatedData []byte `protobuf:"bytes,7,opt,name=associated_data,json=associatedData,proto3" json:"associated_data,omitempty"`
+}
+
+func (x *SubtleDecryptAlpha1Request) Reset() {
+	*x = SubtleDecryptAlpha1Request{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[58]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleDecryptAlpha1Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleDecryptAlpha1Request) ProtoMessage() {}
+
+func (x *SubtleDecryptAlpha1Request) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[58]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleDecryptAlpha1Request.ProtoReflect.Descriptor instead.
+func (*SubtleDecryptAlpha1Request) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *SubtleDecryptAlpha1Request) GetComponentName() string {
+	if x != nil {
+		return x.ComponentName
+	}
+	return ""
+}
+
+func (x *SubtleDecryptAlpha1Request) GetCiphertext() []byte {
+	if x != nil {
+		return x.Ciphertext
+	}
+	return nil
+}
+
+func (x *SubtleDecryptAlpha1Request) GetAlgorithm() string {
+	if x != nil {
+		return x.Algorithm
+	}
+	return ""
+}
+
+func (x *SubtleDecryptAlpha1Request) GetKeyName() string {
+	if x != nil {
+		return x.KeyName
+	}
+	return ""
+}
+
+func (x *SubtleDecryptAlpha1Request) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *SubtleDecryptAlpha1Request) GetTag() []byte {
+	if x != nil {
+		return x.Tag
+	}
+	return nil
+}
+
+func (x *SubtleDecryptAlpha1Request) GetAssociatedData() []byte {
+	if x != nil {
+		return x.AssociatedData
+	}
+	return nil
+}
+
+// SubtleDecryptAlpha1Response is the response for SubtleDecryptAlpha1.
+type SubtleDecryptAlpha1Response struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Decrypted plaintext.
+	Plaintext []byte `protobuf:"bytes,1,opt,name=plaintext,proto3" json:"plaintext,omitempty"`
+}
+
+func (x *SubtleDecryptAlpha1Response) Reset() {
+	*x = SubtleDecryptAlpha1Response{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[59]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleDecryptAlpha1Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleDecryptAlpha1Response) ProtoMessage() {}
+
+func (x *SubtleDecryptAlpha1Response) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[59]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleDecryptAlpha1Response.ProtoReflect.Descriptor instead.
+func (*SubtleDecryptAlpha1Response) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *SubtleDecryptAlpha1Response) GetPlaintext() []byte {
+	if x != nil {
+		return x.Plaintext
+	}
+	return nil
+}
+
+// SubtleWrapKeyAlpha1Request is the request for SubtleWrapKeyAlpha1.
+type SubtleWrapKeyAlpha1Request struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name of the component
+	ComponentName string `protobuf:"bytes,1,opt,name=component_name,json=componentName,proto3" json:"component_name,omitempty"`
+	// Key to wrap
+	PlaintextKey []byte `protobuf:"bytes,2,opt,name=plaintext_key,json=plaintextKey,proto3" json:"plaintext_key,omitempty"`
+	// Algorithm to use, as in the JWA standard.
+	Algorithm string `protobuf:"bytes,3,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	// Name (or name/version) of the key.
+	KeyName string `protobuf:"bytes,4,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`
+	// Nonce / initialization vector.
+	// Ignored with asymmetric ciphers.
+	Nonce []byte `protobuf:"bytes,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	// Associated Data when using AEAD ciphers (optional).
+	AssociatedData []byte `protobuf:"bytes,6,opt,name=associated_data,json=associatedData,proto3" json:"associated_data,omitempty"`
+}
+
+func (x *SubtleWrapKeyAlpha1Request) Reset() {
+	*x = SubtleWrapKeyAlpha1Request{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[60]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleWrapKeyAlpha1Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleWrapKeyAlpha1Request) ProtoMessage() {}
+
+func (x *SubtleWrapKeyAlpha1Request) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[60]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleWrapKeyAlpha1Request.ProtoReflect.Descriptor instead.
+func (*SubtleWrapKeyAlpha1Request) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *SubtleWrapKeyAlpha1Request) GetComponentName() string {
+	if x != nil {
+		return x.ComponentName
+	}
+	return ""
+}
+
+func (x *SubtleWrapKeyAlpha1Request) GetPlaintextKey() []byte {
+	if x != nil {
+		return x.PlaintextKey
+	}
+	return nil
+}
+
+func (x *SubtleWrapKeyAlpha1Request) GetAlgorithm() string {
+	if x != nil {
+		return x.Algorithm
+	}
+	return ""
+}
+
+func (x *SubtleWrapKeyAlpha1Request) GetKeyName() string {
+	if x != nil {
+		return x.KeyName
+	}
+	return ""
+}
+
+func (x *SubtleWrapKeyAlpha1Request) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *SubtleWrapKeyAlpha1Request) GetAssociatedData() []byte {
+	if x != nil {
+		return x.AssociatedData
+	}
+	return nil
+}
+
+// SubtleWrapKeyAlpha1Response is the response for SubtleWrapKeyAlpha1.
+type SubtleWrapKeyAlpha1Response struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Wrapped key.
+	WrappedKey []byte `protobuf:"bytes,1,opt,name=wrapped_key,json=wrappedKey,proto3" json:"wrapped_key,omitempty"`
+	// Authentication tag.
+	// This is nil when not using an authenticated cipher.
+	Tag []byte `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
+}
+
+func (x *SubtleWrapKeyAlpha1Response) Reset() {
+	*x = SubtleWrapKeyAlpha1Response{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[61]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleWrapKeyAlpha1Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleWrapKeyAlpha1Response) ProtoMessage() {}
+
+func (x *SubtleWrapKeyAlpha1Response) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[61]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleWrapKeyAlpha1Response.ProtoReflect.Descriptor instead.
+func (*SubtleWrapKeyAlpha1Response) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *SubtleWrapKeyAlpha1Response) GetWrappedKey() []byte {
+	if x != nil {
+		return x.WrappedKey
+	}
+	return nil
+}
+
+func (x *SubtleWrapKeyAlpha1Response) GetTag() []byte {
+	if x != nil {
+		return x.Tag
+	}
+	return nil
+}
+
+// SubtleUnwrapKeyAlpha1Request is the request for SubtleUnwrapKeyAlpha1.
+type SubtleUnwrapKeyAlpha1Request struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name of the component
+	ComponentName string `protobuf:"bytes,1,opt,name=component_name,json=componentName,proto3" json:"component_name,omitempty"`
+	// Wrapped key.
+	WrappedKey []byte `protobuf:"bytes,2,opt,name=wrapped_key,json=wrappedKey,proto3" json:"wrapped_key,omitempty"`
+	// Algorithm to use, as in the JWA standard.
+	Algorithm string `protobuf:"bytes,3,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	// Name (or name/version) of the key.
+	KeyName string `protobuf:"bytes,4,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`
+	// Nonce / initialization vector.
+	// Ignored with asymmetric ciphers.
+	Nonce []byte `protobuf:"bytes,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	// Authentication tag.
+	// This is nil when not using an authenticated cipher.
+	Tag []byte `protobuf:"bytes,6,opt,name=tag,proto3" json:"tag,omitempty"`
+	// Associated Data when using AEAD ciphers (optional).
+	AssociatedData []byte `protobuf:"bytes,7,opt,name=associated_data,json=associatedData,proto3" json:"associated_data,omitempty"`
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) Reset() {
+	*x = SubtleUnwrapKeyAlpha1Request{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[62]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleUnwrapKeyAlpha1Request) ProtoMessage() {}
+
+func (x *SubtleUnwrapKeyAlpha1Request) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[62]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleUnwrapKeyAlpha1Request.ProtoReflect.Descriptor instead.
+func (*SubtleUnwrapKeyAlpha1Request) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) GetComponentName() string {
+	if x != nil {
+		return x.ComponentName
+	}
+	return ""
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) GetWrappedKey() []byte {
+	if x != nil {
+		return x.WrappedKey
+	}
+	return nil
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) GetAlgorithm() string {
+	if x != nil {
+		return x.Algorithm
+	}
+	return ""
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) GetKeyName() string {
+	if x != nil {
+		return x.KeyName
+	}
+	return ""
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) GetTag() []byte {
+	if x != nil {
+		return x.Tag
+	}
+	return nil
+}
+
+func (x *SubtleUnwrapKeyAlpha1Request) GetAssociatedData() []byte {
+	if x != nil {
+		return x.AssociatedData
+	}
+	return nil
+}
+
+// SubtleUnwrapKeyAlpha1Response is the response for SubtleUnwrapKeyAlpha1.
+type SubtleUnwrapKeyAlpha1Response struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Key in plaintext
+	PlaintextKey []byte `protobuf:"bytes,1,opt,name=plaintext_key,json=plaintextKey,proto3" json:"plaintext_key,omitempty"`
+}
+
+func (x *SubtleUnwrapKeyAlpha1Response) Reset() {
+	*x = SubtleUnwrapKeyAlpha1Response{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[63]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleUnwrapKeyAlpha1Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleUnwrapKeyAlpha1Response) ProtoMessage() {}
+
+func (x *SubtleUnwrapKeyAlpha1Response) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[63]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleUnwrapKeyAlpha1Response.ProtoReflect.Descriptor instead.
+func (*SubtleUnwrapKeyAlpha1Response) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *SubtleUnwrapKeyAlpha1Response) GetPlaintextKey() []byte {
+	if x != nil {
+		return x.PlaintextKey
+	}
+	return nil
+}
+
+// SubtleSignAlpha1Request is the request for SubtleSignAlpha1.
+type SubtleSignAlpha1Request struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name of the component
+	ComponentName string `protobuf:"bytes,1,opt,name=component_name,json=componentName,proto3" json:"component_name,omitempty"`
+	// Digest to sign.
+	Digest []byte `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
+	// Algorithm to use, as in the JWA standard.
+	Algorithm string `protobuf:"bytes,3,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	// Name (or name/version) of the key.
+	KeyName string `protobuf:"bytes,4,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`
+}
+
+func (x *SubtleSignAlpha1Request) Reset() {
+	*x = SubtleSignAlpha1Request{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[64]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleSignAlpha1Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleSignAlpha1Request) ProtoMessage() {}
+
+func (x *SubtleSignAlpha1Request) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[64]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleSignAlpha1Request.ProtoReflect.Descriptor instead.
+func (*SubtleSignAlpha1Request) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *SubtleSignAlpha1Request) GetComponentName() string {
+	if x != nil {
+		return x.ComponentName
+	}
+	return ""
+}
+
+func (x *SubtleSignAlpha1Request) GetDigest() []byte {
+	if x != nil {
+		return x.Digest
+	}
+	return nil
+}
+
+func (x *SubtleSignAlpha1Request) GetAlgorithm() string {
+	if x != nil {
+		return x.Algorithm
+	}
+	return ""
+}
+
+func (x *SubtleSignAlpha1Request) GetKeyName() string {
+	if x != nil {
+		return x.KeyName
+	}
+	return ""
+}
+
+// SubtleSignAlpha1Response is the response for SubtleSignAlpha1.
+type SubtleSignAlpha1Response struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The signature that was computed
+	Signature []byte `protobuf:"bytes,1,opt,name=signature,proto3" json:"signature,omitempty"`
+}
+
+func (x *SubtleSignAlpha1Response) Reset() {
+	*x = SubtleSignAlpha1Response{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[65]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleSignAlpha1Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleSignAlpha1Response) ProtoMessage() {}
+
+func (x *SubtleSignAlpha1Response) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[65]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleSignAlpha1Response.ProtoReflect.Descriptor instead.
+func (*SubtleSignAlpha1Response) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *SubtleSignAlpha1Response) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+// SubtleVerifyAlpha1Request is the request for SubtleVerifyAlpha1.
+type SubtleVerifyAlpha1Request struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name of the component
+	ComponentName string `protobuf:"bytes,1,opt,name=component_name,json=componentName,proto3" json:"component_name,omitempty"`
+	// Digest of the message.
+	Digest []byte `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
+	// Algorithm to use, as in the JWA standard.
+	Algorithm string `protobuf:"bytes,3,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	// Name (or name/version) of the key.
+	KeyName string `protobuf:"bytes,4,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`
+	// Signature to verify.
+	Signature []byte `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`
+}
+
+func (x *SubtleVerifyAlpha1Request) Reset() {
+	*x = SubtleVerifyAlpha1Request{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[66]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleVerifyAlpha1Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleVerifyAlpha1Request) ProtoMessage() {}
+
+func (x *SubtleVerifyAlpha1Request) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[66]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleVerifyAlpha1Request.ProtoReflect.Descriptor instead.
+func (*SubtleVerifyAlpha1Request) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *SubtleVerifyAlpha1Request) GetComponentName() string {
+	if x != nil {
+		return x.ComponentName
+	}
+	return ""
+}
+
+func (x *SubtleVerifyAlpha1Request) GetDigest() []byte {
+	if x != nil {
+		return x.Digest
+	}
+	return nil
+}
+
+func (x *SubtleVerifyAlpha1Request) GetAlgorithm() string {
+	if x != nil {
+		return x.Algorithm
+	}
+	return ""
+}
+
+func (x *SubtleVerifyAlpha1Request) GetKeyName() string {
+	if x != nil {
+		return x.KeyName
+	}
+	return ""
+}
+
+func (x *SubtleVerifyAlpha1Request) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+// SubtleVerifyAlpha1Response is the response for SubtleVerifyAlpha1.
+type SubtleVerifyAlpha1Response struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// True if the signature is valid.
+	Valid bool `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+}
+
+func (x *SubtleVerifyAlpha1Response) Reset() {
+	*x = SubtleVerifyAlpha1Response{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[67]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubtleVerifyAlpha1Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubtleVerifyAlpha1Response) ProtoMessage() {}
+
+func (x *SubtleVerifyAlpha1Response) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[67]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubtleVerifyAlpha1Response.ProtoReflect.Descriptor instead.
+func (*SubtleVerifyAlpha1Response) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *SubtleVerifyAlpha1Response) GetValid() bool {
+	if x != nil {
+		return x.Valid
+	}
+	return false
+}
+
 type WorkflowReference struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -3637,7 +4686,7 @@ type WorkflowReference struct {
 func (x *WorkflowReference) Reset() {
 	*x = WorkflowReference{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[54]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[68]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3650,7 +4699,7 @@ func (x *WorkflowReference) String() string {
 func (*WorkflowReference) ProtoMessage() {}
 
 func (x *WorkflowReference) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[54]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[68]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3663,7 +4712,7 @@ func (x *WorkflowReference) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowReference.ProtoReflect.Descriptor instead.
 func (*WorkflowReference) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{54}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *WorkflowReference) GetInstanceId() string {
@@ -3686,7 +4735,7 @@ type GetWorkflowRequest struct {
 func (x *GetWorkflowRequest) Reset() {
 	*x = GetWorkflowRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[55]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[69]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3699,7 +4748,7 @@ func (x *GetWorkflowRequest) String() string {
 func (*GetWorkflowRequest) ProtoMessage() {}
 
 func (x *GetWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[55]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[69]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3712,7 +4761,7 @@ func (x *GetWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{55}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *GetWorkflowRequest) GetInstanceId() string {
@@ -3749,7 +4798,7 @@ type GetWorkflowResponse struct {
 func (x *GetWorkflowResponse) Reset() {
 	*x = GetWorkflowResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[56]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[70]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3762,7 +4811,7 @@ func (x *GetWorkflowResponse) String() string {
 func (*GetWorkflowResponse) ProtoMessage() {}
 
 func (x *GetWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[56]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[70]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3775,7 +4824,7 @@ func (x *GetWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{56}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *GetWorkflowResponse) GetInstanceId() string {
@@ -3814,7 +4863,7 @@ type StartWorkflowRequest struct {
 func (x *StartWorkflowRequest) Reset() {
 	*x = StartWorkflowRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[57]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[71]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3827,7 +4876,7 @@ func (x *StartWorkflowRequest) String() string {
 func (*StartWorkflowRequest) ProtoMessage() {}
 
 func (x *StartWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[57]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[71]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3840,7 +4889,7 @@ func (x *StartWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*StartWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{57}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *StartWorkflowRequest) GetInstanceId() string {
@@ -3878,7 +4927,7 @@ func (x *StartWorkflowRequest) GetInput() []byte {
 	return nil
 }
 
-type TerminateWorkflowRequest struct {
+type WorkflowActivityRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -3887,23 +4936,23 @@ type TerminateWorkflowRequest struct {
 	WorkflowComponent string `protobuf:"bytes,2,opt,name=workflow_component,json=workflowComponent,proto3" json:"workflow_component,omitempty"`
 }
 
-func (x *TerminateWorkflowRequest) Reset() {
-	*x = TerminateWorkflowRequest{}
+func (x *WorkflowActivityRequest) Reset() {
+	*x = WorkflowActivityRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[58]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[72]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
 }
 
-func (x *TerminateWorkflowRequest) String() string {
+func (x *WorkflowActivityRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TerminateWorkflowRequest) ProtoMessage() {}
+func (*WorkflowActivityRequest) ProtoMessage() {}
 
-func (x *TerminateWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[58]
+func (x *WorkflowActivityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[72]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3914,19 +4963,19 @@ func (x *TerminateWorkflowRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TerminateWorkflowRequest.ProtoReflect.Descriptor instead.
-func (*TerminateWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{58}
+// Deprecated: Use WorkflowActivityRequest.ProtoReflect.Descriptor instead.
+func (*WorkflowActivityRequest) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{72}
 }
 
-func (x *TerminateWorkflowRequest) GetInstanceId() string {
+func (x *WorkflowActivityRequest) GetInstanceId() string {
 	if x != nil {
 		return x.InstanceId
 	}
 	return ""
 }
 
-func (x *TerminateWorkflowRequest) GetWorkflowComponent() string {
+func (x *WorkflowActivityRequest) GetWorkflowComponent() string {
 	if x != nil {
 		return x.WorkflowComponent
 	}
@@ -3942,7 +4991,7 @@ type TerminateWorkflowResponse struct {
 func (x *TerminateWorkflowResponse) Reset() {
 	*x = TerminateWorkflowResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[59]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[73]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3955,7 +5004,7 @@ func (x *TerminateWorkflowResponse) String() string {
 func (*TerminateWorkflowResponse) ProtoMessage() {}
 
 func (x *TerminateWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[59]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[73]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3968,7 +5017,7 @@ func (x *TerminateWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminateWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*TerminateWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{59}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{73}
 }
 
 type PurgeWorkflowRequest struct {
@@ -3983,7 +5032,7 @@ type PurgeWorkflowRequest struct {
 func (x *PurgeWorkflowRequest) Reset() {
 	*x = PurgeWorkflowRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[60]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[74]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3996,7 +5045,7 @@ func (x *PurgeWorkflowRequest) String() string {
 func (*PurgeWorkflowRequest) ProtoMessage() {}
 
 func (x *PurgeWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[60]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[74]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4009,7 +5058,7 @@ func (x *PurgeWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*PurgeWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{60}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *PurgeWorkflowRequest) GetInstanceId() string {
@@ -4026,29 +5075,29 @@ func (x *PurgeWorkflowRequest) GetWorkflowComponent() string {
 	return ""
 }
 
-type PurgeWorkflowResponse struct {
+type WorkflowActivityResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 }
 
-func (x *PurgeWorkflowResponse) Reset() {
-	*x = PurgeWorkflowResponse{}
+func (x *WorkflowActivityResponse) Reset() {
+	*x = WorkflowActivityResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[61]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[75]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
 }
 
-func (x *PurgeWorkflowResponse) String() string {
+func (x *WorkflowActivityResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PurgeWorkflowResponse) ProtoMessage() {}
+func (*WorkflowActivityResponse) ProtoMessage() {}
 
-func (x *PurgeWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[61]
+func (x *WorkflowActivityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[75]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4059,9 +5108,9 @@ func (x *PurgeWorkflowResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PurgeWorkflowResponse.ProtoReflect.Descriptor instead.
-func (*PurgeWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{61}
+// Deprecated: Use WorkflowActivityResponse.ProtoReflect.Descriptor instead.
+func (*WorkflowActivityResponse) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{75}
 }
 
 type RaiseEventWorkflowRequest struct {
@@ -4078,7 +5127,7 @@ type RaiseEventWorkflowRequest struct {
 func (x *RaiseEventWorkflowRequest) Reset() {
 	*x = RaiseEventWorkflowRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[62]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[76]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4091,7 +5140,7 @@ func (x *RaiseEventWorkflowRequest) String() string {
 func (*RaiseEventWorkflowRequest) ProtoMessage() {}
 
 func (x *RaiseEventWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[62]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[76]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4104,7 +5153,7 @@ func (x *RaiseEventWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaiseEventWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*RaiseEventWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{62}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *RaiseEventWorkflowRequest) GetInstanceId() string {
@@ -4133,44 +5182,6 @@ func (x *RaiseEventWorkflowRequest) GetInput() []byte {
 		return x.Input
 	}
 	return nil
-}
-
-type RaiseEventWorkflowResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-}
-
-func (x *RaiseEventWorkflowResponse) Reset() {
-	*x = RaiseEventWorkflowResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[63]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *RaiseEventWorkflowResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RaiseEventWorkflowResponse) ProtoMessage() {}
-
-func (x *RaiseEventWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[63]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RaiseEventWorkflowResponse.ProtoReflect.Descriptor instead.
-func (*RaiseEventWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{63}
 }
 
 var File_dapr_proto_runtime_v1_dapr_proto protoreflect.FileDescriptor
@@ -4792,82 +5803,202 @@ var file_dapr_proto_runtime_v1_dapr_proto_rawDesc = []byte{
 	0x54, 0x10, 0x01, 0x12, 0x1a, 0x0a, 0x16, 0x4c, 0x4f, 0x43, 0x4b, 0x5f, 0x42, 0x45, 0x4c, 0x4f,
 	0x4e, 0x47, 0x53, 0x5f, 0x54, 0x4f, 0x5f, 0x4f, 0x54, 0x48, 0x45, 0x52, 0x53, 0x10, 0x02, 0x12,
 	0x12, 0x0a, 0x0e, 0x49, 0x4e, 0x54, 0x45, 0x52, 0x4e, 0x41, 0x4c, 0x5f, 0x45, 0x52, 0x52, 0x4f,
-	0x52, 0x10, 0x03, 0x22, 0x34, 0x0a, 0x11, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52,
-	0x65, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e, 0x73, 0x74,
-	0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x69,
-	0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x22, 0x89, 0x01, 0x0a, 0x12, 0x47, 0x65,
-	0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49,
-	0x64, 0x12, 0x2d, 0x0a, 0x12, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x6f,
-	0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x77,
-	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74,
-	0x12, 0x23, 0x0a, 0x0d, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x6e, 0x61, 0x6d,
-	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f,
-	0x77, 0x4e, 0x61, 0x6d, 0x65, 0x22, 0xe8, 0x01, 0x0a, 0x13, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72,
-	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1f, 0x0a,
-	0x0b, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d,
-	0x0a, 0x0a, 0x73, 0x74, 0x61, 0x72, 0x74, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x03, 0x52, 0x09, 0x73, 0x74, 0x61, 0x72, 0x74, 0x54, 0x69, 0x6d, 0x65, 0x12, 0x54, 0x0a,
-	0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32,
-	0x38, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
-	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66,
-	0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x4d, 0x65, 0x74, 0x61,
-	0x64, 0x61, 0x74, 0x61, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64,
-	0x61, 0x74, 0x61, 0x1a, 0x3b, 0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45,
+	0x52, 0x10, 0x03, 0x22, 0xca, 0x01, 0x0a, 0x19, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x47, 0x65,
+	0x74, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x12, 0x25, 0x0a, 0x0e, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x5f, 0x6e,
+	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x63, 0x6f, 0x6d, 0x70, 0x6f,
+	0x6e, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x52, 0x0a, 0x06,
+	0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x3a, 0x2e, 0x64,
+	0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x47, 0x65, 0x74, 0x4b, 0x65,
+	0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x4b,
+	0x65, 0x79, 0x46, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x52, 0x06, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74,
+	0x22, 0x1e, 0x0a, 0x09, 0x4b, 0x65, 0x79, 0x46, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x12, 0x07, 0x0a,
+	0x03, 0x50, 0x45, 0x4d, 0x10, 0x00, 0x12, 0x08, 0x0a, 0x04, 0x4a, 0x53, 0x4f, 0x4e, 0x10, 0x01,
+	0x22, 0x4f, 0x0a, 0x1a, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x47, 0x65, 0x74, 0x4b, 0x65, 0x79,
+	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x12,
+	0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61,
+	0x6d, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x5f, 0x6b, 0x65, 0x79,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x4b, 0x65,
+	0x79, 0x22, 0xd9, 0x01, 0x0a, 0x1a, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x45, 0x6e, 0x63, 0x72,
+	0x79, 0x70, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x12, 0x25, 0x0a, 0x0e, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61,
+	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e,
+	0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x70, 0x6c, 0x61, 0x69, 0x6e,
+	0x74, 0x65, 0x78, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x70, 0x6c, 0x61, 0x69,
+	0x6e, 0x74, 0x65, 0x78, 0x74, 0x12, 0x1c, 0x0a, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69, 0x74,
+	0x68, 0x6d, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69,
+	0x74, 0x68, 0x6d, 0x12, 0x19, 0x0a, 0x08, 0x6b, 0x65, 0x79, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6b, 0x65, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x14,
+	0x0a, 0x05, 0x6e, 0x6f, 0x6e, 0x63, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x05, 0x6e,
+	0x6f, 0x6e, 0x63, 0x65, 0x12, 0x27, 0x0a, 0x0f, 0x61, 0x73, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x74,
+	0x65, 0x64, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e, 0x61,
+	0x73, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x74, 0x65, 0x64, 0x44, 0x61, 0x74, 0x61, 0x22, 0x4f, 0x0a,
+	0x1b, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x45, 0x6e, 0x63, 0x72, 0x79, 0x70, 0x74, 0x41, 0x6c,
+	0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1e, 0x0a, 0x0a,
+	0x63, 0x69, 0x70, 0x68, 0x65, 0x72, 0x74, 0x65, 0x78, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x0a, 0x63, 0x69, 0x70, 0x68, 0x65, 0x72, 0x74, 0x65, 0x78, 0x74, 0x12, 0x10, 0x0a, 0x03,
+	0x74, 0x61, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x74, 0x61, 0x67, 0x22, 0xed,
+	0x01, 0x0a, 0x1a, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x44, 0x65, 0x63, 0x72, 0x79, 0x70, 0x74,
+	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x25, 0x0a,
+	0x0e, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74,
+	0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1e, 0x0a, 0x0a, 0x63, 0x69, 0x70, 0x68, 0x65, 0x72, 0x74, 0x65,
+	0x78, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x63, 0x69, 0x70, 0x68, 0x65, 0x72,
+	0x74, 0x65, 0x78, 0x74, 0x12, 0x1c, 0x0a, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69, 0x74, 0x68,
+	0x6d, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69, 0x74,
+	0x68, 0x6d, 0x12, 0x19, 0x0a, 0x08, 0x6b, 0x65, 0x79, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6b, 0x65, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x14, 0x0a,
+	0x05, 0x6e, 0x6f, 0x6e, 0x63, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x05, 0x6e, 0x6f,
+	0x6e, 0x63, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x74, 0x61, 0x67, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x03, 0x74, 0x61, 0x67, 0x12, 0x27, 0x0a, 0x0f, 0x61, 0x73, 0x73, 0x6f, 0x63, 0x69, 0x61,
+	0x74, 0x65, 0x64, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e,
+	0x61, 0x73, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x74, 0x65, 0x64, 0x44, 0x61, 0x74, 0x61, 0x22, 0x3b,
+	0x0a, 0x1b, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x44, 0x65, 0x63, 0x72, 0x79, 0x70, 0x74, 0x41,
+	0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1c, 0x0a,
+	0x09, 0x70, 0x6c, 0x61, 0x69, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x09, 0x70, 0x6c, 0x61, 0x69, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x22, 0xe0, 0x01, 0x0a, 0x1a,
+	0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x57, 0x72, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70,
+	0x68, 0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x25, 0x0a, 0x0e, 0x63, 0x6f,
+	0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x0d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d,
+	0x65, 0x12, 0x23, 0x0a, 0x0d, 0x70, 0x6c, 0x61, 0x69, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x5f, 0x6b,
+	0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0c, 0x70, 0x6c, 0x61, 0x69, 0x6e, 0x74,
+	0x65, 0x78, 0x74, 0x4b, 0x65, 0x79, 0x12, 0x1c, 0x0a, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69,
+	0x74, 0x68, 0x6d, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72,
+	0x69, 0x74, 0x68, 0x6d, 0x12, 0x19, 0x0a, 0x08, 0x6b, 0x65, 0x79, 0x5f, 0x6e, 0x61, 0x6d, 0x65,
+	0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6b, 0x65, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x12,
+	0x14, 0x0a, 0x05, 0x6e, 0x6f, 0x6e, 0x63, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x05,
+	0x6e, 0x6f, 0x6e, 0x63, 0x65, 0x12, 0x27, 0x0a, 0x0f, 0x61, 0x73, 0x73, 0x6f, 0x63, 0x69, 0x61,
+	0x74, 0x65, 0x64, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e,
+	0x61, 0x73, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x74, 0x65, 0x64, 0x44, 0x61, 0x74, 0x61, 0x22, 0x50,
+	0x0a, 0x1b, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x57, 0x72, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x41,
+	0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1f, 0x0a,
+	0x0b, 0x77, 0x72, 0x61, 0x70, 0x70, 0x65, 0x64, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0c, 0x52, 0x0a, 0x77, 0x72, 0x61, 0x70, 0x70, 0x65, 0x64, 0x4b, 0x65, 0x79, 0x12, 0x10,
+	0x0a, 0x03, 0x74, 0x61, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x74, 0x61, 0x67,
+	0x22, 0xf0, 0x01, 0x0a, 0x1c, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x55, 0x6e, 0x77, 0x72, 0x61,
+	0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x12, 0x25, 0x0a, 0x0e, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x5f, 0x6e,
+	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x63, 0x6f, 0x6d, 0x70, 0x6f,
+	0x6e, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x77, 0x72, 0x61, 0x70,
+	0x70, 0x65, 0x64, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x77,
+	0x72, 0x61, 0x70, 0x70, 0x65, 0x64, 0x4b, 0x65, 0x79, 0x12, 0x1c, 0x0a, 0x09, 0x61, 0x6c, 0x67,
+	0x6f, 0x72, 0x69, 0x74, 0x68, 0x6d, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x6c,
+	0x67, 0x6f, 0x72, 0x69, 0x74, 0x68, 0x6d, 0x12, 0x19, 0x0a, 0x08, 0x6b, 0x65, 0x79, 0x5f, 0x6e,
+	0x61, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6b, 0x65, 0x79, 0x4e, 0x61,
+	0x6d, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x6e, 0x6f, 0x6e, 0x63, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x05, 0x6e, 0x6f, 0x6e, 0x63, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x74, 0x61, 0x67, 0x18,
+	0x06, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x74, 0x61, 0x67, 0x12, 0x27, 0x0a, 0x0f, 0x61, 0x73,
+	0x73, 0x6f, 0x63, 0x69, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x07, 0x20,
+	0x01, 0x28, 0x0c, 0x52, 0x0e, 0x61, 0x73, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x74, 0x65, 0x64, 0x44,
+	0x61, 0x74, 0x61, 0x22, 0x44, 0x0a, 0x1d, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x55, 0x6e, 0x77,
+	0x72, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x23, 0x0a, 0x0d, 0x70, 0x6c, 0x61, 0x69, 0x6e, 0x74, 0x65, 0x78,
+	0x74, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0c, 0x70, 0x6c, 0x61,
+	0x69, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x4b, 0x65, 0x79, 0x22, 0x91, 0x01, 0x0a, 0x17, 0x53, 0x75,
+	0x62, 0x74, 0x6c, 0x65, 0x53, 0x69, 0x67, 0x6e, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x25, 0x0a, 0x0e, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65,
+	0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x63,
+	0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x16, 0x0a, 0x06,
+	0x64, 0x69, 0x67, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x06, 0x64, 0x69,
+	0x67, 0x65, 0x73, 0x74, 0x12, 0x1c, 0x0a, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69, 0x74, 0x68,
+	0x6d, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69, 0x74,
+	0x68, 0x6d, 0x12, 0x19, 0x0a, 0x08, 0x6b, 0x65, 0x79, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6b, 0x65, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x22, 0x38, 0x0a,
+	0x18, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x53, 0x69, 0x67, 0x6e, 0x41, 0x6c, 0x70, 0x68, 0x61,
+	0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x73, 0x69, 0x67,
+	0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x73, 0x69,
+	0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x22, 0xb1, 0x01, 0x0a, 0x19, 0x53, 0x75, 0x62, 0x74,
+	0x6c, 0x65, 0x56, 0x65, 0x72, 0x69, 0x66, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x25, 0x0a, 0x0e, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65,
+	0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x63,
+	0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x16, 0x0a, 0x06,
+	0x64, 0x69, 0x67, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x06, 0x64, 0x69,
+	0x67, 0x65, 0x73, 0x74, 0x12, 0x1c, 0x0a, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69, 0x74, 0x68,
+	0x6d, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x6c, 0x67, 0x6f, 0x72, 0x69, 0x74,
+	0x68, 0x6d, 0x12, 0x19, 0x0a, 0x08, 0x6b, 0x65, 0x79, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6b, 0x65, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1c, 0x0a,
+	0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x22, 0x32, 0x0a, 0x1a, 0x53,
+	0x75, 0x62, 0x74, 0x6c, 0x65, 0x56, 0x65, 0x72, 0x69, 0x66, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61,
+	0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x22,
+	0x34, 0x0a, 0x11, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x66, 0x65, 0x72,
+	0x65, 0x6e, 0x63, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65,
+	0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74, 0x61,
+	0x6e, 0x63, 0x65, 0x49, 0x64, 0x22, 0x89, 0x01, 0x0a, 0x12, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72,
+	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b,
+	0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2d, 0x0a,
+	0x12, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e,
+	0x65, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x77, 0x6f, 0x72, 0x6b, 0x66,
+	0x6c, 0x6f, 0x77, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x12, 0x23, 0x0a, 0x0d,
+	0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0c, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x4e, 0x61, 0x6d,
+	0x65, 0x22, 0xe8, 0x01, 0x0a, 0x13, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f,
+	0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e, 0x73,
+	0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a,
+	0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x73, 0x74,
+	0x61, 0x72, 0x74, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09,
+	0x73, 0x74, 0x61, 0x72, 0x74, 0x54, 0x69, 0x6d, 0x65, 0x12, 0x54, 0x0a, 0x08, 0x6d, 0x65, 0x74,
+	0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x64, 0x61,
+	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61,
+	0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x1a,
+	0x3b, 0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45, 0x6e, 0x74, 0x72, 0x79,
+	0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b,
+	0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0xb1, 0x02, 0x0a,
+	0x14, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63,
+	0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74,
+	0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2d, 0x0a, 0x12, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
+	0x6f, 0x77, 0x5f, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x11, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x43, 0x6f, 0x6d, 0x70,
+	0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f,
+	0x77, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x77, 0x6f,
+	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x52, 0x0a, 0x07, 0x6f, 0x70,
+	0x74, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x64, 0x61,
+	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f,
+	0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x4f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73,
+	0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x07, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x14,
+	0x0a, 0x05, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x05, 0x69,
+	0x6e, 0x70, 0x75, 0x74, 0x1a, 0x3a, 0x0a, 0x0c, 0x4f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x45,
 	0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
 	0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18,
 	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01,
-	0x22, 0xb1, 0x02, 0x0a, 0x14, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e, 0x73,
-	0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a,
-	0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2d, 0x0a, 0x12, 0x77, 0x6f,
-	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
-	0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x77, 0x6f, 0x72,
-	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x0c, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x52,
-	0x0a, 0x07, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32,
-	0x38, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
-	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72,
-	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x4f, 0x70, 0x74,
-	0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x07, 0x6f, 0x70, 0x74, 0x69, 0x6f,
-	0x6e, 0x73, 0x12, 0x14, 0x0a, 0x05, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x18, 0x05, 0x20, 0x01, 0x28,
-	0x0c, 0x52, 0x05, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x1a, 0x3a, 0x0a, 0x0c, 0x4f, 0x70, 0x74, 0x69,
-	0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61,
-	0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
-	0x3a, 0x02, 0x38, 0x01, 0x22, 0x6a, 0x0a, 0x18, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74,
+	0x22, 0x69, 0x0a, 0x17, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x63, 0x74, 0x69,
+	0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x69,
+	0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2d, 0x0a, 0x12,
+	0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65,
+	0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
+	0x6f, 0x77, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x22, 0x1b, 0x0a, 0x19, 0x54,
+	0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x66, 0x0a, 0x14, 0x50, 0x75, 0x72, 0x67,
 	0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
 	0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18,
 	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49,
 	0x64, 0x12, 0x2d, 0x0a, 0x12, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x6f,
 	0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x77,
 	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74,
-	0x22, 0x1b, 0x0a, 0x19, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72,
-	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x66, 0x0a,
-	0x14, 0x50, 0x75, 0x72, 0x67, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63,
-	0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74,
-	0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2d, 0x0a, 0x12, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x5f, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x11, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x43, 0x6f, 0x6d, 0x70,
-	0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x22, 0x17, 0x0a, 0x15, 0x50, 0x75, 0x72, 0x67, 0x65, 0x57, 0x6f,
-	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xa0,
-	0x01, 0x0a, 0x19, 0x52, 0x61, 0x69, 0x73, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x57, 0x6f, 0x72,
-	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b,
-	0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x0a, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2d, 0x0a,
-	0x12, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e,
-	0x65, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x77, 0x6f, 0x72, 0x6b, 0x66,
-	0x6c, 0x6f, 0x77, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x12, 0x1d, 0x0a, 0x0a,
-	0x65, 0x76, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x09, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x69,
-	0x6e, 0x70, 0x75, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x05, 0x69, 0x6e, 0x70, 0x75,
-	0x74, 0x22, 0x1c, 0x0a, 0x1a, 0x52, 0x61, 0x69, 0x73, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x57,
-	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32,
-	0x83, 0x1c, 0x0a, 0x04, 0x44, 0x61, 0x70, 0x72, 0x12, 0x64, 0x0a, 0x0d, 0x49, 0x6e, 0x76, 0x6f,
+	0x22, 0x1a, 0x0a, 0x18, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x63, 0x74, 0x69,
+	0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xa0, 0x01, 0x0a,
+	0x19, 0x52, 0x61, 0x69, 0x73, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66,
+	0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x69, 0x6e,
+	0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x0a, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2d, 0x0a, 0x12, 0x77,
+	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e,
+	0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f,
+	0x77, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x65, 0x76,
+	0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09,
+	0x65, 0x76, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x69, 0x6e, 0x70,
+	0x75, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x05, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x32,
+	0xe0, 0x24, 0x0a, 0x04, 0x44, 0x61, 0x70, 0x72, 0x12, 0x64, 0x0a, 0x0d, 0x49, 0x6e, 0x76, 0x6f,
 	0x6b, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72,
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76,
 	0x31, 0x2e, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52,
@@ -5050,55 +6181,125 @@ var file_dapr_proto_runtime_v1_dapr_proto_rawDesc = []byte{
 	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61,
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22,
-	0x00, 0x12, 0x6e, 0x0a, 0x13, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x28, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f,
-	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x22,
-	0x00, 0x12, 0x6c, 0x0a, 0x11, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
-	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x29, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47,
-	0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x1a, 0x2a, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72,
-	0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72,
-	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12,
-	0x7e, 0x0a, 0x17, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72, 0x6b,
-	0x66, 0x6c, 0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x2f, 0x2e, 0x64, 0x61, 0x70,
-	0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e,
-	0x76, 0x31, 0x2e, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72, 0x6b,
-	0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x30, 0x2e, 0x64, 0x61,
-	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
-	0x2e, 0x76, 0x31, 0x2e, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72,
-	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12,
-	0x81, 0x01, 0x0a, 0x18, 0x52, 0x61, 0x69, 0x73, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x57, 0x6f,
-	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x30, 0x2e, 0x64,
-	0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d,
-	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x61, 0x69, 0x73, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x57,
-	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31,
-	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74,
-	0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x61, 0x69, 0x73, 0x65, 0x45, 0x76, 0x65, 0x6e,
-	0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x22, 0x00, 0x12, 0x72, 0x0a, 0x13, 0x50, 0x75, 0x72, 0x67, 0x65, 0x57, 0x6f, 0x72, 0x6b,
-	0x66, 0x6c, 0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x2b, 0x2e, 0x64, 0x61, 0x70,
-	0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e,
-	0x76, 0x31, 0x2e, 0x50, 0x75, 0x72, 0x67, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70,
+	0x00, 0x12, 0x79, 0x0a, 0x12, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x47, 0x65, 0x74, 0x4b, 0x65,
+	0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x30, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70,
 	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e,
-	0x50, 0x75, 0x72, 0x67, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x3c, 0x0a, 0x08, 0x53, 0x68, 0x75, 0x74, 0x64,
-	0x6f, 0x77, 0x6e, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x16, 0x2e, 0x67, 0x6f,
-	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d,
-	0x70, 0x74, 0x79, 0x22, 0x00, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72,
-	0x2e, 0x76, 0x31, 0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a,
-	0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72,
-	0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f,
-	0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69,
-	0x6d, 0x65, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74,
-	0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31,
-	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x47, 0x65, 0x74, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68,
+	0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x64, 0x61, 0x70, 0x72,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x47, 0x65, 0x74, 0x4b, 0x65, 0x79, 0x41, 0x6c,
+	0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7c, 0x0a, 0x13,
+	0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x45, 0x6e, 0x63, 0x72, 0x79, 0x70, 0x74, 0x41, 0x6c, 0x70,
+	0x68, 0x61, 0x31, 0x12, 0x31, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x74,
+	0x6c, 0x65, 0x45, 0x6e, 0x63, 0x72, 0x79, 0x70, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x32, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53,
+	0x75, 0x62, 0x74, 0x6c, 0x65, 0x45, 0x6e, 0x63, 0x72, 0x79, 0x70, 0x74, 0x41, 0x6c, 0x70, 0x68,
+	0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7c, 0x0a, 0x13, 0x53, 0x75,
+	0x62, 0x74, 0x6c, 0x65, 0x44, 0x65, 0x63, 0x72, 0x79, 0x70, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61,
+	0x31, 0x12, 0x31, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72,
+	0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65,
+	0x44, 0x65, 0x63, 0x72, 0x79, 0x70, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x32, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62,
+	0x74, 0x6c, 0x65, 0x44, 0x65, 0x63, 0x72, 0x79, 0x70, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7c, 0x0a, 0x13, 0x53, 0x75, 0x62, 0x74,
+	0x6c, 0x65, 0x57, 0x72, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12,
+	0x31, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
+	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x57, 0x72,
+	0x61, 0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x32, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
+	0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c,
+	0x65, 0x57, 0x72, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x82, 0x01, 0x0a, 0x15, 0x53, 0x75, 0x62, 0x74, 0x6c,
+	0x65, 0x55, 0x6e, 0x77, 0x72, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31,
+	0x12, 0x33, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75,
+	0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x55,
+	0x6e, 0x77, 0x72, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x34, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75,
+	0x62, 0x74, 0x6c, 0x65, 0x55, 0x6e, 0x77, 0x72, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x41, 0x6c, 0x70,
+	0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x73, 0x0a, 0x10, 0x53,
+	0x75, 0x62, 0x74, 0x6c, 0x65, 0x53, 0x69, 0x67, 0x6e, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12,
+	0x2e, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
+	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x53, 0x69,
+	0x67, 0x6e, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
+	0x2f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
+	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x53, 0x69,
+	0x67, 0x6e, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x79, 0x0a, 0x12, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x56, 0x65, 0x72, 0x69, 0x66, 0x79,
+	0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x30, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53,
+	0x75, 0x62, 0x74, 0x6c, 0x65, 0x56, 0x65, 0x72, 0x69, 0x66, 0x79, 0x41, 0x6c, 0x70, 0x68, 0x61,
+	0x31, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31,
+	0x2e, 0x53, 0x75, 0x62, 0x74, 0x6c, 0x65, 0x56, 0x65, 0x72, 0x69, 0x66, 0x79, 0x41, 0x6c, 0x70,
+	0x68, 0x61, 0x31, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6e, 0x0a, 0x13, 0x53,
+	0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68,
+	0x61, 0x31, 0x12, 0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
+	0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74,
+	0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
+	0x28, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
+	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
+	0x52, 0x65, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x22, 0x00, 0x12, 0x6c, 0x0a, 0x11, 0x47,
+	0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31,
+	0x12, 0x29, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75,
+	0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b,
+	0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2a, 0x2e, 0x64, 0x61,
+	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x7c, 0x0a, 0x17, 0x54, 0x65, 0x72,
+	0x6d, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x6c,
+	0x70, 0x68, 0x61, 0x31, 0x12, 0x2e, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72,
+	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x2f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72,
+	0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x78, 0x0a, 0x13, 0x50, 0x61, 0x75, 0x73, 0x65,
+	0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x2e,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74,
+	0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41,
+	0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2f,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74,
+	0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41,
+	0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
+	0x00, 0x12, 0x79, 0x0a, 0x14, 0x52, 0x65, 0x73, 0x75, 0x6d, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66,
+	0x6c, 0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x2e, 0x2e, 0x64, 0x61, 0x70, 0x72,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69,
+	0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2f, 0x2e, 0x64, 0x61, 0x70, 0x72,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69,
+	0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x7f, 0x0a, 0x18,
+	0x52, 0x61, 0x69, 0x73, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
+	0x6f, 0x77, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x30, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31,
+	0x2e, 0x52, 0x61, 0x69, 0x73, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66,
+	0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2f, 0x2e, 0x64, 0x61, 0x70,
+	0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e,
+	0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x63, 0x74, 0x69, 0x76,
+	0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x75, 0x0a,
+	0x13, 0x50, 0x75, 0x72, 0x67, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x6c,
+	0x70, 0x68, 0x61, 0x31, 0x12, 0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x75, 0x72,
+	0x67, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x2f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72,
+	0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
+	0x6f, 0x77, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x22, 0x00, 0x12, 0x3c, 0x0a, 0x08, 0x53, 0x68, 0x75, 0x74, 0x64, 0x6f, 0x77, 0x6e,
+	0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62,
+	0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c,
+	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79,
+	0x22, 0x00, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31,
+	0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31, 0x67, 0x69,
+	0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61,
+	0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75, 0x6e,
+	0x74, 0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0xaa,
+	0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75,
+	0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -5113,237 +6314,270 @@ func file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescData
 }
 
-var file_dapr_proto_runtime_v1_dapr_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_dapr_proto_runtime_v1_dapr_proto_msgTypes = make([]protoimpl.MessageInfo, 92)
+var file_dapr_proto_runtime_v1_dapr_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_dapr_proto_runtime_v1_dapr_proto_msgTypes = make([]protoimpl.MessageInfo, 105)
 var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	(UnlockResponse_Status)(0),                  // 0: dapr.proto.runtime.v1.UnlockResponse.Status
-	(*InvokeServiceRequest)(nil),                // 1: dapr.proto.runtime.v1.InvokeServiceRequest
-	(*GetStateRequest)(nil),                     // 2: dapr.proto.runtime.v1.GetStateRequest
-	(*GetBulkStateRequest)(nil),                 // 3: dapr.proto.runtime.v1.GetBulkStateRequest
-	(*GetBulkStateResponse)(nil),                // 4: dapr.proto.runtime.v1.GetBulkStateResponse
-	(*BulkStateItem)(nil),                       // 5: dapr.proto.runtime.v1.BulkStateItem
-	(*GetStateResponse)(nil),                    // 6: dapr.proto.runtime.v1.GetStateResponse
-	(*DeleteStateRequest)(nil),                  // 7: dapr.proto.runtime.v1.DeleteStateRequest
-	(*DeleteBulkStateRequest)(nil),              // 8: dapr.proto.runtime.v1.DeleteBulkStateRequest
-	(*SaveStateRequest)(nil),                    // 9: dapr.proto.runtime.v1.SaveStateRequest
-	(*QueryStateRequest)(nil),                   // 10: dapr.proto.runtime.v1.QueryStateRequest
-	(*QueryStateItem)(nil),                      // 11: dapr.proto.runtime.v1.QueryStateItem
-	(*QueryStateResponse)(nil),                  // 12: dapr.proto.runtime.v1.QueryStateResponse
-	(*PublishEventRequest)(nil),                 // 13: dapr.proto.runtime.v1.PublishEventRequest
-	(*BulkPublishRequest)(nil),                  // 14: dapr.proto.runtime.v1.BulkPublishRequest
-	(*BulkPublishRequestEntry)(nil),             // 15: dapr.proto.runtime.v1.BulkPublishRequestEntry
-	(*BulkPublishResponse)(nil),                 // 16: dapr.proto.runtime.v1.BulkPublishResponse
-	(*BulkPublishResponseFailedEntry)(nil),      // 17: dapr.proto.runtime.v1.BulkPublishResponseFailedEntry
-	(*InvokeBindingRequest)(nil),                // 18: dapr.proto.runtime.v1.InvokeBindingRequest
-	(*InvokeBindingResponse)(nil),               // 19: dapr.proto.runtime.v1.InvokeBindingResponse
-	(*GetSecretRequest)(nil),                    // 20: dapr.proto.runtime.v1.GetSecretRequest
-	(*GetSecretResponse)(nil),                   // 21: dapr.proto.runtime.v1.GetSecretResponse
-	(*GetBulkSecretRequest)(nil),                // 22: dapr.proto.runtime.v1.GetBulkSecretRequest
-	(*SecretResponse)(nil),                      // 23: dapr.proto.runtime.v1.SecretResponse
-	(*GetBulkSecretResponse)(nil),               // 24: dapr.proto.runtime.v1.GetBulkSecretResponse
-	(*TransactionalStateOperation)(nil),         // 25: dapr.proto.runtime.v1.TransactionalStateOperation
-	(*ExecuteStateTransactionRequest)(nil),      // 26: dapr.proto.runtime.v1.ExecuteStateTransactionRequest
-	(*RegisterActorTimerRequest)(nil),           // 27: dapr.proto.runtime.v1.RegisterActorTimerRequest
-	(*UnregisterActorTimerRequest)(nil),         // 28: dapr.proto.runtime.v1.UnregisterActorTimerRequest
-	(*RegisterActorReminderRequest)(nil),        // 29: dapr.proto.runtime.v1.RegisterActorReminderRequest
-	(*UnregisterActorReminderRequest)(nil),      // 30: dapr.proto.runtime.v1.UnregisterActorReminderRequest
-	(*RenameActorReminderRequest)(nil),          // 31: dapr.proto.runtime.v1.RenameActorReminderRequest
-	(*GetActorStateRequest)(nil),                // 32: dapr.proto.runtime.v1.GetActorStateRequest
-	(*GetActorStateResponse)(nil),               // 33: dapr.proto.runtime.v1.GetActorStateResponse
-	(*ExecuteActorStateTransactionRequest)(nil), // 34: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
-	(*TransactionalActorStateOperation)(nil),    // 35: dapr.proto.runtime.v1.TransactionalActorStateOperation
-	(*InvokeActorRequest)(nil),                  // 36: dapr.proto.runtime.v1.InvokeActorRequest
-	(*InvokeActorResponse)(nil),                 // 37: dapr.proto.runtime.v1.InvokeActorResponse
-	(*GetMetadataResponse)(nil),                 // 38: dapr.proto.runtime.v1.GetMetadataResponse
-	(*ActiveActorsCount)(nil),                   // 39: dapr.proto.runtime.v1.ActiveActorsCount
-	(*RegisteredComponents)(nil),                // 40: dapr.proto.runtime.v1.RegisteredComponents
-	(*PubsubSubscription)(nil),                  // 41: dapr.proto.runtime.v1.PubsubSubscription
-	(*PubsubSubscriptionRules)(nil),             // 42: dapr.proto.runtime.v1.PubsubSubscriptionRules
-	(*PubsubSubscriptionRule)(nil),              // 43: dapr.proto.runtime.v1.PubsubSubscriptionRule
-	(*SetMetadataRequest)(nil),                  // 44: dapr.proto.runtime.v1.SetMetadataRequest
-	(*GetConfigurationRequest)(nil),             // 45: dapr.proto.runtime.v1.GetConfigurationRequest
-	(*GetConfigurationResponse)(nil),            // 46: dapr.proto.runtime.v1.GetConfigurationResponse
-	(*SubscribeConfigurationRequest)(nil),       // 47: dapr.proto.runtime.v1.SubscribeConfigurationRequest
-	(*UnsubscribeConfigurationRequest)(nil),     // 48: dapr.proto.runtime.v1.UnsubscribeConfigurationRequest
-	(*SubscribeConfigurationResponse)(nil),      // 49: dapr.proto.runtime.v1.SubscribeConfigurationResponse
-	(*UnsubscribeConfigurationResponse)(nil),    // 50: dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
-	(*TryLockRequest)(nil),                      // 51: dapr.proto.runtime.v1.TryLockRequest
-	(*TryLockResponse)(nil),                     // 52: dapr.proto.runtime.v1.TryLockResponse
-	(*UnlockRequest)(nil),                       // 53: dapr.proto.runtime.v1.UnlockRequest
-	(*UnlockResponse)(nil),                      // 54: dapr.proto.runtime.v1.UnlockResponse
-	(*WorkflowReference)(nil),                   // 55: dapr.proto.runtime.v1.WorkflowReference
-	(*GetWorkflowRequest)(nil),                  // 56: dapr.proto.runtime.v1.GetWorkflowRequest
-	(*GetWorkflowResponse)(nil),                 // 57: dapr.proto.runtime.v1.GetWorkflowResponse
-	(*StartWorkflowRequest)(nil),                // 58: dapr.proto.runtime.v1.StartWorkflowRequest
-	(*TerminateWorkflowRequest)(nil),            // 59: dapr.proto.runtime.v1.TerminateWorkflowRequest
-	(*TerminateWorkflowResponse)(nil),           // 60: dapr.proto.runtime.v1.TerminateWorkflowResponse
-	(*PurgeWorkflowRequest)(nil),                // 61: dapr.proto.runtime.v1.PurgeWorkflowRequest
-	(*PurgeWorkflowResponse)(nil),               // 62: dapr.proto.runtime.v1.PurgeWorkflowResponse
-	(*RaiseEventWorkflowRequest)(nil),           // 63: dapr.proto.runtime.v1.RaiseEventWorkflowRequest
-	(*RaiseEventWorkflowResponse)(nil),          // 64: dapr.proto.runtime.v1.RaiseEventWorkflowResponse
-	nil,                                         // 65: dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
-	nil,                                         // 66: dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
-	nil,                                         // 67: dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
-	nil,                                         // 68: dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
-	nil,                                         // 69: dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
-	nil,                                         // 70: dapr.proto.runtime.v1.QueryStateRequest.MetadataEntry
-	nil,                                         // 71: dapr.proto.runtime.v1.QueryStateResponse.MetadataEntry
-	nil,                                         // 72: dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
-	nil,                                         // 73: dapr.proto.runtime.v1.BulkPublishRequest.MetadataEntry
-	nil,                                         // 74: dapr.proto.runtime.v1.BulkPublishRequestEntry.MetadataEntry
-	nil,                                         // 75: dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
-	nil,                                         // 76: dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
-	nil,                                         // 77: dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
-	nil,                                         // 78: dapr.proto.runtime.v1.GetSecretResponse.DataEntry
-	nil,                                         // 79: dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
-	nil,                                         // 80: dapr.proto.runtime.v1.SecretResponse.SecretsEntry
-	nil,                                         // 81: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
-	nil,                                         // 82: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
-	nil,                                         // 83: dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
-	nil,                                         // 84: dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
-	nil,                                         // 85: dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
-	nil,                                         // 86: dapr.proto.runtime.v1.PubsubSubscription.MetadataEntry
-	nil,                                         // 87: dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
-	nil,                                         // 88: dapr.proto.runtime.v1.GetConfigurationResponse.ItemsEntry
-	nil,                                         // 89: dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
-	nil,                                         // 90: dapr.proto.runtime.v1.SubscribeConfigurationResponse.ItemsEntry
-	nil,                                         // 91: dapr.proto.runtime.v1.GetWorkflowResponse.MetadataEntry
-	nil,                                         // 92: dapr.proto.runtime.v1.StartWorkflowRequest.OptionsEntry
-	(*v1.InvokeRequest)(nil),                    // 93: dapr.proto.common.v1.InvokeRequest
-	(v1.StateOptions_StateConsistency)(0),       // 94: dapr.proto.common.v1.StateOptions.StateConsistency
-	(*v1.Etag)(nil),                             // 95: dapr.proto.common.v1.Etag
-	(*v1.StateOptions)(nil),                     // 96: dapr.proto.common.v1.StateOptions
-	(*v1.StateItem)(nil),                        // 97: dapr.proto.common.v1.StateItem
-	(*anypb.Any)(nil),                           // 98: google.protobuf.Any
-	(*v1.ConfigurationItem)(nil),                // 99: dapr.proto.common.v1.ConfigurationItem
-	(*emptypb.Empty)(nil),                       // 100: google.protobuf.Empty
-	(*v1.InvokeResponse)(nil),                   // 101: dapr.proto.common.v1.InvokeResponse
+	(SubtleGetKeyAlpha1Request_KeyFormat)(0),    // 1: dapr.proto.runtime.v1.SubtleGetKeyAlpha1Request.KeyFormat
+	(*InvokeServiceRequest)(nil),                // 2: dapr.proto.runtime.v1.InvokeServiceRequest
+	(*GetStateRequest)(nil),                     // 3: dapr.proto.runtime.v1.GetStateRequest
+	(*GetBulkStateRequest)(nil),                 // 4: dapr.proto.runtime.v1.GetBulkStateRequest
+	(*GetBulkStateResponse)(nil),                // 5: dapr.proto.runtime.v1.GetBulkStateResponse
+	(*BulkStateItem)(nil),                       // 6: dapr.proto.runtime.v1.BulkStateItem
+	(*GetStateResponse)(nil),                    // 7: dapr.proto.runtime.v1.GetStateResponse
+	(*DeleteStateRequest)(nil),                  // 8: dapr.proto.runtime.v1.DeleteStateRequest
+	(*DeleteBulkStateRequest)(nil),              // 9: dapr.proto.runtime.v1.DeleteBulkStateRequest
+	(*SaveStateRequest)(nil),                    // 10: dapr.proto.runtime.v1.SaveStateRequest
+	(*QueryStateRequest)(nil),                   // 11: dapr.proto.runtime.v1.QueryStateRequest
+	(*QueryStateItem)(nil),                      // 12: dapr.proto.runtime.v1.QueryStateItem
+	(*QueryStateResponse)(nil),                  // 13: dapr.proto.runtime.v1.QueryStateResponse
+	(*PublishEventRequest)(nil),                 // 14: dapr.proto.runtime.v1.PublishEventRequest
+	(*BulkPublishRequest)(nil),                  // 15: dapr.proto.runtime.v1.BulkPublishRequest
+	(*BulkPublishRequestEntry)(nil),             // 16: dapr.proto.runtime.v1.BulkPublishRequestEntry
+	(*BulkPublishResponse)(nil),                 // 17: dapr.proto.runtime.v1.BulkPublishResponse
+	(*BulkPublishResponseFailedEntry)(nil),      // 18: dapr.proto.runtime.v1.BulkPublishResponseFailedEntry
+	(*InvokeBindingRequest)(nil),                // 19: dapr.proto.runtime.v1.InvokeBindingRequest
+	(*InvokeBindingResponse)(nil),               // 20: dapr.proto.runtime.v1.InvokeBindingResponse
+	(*GetSecretRequest)(nil),                    // 21: dapr.proto.runtime.v1.GetSecretRequest
+	(*GetSecretResponse)(nil),                   // 22: dapr.proto.runtime.v1.GetSecretResponse
+	(*GetBulkSecretRequest)(nil),                // 23: dapr.proto.runtime.v1.GetBulkSecretRequest
+	(*SecretResponse)(nil),                      // 24: dapr.proto.runtime.v1.SecretResponse
+	(*GetBulkSecretResponse)(nil),               // 25: dapr.proto.runtime.v1.GetBulkSecretResponse
+	(*TransactionalStateOperation)(nil),         // 26: dapr.proto.runtime.v1.TransactionalStateOperation
+	(*ExecuteStateTransactionRequest)(nil),      // 27: dapr.proto.runtime.v1.ExecuteStateTransactionRequest
+	(*RegisterActorTimerRequest)(nil),           // 28: dapr.proto.runtime.v1.RegisterActorTimerRequest
+	(*UnregisterActorTimerRequest)(nil),         // 29: dapr.proto.runtime.v1.UnregisterActorTimerRequest
+	(*RegisterActorReminderRequest)(nil),        // 30: dapr.proto.runtime.v1.RegisterActorReminderRequest
+	(*UnregisterActorReminderRequest)(nil),      // 31: dapr.proto.runtime.v1.UnregisterActorReminderRequest
+	(*RenameActorReminderRequest)(nil),          // 32: dapr.proto.runtime.v1.RenameActorReminderRequest
+	(*GetActorStateRequest)(nil),                // 33: dapr.proto.runtime.v1.GetActorStateRequest
+	(*GetActorStateResponse)(nil),               // 34: dapr.proto.runtime.v1.GetActorStateResponse
+	(*ExecuteActorStateTransactionRequest)(nil), // 35: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
+	(*TransactionalActorStateOperation)(nil),    // 36: dapr.proto.runtime.v1.TransactionalActorStateOperation
+	(*InvokeActorRequest)(nil),                  // 37: dapr.proto.runtime.v1.InvokeActorRequest
+	(*InvokeActorResponse)(nil),                 // 38: dapr.proto.runtime.v1.InvokeActorResponse
+	(*GetMetadataResponse)(nil),                 // 39: dapr.proto.runtime.v1.GetMetadataResponse
+	(*ActiveActorsCount)(nil),                   // 40: dapr.proto.runtime.v1.ActiveActorsCount
+	(*RegisteredComponents)(nil),                // 41: dapr.proto.runtime.v1.RegisteredComponents
+	(*PubsubSubscription)(nil),                  // 42: dapr.proto.runtime.v1.PubsubSubscription
+	(*PubsubSubscriptionRules)(nil),             // 43: dapr.proto.runtime.v1.PubsubSubscriptionRules
+	(*PubsubSubscriptionRule)(nil),              // 44: dapr.proto.runtime.v1.PubsubSubscriptionRule
+	(*SetMetadataRequest)(nil),                  // 45: dapr.proto.runtime.v1.SetMetadataRequest
+	(*GetConfigurationRequest)(nil),             // 46: dapr.proto.runtime.v1.GetConfigurationRequest
+	(*GetConfigurationResponse)(nil),            // 47: dapr.proto.runtime.v1.GetConfigurationResponse
+	(*SubscribeConfigurationRequest)(nil),       // 48: dapr.proto.runtime.v1.SubscribeConfigurationRequest
+	(*UnsubscribeConfigurationRequest)(nil),     // 49: dapr.proto.runtime.v1.UnsubscribeConfigurationRequest
+	(*SubscribeConfigurationResponse)(nil),      // 50: dapr.proto.runtime.v1.SubscribeConfigurationResponse
+	(*UnsubscribeConfigurationResponse)(nil),    // 51: dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
+	(*TryLockRequest)(nil),                      // 52: dapr.proto.runtime.v1.TryLockRequest
+	(*TryLockResponse)(nil),                     // 53: dapr.proto.runtime.v1.TryLockResponse
+	(*UnlockRequest)(nil),                       // 54: dapr.proto.runtime.v1.UnlockRequest
+	(*UnlockResponse)(nil),                      // 55: dapr.proto.runtime.v1.UnlockResponse
+	(*SubtleGetKeyAlpha1Request)(nil),           // 56: dapr.proto.runtime.v1.SubtleGetKeyAlpha1Request
+	(*SubtleGetKeyAlpha1Response)(nil),          // 57: dapr.proto.runtime.v1.SubtleGetKeyAlpha1Response
+	(*SubtleEncryptAlpha1Request)(nil),          // 58: dapr.proto.runtime.v1.SubtleEncryptAlpha1Request
+	(*SubtleEncryptAlpha1Response)(nil),         // 59: dapr.proto.runtime.v1.SubtleEncryptAlpha1Response
+	(*SubtleDecryptAlpha1Request)(nil),          // 60: dapr.proto.runtime.v1.SubtleDecryptAlpha1Request
+	(*SubtleDecryptAlpha1Response)(nil),         // 61: dapr.proto.runtime.v1.SubtleDecryptAlpha1Response
+	(*SubtleWrapKeyAlpha1Request)(nil),          // 62: dapr.proto.runtime.v1.SubtleWrapKeyAlpha1Request
+	(*SubtleWrapKeyAlpha1Response)(nil),         // 63: dapr.proto.runtime.v1.SubtleWrapKeyAlpha1Response
+	(*SubtleUnwrapKeyAlpha1Request)(nil),        // 64: dapr.proto.runtime.v1.SubtleUnwrapKeyAlpha1Request
+	(*SubtleUnwrapKeyAlpha1Response)(nil),       // 65: dapr.proto.runtime.v1.SubtleUnwrapKeyAlpha1Response
+	(*SubtleSignAlpha1Request)(nil),             // 66: dapr.proto.runtime.v1.SubtleSignAlpha1Request
+	(*SubtleSignAlpha1Response)(nil),            // 67: dapr.proto.runtime.v1.SubtleSignAlpha1Response
+	(*SubtleVerifyAlpha1Request)(nil),           // 68: dapr.proto.runtime.v1.SubtleVerifyAlpha1Request
+	(*SubtleVerifyAlpha1Response)(nil),          // 69: dapr.proto.runtime.v1.SubtleVerifyAlpha1Response
+	(*WorkflowReference)(nil),                   // 70: dapr.proto.runtime.v1.WorkflowReference
+	(*GetWorkflowRequest)(nil),                  // 71: dapr.proto.runtime.v1.GetWorkflowRequest
+	(*GetWorkflowResponse)(nil),                 // 72: dapr.proto.runtime.v1.GetWorkflowResponse
+	(*StartWorkflowRequest)(nil),                // 73: dapr.proto.runtime.v1.StartWorkflowRequest
+	(*WorkflowActivityRequest)(nil),             // 74: dapr.proto.runtime.v1.WorkflowActivityRequest
+	(*TerminateWorkflowResponse)(nil),           // 75: dapr.proto.runtime.v1.TerminateWorkflowResponse
+	(*PurgeWorkflowRequest)(nil),                // 76: dapr.proto.runtime.v1.PurgeWorkflowRequest
+	(*WorkflowActivityResponse)(nil),            // 77: dapr.proto.runtime.v1.WorkflowActivityResponse
+	(*RaiseEventWorkflowRequest)(nil),           // 78: dapr.proto.runtime.v1.RaiseEventWorkflowRequest
+	nil,                                         // 79: dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
+	nil,                                         // 80: dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
+	nil,                                         // 81: dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
+	nil,                                         // 82: dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
+	nil,                                         // 83: dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
+	nil,                                         // 84: dapr.proto.runtime.v1.QueryStateRequest.MetadataEntry
+	nil,                                         // 85: dapr.proto.runtime.v1.QueryStateResponse.MetadataEntry
+	nil,                                         // 86: dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
+	nil,                                         // 87: dapr.proto.runtime.v1.BulkPublishRequest.MetadataEntry
+	nil,                                         // 88: dapr.proto.runtime.v1.BulkPublishRequestEntry.MetadataEntry
+	nil,                                         // 89: dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
+	nil,                                         // 90: dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
+	nil,                                         // 91: dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
+	nil,                                         // 92: dapr.proto.runtime.v1.GetSecretResponse.DataEntry
+	nil,                                         // 93: dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
+	nil,                                         // 94: dapr.proto.runtime.v1.SecretResponse.SecretsEntry
+	nil,                                         // 95: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
+	nil,                                         // 96: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
+	nil,                                         // 97: dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
+	nil,                                         // 98: dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
+	nil,                                         // 99: dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
+	nil,                                         // 100: dapr.proto.runtime.v1.PubsubSubscription.MetadataEntry
+	nil,                                         // 101: dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
+	nil,                                         // 102: dapr.proto.runtime.v1.GetConfigurationResponse.ItemsEntry
+	nil,                                         // 103: dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
+	nil,                                         // 104: dapr.proto.runtime.v1.SubscribeConfigurationResponse.ItemsEntry
+	nil,                                         // 105: dapr.proto.runtime.v1.GetWorkflowResponse.MetadataEntry
+	nil,                                         // 106: dapr.proto.runtime.v1.StartWorkflowRequest.OptionsEntry
+	(*v1.InvokeRequest)(nil),                    // 107: dapr.proto.common.v1.InvokeRequest
+	(v1.StateOptions_StateConsistency)(0),       // 108: dapr.proto.common.v1.StateOptions.StateConsistency
+	(*v1.Etag)(nil),                             // 109: dapr.proto.common.v1.Etag
+	(*v1.StateOptions)(nil),                     // 110: dapr.proto.common.v1.StateOptions
+	(*v1.StateItem)(nil),                        // 111: dapr.proto.common.v1.StateItem
+	(*anypb.Any)(nil),                           // 112: google.protobuf.Any
+	(*v1.ConfigurationItem)(nil),                // 113: dapr.proto.common.v1.ConfigurationItem
+	(*emptypb.Empty)(nil),                       // 114: google.protobuf.Empty
+	(*v1.InvokeResponse)(nil),                   // 115: dapr.proto.common.v1.InvokeResponse
 }
 var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
-	93,  // 0: dapr.proto.runtime.v1.InvokeServiceRequest.message:type_name -> dapr.proto.common.v1.InvokeRequest
-	94,  // 1: dapr.proto.runtime.v1.GetStateRequest.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
-	65,  // 2: dapr.proto.runtime.v1.GetStateRequest.metadata:type_name -> dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
-	66,  // 3: dapr.proto.runtime.v1.GetBulkStateRequest.metadata:type_name -> dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
-	5,   // 4: dapr.proto.runtime.v1.GetBulkStateResponse.items:type_name -> dapr.proto.runtime.v1.BulkStateItem
-	67,  // 5: dapr.proto.runtime.v1.BulkStateItem.metadata:type_name -> dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
-	68,  // 6: dapr.proto.runtime.v1.GetStateResponse.metadata:type_name -> dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
-	95,  // 7: dapr.proto.runtime.v1.DeleteStateRequest.etag:type_name -> dapr.proto.common.v1.Etag
-	96,  // 8: dapr.proto.runtime.v1.DeleteStateRequest.options:type_name -> dapr.proto.common.v1.StateOptions
-	69,  // 9: dapr.proto.runtime.v1.DeleteStateRequest.metadata:type_name -> dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
-	97,  // 10: dapr.proto.runtime.v1.DeleteBulkStateRequest.states:type_name -> dapr.proto.common.v1.StateItem
-	97,  // 11: dapr.proto.runtime.v1.SaveStateRequest.states:type_name -> dapr.proto.common.v1.StateItem
-	70,  // 12: dapr.proto.runtime.v1.QueryStateRequest.metadata:type_name -> dapr.proto.runtime.v1.QueryStateRequest.MetadataEntry
-	11,  // 13: dapr.proto.runtime.v1.QueryStateResponse.results:type_name -> dapr.proto.runtime.v1.QueryStateItem
-	71,  // 14: dapr.proto.runtime.v1.QueryStateResponse.metadata:type_name -> dapr.proto.runtime.v1.QueryStateResponse.MetadataEntry
-	72,  // 15: dapr.proto.runtime.v1.PublishEventRequest.metadata:type_name -> dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
-	15,  // 16: dapr.proto.runtime.v1.BulkPublishRequest.entries:type_name -> dapr.proto.runtime.v1.BulkPublishRequestEntry
-	73,  // 17: dapr.proto.runtime.v1.BulkPublishRequest.metadata:type_name -> dapr.proto.runtime.v1.BulkPublishRequest.MetadataEntry
-	74,  // 18: dapr.proto.runtime.v1.BulkPublishRequestEntry.metadata:type_name -> dapr.proto.runtime.v1.BulkPublishRequestEntry.MetadataEntry
-	17,  // 19: dapr.proto.runtime.v1.BulkPublishResponse.failedEntries:type_name -> dapr.proto.runtime.v1.BulkPublishResponseFailedEntry
-	75,  // 20: dapr.proto.runtime.v1.InvokeBindingRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
-	76,  // 21: dapr.proto.runtime.v1.InvokeBindingResponse.metadata:type_name -> dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
-	77,  // 22: dapr.proto.runtime.v1.GetSecretRequest.metadata:type_name -> dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
-	78,  // 23: dapr.proto.runtime.v1.GetSecretResponse.data:type_name -> dapr.proto.runtime.v1.GetSecretResponse.DataEntry
-	79,  // 24: dapr.proto.runtime.v1.GetBulkSecretRequest.metadata:type_name -> dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
-	80,  // 25: dapr.proto.runtime.v1.SecretResponse.secrets:type_name -> dapr.proto.runtime.v1.SecretResponse.SecretsEntry
-	81,  // 26: dapr.proto.runtime.v1.GetBulkSecretResponse.data:type_name -> dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
-	97,  // 27: dapr.proto.runtime.v1.TransactionalStateOperation.request:type_name -> dapr.proto.common.v1.StateItem
-	25,  // 28: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.operations:type_name -> dapr.proto.runtime.v1.TransactionalStateOperation
-	82,  // 29: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.metadata:type_name -> dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
-	35,  // 30: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest.operations:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation
-	98,  // 31: dapr.proto.runtime.v1.TransactionalActorStateOperation.value:type_name -> google.protobuf.Any
-	83,  // 32: dapr.proto.runtime.v1.TransactionalActorStateOperation.metadata:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
-	84,  // 33: dapr.proto.runtime.v1.InvokeActorRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
-	39,  // 34: dapr.proto.runtime.v1.GetMetadataResponse.active_actors_count:type_name -> dapr.proto.runtime.v1.ActiveActorsCount
-	40,  // 35: dapr.proto.runtime.v1.GetMetadataResponse.registered_components:type_name -> dapr.proto.runtime.v1.RegisteredComponents
-	85,  // 36: dapr.proto.runtime.v1.GetMetadataResponse.extended_metadata:type_name -> dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
-	41,  // 37: dapr.proto.runtime.v1.GetMetadataResponse.subscriptions:type_name -> dapr.proto.runtime.v1.PubsubSubscription
-	86,  // 38: dapr.proto.runtime.v1.PubsubSubscription.metadata:type_name -> dapr.proto.runtime.v1.PubsubSubscription.MetadataEntry
-	42,  // 39: dapr.proto.runtime.v1.PubsubSubscription.rules:type_name -> dapr.proto.runtime.v1.PubsubSubscriptionRules
-	43,  // 40: dapr.proto.runtime.v1.PubsubSubscriptionRules.rules:type_name -> dapr.proto.runtime.v1.PubsubSubscriptionRule
-	87,  // 41: dapr.proto.runtime.v1.GetConfigurationRequest.metadata:type_name -> dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
-	88,  // 42: dapr.proto.runtime.v1.GetConfigurationResponse.items:type_name -> dapr.proto.runtime.v1.GetConfigurationResponse.ItemsEntry
-	89,  // 43: dapr.proto.runtime.v1.SubscribeConfigurationRequest.metadata:type_name -> dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
-	90,  // 44: dapr.proto.runtime.v1.SubscribeConfigurationResponse.items:type_name -> dapr.proto.runtime.v1.SubscribeConfigurationResponse.ItemsEntry
+	107, // 0: dapr.proto.runtime.v1.InvokeServiceRequest.message:type_name -> dapr.proto.common.v1.InvokeRequest
+	108, // 1: dapr.proto.runtime.v1.GetStateRequest.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
+	79,  // 2: dapr.proto.runtime.v1.GetStateRequest.metadata:type_name -> dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
+	80,  // 3: dapr.proto.runtime.v1.GetBulkStateRequest.metadata:type_name -> dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
+	6,   // 4: dapr.proto.runtime.v1.GetBulkStateResponse.items:type_name -> dapr.proto.runtime.v1.BulkStateItem
+	81,  // 5: dapr.proto.runtime.v1.BulkStateItem.metadata:type_name -> dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
+	82,  // 6: dapr.proto.runtime.v1.GetStateResponse.metadata:type_name -> dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
+	109, // 7: dapr.proto.runtime.v1.DeleteStateRequest.etag:type_name -> dapr.proto.common.v1.Etag
+	110, // 8: dapr.proto.runtime.v1.DeleteStateRequest.options:type_name -> dapr.proto.common.v1.StateOptions
+	83,  // 9: dapr.proto.runtime.v1.DeleteStateRequest.metadata:type_name -> dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
+	111, // 10: dapr.proto.runtime.v1.DeleteBulkStateRequest.states:type_name -> dapr.proto.common.v1.StateItem
+	111, // 11: dapr.proto.runtime.v1.SaveStateRequest.states:type_name -> dapr.proto.common.v1.StateItem
+	84,  // 12: dapr.proto.runtime.v1.QueryStateRequest.metadata:type_name -> dapr.proto.runtime.v1.QueryStateRequest.MetadataEntry
+	12,  // 13: dapr.proto.runtime.v1.QueryStateResponse.results:type_name -> dapr.proto.runtime.v1.QueryStateItem
+	85,  // 14: dapr.proto.runtime.v1.QueryStateResponse.metadata:type_name -> dapr.proto.runtime.v1.QueryStateResponse.MetadataEntry
+	86,  // 15: dapr.proto.runtime.v1.PublishEventRequest.metadata:type_name -> dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
+	16,  // 16: dapr.proto.runtime.v1.BulkPublishRequest.entries:type_name -> dapr.proto.runtime.v1.BulkPublishRequestEntry
+	87,  // 17: dapr.proto.runtime.v1.BulkPublishRequest.metadata:type_name -> dapr.proto.runtime.v1.BulkPublishRequest.MetadataEntry
+	88,  // 18: dapr.proto.runtime.v1.BulkPublishRequestEntry.metadata:type_name -> dapr.proto.runtime.v1.BulkPublishRequestEntry.MetadataEntry
+	18,  // 19: dapr.proto.runtime.v1.BulkPublishResponse.failedEntries:type_name -> dapr.proto.runtime.v1.BulkPublishResponseFailedEntry
+	89,  // 20: dapr.proto.runtime.v1.InvokeBindingRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
+	90,  // 21: dapr.proto.runtime.v1.InvokeBindingResponse.metadata:type_name -> dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
+	91,  // 22: dapr.proto.runtime.v1.GetSecretRequest.metadata:type_name -> dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
+	92,  // 23: dapr.proto.runtime.v1.GetSecretResponse.data:type_name -> dapr.proto.runtime.v1.GetSecretResponse.DataEntry
+	93,  // 24: dapr.proto.runtime.v1.GetBulkSecretRequest.metadata:type_name -> dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
+	94,  // 25: dapr.proto.runtime.v1.SecretResponse.secrets:type_name -> dapr.proto.runtime.v1.SecretResponse.SecretsEntry
+	95,  // 26: dapr.proto.runtime.v1.GetBulkSecretResponse.data:type_name -> dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
+	111, // 27: dapr.proto.runtime.v1.TransactionalStateOperation.request:type_name -> dapr.proto.common.v1.StateItem
+	26,  // 28: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.operations:type_name -> dapr.proto.runtime.v1.TransactionalStateOperation
+	96,  // 29: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.metadata:type_name -> dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
+	36,  // 30: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest.operations:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation
+	112, // 31: dapr.proto.runtime.v1.TransactionalActorStateOperation.value:type_name -> google.protobuf.Any
+	97,  // 32: dapr.proto.runtime.v1.TransactionalActorStateOperation.metadata:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
+	98,  // 33: dapr.proto.runtime.v1.InvokeActorRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
+	40,  // 34: dapr.proto.runtime.v1.GetMetadataResponse.active_actors_count:type_name -> dapr.proto.runtime.v1.ActiveActorsCount
+	41,  // 35: dapr.proto.runtime.v1.GetMetadataResponse.registered_components:type_name -> dapr.proto.runtime.v1.RegisteredComponents
+	99,  // 36: dapr.proto.runtime.v1.GetMetadataResponse.extended_metadata:type_name -> dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
+	42,  // 37: dapr.proto.runtime.v1.GetMetadataResponse.subscriptions:type_name -> dapr.proto.runtime.v1.PubsubSubscription
+	100, // 38: dapr.proto.runtime.v1.PubsubSubscription.metadata:type_name -> dapr.proto.runtime.v1.PubsubSubscription.MetadataEntry
+	43,  // 39: dapr.proto.runtime.v1.PubsubSubscription.rules:type_name -> dapr.proto.runtime.v1.PubsubSubscriptionRules
+	44,  // 40: dapr.proto.runtime.v1.PubsubSubscriptionRules.rules:type_name -> dapr.proto.runtime.v1.PubsubSubscriptionRule
+	101, // 41: dapr.proto.runtime.v1.GetConfigurationRequest.metadata:type_name -> dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
+	102, // 42: dapr.proto.runtime.v1.GetConfigurationResponse.items:type_name -> dapr.proto.runtime.v1.GetConfigurationResponse.ItemsEntry
+	103, // 43: dapr.proto.runtime.v1.SubscribeConfigurationRequest.metadata:type_name -> dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
+	104, // 44: dapr.proto.runtime.v1.SubscribeConfigurationResponse.items:type_name -> dapr.proto.runtime.v1.SubscribeConfigurationResponse.ItemsEntry
 	0,   // 45: dapr.proto.runtime.v1.UnlockResponse.status:type_name -> dapr.proto.runtime.v1.UnlockResponse.Status
-	91,  // 46: dapr.proto.runtime.v1.GetWorkflowResponse.metadata:type_name -> dapr.proto.runtime.v1.GetWorkflowResponse.MetadataEntry
-	92,  // 47: dapr.proto.runtime.v1.StartWorkflowRequest.options:type_name -> dapr.proto.runtime.v1.StartWorkflowRequest.OptionsEntry
-	23,  // 48: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry.value:type_name -> dapr.proto.runtime.v1.SecretResponse
-	99,  // 49: dapr.proto.runtime.v1.GetConfigurationResponse.ItemsEntry.value:type_name -> dapr.proto.common.v1.ConfigurationItem
-	99,  // 50: dapr.proto.runtime.v1.SubscribeConfigurationResponse.ItemsEntry.value:type_name -> dapr.proto.common.v1.ConfigurationItem
-	1,   // 51: dapr.proto.runtime.v1.Dapr.InvokeService:input_type -> dapr.proto.runtime.v1.InvokeServiceRequest
-	2,   // 52: dapr.proto.runtime.v1.Dapr.GetState:input_type -> dapr.proto.runtime.v1.GetStateRequest
-	3,   // 53: dapr.proto.runtime.v1.Dapr.GetBulkState:input_type -> dapr.proto.runtime.v1.GetBulkStateRequest
-	9,   // 54: dapr.proto.runtime.v1.Dapr.SaveState:input_type -> dapr.proto.runtime.v1.SaveStateRequest
-	10,  // 55: dapr.proto.runtime.v1.Dapr.QueryStateAlpha1:input_type -> dapr.proto.runtime.v1.QueryStateRequest
-	7,   // 56: dapr.proto.runtime.v1.Dapr.DeleteState:input_type -> dapr.proto.runtime.v1.DeleteStateRequest
-	8,   // 57: dapr.proto.runtime.v1.Dapr.DeleteBulkState:input_type -> dapr.proto.runtime.v1.DeleteBulkStateRequest
-	26,  // 58: dapr.proto.runtime.v1.Dapr.ExecuteStateTransaction:input_type -> dapr.proto.runtime.v1.ExecuteStateTransactionRequest
-	13,  // 59: dapr.proto.runtime.v1.Dapr.PublishEvent:input_type -> dapr.proto.runtime.v1.PublishEventRequest
-	14,  // 60: dapr.proto.runtime.v1.Dapr.BulkPublishEventAlpha1:input_type -> dapr.proto.runtime.v1.BulkPublishRequest
-	18,  // 61: dapr.proto.runtime.v1.Dapr.InvokeBinding:input_type -> dapr.proto.runtime.v1.InvokeBindingRequest
-	20,  // 62: dapr.proto.runtime.v1.Dapr.GetSecret:input_type -> dapr.proto.runtime.v1.GetSecretRequest
-	22,  // 63: dapr.proto.runtime.v1.Dapr.GetBulkSecret:input_type -> dapr.proto.runtime.v1.GetBulkSecretRequest
-	27,  // 64: dapr.proto.runtime.v1.Dapr.RegisterActorTimer:input_type -> dapr.proto.runtime.v1.RegisterActorTimerRequest
-	28,  // 65: dapr.proto.runtime.v1.Dapr.UnregisterActorTimer:input_type -> dapr.proto.runtime.v1.UnregisterActorTimerRequest
-	29,  // 66: dapr.proto.runtime.v1.Dapr.RegisterActorReminder:input_type -> dapr.proto.runtime.v1.RegisterActorReminderRequest
-	30,  // 67: dapr.proto.runtime.v1.Dapr.UnregisterActorReminder:input_type -> dapr.proto.runtime.v1.UnregisterActorReminderRequest
-	31,  // 68: dapr.proto.runtime.v1.Dapr.RenameActorReminder:input_type -> dapr.proto.runtime.v1.RenameActorReminderRequest
-	32,  // 69: dapr.proto.runtime.v1.Dapr.GetActorState:input_type -> dapr.proto.runtime.v1.GetActorStateRequest
-	34,  // 70: dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction:input_type -> dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
-	36,  // 71: dapr.proto.runtime.v1.Dapr.InvokeActor:input_type -> dapr.proto.runtime.v1.InvokeActorRequest
-	45,  // 72: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.GetConfigurationRequest
-	47,  // 73: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.SubscribeConfigurationRequest
-	48,  // 74: dapr.proto.runtime.v1.Dapr.UnsubscribeConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationRequest
-	51,  // 75: dapr.proto.runtime.v1.Dapr.TryLockAlpha1:input_type -> dapr.proto.runtime.v1.TryLockRequest
-	53,  // 76: dapr.proto.runtime.v1.Dapr.UnlockAlpha1:input_type -> dapr.proto.runtime.v1.UnlockRequest
-	100, // 77: dapr.proto.runtime.v1.Dapr.GetMetadata:input_type -> google.protobuf.Empty
-	44,  // 78: dapr.proto.runtime.v1.Dapr.SetMetadata:input_type -> dapr.proto.runtime.v1.SetMetadataRequest
-	58,  // 79: dapr.proto.runtime.v1.Dapr.StartWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.StartWorkflowRequest
-	56,  // 80: dapr.proto.runtime.v1.Dapr.GetWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.GetWorkflowRequest
-	59,  // 81: dapr.proto.runtime.v1.Dapr.TerminateWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.TerminateWorkflowRequest
-	63,  // 82: dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.RaiseEventWorkflowRequest
-	61,  // 83: dapr.proto.runtime.v1.Dapr.PurgeWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.PurgeWorkflowRequest
-	100, // 84: dapr.proto.runtime.v1.Dapr.Shutdown:input_type -> google.protobuf.Empty
-	101, // 85: dapr.proto.runtime.v1.Dapr.InvokeService:output_type -> dapr.proto.common.v1.InvokeResponse
-	6,   // 86: dapr.proto.runtime.v1.Dapr.GetState:output_type -> dapr.proto.runtime.v1.GetStateResponse
-	4,   // 87: dapr.proto.runtime.v1.Dapr.GetBulkState:output_type -> dapr.proto.runtime.v1.GetBulkStateResponse
-	100, // 88: dapr.proto.runtime.v1.Dapr.SaveState:output_type -> google.protobuf.Empty
-	12,  // 89: dapr.proto.runtime.v1.Dapr.QueryStateAlpha1:output_type -> dapr.proto.runtime.v1.QueryStateResponse
-	100, // 90: dapr.proto.runtime.v1.Dapr.DeleteState:output_type -> google.protobuf.Empty
-	100, // 91: dapr.proto.runtime.v1.Dapr.DeleteBulkState:output_type -> google.protobuf.Empty
-	100, // 92: dapr.proto.runtime.v1.Dapr.ExecuteStateTransaction:output_type -> google.protobuf.Empty
-	100, // 93: dapr.proto.runtime.v1.Dapr.PublishEvent:output_type -> google.protobuf.Empty
-	16,  // 94: dapr.proto.runtime.v1.Dapr.BulkPublishEventAlpha1:output_type -> dapr.proto.runtime.v1.BulkPublishResponse
-	19,  // 95: dapr.proto.runtime.v1.Dapr.InvokeBinding:output_type -> dapr.proto.runtime.v1.InvokeBindingResponse
-	21,  // 96: dapr.proto.runtime.v1.Dapr.GetSecret:output_type -> dapr.proto.runtime.v1.GetSecretResponse
-	24,  // 97: dapr.proto.runtime.v1.Dapr.GetBulkSecret:output_type -> dapr.proto.runtime.v1.GetBulkSecretResponse
-	100, // 98: dapr.proto.runtime.v1.Dapr.RegisterActorTimer:output_type -> google.protobuf.Empty
-	100, // 99: dapr.proto.runtime.v1.Dapr.UnregisterActorTimer:output_type -> google.protobuf.Empty
-	100, // 100: dapr.proto.runtime.v1.Dapr.RegisterActorReminder:output_type -> google.protobuf.Empty
-	100, // 101: dapr.proto.runtime.v1.Dapr.UnregisterActorReminder:output_type -> google.protobuf.Empty
-	100, // 102: dapr.proto.runtime.v1.Dapr.RenameActorReminder:output_type -> google.protobuf.Empty
-	33,  // 103: dapr.proto.runtime.v1.Dapr.GetActorState:output_type -> dapr.proto.runtime.v1.GetActorStateResponse
-	100, // 104: dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction:output_type -> google.protobuf.Empty
-	37,  // 105: dapr.proto.runtime.v1.Dapr.InvokeActor:output_type -> dapr.proto.runtime.v1.InvokeActorResponse
-	46,  // 106: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.GetConfigurationResponse
-	49,  // 107: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.SubscribeConfigurationResponse
-	50,  // 108: dapr.proto.runtime.v1.Dapr.UnsubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
-	52,  // 109: dapr.proto.runtime.v1.Dapr.TryLockAlpha1:output_type -> dapr.proto.runtime.v1.TryLockResponse
-	54,  // 110: dapr.proto.runtime.v1.Dapr.UnlockAlpha1:output_type -> dapr.proto.runtime.v1.UnlockResponse
-	38,  // 111: dapr.proto.runtime.v1.Dapr.GetMetadata:output_type -> dapr.proto.runtime.v1.GetMetadataResponse
-	100, // 112: dapr.proto.runtime.v1.Dapr.SetMetadata:output_type -> google.protobuf.Empty
-	55,  // 113: dapr.proto.runtime.v1.Dapr.StartWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.WorkflowReference
-	57,  // 114: dapr.proto.runtime.v1.Dapr.GetWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.GetWorkflowResponse
-	60,  // 115: dapr.proto.runtime.v1.Dapr.TerminateWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.TerminateWorkflowResponse
-	64,  // 116: dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.RaiseEventWorkflowResponse
-	62,  // 117: dapr.proto.runtime.v1.Dapr.PurgeWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.PurgeWorkflowResponse
-	100, // 118: dapr.proto.runtime.v1.Dapr.Shutdown:output_type -> google.protobuf.Empty
-	85,  // [85:119] is the sub-list for method output_type
-	51,  // [51:85] is the sub-list for method input_type
-	51,  // [51:51] is the sub-list for extension type_name
-	51,  // [51:51] is the sub-list for extension extendee
-	0,   // [0:51] is the sub-list for field type_name
+	1,   // 46: dapr.proto.runtime.v1.SubtleGetKeyAlpha1Request.format:type_name -> dapr.proto.runtime.v1.SubtleGetKeyAlpha1Request.KeyFormat
+	105, // 47: dapr.proto.runtime.v1.GetWorkflowResponse.metadata:type_name -> dapr.proto.runtime.v1.GetWorkflowResponse.MetadataEntry
+	106, // 48: dapr.proto.runtime.v1.StartWorkflowRequest.options:type_name -> dapr.proto.runtime.v1.StartWorkflowRequest.OptionsEntry
+	24,  // 49: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry.value:type_name -> dapr.proto.runtime.v1.SecretResponse
+	113, // 50: dapr.proto.runtime.v1.GetConfigurationResponse.ItemsEntry.value:type_name -> dapr.proto.common.v1.ConfigurationItem
+	113, // 51: dapr.proto.runtime.v1.SubscribeConfigurationResponse.ItemsEntry.value:type_name -> dapr.proto.common.v1.ConfigurationItem
+	2,   // 52: dapr.proto.runtime.v1.Dapr.InvokeService:input_type -> dapr.proto.runtime.v1.InvokeServiceRequest
+	3,   // 53: dapr.proto.runtime.v1.Dapr.GetState:input_type -> dapr.proto.runtime.v1.GetStateRequest
+	4,   // 54: dapr.proto.runtime.v1.Dapr.GetBulkState:input_type -> dapr.proto.runtime.v1.GetBulkStateRequest
+	10,  // 55: dapr.proto.runtime.v1.Dapr.SaveState:input_type -> dapr.proto.runtime.v1.SaveStateRequest
+	11,  // 56: dapr.proto.runtime.v1.Dapr.QueryStateAlpha1:input_type -> dapr.proto.runtime.v1.QueryStateRequest
+	8,   // 57: dapr.proto.runtime.v1.Dapr.DeleteState:input_type -> dapr.proto.runtime.v1.DeleteStateRequest
+	9,   // 58: dapr.proto.runtime.v1.Dapr.DeleteBulkState:input_type -> dapr.proto.runtime.v1.DeleteBulkStateRequest
+	27,  // 59: dapr.proto.runtime.v1.Dapr.ExecuteStateTransaction:input_type -> dapr.proto.runtime.v1.ExecuteStateTransactionRequest
+	14,  // 60: dapr.proto.runtime.v1.Dapr.PublishEvent:input_type -> dapr.proto.runtime.v1.PublishEventRequest
+	15,  // 61: dapr.proto.runtime.v1.Dapr.BulkPublishEventAlpha1:input_type -> dapr.proto.runtime.v1.BulkPublishRequest
+	19,  // 62: dapr.proto.runtime.v1.Dapr.InvokeBinding:input_type -> dapr.proto.runtime.v1.InvokeBindingRequest
+	21,  // 63: dapr.proto.runtime.v1.Dapr.GetSecret:input_type -> dapr.proto.runtime.v1.GetSecretRequest
+	23,  // 64: dapr.proto.runtime.v1.Dapr.GetBulkSecret:input_type -> dapr.proto.runtime.v1.GetBulkSecretRequest
+	28,  // 65: dapr.proto.runtime.v1.Dapr.RegisterActorTimer:input_type -> dapr.proto.runtime.v1.RegisterActorTimerRequest
+	29,  // 66: dapr.proto.runtime.v1.Dapr.UnregisterActorTimer:input_type -> dapr.proto.runtime.v1.UnregisterActorTimerRequest
+	30,  // 67: dapr.proto.runtime.v1.Dapr.RegisterActorReminder:input_type -> dapr.proto.runtime.v1.RegisterActorReminderRequest
+	31,  // 68: dapr.proto.runtime.v1.Dapr.UnregisterActorReminder:input_type -> dapr.proto.runtime.v1.UnregisterActorReminderRequest
+	32,  // 69: dapr.proto.runtime.v1.Dapr.RenameActorReminder:input_type -> dapr.proto.runtime.v1.RenameActorReminderRequest
+	33,  // 70: dapr.proto.runtime.v1.Dapr.GetActorState:input_type -> dapr.proto.runtime.v1.GetActorStateRequest
+	35,  // 71: dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction:input_type -> dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
+	37,  // 72: dapr.proto.runtime.v1.Dapr.InvokeActor:input_type -> dapr.proto.runtime.v1.InvokeActorRequest
+	46,  // 73: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.GetConfigurationRequest
+	48,  // 74: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.SubscribeConfigurationRequest
+	49,  // 75: dapr.proto.runtime.v1.Dapr.UnsubscribeConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationRequest
+	52,  // 76: dapr.proto.runtime.v1.Dapr.TryLockAlpha1:input_type -> dapr.proto.runtime.v1.TryLockRequest
+	54,  // 77: dapr.proto.runtime.v1.Dapr.UnlockAlpha1:input_type -> dapr.proto.runtime.v1.UnlockRequest
+	114, // 78: dapr.proto.runtime.v1.Dapr.GetMetadata:input_type -> google.protobuf.Empty
+	45,  // 79: dapr.proto.runtime.v1.Dapr.SetMetadata:input_type -> dapr.proto.runtime.v1.SetMetadataRequest
+	56,  // 80: dapr.proto.runtime.v1.Dapr.SubtleGetKeyAlpha1:input_type -> dapr.proto.runtime.v1.SubtleGetKeyAlpha1Request
+	58,  // 81: dapr.proto.runtime.v1.Dapr.SubtleEncryptAlpha1:input_type -> dapr.proto.runtime.v1.SubtleEncryptAlpha1Request
+	60,  // 82: dapr.proto.runtime.v1.Dapr.SubtleDecryptAlpha1:input_type -> dapr.proto.runtime.v1.SubtleDecryptAlpha1Request
+	62,  // 83: dapr.proto.runtime.v1.Dapr.SubtleWrapKeyAlpha1:input_type -> dapr.proto.runtime.v1.SubtleWrapKeyAlpha1Request
+	64,  // 84: dapr.proto.runtime.v1.Dapr.SubtleUnwrapKeyAlpha1:input_type -> dapr.proto.runtime.v1.SubtleUnwrapKeyAlpha1Request
+	66,  // 85: dapr.proto.runtime.v1.Dapr.SubtleSignAlpha1:input_type -> dapr.proto.runtime.v1.SubtleSignAlpha1Request
+	68,  // 86: dapr.proto.runtime.v1.Dapr.SubtleVerifyAlpha1:input_type -> dapr.proto.runtime.v1.SubtleVerifyAlpha1Request
+	73,  // 87: dapr.proto.runtime.v1.Dapr.StartWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.StartWorkflowRequest
+	71,  // 88: dapr.proto.runtime.v1.Dapr.GetWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.GetWorkflowRequest
+	74,  // 89: dapr.proto.runtime.v1.Dapr.TerminateWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.WorkflowActivityRequest
+	74,  // 90: dapr.proto.runtime.v1.Dapr.PauseWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.WorkflowActivityRequest
+	74,  // 91: dapr.proto.runtime.v1.Dapr.ResumeWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.WorkflowActivityRequest
+	78,  // 92: dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.RaiseEventWorkflowRequest
+	76,  // 93: dapr.proto.runtime.v1.Dapr.PurgeWorkflowAlpha1:input_type -> dapr.proto.runtime.v1.PurgeWorkflowRequest
+	114, // 94: dapr.proto.runtime.v1.Dapr.Shutdown:input_type -> google.protobuf.Empty
+	115, // 95: dapr.proto.runtime.v1.Dapr.InvokeService:output_type -> dapr.proto.common.v1.InvokeResponse
+	7,   // 96: dapr.proto.runtime.v1.Dapr.GetState:output_type -> dapr.proto.runtime.v1.GetStateResponse
+	5,   // 97: dapr.proto.runtime.v1.Dapr.GetBulkState:output_type -> dapr.proto.runtime.v1.GetBulkStateResponse
+	114, // 98: dapr.proto.runtime.v1.Dapr.SaveState:output_type -> google.protobuf.Empty
+	13,  // 99: dapr.proto.runtime.v1.Dapr.QueryStateAlpha1:output_type -> dapr.proto.runtime.v1.QueryStateResponse
+	114, // 100: dapr.proto.runtime.v1.Dapr.DeleteState:output_type -> google.protobuf.Empty
+	114, // 101: dapr.proto.runtime.v1.Dapr.DeleteBulkState:output_type -> google.protobuf.Empty
+	114, // 102: dapr.proto.runtime.v1.Dapr.ExecuteStateTransaction:output_type -> google.protobuf.Empty
+	114, // 103: dapr.proto.runtime.v1.Dapr.PublishEvent:output_type -> google.protobuf.Empty
+	17,  // 104: dapr.proto.runtime.v1.Dapr.BulkPublishEventAlpha1:output_type -> dapr.proto.runtime.v1.BulkPublishResponse
+	20,  // 105: dapr.proto.runtime.v1.Dapr.InvokeBinding:output_type -> dapr.proto.runtime.v1.InvokeBindingResponse
+	22,  // 106: dapr.proto.runtime.v1.Dapr.GetSecret:output_type -> dapr.proto.runtime.v1.GetSecretResponse
+	25,  // 107: dapr.proto.runtime.v1.Dapr.GetBulkSecret:output_type -> dapr.proto.runtime.v1.GetBulkSecretResponse
+	114, // 108: dapr.proto.runtime.v1.Dapr.RegisterActorTimer:output_type -> google.protobuf.Empty
+	114, // 109: dapr.proto.runtime.v1.Dapr.UnregisterActorTimer:output_type -> google.protobuf.Empty
+	114, // 110: dapr.proto.runtime.v1.Dapr.RegisterActorReminder:output_type -> google.protobuf.Empty
+	114, // 111: dapr.proto.runtime.v1.Dapr.UnregisterActorReminder:output_type -> google.protobuf.Empty
+	114, // 112: dapr.proto.runtime.v1.Dapr.RenameActorReminder:output_type -> google.protobuf.Empty
+	34,  // 113: dapr.proto.runtime.v1.Dapr.GetActorState:output_type -> dapr.proto.runtime.v1.GetActorStateResponse
+	114, // 114: dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction:output_type -> google.protobuf.Empty
+	38,  // 115: dapr.proto.runtime.v1.Dapr.InvokeActor:output_type -> dapr.proto.runtime.v1.InvokeActorResponse
+	47,  // 116: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.GetConfigurationResponse
+	50,  // 117: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.SubscribeConfigurationResponse
+	51,  // 118: dapr.proto.runtime.v1.Dapr.UnsubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
+	53,  // 119: dapr.proto.runtime.v1.Dapr.TryLockAlpha1:output_type -> dapr.proto.runtime.v1.TryLockResponse
+	55,  // 120: dapr.proto.runtime.v1.Dapr.UnlockAlpha1:output_type -> dapr.proto.runtime.v1.UnlockResponse
+	39,  // 121: dapr.proto.runtime.v1.Dapr.GetMetadata:output_type -> dapr.proto.runtime.v1.GetMetadataResponse
+	114, // 122: dapr.proto.runtime.v1.Dapr.SetMetadata:output_type -> google.protobuf.Empty
+	57,  // 123: dapr.proto.runtime.v1.Dapr.SubtleGetKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleGetKeyAlpha1Response
+	59,  // 124: dapr.proto.runtime.v1.Dapr.SubtleEncryptAlpha1:output_type -> dapr.proto.runtime.v1.SubtleEncryptAlpha1Response
+	61,  // 125: dapr.proto.runtime.v1.Dapr.SubtleDecryptAlpha1:output_type -> dapr.proto.runtime.v1.SubtleDecryptAlpha1Response
+	63,  // 126: dapr.proto.runtime.v1.Dapr.SubtleWrapKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleWrapKeyAlpha1Response
+	65,  // 127: dapr.proto.runtime.v1.Dapr.SubtleUnwrapKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleUnwrapKeyAlpha1Response
+	67,  // 128: dapr.proto.runtime.v1.Dapr.SubtleSignAlpha1:output_type -> dapr.proto.runtime.v1.SubtleSignAlpha1Response
+	69,  // 129: dapr.proto.runtime.v1.Dapr.SubtleVerifyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleVerifyAlpha1Response
+	70,  // 130: dapr.proto.runtime.v1.Dapr.StartWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.WorkflowReference
+	72,  // 131: dapr.proto.runtime.v1.Dapr.GetWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.GetWorkflowResponse
+	77,  // 132: dapr.proto.runtime.v1.Dapr.TerminateWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.WorkflowActivityResponse
+	77,  // 133: dapr.proto.runtime.v1.Dapr.PauseWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.WorkflowActivityResponse
+	77,  // 134: dapr.proto.runtime.v1.Dapr.ResumeWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.WorkflowActivityResponse
+	77,  // 135: dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.WorkflowActivityResponse
+	77,  // 136: dapr.proto.runtime.v1.Dapr.PurgeWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.WorkflowActivityResponse
+	114, // 137: dapr.proto.runtime.v1.Dapr.Shutdown:output_type -> google.protobuf.Empty
+	95,  // [95:138] is the sub-list for method output_type
+	52,  // [52:95] is the sub-list for method input_type
+	52,  // [52:52] is the sub-list for extension type_name
+	52,  // [52:52] is the sub-list for extension extendee
+	0,   // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_runtime_v1_dapr_proto_init() }
@@ -6001,7 +7235,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[54].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WorkflowReference); i {
+			switch v := v.(*SubtleGetKeyAlpha1Request); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6013,7 +7247,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[55].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetWorkflowRequest); i {
+			switch v := v.(*SubtleGetKeyAlpha1Response); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6025,7 +7259,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[56].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetWorkflowResponse); i {
+			switch v := v.(*SubtleEncryptAlpha1Request); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6037,7 +7271,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[57].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StartWorkflowRequest); i {
+			switch v := v.(*SubtleEncryptAlpha1Response); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6049,7 +7283,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[58].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TerminateWorkflowRequest); i {
+			switch v := v.(*SubtleDecryptAlpha1Request); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6061,7 +7295,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[59].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TerminateWorkflowResponse); i {
+			switch v := v.(*SubtleDecryptAlpha1Response); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6073,7 +7307,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[60].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PurgeWorkflowRequest); i {
+			switch v := v.(*SubtleWrapKeyAlpha1Request); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6085,7 +7319,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[61].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PurgeWorkflowResponse); i {
+			switch v := v.(*SubtleWrapKeyAlpha1Response); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6097,7 +7331,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[62].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RaiseEventWorkflowRequest); i {
+			switch v := v.(*SubtleUnwrapKeyAlpha1Request); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6109,7 +7343,163 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[63].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RaiseEventWorkflowResponse); i {
+			switch v := v.(*SubtleUnwrapKeyAlpha1Response); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[64].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubtleSignAlpha1Request); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[65].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubtleSignAlpha1Response); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[66].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubtleVerifyAlpha1Request); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[67].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubtleVerifyAlpha1Response); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[68].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WorkflowReference); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[69].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetWorkflowRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[70].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetWorkflowResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[71].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*StartWorkflowRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[72].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WorkflowActivityRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[73].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TerminateWorkflowResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[74].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PurgeWorkflowRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[75].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WorkflowActivityResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[76].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RaiseEventWorkflowRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -6126,8 +7516,8 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_runtime_v1_dapr_proto_rawDesc,
-			NumEnums:      1,
-			NumMessages:   92,
+			NumEnums:      2,
+			NumMessages:   105,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

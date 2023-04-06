@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	workflowContrib "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -1825,7 +1826,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -1855,7 +1856,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -2029,9 +2030,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		reminderResponse := actors.Reminder{
-			// Functions are not JSON encodable. This will force the error condition
-			Data: func() {},
+		reminderResponse := reminders.Reminder{
+			// This is not valid JSON
+			Data: json.RawMessage(`foo`),
 		}
 
 		mockActors := new(actors.MockActors)
@@ -2056,7 +2057,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 			Callback:  "",
@@ -2087,7 +2088,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      nil,
+			Data:      json.RawMessage("null"),
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -3272,11 +3273,12 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		assert.Nil(t, resp.ErrorBody)
 	})
 
-	/////////////////////
-	// PURGE API TESTS //
-	/////////////////////
-	t.Run("Purge with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr//purge"
+	/////////////////////////
+	// PAUSE API TESTS //
+	/////////////////////////
+
+	t.Run("Pause with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//pause"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -3287,9 +3289,101 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
 	})
 
+	t.Run("Pause with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//instanceID/pause"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Pause with non existent component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/pause"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Pause with valid API path", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'pause' method implemented to simply return nil
+
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/pause"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
+
+	/////////////////////////
+	// RESUME API TESTS //
+	/////////////////////////
+
+	t.Run("Resume with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//resume"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Resume with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//instanceID/resume"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Resume with non existent component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/resume"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Resume with valid API path", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'resume' method implemented to simply return nil
+
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/resume"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
+
+	/////////////////////
+	// PURGE API TESTS //
+	/////////////////////
 	t.Run("Purge with no workflow component", func(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows//instanceID/purge"
-
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
 
@@ -3301,7 +3395,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 	t.Run("Purge with non existent component", func(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/purge"
-
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
 
@@ -3311,17 +3404,27 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
+	t.Run("Purge with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//purge"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
+	})
 	t.Run("Purge with valid API path", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'purge' method implemented to simply return nil
 
 		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/purge"
-
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.ErrorBody)
+
 	})
 }
 
@@ -3672,14 +3775,14 @@ func TestV1StateEndpoints(t *testing.T) {
 		"store1":    fakeStore,
 		"failStore": failingStore,
 	}
-	fakeTransactionalStores := map[string]state.TransactionalStore{
-		"store1":    fakeStore.(state.TransactionalStore),
-		"failStore": failingStore,
-	}
 	testAPI := &api{
-		stateStores:              fakeStores,
-		transactionalStateStores: fakeTransactionalStores,
-		resiliency:               resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency),
+		stateStores: fakeStores,
+		resiliency:  resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency),
+	}
+	testAPI.universal = &universalapi.UniversalAPI{
+		Logger:      logger.NewLogger("fakeLogger"),
+		StateStores: fakeStores,
+		Resiliency:  testAPI.resiliency,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -3696,11 +3799,14 @@ func TestV1StateEndpoints(t *testing.T) {
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
 				testAPI.stateStores = nil
+				testAPI.universal.StateStores = nil
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 500, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+
 				testAPI.stateStores = fakeStores
+				testAPI.universal.StateStores = fakeStores
 
 				// act
 				resp = fakeServer.DoRequest(method, apiPath, nil, nil)
@@ -3716,7 +3822,6 @@ func TestV1StateEndpoints(t *testing.T) {
 			"v1.0/state/store1/",
 			"v1.0/state/store1/bulk",
 			"v1.0/state/store1/transaction",
-			"v1.0-alpha1/state/store1/query",
 		}
 
 		for _, apiPath := range apiPaths {
@@ -3966,7 +4071,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp = fakeServer.DoRequest("POST", apiPath, []byte(queryTestRequestSyntaxErr), nil)
 		// assert
-		assert.Equal(t, 400, resp.StatusCode)
+		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	t.Run("get state request retries with resiliency", func(t *testing.T) {
@@ -4202,22 +4307,28 @@ func TestV1StateEndpoints(t *testing.T) {
 func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		stateStores: map[string]state.Store{"store1": fakeStateStore{}},
-		resiliency:  resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			Logger:      logger.NewLogger("fakeLogger"),
+			StateStores: map[string]state.Store{"store1": fakeStateStore{}},
+			Resiliency:  resiliency.New(nil),
+		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
 	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/store1/query", nil, nil)
 	// assert
-	assert.Equal(t, 404, resp.StatusCode)
-	assert.Equal(t, "ERR_METHOD_NOT_FOUND", resp.ErrorBody["errorCode"])
+	assert.Equal(t, 500, resp.StatusCode)
+	assert.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", resp.ErrorBody["errorCode"])
 }
 
 func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		stateStores: map[string]state.Store{"store1": fakeStateStoreQuerier{}},
-		resiliency:  resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			Logger:      logger.NewLogger("fakeLogger"),
+			StateStores: map[string]state.Store{"store1": fakeStateStoreQuerier{}},
+			Resiliency:  resiliency.New(nil),
+		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
@@ -4230,15 +4341,19 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	storeName := "encrypted-store1"
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		stateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
-		resiliency:  resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			Logger:      logger.NewLogger("fakeLogger"),
+			StateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
+			Resiliency:  resiliency.New(nil),
+		},
 	}
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
 	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/"+storeName+"/query", nil, nil)
 	// assert
-	assert.Equal(t, 400, resp.StatusCode)
+	assert.Equal(t, 500, resp.StatusCode)
+	assert.Contains(t, string(resp.RawBody), "cannot query encrypted store")
 }
 
 const (
@@ -4424,9 +4539,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	l := logger.NewLogger("fakeLogger")
 	res := resiliency.FromConfigurations(l, testResiliency)
 	testAPI := &api{
-		secretsConfiguration: secretsConfiguration,
-		secretStores:         fakeStores,
-		resiliency:           res,
+		resiliency: res,
 		universal: &universalapi.UniversalAPI{
 			Logger:               l,
 			SecretsConfiguration: secretsConfiguration,
@@ -4526,9 +4639,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
 		testAPI.universal.SecretStores = nil
-		testAPI.secretStores = nil
 		defer func() {
-			testAPI.secretStores = fakeStores
 			testAPI.universal.SecretStores = fakeStores
 		}()
 
@@ -4783,6 +4894,14 @@ func (l *fakeWorkflowComponent) RaiseEvent(ctx context.Context, req *workflowCon
 	return nil
 }
 
+func (l *fakeWorkflowComponent) Pause(ctx context.Context, req *workflowContrib.WorkflowReference) error {
+	return nil
+}
+
+func (l *fakeWorkflowComponent) Resume(ctx context.Context, req *workflowContrib.WorkflowReference) error {
+	return nil
+}
+
 func (l *fakeWorkflowComponent) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
@@ -4826,13 +4945,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		"store1":                fakeStore,
 		"storeNonTransactional": fakeStoreNonTransactional,
 	}
-	fakeTransactionalStores := map[string]state.TransactionalStore{
-		"store1": fakeStore.(state.TransactionalStore),
-	}
 	testAPI := &api{
-		stateStores:              fakeStores,
-		transactionalStateStores: fakeTransactionalStores,
-		resiliency:               resiliency.New(nil),
+		stateStores: fakeStores,
+		resiliency:  resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

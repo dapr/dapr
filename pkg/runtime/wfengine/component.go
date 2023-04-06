@@ -193,6 +193,32 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.Workfl
 	}
 }
 
+func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workflows.WorkflowReference) error {
+	if req.InstanceID == "" {
+		return errors.New("a workflow instance ID is required")
+	}
+
+	if err := c.client.SuspendOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
+		return fmt.Errorf("failed to pause workflow %s: %w", req.InstanceID, err)
+	}
+
+	c.logger.Infof("pausing workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) ResumeWorkflow(ctx context.Context, req *workflows.WorkflowReference) error {
+	if req.InstanceID == "" {
+		return errors.New("a workflow instance ID is required")
+	}
+
+	if err := c.client.ResumeOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
+		return fmt.Errorf("failed to resume workflow %s: %w", req.InstanceID, err)
+	}
+
+	c.logger.Infof("resuming workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
 func getStatusString(status int32) string {
 	if statusStr, ok := statusMap[status]; ok {
 		return statusStr

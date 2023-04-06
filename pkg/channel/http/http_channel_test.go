@@ -642,27 +642,6 @@ func TestAppToken(t *testing.T) {
 	})
 }
 
-func TestCreateChannel(t *testing.T) {
-	config := ChannelConfiguration{Port: 3000}
-	t.Run("ssl scheme", func(t *testing.T) {
-		config.SslEnabled = true
-		ch, err := CreateLocalChannel(config)
-		assert.NoError(t, err)
-
-		b := ch.GetBaseAddress()
-		assert.Equal(t, b, "https://127.0.0.1:3000")
-	})
-
-	t.Run("non-ssl scheme", func(t *testing.T) {
-		config.SslEnabled = false
-		ch, err := CreateLocalChannel(config)
-		assert.NoError(t, err)
-
-		b := ch.GetBaseAddress()
-		assert.Equal(t, b, "http://127.0.0.1:3000")
-	})
-}
-
 func TestHealthProbe(t *testing.T) {
 	ctx := context.Background()
 	h := &testStatusCodeHandler{}

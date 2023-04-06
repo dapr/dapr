@@ -26,12 +26,9 @@ const (
 	ErrMalformedRequestData = "can't serialize request data field: %s"
 
 	// State.
-	ErrStateStoresNotConfigured = "state store is not configured"
-	ErrStateStoreNotFound       = "state store %s is not found"
-	ErrStateGet                 = "fail to get %s from state store %s: %s"
-	ErrStateDelete              = "failed deleting state with key %s: %s"
-	ErrStateSave                = "failed saving state in state store %s: %s"
-	ErrStateQuery               = "failed query in state store %s: %s"
+	ErrStateGet    = "fail to get %s from state store %s: %s"
+	ErrStateDelete = "failed deleting state with key %s: %s"
+	ErrStateSave   = "failed saving state in state store %s: %s"
 
 	// StateTransaction.
 	ErrStateStoreNotSupported     = "state store %s doesn't support transaction"
@@ -97,12 +94,28 @@ const (
 )
 
 var (
+	// Generic.
+	ErrBadRequest       = APIError{"invalid request: %v", "ERR_BAD_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrAPIUnimplemented = APIError{"this API is currently not implemented", "ERR_API_UNIMPLEMENTED", http.StatusNotImplemented, grpcCodes.Unimplemented}
+
+	// State.
+	ErrStateStoresNotConfigured = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
+	ErrStateStoreNotFound       = APIError{"state store %s is not found", "ERR_STATE_STORE_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrStateQueryFailed         = APIError{"failed query in state store %s: %s", "ERR_STATE_QUERY", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrStateQueryUnsupported    = APIError{"state store does not support querying", "ERR_STATE_STORE_NOT_SUPPORTED", http.StatusInternalServerError, grpcCodes.Internal}
+
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
 	ErrSecretStoreNotFound      = APIError{"failed finding secret store with key %s", "ERR_SECRET_STORE_NOT_FOUND", http.StatusUnauthorized, grpcCodes.InvalidArgument}
 	ErrSecretPermissionDenied   = APIError{"access denied by policy to get %q from %q", "ERR_PERMISSION_DENIED", http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrSecretGet                = APIError{"failed getting secret with key %s from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrBulkSecretGet            = APIError{"failed getting secrets from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrBulkSecretGet            = APIError{"failed getting secrets from secret store %s: %v", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
+
+	// Crypto.
+	ErrCryptoProvidersNotConfigured = APIError{"crypto providers not configured", "ERR_CRYPTO_PROVIDERS_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrCryptoProviderNotFound       = APIError{"crypto provider %s not found", "ERR_CRYPTO_PROVIDER_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrCryptoGetKey                 = APIError{"failed to retrieve key %s: %v", "ERR_CRYPTO_KEY", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrCryptoOperation              = APIError{"failed to perform operation: %v", "ERR_CRYPTO", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
@@ -124,5 +137,7 @@ var (
 	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", "ERR_WORKFLOW_EVENT_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow %s", "ERR_RAISE_EVENT_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrPurgeWorkflow                 = APIError{"error purging workflow %s", "ERR_PURGE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrPauseWorkflow                 = APIError{"error pausing workflow %s", "ERR_PAUSE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrResumeWorkflow                = APIError{"error resuming workflow %s", "ERR_RESUME_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrTimerParse                    = APIError{"error parsing time: %s", "ERR_WORKFLOW_TIME_PARSE", http.StatusInternalServerError, grpcCodes.Internal}
 )

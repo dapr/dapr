@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,10 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package actors
+package components
 
-// ActorHostedRequest is the request object for checking if an actor is hosted on this instance.
-type ActorHostedRequest struct {
-	ActorID   string `json:"actorId"`
-	ActorType string `json:"actorType"`
+import (
+	"github.com/dapr/components-contrib/state/alicloud/tablestore"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
+)
+
+func init() {
+	stateLoader.DefaultRegistry.RegisterComponent(tablestore.NewAliCloudTableStore, "alicloud.tablestore")
 }
