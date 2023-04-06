@@ -4998,10 +4998,10 @@ func (l *fakeWorkflowComponent) GetComponentMetadata() map[string]string {
 func TestV1HealthzEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
-	appId := "test"
+	appID := "test"
 	testAPI := &api{
 		actor: nil,
-		id:    appId,
+		id:    appID,
 	}
 
 	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
@@ -5031,7 +5031,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	t.Run("Healthz - 204 AppId Match", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
 		testAPI.MarkStatusAsReady()
-		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": appId})
+		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
