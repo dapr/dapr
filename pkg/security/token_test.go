@@ -73,7 +73,7 @@ func TestExcludedRoute(t *testing.T) {
 	})
 }
 
-func TestgetKubernetesIdentityToken(t *testing.T) {
+func TestGetKubernetesIdentityToken(t *testing.T) {
 	tests := map[string]struct {
 		kubeToken  *string
 		boundToken *string

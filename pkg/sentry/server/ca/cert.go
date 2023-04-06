@@ -65,7 +65,7 @@ func generateBaseCert(ttl, skew time.Duration) (*x509.Certificate, error) {
 }
 
 // generateRootCert returns a CA root x509 Certificate.
-func generateRootCert(trustDomain string, skew time.Duration) (*x509.Certificate, error) {
+func GenerateRootCert(trustDomain string, skew time.Duration) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(caTTL, skew)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func generateRootCert(trustDomain string, skew time.Duration) (*x509.Certificate
 }
 
 // generateIssuerCert returns a CA issuing x509 Certificate.
-func generateIssuerCert(trustDomain string, skew time.Duration) (*x509.Certificate, error) {
+func GenerateIssuerCert(trustDomain string, skew time.Duration) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(caTTL, skew)
 	if err != nil {
 		return nil, err

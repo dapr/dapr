@@ -19,6 +19,6 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 )
 
-func Testselfhosted(t *testing.T) {
+func TestSelfhosted(t *testing.T) {
 	var _ validator.Validator = New()
 }

@@ -81,7 +81,7 @@ func joinPEM(crts ...[]byte) []byte {
 	return b
 }
 
-func TestverifyBundle(t *testing.T) {
+func TestVerifyBundle(t *testing.T) {
 	rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
 	//nolint:dogsled
 	rootBPEM, _, _, _ := genCrt(t, "rootB", nil, nil)

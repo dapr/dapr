@@ -185,7 +185,7 @@ func generateCABundle(conf config.Config) (caBundle, error) {
 		return caBundle{}, err
 	}
 
-	rootCert, err := generateRootCert(conf.TrustDomain, conf.AllowedClockSkew)
+	rootCert, err := GenerateRootCert(conf.TrustDomain, conf.AllowedClockSkew)
 	if err != nil {
 		return caBundle{}, fmt.Errorf("failed to generate root cert: %w", err)
 	}
@@ -206,7 +206,7 @@ func generateCABundle(conf config.Config) (caBundle, error) {
 	}
 	issKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: issKeyDer})
 
-	issCert, err := generateIssuerCert(conf.TrustDomain, conf.AllowedClockSkew)
+	issCert, err := GenerateIssuerCert(conf.TrustDomain, conf.AllowedClockSkew)
 	if err != nil {
 		return caBundle{}, fmt.Errorf("failed to generate issuer cert: %w", err)
 	}
