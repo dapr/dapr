@@ -55,15 +55,13 @@ func TestValidate(t *testing.T) {
 		pod     *corev1.Pod
 		config  *configapi.Configuration
 
-		sentryAudience         string
-		noDefaultTokenAudience bool
+		sentryAudience string
 
 		expTD  spiffeid.TrustDomain
 		expErr bool
 	}{
 		"if pod in different namespace, expect error": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -110,8 +108,7 @@ func TestValidate(t *testing.T) {
 		},
 
 		"if config in different namespace, expect error": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -158,8 +155,7 @@ func TestValidate(t *testing.T) {
 		},
 
 		"is missing app-id and app-id is the same as the pod name, expect no error": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -205,8 +201,7 @@ func TestValidate(t *testing.T) {
 		},
 
 		"if missing app-id annotation and app-id doesn't match pod name, expect error": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -252,8 +247,7 @@ func TestValidate(t *testing.T) {
 		},
 
 		"if target configuration doesn't exist, expect error": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -290,8 +284,7 @@ func TestValidate(t *testing.T) {
 		},
 
 		"is service account on pod does not match token, expect error": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -338,8 +331,7 @@ func TestValidate(t *testing.T) {
 		},
 
 		"if username namespace doesn't match request namespace, reject": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -374,21 +366,11 @@ func TestValidate(t *testing.T) {
 		},
 
 		"if token returns an error, expect error": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
-				var i int
-				t.Cleanup(func() {
-					assert.Equal(t, 2, i)
-				})
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
-					if i == 0 {
-						assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
-					} else {
-						assert.Equal(t, []string(nil), obj.Spec.Audiences)
-					}
-					i++
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
 					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
 						Authenticated: true,
 						Error:         "this is an error",
@@ -419,72 +401,12 @@ func TestValidate(t *testing.T) {
 			expTD:  spiffeid.TrustDomain{},
 		},
 
-		"if noDefaultTokenAudience disabled, first token auth failed, expect a second": {
-			noDefaultTokenAudience: false,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"if token auth failed, expect failed": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
-				var i int
-				t.Cleanup(func() {
-					assert.Equal(t, 2, i)
-				})
 				return func(action core.Action) (bool, runtime.Object, error) {
-					i++
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
-					if i == 1 {
-						assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
-						return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
-							Authenticated: false,
-						}}, nil
-					}
-					assert.Equal(t, []string(nil), obj.Spec.Audiences)
-					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
-						Authenticated: true,
-						User: kauthapi.UserInfo{
-							Username: "system:serviceaccount:my-ns:my-sa",
-						},
-					}}, nil
-				}
-			},
-			req: &sentryv1pb.SignCertificateRequest{
-				CertificateSigningRequest: []byte("csr"),
-				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
-				TrustDomain:               "example.test.dapr.io",
-				Id:                        "my-app-id",
-			},
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-pod",
-					Namespace: "my-ns",
-					Annotations: map[string]string{
-						"dapr.io/app-id": "my-app-id",
-					},
-				},
-				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
-			},
-			expErr: false,
-			expTD:  spiffeid.RequireTrustDomainFromString("public"),
-		},
-
-		"if noDefaultTokenAudience disabled, both token auth fail, expect error": {
-			noDefaultTokenAudience: false,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
-			reactor: func(t *testing.T) core.ReactionFunc {
-				var i int
-				t.Cleanup(func() {
-					assert.Equal(t, 2, i)
-				})
-				return func(action core.Action) (bool, runtime.Object, error) {
-					i++
-					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
-					if i == 1 {
-						assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
-						return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
-							Authenticated: false,
-						}}, nil
-					}
-					var empty []string
-					assert.Equal(t, empty, obj.Spec.Audiences)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
 					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
 						Authenticated: false,
 					}}, nil
@@ -512,8 +434,7 @@ func TestValidate(t *testing.T) {
 		},
 
 		"if pod name is empty in kube token, expect error": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -546,9 +467,8 @@ func TestValidate(t *testing.T) {
 			expErr: true,
 			expTD:  spiffeid.TrustDomain{},
 		},
-		"valid authentication with no default audience, no config annotation should be default trust domain": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"valid authentication, no config annotation should be default trust domain": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -581,9 +501,8 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("public"),
 		},
-		"valid authentication with no default audience, config annotation, return the trust domain from config": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"valid authentication, config annotation, return the trust domain from config": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -628,9 +547,8 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("example.test.dapr.io"),
 		},
-		"valid authentication with no default audience, config annotation, config empty, return the default trust domain": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"valid authentication, config annotation, config empty, return the default trust domain": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -675,9 +593,8 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("public"),
 		},
-		"valid authentication with no default audience, if sentry return trust domain of control-plane": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"valid authentication, if sentry return trust domain of control-plane": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -707,9 +624,8 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
-		"valid authentication with no default audience, if operator return trust domain of control-plane": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"valid authentication, if operator return trust domain of control-plane": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -739,9 +655,8 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
-		"valid authentication with no default audience, if injector return trust domain of control-plane": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"valid authentication, if injector return trust domain of control-plane": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -771,9 +686,8 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
-		"valid authentication with no default audience, if placement return trust domain of control-plane": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"valid authentication, if placement return trust domain of control-plane": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
@@ -803,9 +717,8 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
-		"valid authentication with no default audience, config annotation, using legacy request ID, return the trust domain from config": {
-			noDefaultTokenAudience: true,
-			sentryAudience:         "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+		"valid authentication, config annotation, using legacy request ID, return the trust domain from config": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
 					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)

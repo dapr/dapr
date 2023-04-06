@@ -68,8 +68,6 @@ type Options struct {
 	RestConfig     *rest.Config
 	SentryID       spiffeid.ID
 	ControlPlaneNS string
-
-	NoDefaultTokenAudience bool
 }
 
 // kubernetes implements the validator.Interface. It validates the request by
@@ -81,8 +79,6 @@ type kubernetes struct {
 	sentryAudience string
 	controlPlaneNS string
 	controlPlaneTD spiffeid.TrustDomain
-
-	noDefaultTokenAudience bool
 }
 
 func New(ctx context.Context, opts Options) (validator.Interface, error) {
@@ -112,8 +108,6 @@ func New(ctx context.Context, opts Options) (validator.Interface, error) {
 		sentryAudience: opts.SentryID.String(),
 		controlPlaneNS: opts.ControlPlaneNS,
 		controlPlaneTD: opts.SentryID.TrustDomain(),
-		// TODO: Remove once the NoDefaultTokenAudience feature is finalized
-		noDefaultTokenAudience: opts.NoDefaultTokenAudience,
 	}, nil
 }
 
@@ -138,16 +132,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 
 	prts, err := k.executeTokenReview(ctx, req.GetToken(), LegacyServiceAccountAudience, k.sentryAudience)
 	if err != nil {
-		if !k.noDefaultTokenAudience {
-			// Empty audience means the Kubernetes API server.
-			prts, err = k.executeTokenReview(ctx, req.GetToken())
-			if err != nil {
-				return spiffeid.TrustDomain{}, err
-			}
-			log.Warn("WARNING: Sentry accepted a token with the audience for the Kubernetes API server. This is deprecated and only supported to ensure a smooth upgrade from Dapr pre-1.10.")
-		} else {
-			return spiffeid.TrustDomain{}, err
-		}
+		return spiffeid.TrustDomain{}, err
 	}
 
 	if len(prts) != 4 || prts[0] != "system" {

@@ -152,13 +152,10 @@ func (s *sentry) validator(ctx context.Context) (validator.Interface, error) {
 			return nil, err
 		}
 
-		// TODO: Remove once the NoDefaultTokenAudience feature is finalized
-		noDefaultTokenAudience := false
 		return valkube.New(ctx, valkube.Options{
-			RestConfig:             config,
-			SentryID:               sentryID,
-			ControlPlaneNS:         security.CurrentNamespace(),
-			NoDefaultTokenAudience: noDefaultTokenAudience,
+			RestConfig:     config,
+			SentryID:       sentryID,
+			ControlPlaneNS: security.CurrentNamespace(),
 		})
 	}
 
