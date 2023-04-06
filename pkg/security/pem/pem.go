@@ -114,15 +114,12 @@ func EncodePrivateKey(key any) ([]byte, error) {
 	)
 
 	switch key := key.(type) {
-	case *ecdsa.PrivateKey:
-		keyBytes, err = x509.MarshalECPrivateKey(key)
+	case *ecdsa.PrivateKey, *ed25519.PrivateKey:
+		keyBytes, err = x509.MarshalPKCS8PrivateKey(key)
 		if err != nil {
 			return nil, err
 		}
-		blockType = "EC PRIVATE KEY"
-	case *rsa.PrivateKey:
-		keyBytes = x509.MarshalPKCS1PrivateKey(key)
-		blockType = "RSA PRIVATE KEY"
+		blockType = "PRIVATE KEY"
 	default:
 		return nil, fmt.Errorf("unsupported key type %T", key)
 	}

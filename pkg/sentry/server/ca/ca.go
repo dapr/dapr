@@ -200,11 +200,11 @@ func generateCABundle(conf config.Config) (caBundle, error) {
 	if err != nil {
 		return caBundle{}, err
 	}
-	issKeyDer, err := x509.MarshalECPrivateKey(issKey)
+	issKeyDer, err := x509.MarshalPKCS8PrivateKey(issKey)
 	if err != nil {
 		return caBundle{}, err
 	}
-	issKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: issKeyDer})
+	issKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: issKeyDer})
 
 	issCert, err := generateIssuerCert(conf.TrustDomain, conf.AllowedClockSkew)
 	if err != nil {

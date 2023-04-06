@@ -64,10 +64,10 @@ func genCrt(t *testing.T,
 	require.NoError(t, err)
 	crtPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crtDER})
 
-	pkDER, err := x509.MarshalECPrivateKey(pk)
+	pkDER, err := x509.MarshalPKCS8PrivateKey(pk)
 	require.NoError(t, err)
 	pkPEM := pem.EncodeToMemory(&pem.Block{
-		Type: "EC PRIVATE KEY", Bytes: pkDER,
+		Type: "PRIVATE KEY", Bytes: pkDER,
 	})
 
 	return crtPEM, crt, pkPEM, pk
