@@ -29,6 +29,11 @@ on:
     - cron: "44 23 * * 0,6"
   # Manual trigger
   workflow_dispatch:
+    inputs:
+      tests:
+        description: "Space-separated list of perf tests to run only"
+        required: false
+        type: string
   # Dispatch on external events
   repository_dispatch:
     types: [perf-test]
@@ -348,6 +353,9 @@ jobs:
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+          if [ "${{ inputs.tests }}" != "" ] ; then
+            echo "DAPR_PERF_TEST=${{ inputs.tests }}" >> $GITHUB_ENV
+          fi
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
