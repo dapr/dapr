@@ -22,8 +22,7 @@ import (
 )
 
 const (
-	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
-	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	kubeTknPath = "/var/run/secrets/dapr.io/sentrytoken/token"
 )
 
 var (
@@ -55,10 +54,6 @@ func ExcludedRoute(route string) bool {
 
 // getKubernetesIdentityToken returns the value of the Kubernetes identity
 // token.
-// If a audience bound token for sentry does not exist, we use the Pods API
-// Server token. After all supported Dapr control plane versions support
-// audience bound tokens, we can remove this function and use the audience
-// bound token.
 func getKubernetesIdentityToken() (string, error) {
 	b, err := os.ReadFile(filepath.Join(rootFS, kubeTknPath))
 	if err != nil {

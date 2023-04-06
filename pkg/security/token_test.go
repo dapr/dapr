@@ -86,19 +86,19 @@ func Test_getKubernetesIdentityToken(t *testing.T) {
 			exp:        "",
 			expErr:     true,
 		},
-		"if only kube token is present, expect kube token": {
+		"if only kube token is present, expect error": {
 			kubeToken:  ptr.Of("kube-token"),
 			boundToken: nil,
-			exp:        "kube-token",
-			expErr:     false,
+			exp:        "",
+			expErr:     true,
 		},
-		"if only boundToken, expect boundToken": {
+		"if only boundToken, expect bound token": {
 			kubeToken:  nil,
 			boundToken: ptr.Of("bound-token"),
 			exp:        "bound-token",
 			expErr:     false,
 		},
-		"if both tokens are present, expect boundToken": {
+		"if both tokens are present, expect bound token": {
 			kubeToken:  ptr.Of("kube-token"),
 			boundToken: ptr.Of("bound-token"),
 			exp:        "bound-token",

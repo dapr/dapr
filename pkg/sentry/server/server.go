@@ -76,7 +76,7 @@ func Start(ctx context.Context, opts Options) error {
 	errCh := make(chan error, 1)
 	go func() {
 		log.Infof("Running gRPC server on port %d", opts.Port)
-		if err := svr.Serve(lis); err != nil {
+		if err := srv.Serve(lis); err != nil {
 			errCh <- fmt.Errorf("failed to serve: %w", err)
 			return
 		}
@@ -85,7 +85,7 @@ func Start(ctx context.Context, opts Options) error {
 
 	<-ctx.Done()
 	log.Info("Shutting down gRPC server")
-	svr.GracefulStop()
+	srv.GracefulStop()
 	return <-errCh
 }
 
