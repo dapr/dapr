@@ -44,7 +44,7 @@ func serialNumber() (*big.Int, error) {
 }
 
 // generateBaseCert returns a base non-CA cert that can be made a workload or CA cert
-// By adding subjects, key usage and additional proerties.
+// By adding subjects, key usage and additional properties.
 func generateBaseCert(ttl, skew time.Duration) (*x509.Certificate, error) {
 	serNum, err := serialNumber()
 	if err != nil {

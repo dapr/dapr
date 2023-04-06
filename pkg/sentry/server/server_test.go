@@ -303,7 +303,7 @@ func Test_Run(t *testing.T) {
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expCode, status.Code(err), "unexpected error code: %v", err)
 
-			require.Equal(t, test.expResp == nil, resp == nil, "expected response to be nil: %v", resp)
+			require.Equalf(t, test.expResp == nil, resp == nil, "expected response to be nil: %v", resp)
 			if test.expResp != nil {
 				assert.Equal(t, test.expResp.TrustChainCertificates, resp.TrustChainCertificates)
 				assert.Equal(t, test.expResp.ValidUntil, resp.ValidUntil)

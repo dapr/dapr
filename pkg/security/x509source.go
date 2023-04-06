@@ -135,16 +135,16 @@ func (x *x509source) GetX509BundleForTrustDomain(_ spiffeid.TrustDomain) (*x509b
 func (x *x509source) startRotation(ctx context.Context, fn renewFn, cert *x509.Certificate) {
 	defer log.Debug("stopping workload cert expiry watcher")
 	renewTime := renewalTime(cert.NotBefore, cert.NotAfter)
-	log.Infof("Starting workload cert expiry watcher. current cert expires on: %s, renewing at %s",
+	log.Infof("Starting workload cert expiry watcher; current cert expires on: %s, renewing at %s",
 		cert.NotAfter.String(), renewTime.String())
 
 	for {
 		select {
 		case <-x.clock.After(renewTime.Sub(x.clock.Now())):
-			log.Infof("renewing workload cert. current cert expires on: %s", cert.NotAfter.String())
+			log.Infof("Renewing workload cert; current cert expires on: %s", cert.NotAfter.String())
 			newCert, err := fn(ctx)
 			if err != nil {
-				log.Errorf("error renewing identity certificate, trying again in 10 seconds: %s", err)
+				log.Errorf("Error renewing identity certificate, trying again in 10 seconds: %v", err)
 				select {
 				case <-x.clock.After(10 * time.Second):
 					continue
@@ -154,7 +154,7 @@ func (x *x509source) startRotation(ctx context.Context, fn renewFn, cert *x509.C
 			}
 			cert = newCert
 			renewTime = renewalTime(cert.NotBefore, cert.NotAfter)
-			log.Infof("successfully renewed workload cert. new cert expires on: %s", cert.NotAfter.String())
+			log.Infof("Successfully renewed workload cert; new cert expires on: %s", cert.NotAfter.String())
 
 		case <-ctx.Done():
 			return

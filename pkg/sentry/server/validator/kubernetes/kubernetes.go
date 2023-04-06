@@ -188,7 +188,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	// for the ID containing their namespace and service account (ns:sa). This
 	// is wrong- dapr identities are based on daprd namespace + _app ID_.
 	// Remove this allowance in v1.12.
-	if fmt.Sprintf(req.Namespace+":"+pod.Spec.ServiceAccountName) == req.Id {
+	if req.Namespace+":"+pod.Spec.ServiceAccountName == req.Id {
 		req.Id = expID
 	}
 
@@ -210,7 +210,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	var config configv1alpha1.Configuration
 	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: configName}, &config)
 	if err != nil {
-		log.Errorf("failed to get configuration %q: %s", configName, err)
+		log.Errorf("Failed to get configuration %q: %v", configName, err)
 		return spiffeid.TrustDomain{}, fmt.Errorf("%s: failed to get configuration", errPrefix)
 	}
 

@@ -61,7 +61,7 @@ type server struct {
 func Start(ctx context.Context, opts Options) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", opts.Port))
 	if err != nil {
-		return fmt.Errorf("could not listen on port %d: %s", opts.Port, err)
+		return fmt.Errorf("could not listen on port %d: %w", opts.Port, err)
 	}
 
 	// No client auth because we auth based on the client SignCertificateRequest.
@@ -75,16 +75,16 @@ func Start(ctx context.Context, opts Options) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Infof("running gRPC server on port %d", opts.Port)
+		log.Infof("Running gRPC server on port %d", opts.Port)
 		if err := svr.Serve(lis); err != nil {
-			errCh <- fmt.Errorf("failed to serve: %s", err)
+			errCh <- fmt.Errorf("failed to serve: %w", err)
 			return
 		}
 		errCh <- nil
 	}()
 
 	<-ctx.Done()
-	log.Info("shutting down gRPC server")
+	log.Info("Shutting down gRPC server")
 	svr.GracefulStop()
 	return <-errCh
 }
@@ -144,13 +144,13 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		DNS:                dns,
 	})
 	if err != nil {
-		log.Errorf("error signing identity: %s", err)
+		log.Errorf("Error signing identity: %v", err)
 		return nil, status.Error(codes.Internal, "failed to sign certificate")
 	}
 
 	chainPEM, err := secpem.EncodeX509Chain(chain)
 	if err != nil {
-		log.Errorf("error encoding certificate chain: %s", err)
+		log.Errorf("Error encoding certificate chain: %v", err)
 		return nil, status.Error(codes.Internal, "failed to encode certificate chain")
 	}
 

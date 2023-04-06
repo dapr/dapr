@@ -92,7 +92,7 @@ type caBundle struct {
 func New(ctx context.Context, conf config.Config) (Interface, error) {
 	var castore store
 	if config.IsKubernetesHosted() {
-		log.Info("using kubernetes secret store for trust bundle storage")
+		log.Info("Using kubernetes secret store for trust bundle storage")
 
 		restConfig, err := rest.InClusterConfig()
 		if err != nil {
@@ -109,7 +109,7 @@ func New(ctx context.Context, conf config.Config) (Interface, error) {
 			client:    client,
 		}
 	} else {
-		log.Info("using local file system for trust bundle storage")
+		log.Info("Using local file system for trust bundle storage")
 		castore = &selfhosted{config: conf}
 	}
 
@@ -119,24 +119,24 @@ func New(ctx context.Context, conf config.Config) (Interface, error) {
 	}
 
 	if !ok {
-		log.Info("root and issuer certs not found: generating self signed CA")
+		log.Info("Root and issuer certs not found: generating self signed CA")
 
 		bundle, err = generateCABundle(conf)
 		if err != nil {
 			return nil, err
 		}
 
-		log.Info("root and issuer certs generated")
+		log.Info("Root and issuer certs generated")
 
 		if err := castore.store(ctx, bundle); err != nil {
 			return nil, err
 		}
 
-		log.Info("self signed certs generated and persisted successfully")
+		log.Info("Self-signed certs generated and persisted successfully")
 		monitoring.IssuerCertChanged()
 		monitoring.IssuerCertExpiry(bundle.issChain[0].NotAfter)
 	} else {
-		log.Info("root and issuer certs found: using existing certs")
+		log.Info("Root and issuer certs found: using existing certs")
 	}
 
 	return &ca{
