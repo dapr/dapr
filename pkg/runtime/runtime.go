@@ -1061,8 +1061,6 @@ func (a *DaprRuntime) initProxy() {
 		ACL:               a.accessControlList,
 		Resiliency:        a.resiliency,
 	})
-
-	log.Info("gRPC proxy enabled")
 }
 
 // begin components updates for kubernetes mode.

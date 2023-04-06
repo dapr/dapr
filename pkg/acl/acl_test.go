@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
@@ -139,7 +140,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 	t.Run("translate to in-memory rules", func(t *testing.T) {
 		accessControlList, err := initializeAccessControlList(config.HTTPProtocol)
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 
 		assert.Equal(t, config.DenyAccess, accessControlList.DefaultAction)
 		assert.Equal(t, "abcd", accessControlList.TrustDomain)
@@ -331,7 +332,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 
 	t.Run("test when no access control policy has been specified", func(t *testing.T) {
 		accessControlList, err := ParseAccessControlSpec(nil, "http")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, accessControlList)
 
 		invalidAccessControlSpec := &config.AccessControlSpec{
@@ -341,7 +342,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 		}
 
 		accessControlList, err = ParseAccessControlSpec(invalidAccessControlSpec, "http")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, accessControlList)
 	})
 
@@ -382,25 +383,25 @@ func TestSpiffeID(t *testing.T) {
 		assert.Equal(t, "mydomain", id.TrustDomain)
 		assert.Equal(t, "mynamespace", id.Namespace)
 		assert.Equal(t, "myappid", id.AppID)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("test parse invalid spiffe id", func(t *testing.T) {
 		spiffeID := "abcd"
 		_, err := parseSpiffeID(spiffeID)
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("test parse spiffe id with not all fields", func(t *testing.T) {
 		spiffeID := "spiffe://mydomain/ns/myappid"
 		_, err := parseSpiffeID(spiffeID)
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("test empty spiffe id", func(t *testing.T) {
 		spiffeID := ""
 		_, err := parseSpiffeID(spiffeID)
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
