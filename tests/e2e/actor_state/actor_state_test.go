@@ -153,7 +153,7 @@ func TestActorState(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
-			myData := []byte(`[{"operation":"upsert","request":{"key":"myTTLKey","value":"myTTLData","metadata":{"ttlInSeconds":"5"}}}]`)
+			myData := []byte(`[{"operation":"upsert","request":{"key":"myTTLKey","value":"myTTLData","metadata":{"ttlInSeconds":"3"}}}]`)
 			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), myData)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, code)
@@ -165,6 +165,7 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusOK, code)
 			assert.Equal(t, `"myTTLData"`, string(resp))
 
+			// Data should be deleted within 10s, since TTL is 3s
 			assert.Eventually(t, func() bool {
 				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
 				return err == nil && code == http.StatusNoContent && string(resp) == ""
