@@ -71,7 +71,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.Equal(t, "keepitsecret", config.Spec.Secrets.Scopes[0].AllowedSecrets[0])
 	})
 
-	t.Run("Kind and Name", func(t *testing.T) {
+	t.Run("check Kind and Name", func(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
 		assert.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
