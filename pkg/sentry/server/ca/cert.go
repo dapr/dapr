@@ -30,7 +30,7 @@ import (
 
 const (
 	// caTTL is the CA certificate TTL.
-	caTTL = 10 * 365 * 24 * time.Hour
+	caTTL = 365 * 24 * time.Hour
 )
 
 // serialNumber returns the serial number of the certificate.
