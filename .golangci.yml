@@ -137,6 +137,8 @@ linters-settings:
       - "github.com/ghodss/yaml": "must use sigs.k8s.io/yaml"
       - "gopkg.in/yaml.v2": "must use gopkg.in/yaml.v3"
       - "github.com/golang-jwt/jwt": "must use github.com/lestrrat-go/jwx/v2"
+      - "github.com/golang-jwt/jwt/v2": "must use github.com/lestrrat-go/jwx/v2"
+      - "github.com/golang-jwt/jwt/v3": "must use github.com/lestrrat-go/jwx/v2"
       - "github.com/ghodss/yaml": "must use sigs.k8s.io/yaml"
       # Commonly auto-completed by gopls
       - "github.com/gogo/status": "must use google.golang.org/grpc/status"
