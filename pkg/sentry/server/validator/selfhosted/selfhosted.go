@@ -25,7 +25,7 @@ import (
 
 type selfhosted struct{}
 
-func New() validator.Interface {
+func New() validator.Validator {
 	return &selfhosted{}
 }
 

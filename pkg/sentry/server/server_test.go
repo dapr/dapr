@@ -70,7 +70,7 @@ func Test_Run(t *testing.T) {
 
 	tests := map[string]struct {
 		sec security.Interface
-		val validator.Interface
+		val validator.Validator
 		ca  ca.Interface
 
 		req     *sentryv1pb.SignCertificateRequest

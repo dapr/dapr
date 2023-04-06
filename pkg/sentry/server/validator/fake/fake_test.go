@@ -20,5 +20,5 @@ import (
 )
 
 func Test_New(t *testing.T) {
-	var _ validator.Interface = New()
+	var _ validator.Validator = New()
 }

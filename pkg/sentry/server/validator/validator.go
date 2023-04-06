@@ -21,10 +21,10 @@ import (
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
-// Interface is used to validate the identity of a certificate requester by
+// Validator is used to validate the identity of a certificate requester by
 // using an ID and token.
 // Returns the trust domain of the certificate requester.
-type Interface interface {
+type Validator interface {
 	// Start starts the validator.
 	Start(context.Context) error
 

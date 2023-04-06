@@ -139,7 +139,7 @@ func (s *sentry) Start(ctx context.Context) error {
 	return errors.Join(err, <-providerErr, <-validatorErr)
 }
 
-func (s *sentry) validator(ctx context.Context) (validator.Interface, error) {
+func (s *sentry) validator(ctx context.Context) (validator.Validator, error) {
 	if config.IsKubernetesHosted() {
 		// We're in Kubernetes, create client and init a new serviceaccount token
 		// validator

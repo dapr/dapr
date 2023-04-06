@@ -45,7 +45,7 @@ type Options struct {
 	Security security.Interface
 
 	// Validator is the client authentication validator.
-	Validator validator.Interface
+	Validator validator.Validator
 
 	// CA is the certificate authority which signs client certificates.
 	CA ca.Interface
@@ -53,7 +53,7 @@ type Options struct {
 
 // server is the gRPC server for the Sentry service.
 type server struct {
-	val validator.Interface
+	val validator.Validator
 	ca  ca.Interface
 }
 

@@ -81,7 +81,7 @@ type kubernetes struct {
 	controlPlaneTD spiffeid.TrustDomain
 }
 
-func New(ctx context.Context, opts Options) (validator.Interface, error) {
+func New(ctx context.Context, opts Options) (validator.Validator, error) {
 	kubeClient, err := cl.NewForConfig(opts.RestConfig)
 	if err != nil {
 		return nil, err
