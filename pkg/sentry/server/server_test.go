@@ -301,7 +301,7 @@ func Test_Run(t *testing.T) {
 
 			resp, err := client.SignCertificate(ctx, test.req)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
-			assert.Equal(t, test.expCode, status.Code(err), "unexpected error code: %v", err)
+			assert.Equalf(t, test.expCode, status.Code(err), "unexpected error code: %v", err)
 
 			require.Equalf(t, test.expResp == nil, resp == nil, "expected response to be nil: %v", resp)
 			if test.expResp != nil {

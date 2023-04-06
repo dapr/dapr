@@ -40,7 +40,7 @@ func Test_Validate(t *testing.T) {
 			expTD: spiffeid.TrustDomain{},
 			expErr: fmt.Errorf("invalid request: %w",
 				errors.Join(
-					errors.New("app ID is required"),
+					errors.New("parameter app-id cannot be empty"),
 					errors.New("CSR is required"),
 					errors.New("namespace is required"),
 				)),

@@ -21,17 +21,17 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/validation"
 )
 
 // Validate validates the common rules for all requests.
 func Validate(_ context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
 	var errs []error
 
-	// TODO: we should also validate that the app ID is alpha numeric, and
-	// doesn't contain things like spaces etc.
-	if len(req.Id) == 0 {
-		errs = append(errs, errors.New("app ID is required"))
+	if err := validation.ValidateSelfHostedAppID(req.Id); err != nil {
+		errs = append(errs, err)
 	}
+
 	if len(req.Id) > 64 {
 		errs = append(errs, errors.New("app ID must be 64 characters or less"))
 	}
