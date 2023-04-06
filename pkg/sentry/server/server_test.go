@@ -69,7 +69,7 @@ func TestRun(t *testing.T) {
 	crtPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crt})
 
 	tests := map[string]struct {
-		sec security.Interface
+		sec security.Handler
 		val validator.Validator
 		ca  ca.Interface
 

@@ -123,7 +123,7 @@ func (s *sentry) Start(ctx context.Context) error {
 		providerErr <- provider.Start(ctx)
 	}()
 
-	sec, err := provider.Security(ctx)
+	sec, err := provider.Handler(ctx)
 	if err != nil {
 		return errors.Join(err, <-providerErr, <-validatorErr)
 	}

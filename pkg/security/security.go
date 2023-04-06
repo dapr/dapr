@@ -34,15 +34,15 @@ var log = logger.NewLogger("dapr.runtime.security")
 
 type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error)
 
-// Interface implements middleware for client and server connection security.
-type Interface interface {
+// Handler implements middleware for client and server connection security.
+type Handler interface {
 	GRPCServerOptionNoClientAuth() grpc.ServerOption
 }
 
 // Provider is the security provider.
 type Provider interface {
 	Start(context.Context) error
-	Security(context.Context) (Interface, error)
+	Handler(context.Context) (Handler, error)
 }
 
 // Options are the options for the security authenticator.
@@ -156,8 +156,9 @@ func (p *provider) Start(ctx context.Context) error {
 	return nil
 }
 
-// Security returns the security provider. Blocks until the provider is ready.
-func (p *provider) Security(ctx context.Context) (Interface, error) {
+// Handler returns a ready handler from the security provider. Blocks until
+// the provider is ready.
+func (p *provider) Handler(ctx context.Context) (Handler, error) {
 	select {
 	case <-p.readyCh:
 		return p.sec, nil

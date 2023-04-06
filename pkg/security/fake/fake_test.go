@@ -20,5 +20,5 @@ import (
 )
 
 func TestFake(t *testing.T) {
-	var _ security.Interface = New()
+	var _ security.Handler = New()
 }

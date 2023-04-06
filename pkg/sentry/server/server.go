@@ -41,8 +41,8 @@ type Options struct {
 	// Port is the port that the server will listen on.
 	Port int
 
-	// Security is the security listening configuration for the server.
-	Security security.Interface
+	// Security is the security handler for the server.
+	Security security.Handler
 
 	// Validator is the client authentication validator.
 	Validator validator.Validator
