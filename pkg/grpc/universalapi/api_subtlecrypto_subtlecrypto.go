@@ -41,6 +41,15 @@ func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 	if err != nil {
 		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
+	switch in.Format {
+	case runtimev1pb.SubtleGetKeyAlpha1Request_PEM,
+		runtimev1pb.SubtleGetKeyAlpha1Request_JSON: //nolint:nosnakecase
+		// Nop
+	default:
+		err = messages.ErrBadRequest.WithFormat("invalid key format")
+		a.Logger.Debug(err)
+		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
+	}
 
 	// Get the key
 	policyRunner := resiliency.NewRunner[jwk.Key](ctx,
@@ -101,11 +110,6 @@ func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 			a.Logger.Debug(err)
 			return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 		}
-
-	default:
-		err = messages.ErrBadRequest.WithFormat("invalid key format")
-		a.Logger.Debug(err)
-		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
 
 	return &runtimev1pb.SubtleGetKeyAlpha1Response{
@@ -131,7 +135,7 @@ func (a *UniversalAPI) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.
 	)
 	start := time.Now()
 	ser, err := policyRunner(func(ctx context.Context) (r subtleEncryptRes, rErr error) {
-		r.ciphertext, r.tag, rErr = component.Encrypt(ctx, in.Plaintext, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
+		r.ciphertext, r.tag, rErr = component.Encrypt(ctx, in.Plaintext, in.Algorithm, in.KeyName, in.Nonce, in.AssociatedData)
 		return
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -164,7 +168,7 @@ func (a *UniversalAPI) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.
 	)
 	start := time.Now()
 	plaintext, err := policyRunner(func(ctx context.Context) ([]byte, error) {
-		return component.Decrypt(ctx, in.Ciphertext, in.Algorithm, in.Key, in.Nonce, in.Tag, in.AssociatedData)
+		return component.Decrypt(ctx, in.Ciphertext, in.Algorithm, in.KeyName, in.Nonce, in.Tag, in.AssociatedData)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -209,7 +213,7 @@ func (a *UniversalAPI) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.
 	)
 	start := time.Now()
 	swkr, err := policyRunner(func(ctx context.Context) (r subtleWrapKeyRes, rErr error) {
-		r.wrappedKey, r.tag, rErr = component.WrapKey(ctx, pk, in.Algorithm, in.Key, in.Nonce, in.AssociatedData)
+		r.wrappedKey, r.tag, rErr = component.WrapKey(ctx, pk, in.Algorithm, in.KeyName, in.Nonce, in.AssociatedData)
 		return
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -242,7 +246,7 @@ func (a *UniversalAPI) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1p
 	)
 	start := time.Now()
 	plaintextText, err := policyRunner(func(ctx context.Context) (jwk.Key, error) {
-		return component.UnwrapKey(ctx, in.WrappedKey, in.Algorithm, in.Key, in.Nonce, in.Tag, in.AssociatedData)
+		return component.UnwrapKey(ctx, in.WrappedKey, in.Algorithm, in.KeyName, in.Nonce, in.Tag, in.AssociatedData)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -282,7 +286,7 @@ func (a *UniversalAPI) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.Sub
 	)
 	start := time.Now()
 	sig, err := policyRunner(func(ctx context.Context) ([]byte, error) {
-		return component.Sign(ctx, in.Digest, in.Algorithm, in.Key)
+		return component.Sign(ctx, in.Digest, in.Algorithm, in.KeyName)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -313,7 +317,7 @@ func (a *UniversalAPI) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.S
 	)
 	start := time.Now()
 	valid, err := policyRunner(func(ctx context.Context) (bool, error) {
-		return component.Verify(ctx, in.Digest, in.Signature, in.Algorithm, in.Key)
+		return component.Verify(ctx, in.Digest, in.Signature, in.Algorithm, in.KeyName)
 	})
 	elapsed := diag.ElapsedSince(start)
 
