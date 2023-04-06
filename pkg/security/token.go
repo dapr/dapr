@@ -61,11 +61,6 @@ func ExcludedRoute(route string) bool {
 // bound token.
 func getKubernetesIdentityToken() (string, error) {
 	b, err := os.ReadFile(filepath.Join(rootFS, kubeTknPath))
-	if os.IsNotExist(err) {
-		log.Warn("⚠️ daprd is initializing using the legacy service account token with access to Kubernetes APIs, which is discouraged. This usually happens when daprd is running against an older version of the Dapr control plane.")
-		// Attempt to use the legacy token if that exists
-		b, err = os.ReadFile(filepath.Join(rootFS, legacyKubeTknPath))
-	}
 	if err != nil {
 		return "", err
 	}
