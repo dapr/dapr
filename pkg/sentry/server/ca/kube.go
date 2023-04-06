@@ -37,45 +37,45 @@ type kube struct {
 	client    kubernetes.Interface
 }
 
-func (k *kube) get(ctx context.Context) (caBundle, bool, error) {
+func (k *kube) get(ctx context.Context) (CABundle, bool, error) {
 	s, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return caBundle{}, false, err
+		return CABundle{}, false, err
 	}
 
 	trustAnchors, ok := s.Data[filepath.Base(k.config.RootCertPath)]
 	if !ok {
-		return caBundle{}, false, nil
+		return CABundle{}, false, nil
 	}
 
 	issChainPEM, ok := s.Data[filepath.Base(k.config.IssuerCertPath)]
 	if !ok {
-		return caBundle{}, false, nil
+		return CABundle{}, false, nil
 	}
 
 	issKeyPEM, ok := s.Data[filepath.Base(k.config.IssuerKeyPath)]
 	if !ok {
-		return caBundle{}, false, nil
+		return CABundle{}, false, nil
 	}
 
 	// Ensure ConfigMap is up to date also.
 	cm, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return caBundle{}, false, err
+		return CABundle{}, false, err
 	}
 	if cm.Data[filepath.Base(k.config.RootCertPath)] != string(trustAnchors) {
-		return caBundle{}, false, nil
+		return CABundle{}, false, nil
 	}
 
 	bundle, err := verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
 	if err != nil {
-		return caBundle{}, false, err
+		return CABundle{}, false, err
 	}
 
 	return bundle, true, nil
 }
 
-func (k *kube) store(ctx context.Context, bundle caBundle) error {
+func (k *kube) store(ctx context.Context, bundle CABundle) error {
 	s, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
 		return err

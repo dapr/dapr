@@ -93,84 +93,84 @@ func TestVerifyBundle(t *testing.T) {
 		issKeyPEM   []byte
 		trustBundle []byte
 		expErr      bool
-		expCABundle caBundle
+		expCABundle CABundle
 	}{
 		"if issuer chain pem empty, expect error": {
 			issChainPEM: nil,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"if issuer key pem empty, expect error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   nil,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"if issuer trust bundle pem empty, expect error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: nil,
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"invalid issuer chain PEM should error": {
 			issChainPEM: []byte("invalid"),
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"invalid issuer key PEM should error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   []byte("invalid"),
 			trustBundle: rootPEM,
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"invalid trust bundle PEM should error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: []byte("invalid"),
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"if issuer chain is in wrong order, expect error": {
 			issChainPEM: joinPEM(int1PEM, int2PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"if issuer key does not belong to issuer certificate, expect error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int1PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"if trust anchors contains non root certificates, exp error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM, int1PEM),
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"if issuer chain doesn't belong to trust anchors, expect error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootBPEM),
 			expErr:      true,
-			expCABundle: caBundle{},
+			expCABundle: CABundle{},
 		},
 		"valid chain should not error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      false,
-			expCABundle: caBundle{
+			expCABundle: CABundle{
 				trustAnchors: rootPEM,
 				issChainPEM:  joinPEM(int1PEM),
 				issKeyPEM:    int1PKPEM,
@@ -183,7 +183,7 @@ func TestVerifyBundle(t *testing.T) {
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      false,
-			expCABundle: caBundle{
+			expCABundle: CABundle{
 				trustAnchors: joinPEM(rootPEM, rootBPEM),
 				issChainPEM:  joinPEM(int2PEM, int1PEM),
 				issKeyPEM:    int2PKPEM,
@@ -196,7 +196,7 @@ func TestVerifyBundle(t *testing.T) {
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      false,
-			expCABundle: caBundle{
+			expCABundle: CABundle{
 				trustAnchors: joinPEM(rootPEM, rootBPEM),
 				issChainPEM:  joinPEM(int2PEM, int1PEM),
 				issKeyPEM:    int2PKPEM,
@@ -225,7 +225,7 @@ func TestVerifyBundle(t *testing.T) {
 				[]byte("# this is a comment\n"),
 			),
 			expErr: false,
-			expCABundle: caBundle{
+			expCABundle: CABundle{
 				trustAnchors: joinPEM(rootPEM, rootBPEM),
 				issChainPEM:  joinPEM(int2PEM, int1PEM),
 				issKeyPEM:    int2PKPEM,
@@ -237,9 +237,9 @@ func TestVerifyBundle(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			caBundle, err := verifyBundle(test.trustBundle, test.issChainPEM, test.issKeyPEM)
+			CABundle, err := verifyBundle(test.trustBundle, test.issChainPEM, test.issKeyPEM)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
-			require.Equal(t, test.expCABundle, caBundle)
+			require.Equal(t, test.expCABundle, CABundle)
 		})
 	}
 }

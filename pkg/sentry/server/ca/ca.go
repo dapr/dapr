@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"time"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -70,18 +71,18 @@ type Interface interface {
 
 // store is the interface for the trust bundle backend store.
 type store interface {
-	store(context.Context, caBundle) error
-	get(context.Context) (caBundle, bool, error)
+	store(context.Context, CABundle) error
+	get(context.Context) (CABundle, bool, error)
 }
 
 // ca is the implementation of the CA Interface.
 type ca struct {
-	bundle caBundle
+	bundle CABundle
 	config config.Config
 }
 
-// caBundle is the bundle of certificates and keys used by the CA.
-type caBundle struct {
+// CABundle is the bundle of certificates and keys used by the CA.
+type CABundle struct {
 	trustAnchors []byte
 	issChainPEM  []byte
 	issKeyPEM    []byte
@@ -121,7 +122,7 @@ func New(ctx context.Context, conf config.Config) (Interface, error) {
 	if !ok {
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
-		bundle, err = generateCABundle(conf)
+		bundle, err = GenerateCABundle(conf.TrustDomain, conf.AllowedClockSkew)
 		if err != nil {
 			return nil, err
 		}
@@ -179,49 +180,49 @@ func (c *ca) TrustAnchors() []byte {
 	return c.bundle.trustAnchors
 }
 
-func generateCABundle(conf config.Config) (caBundle, error) {
+func GenerateCABundle(trustDomain string, allowedClockSkew time.Duration) (CABundle, error) {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return caBundle{}, err
+		return CABundle{}, err
 	}
 
-	rootCert, err := GenerateRootCert(conf.TrustDomain, conf.AllowedClockSkew)
+	rootCert, err := generateRootCert(trustDomain, allowedClockSkew)
 	if err != nil {
-		return caBundle{}, fmt.Errorf("failed to generate root cert: %w", err)
+		return CABundle{}, fmt.Errorf("failed to generate root cert: %w", err)
 	}
 
 	rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, &rootKey.PublicKey, rootKey)
 	if err != nil {
-		return caBundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
+		return CABundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
 	}
 	trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertDER})
 
 	issKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return caBundle{}, err
+		return CABundle{}, err
 	}
 	issKeyDer, err := x509.MarshalPKCS8PrivateKey(issKey)
 	if err != nil {
-		return caBundle{}, err
+		return CABundle{}, err
 	}
 	issKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: issKeyDer})
 
-	issCert, err := GenerateIssuerCert(conf.TrustDomain, conf.AllowedClockSkew)
+	issCert, err := generateIssuerCert(trustDomain, allowedClockSkew)
 	if err != nil {
-		return caBundle{}, fmt.Errorf("failed to generate issuer cert: %w", err)
+		return CABundle{}, fmt.Errorf("failed to generate issuer cert: %w", err)
 	}
 	issCertDER, err := x509.CreateCertificate(rand.Reader, issCert, rootCert, &issKey.PublicKey, rootKey)
 	if err != nil {
-		return caBundle{}, fmt.Errorf("failed to sign issuer cert: %w", err)
+		return CABundle{}, fmt.Errorf("failed to sign issuer cert: %w", err)
 	}
 	issCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: issCertDER})
 
 	issCert, err = x509.ParseCertificate(issCertDER)
 	if err != nil {
-		return caBundle{}, err
+		return CABundle{}, err
 	}
 
-	return caBundle{
+	return CABundle{
 		trustAnchors: trustAnchors,
 		issChainPEM:  issCertPEM,
 		issKeyPEM:    issKeyPEM,

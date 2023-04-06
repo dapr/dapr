@@ -36,7 +36,7 @@ func TestKube_get(t *testing.T) {
 	tests := map[string]struct {
 		sec       *corev1.Secret
 		cm        *corev1.ConfigMap
-		expBundle caBundle
+		expBundle CABundle
 		expOK     bool
 		expErr    bool
 	}{
@@ -49,7 +49,7 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: caBundle{},
+			expBundle: CABundle{},
 			expOK:     false,
 			expErr:    true,
 		},
@@ -66,7 +66,7 @@ func TestKube_get(t *testing.T) {
 				},
 			},
 			cm:        nil,
-			expBundle: caBundle{},
+			expBundle: CABundle{},
 			expOK:     false,
 			expErr:    true,
 		},
@@ -88,7 +88,7 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: caBundle{},
+			expBundle: CABundle{},
 			expOK:     false,
 			expErr:    false,
 		},
@@ -110,7 +110,7 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: caBundle{},
+			expBundle: CABundle{},
 			expOK:     false,
 			expErr:    false,
 		},
@@ -132,7 +132,7 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: caBundle{},
+			expBundle: CABundle{},
 			expOK:     false,
 			expErr:    false,
 		},
@@ -155,7 +155,7 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{},
 			},
-			expBundle: caBundle{},
+			expBundle: CABundle{},
 			expOK:     false,
 			expErr:    false,
 		},
@@ -178,7 +178,7 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM) + "\n" + string(rootPEM2)},
 			},
-			expBundle: caBundle{},
+			expBundle: CABundle{},
 			expOK:     false,
 			expErr:    false,
 		},
@@ -201,7 +201,7 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM2)},
 			},
-			expBundle: caBundle{},
+			expBundle: CABundle{},
 			expOK:     false,
 			expErr:    true,
 		},
@@ -224,7 +224,7 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: caBundle{
+			expBundle: CABundle{
 				trustAnchors: rootPEM,
 				issChainPEM:  intPEM,
 				issKeyPEM:    intPKPEM,
