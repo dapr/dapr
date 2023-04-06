@@ -26,26 +26,14 @@ import (
 
 // Validate validates the common rules for all requests.
 func Validate(_ context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-	var errs []error
-
-	if err := validation.ValidateSelfHostedAppID(req.Id); err != nil {
-		errs = append(errs, err)
-	}
-
-	if len(req.Id) > 64 {
-		errs = append(errs, errors.New("app ID must be 64 characters or less"))
-	}
-
-	if len(req.CertificateSigningRequest) == 0 {
-		errs = append(errs, errors.New("CSR is required"))
-	}
-
-	if len(req.Namespace) == 0 {
-		errs = append(errs, errors.New("namespace is required"))
-	}
-
-	if len(errs) > 0 {
-		return spiffeid.TrustDomain{}, fmt.Errorf("invalid request: %w", errors.Join(errs...))
+	err := errors.Join(
+		validation.ValidateSelfHostedAppID(req.Id),
+		appIDLessOrEqualTo64Characters(req.Id),
+		csrIsRequired(req.CertificateSigningRequest),
+		namespaceIsRequired(req.Namespace),
+	)
+	if err != nil {
+		return spiffeid.TrustDomain{}, fmt.Errorf("invalid request: %w", err)
 	}
 
 	if len(req.GetTrustDomain()) == 0 {
@@ -54,4 +42,25 @@ func Validate(_ context.Context, req *sentryv1pb.SignCertificateRequest) (spiffe
 	}
 
 	return spiffeid.TrustDomainFromString(req.GetTrustDomain())
+}
+
+func appIDLessOrEqualTo64Characters(appID string) error {
+	if len(appID) > 64 {
+		return errors.New("app ID must be 64 characters or less")
+	}
+	return nil
+}
+
+func csrIsRequired(csr []byte) error {
+	if len(csr) == 0 {
+		return errors.New("CSR is required")
+	}
+	return nil
+}
+
+func namespaceIsRequired(namespace string) error {
+	if len(namespace) == 0 {
+		return errors.New("namespace is required")
+	}
+	return nil
 }
