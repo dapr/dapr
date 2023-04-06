@@ -48,13 +48,13 @@ type Options struct {
 	Validator validator.Validator
 
 	// CA is the certificate authority which signs client certificates.
-	CA ca.Interface
+	CA ca.Signer
 }
 
 // server is the gRPC server for the Sentry service.
 type server struct {
 	val validator.Validator
-	ca  ca.Interface
+	ca  ca.Signer
 }
 
 // Start starts the server. Blocks until the context is cancelled.

@@ -20,5 +20,5 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	var _ ca.Interface = New()
+	var _ ca.Signer = New()
 }

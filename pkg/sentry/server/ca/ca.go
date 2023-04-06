@@ -57,8 +57,8 @@ type SignRequest struct {
 	DNS []string
 }
 
-// Interface is the interface for the CA.
-type Interface interface {
+// Signer is the interface for the CA.
+type Signer interface {
 	// SignIdentity signs a certificate request with the issuer certificate. Note
 	// that this does not include the trust anchors, and does not perform _any_
 	// kind of validation on the request; authz should already have happened
@@ -75,7 +75,7 @@ type store interface {
 	get(context.Context) (CABundle, bool, error)
 }
 
-// ca is the implementation of the CA Interface.
+// ca is the implementation of the CA Signer.
 type ca struct {
 	bundle CABundle
 	config config.Config
@@ -90,7 +90,7 @@ type CABundle struct {
 	issKey       any
 }
 
-func New(ctx context.Context, conf config.Config) (Interface, error) {
+func New(ctx context.Context, conf config.Config) (Signer, error) {
 	var castore store
 	if config.IsKubernetesHosted() {
 		log.Info("Using kubernetes secret store for trust bundle storage")

@@ -71,7 +71,7 @@ func TestRun(t *testing.T) {
 	tests := map[string]struct {
 		sec security.Handler
 		val validator.Validator
-		ca  ca.Interface
+		ca  ca.Signer
 
 		req     *sentryv1pb.SignCertificateRequest
 		expResp *sentryv1pb.SignCertificateResponse
