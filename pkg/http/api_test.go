@@ -3272,6 +3272,112 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// assert
 		assert.Nil(t, resp.ErrorBody)
 	})
+
+	/////////////////////////
+	// PAUSE API TESTS //
+	/////////////////////////
+
+	t.Run("Pause with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//pause"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Pause with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//instanceID/pause"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Pause with non existent component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/pause"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Pause with valid API path", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'pause' method implemented to simply return nil
+
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/pause"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
+
+	/////////////////////////
+	// RESUME API TESTS //
+	/////////////////////////
+
+	t.Run("Resume with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//resume"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Resume with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//instanceID/resume"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Resume with non existent component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/resume"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Resume with valid API path", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'resume' method implemented to simply return nil
+
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/resume"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
 }
 
 func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
@@ -4741,6 +4847,14 @@ func (l *fakeWorkflowComponent) Get(ctx context.Context, req *workflowContrib.Wo
 }
 
 func (l *fakeWorkflowComponent) RaiseEvent(ctx context.Context, req *workflowContrib.RaiseEventRequest) error {
+	return nil
+}
+
+func (l *fakeWorkflowComponent) Pause(ctx context.Context, req *workflowContrib.WorkflowReference) error {
+	return nil
+}
+
+func (l *fakeWorkflowComponent) Resume(ctx context.Context, req *workflowContrib.WorkflowReference) error {
 	return nil
 }
 
