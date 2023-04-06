@@ -42,9 +42,9 @@ func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
 	switch in.Format {
-	case runtimev1pb.SubtleGetKeyAlpha1Request_PEM,
-		runtimev1pb.SubtleGetKeyAlpha1Request_JSON: //nolint:nosnakecase
-		// Nop
+	//nolint:nosnakecase
+	case runtimev1pb.SubtleGetKeyAlpha1Request_PEM, runtimev1pb.SubtleGetKeyAlpha1Request_JSON:
+		// All good - nop
 	default:
 		err = messages.ErrBadRequest.WithFormat("invalid key format")
 		a.Logger.Debug(err)
