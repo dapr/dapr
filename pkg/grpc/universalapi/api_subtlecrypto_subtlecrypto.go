@@ -37,7 +37,7 @@ import (
 
 // SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
 func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleGetKeyAlpha1Request) (*runtimev1pb.SubtleGetKeyAlpha1Response, error) {
-	component, err := a.cryptoValidateRequest(in.ComponentName)
+	component, err := a.CryptoValidateRequest(in.ComponentName)
 	if err != nil {
 		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
@@ -121,7 +121,7 @@ type subtleEncryptRes struct {
 
 // SubtleEncryptAlpha1 encrypts a small message using a key stored in the vault.
 func (a *UniversalAPI) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleEncryptAlpha1Request) (*runtimev1pb.SubtleEncryptAlpha1Response, error) {
-	component, err := a.cryptoValidateRequest(in.ComponentName)
+	component, err := a.CryptoValidateRequest(in.ComponentName)
 	if err != nil {
 		return &runtimev1pb.SubtleEncryptAlpha1Response{}, err
 	}
@@ -154,7 +154,7 @@ func (a *UniversalAPI) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.
 
 // SubtleDecryptAlpha1 decrypts a small message using a key stored in the vault.
 func (a *UniversalAPI) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleDecryptAlpha1Request) (*runtimev1pb.SubtleDecryptAlpha1Response, error) {
-	component, err := a.cryptoValidateRequest(in.ComponentName)
+	component, err := a.CryptoValidateRequest(in.ComponentName)
 	if err != nil {
 		return &runtimev1pb.SubtleDecryptAlpha1Response{}, err
 	}
@@ -190,7 +190,7 @@ type subtleWrapKeyRes struct {
 
 // SubtleWrapKeyAlpha1 wraps a key using a key stored in the vault.
 func (a *UniversalAPI) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleWrapKeyAlpha1Request) (*runtimev1pb.SubtleWrapKeyAlpha1Response, error) {
-	component, err := a.cryptoValidateRequest(in.ComponentName)
+	component, err := a.CryptoValidateRequest(in.ComponentName)
 	if err != nil {
 		return &runtimev1pb.SubtleWrapKeyAlpha1Response{}, err
 	}
@@ -232,7 +232,7 @@ func (a *UniversalAPI) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.
 
 // SubtleUnwrapKeyAlpha1 unwraps a key using a key stored in the vault.
 func (a *UniversalAPI) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyAlpha1Request) (*runtimev1pb.SubtleUnwrapKeyAlpha1Response, error) {
-	component, err := a.cryptoValidateRequest(in.ComponentName)
+	component, err := a.CryptoValidateRequest(in.ComponentName)
 	if err != nil {
 		return &runtimev1pb.SubtleUnwrapKeyAlpha1Response{}, err
 	}
@@ -272,7 +272,7 @@ func (a *UniversalAPI) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1p
 
 // SubtleSignAlpha1 signs a message using a key stored in the vault.
 func (a *UniversalAPI) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.SubtleSignAlpha1Request) (*runtimev1pb.SubtleSignAlpha1Response, error) {
-	component, err := a.cryptoValidateRequest(in.ComponentName)
+	component, err := a.CryptoValidateRequest(in.ComponentName)
 	if err != nil {
 		return &runtimev1pb.SubtleSignAlpha1Response{}, err
 	}
@@ -303,7 +303,7 @@ func (a *UniversalAPI) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.Sub
 
 // SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
 func (a *UniversalAPI) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.SubtleVerifyAlpha1Request) (*runtimev1pb.SubtleVerifyAlpha1Response, error) {
-	component, err := a.cryptoValidateRequest(in.ComponentName)
+	component, err := a.CryptoValidateRequest(in.ComponentName)
 	if err != nil {
 		return &runtimev1pb.SubtleVerifyAlpha1Response{}, err
 	}
@@ -332,9 +332,9 @@ func (a *UniversalAPI) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.S
 	}, nil
 }
 
-// Internal method that checks if the request is for a valid crypto component.
-func (a *UniversalAPI) cryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
-	if a.CryptoProviders == nil || len(a.CryptoProviders) == 0 {
+// CryptoValidateRequest is an internal method that checks if the request is for a valid crypto component.
+func (a *UniversalAPI) CryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
+	if len(a.CryptoProviders) == 0 {
 		err := messages.ErrCryptoProvidersNotConfigured
 		a.Logger.Debug(err)
 		return nil, err

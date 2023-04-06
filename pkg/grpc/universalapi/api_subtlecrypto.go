@@ -19,6 +19,7 @@ package universalapi
 import (
 	"context"
 
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -56,4 +57,22 @@ func (a *UniversalAPI) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.Sub
 // SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
 func (a *UniversalAPI) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.SubtleVerifyAlpha1Request) (*runtimev1pb.SubtleVerifyAlpha1Response, error) {
 	return nil, messages.ErrAPIUnimplemented
+}
+
+// CryptoValidateRequest is an internal method that checks if the request is for a valid crypto component.
+func (a *UniversalAPI) CryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
+	if len(a.CryptoProviders) == 0 {
+		err := messages.ErrCryptoProvidersNotConfigured
+		a.Logger.Debug(err)
+		return nil, err
+	}
+
+	component := a.CryptoProviders[componentName]
+	if component == nil {
+		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
+		a.Logger.Debug(err)
+		return nil, err
+	}
+
+	return component, nil
 }
