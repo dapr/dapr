@@ -65,13 +65,13 @@ func Start(ctx context.Context, opts Options) error {
 	}
 
 	// No client auth because we auth based on the client SignCertificateRequest.
-	svr := grpc.NewServer(opts.Security.GRPCServerOptionNoClientAuth())
+	srv := grpc.NewServer(opts.Security.GRPCServerOptionNoClientAuth())
 
 	s := &server{
 		val: opts.Validator,
 		ca:  opts.CA,
 	}
-	sentryv1pb.RegisterCAServer(svr, s)
+	sentryv1pb.RegisterCAServer(srv, s)
 
 	errCh := make(chan error, 1)
 	go func() {

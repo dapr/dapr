@@ -65,7 +65,7 @@ func (s *sentry) Start(ctx context.Context) error {
 
 	camngr, err := ca.New(ctx, s.conf)
 	if err != nil {
-		return fmt.Errorf("error creating CA: %s", err)
+		return fmt.Errorf("error creating CA: %w", err)
 	}
 	log.Info("ca certificate key pair ready")
 
@@ -111,7 +111,7 @@ func (s *sentry) Start(ctx context.Context) error {
 
 	validatorErr := make(chan error, 1)
 	go func() {
-		log.Info("starting validator")
+		log.Info("Starting validator")
 		validatorErr <- val.Start(ctx)
 	}()
 
@@ -130,12 +130,13 @@ func (s *sentry) Start(ctx context.Context) error {
 
 	log.Info("Security ready")
 
-	return errors.Join(server.Start(ctx, server.Options{
+	err = server.Start(ctx, server.Options{
 		Port:      s.conf.Port,
 		Security:  sec,
 		Validator: val,
 		CA:        camngr,
-	}), <-providerErr, <-validatorErr)
+	})
+	return errors.Join(err, <-providerErr, <-validatorErr)
 }
 
 func (s *sentry) validator(ctx context.Context) (validator.Interface, error) {
