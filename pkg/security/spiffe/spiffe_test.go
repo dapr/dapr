@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_FromID(t *testing.T) {
+func TestFromID(t *testing.T) {
 	tests := map[string]struct {
 		id     spiffeid.ID
 		expOK  bool
@@ -72,7 +72,7 @@ func Test_FromID(t *testing.T) {
 	}
 }
 
-func Test_ToID(t *testing.T) {
+func TestToID(t *testing.T) {
 	tests := map[string]struct {
 		parsed Parsed
 		expID  spiffeid.ID

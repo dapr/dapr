@@ -25,7 +25,7 @@ import (
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
-func Test_Validate(t *testing.T) {
+func TestValidate(t *testing.T) {
 	tests := map[string]struct {
 		req    *sentryv1pb.SignCertificateRequest
 		expTD  spiffeid.TrustDomain

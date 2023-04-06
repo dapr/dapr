@@ -36,7 +36,7 @@ func init() {
 	}
 }
 
-func Test_selhosted_store(t *testing.T) {
+func Testselhosted_store(t *testing.T) {
 	t.Run("storing file should write to disk with correct permissions", func(t *testing.T) {
 		rootFile := filepath.Join(t.TempDir(), "root.pem")
 		issuerFile := filepath.Join(t.TempDir(), "issuer.pem")
@@ -86,7 +86,7 @@ func Test_selhosted_store(t *testing.T) {
 	})
 }
 
-func Test_selfhosted_get(t *testing.T) {
+func Testselfhosted_get(t *testing.T) {
 	rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
 	intPEM, intCrt, intPKPEM, intPK := genCrt(t, "int", rootCrt, rootPK)
 

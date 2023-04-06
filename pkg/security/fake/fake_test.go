@@ -19,6 +19,6 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-func Test_Fake(t *testing.T) {
+func TestFake(t *testing.T) {
 	var _ security.Interface = New()
 }

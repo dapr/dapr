@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/config"
 )
 
-func Test_kube_get(t *testing.T) {
+func Testkube_get(t *testing.T) {
 	rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
 	//nolint:dogsled
 	rootPEM2, _, _, _ := genCrt(t, "root2", nil, nil)

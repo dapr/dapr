@@ -27,12 +27,12 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
-func Test_interface(t *testing.T) {
+func Testinterface(t *testing.T) {
 	var _ x509svid.Source = &x509source{}
 	var _ x509bundle.Source = &x509source{}
 }
 
-func Test_startRotation(t *testing.T) {
+func TeststartRotation(t *testing.T) {
 	t.Run("if context is cancelled, expect return", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -174,7 +174,7 @@ func Test_startRotation(t *testing.T) {
 	})
 }
 
-func Test_renewalTime(t *testing.T) {
+func TestrenewalTime(t *testing.T) {
 	now := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	tests := map[string]struct {
 		notBefore time.Time

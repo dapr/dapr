@@ -46,7 +46,7 @@ import (
 	validatorfake "github.com/dapr/dapr/pkg/sentry/server/validator/fake"
 )
 
-func Test_Run(t *testing.T) {
+func TestRun(t *testing.T) {
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 

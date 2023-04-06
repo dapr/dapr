@@ -19,6 +19,6 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 )
 
-func Test_New(t *testing.T) {
+func TestNew(t *testing.T) {
 	var _ ca.Interface = New()
 }

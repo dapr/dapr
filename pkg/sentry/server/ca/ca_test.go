@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/config"
 )
 
-func Test_New(t *testing.T) {
+func TestNew(t *testing.T) {
 	t.Run("if no existing bundle exist, new should generate a new bundle", func(t *testing.T) {
 		os.Setenv("NAMESPACE", "dapr-test")
 		t.Cleanup(func() {
@@ -131,7 +131,7 @@ func Test_New(t *testing.T) {
 	})
 }
 
-func Test_SignIdentity(t *testing.T) {
+func TestSignIdentity(t *testing.T) {
 	t.Run("singing identity should return a signed certificate with chain", func(t *testing.T) {
 		dir := t.TempDir()
 		rootCertPath := filepath.Join(dir, "root.cert")
