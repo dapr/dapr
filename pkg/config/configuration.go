@@ -478,6 +478,24 @@ func (c Configuration) GetAPISpec() APISpec {
 	return *c.Spec.APISpec
 }
 
+// GetLoggingSpec returns the Logging spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c Configuration) GetLoggingSpec() LoggingSpec {
+	if c.Spec.LoggingSpec == nil {
+		return LoggingSpec{}
+	}
+	return *c.Spec.LoggingSpec
+}
+
+// GetLoggingSpec returns the Logging.APILogging spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
+	if c.Spec.LoggingSpec == nil || c.Spec.LoggingSpec.APILogging == nil {
+		return APILoggingSpec{}
+	}
+	return *c.Spec.LoggingSpec.APILogging
+}
+
 // ToYAML returns the Configuration represented as YAML.
 func (c *Configuration) ToYAML() (string, error) {
 	b, err := yaml.Marshal(c)

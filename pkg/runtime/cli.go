@@ -360,10 +360,10 @@ func FromFlags() (*DaprRuntime, error) {
 	if len(config) > 0 {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			log.Debug("Loading Kubernetes config resources: " + strings.Join(config, ", "))
+			log.Debug("Loading Kubernetes config resource(s): " + strings.Join(config, ", "))
 			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
-			log.Debug("Loading config from files: " + strings.Join(config, ", "))
+			log.Debug("Loading config from file(s): " + strings.Join(config, ", "))
 			globalConfig, configErr = daprGlobalConfig.LoadStandaloneConfiguration(config...)
 		}
 	}
@@ -422,7 +422,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if enableAPILogging != nil {
 		runtimeConfig.EnableAPILogging = *enableAPILogging
 	} else {
-		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec != nil && globalConfig.Spec.LoggingSpec.APILogging != nil && globalConfig.Spec.LoggingSpec.APILogging.Enabled
+		runtimeConfig.EnableAPILogging = globalConfig.GetAPILoggingSpec().Enabled
 	}
 
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
