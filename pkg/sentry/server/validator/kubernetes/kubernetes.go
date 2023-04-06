@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	kauthapi "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -51,6 +51,8 @@ const (
 var (
 	log    = logger.NewLogger("dapr.sentry.identity.kubernetes")
 	scheme = runtime.NewScheme()
+
+	errMissingPodClaim = errors.New("kubernetes.io/pod/name claim is missing from Kubernetes token")
 )
 
 func init() {
@@ -157,21 +159,25 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 			errPrefix, req.Namespace)
 	}
 
-	var claims k8sClaims
 	// We have already validated to the token against Kubernetes API server, so
 	// we do not need to supply a key.
-	ptoken, _, err := jwt.NewParser().ParseUnverified(req.GetToken(), &claims)
+	ptoken, err := jwt.ParseInsecure([]byte(req.GetToken()), jwt.WithTypedClaim("kubernetes.io", new(k8sClaims)))
 	if err != nil {
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: failed to parse kubernetes token: %s", errPrefix, err)
+		return spiffeid.TrustDomain{}, fmt.Errorf("%s: failed to parse Kubernetes token: %s", errPrefix, err)
 	}
-	if err = ptoken.Claims.Valid(); err != nil {
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: invalid kubernetes token: %s", errPrefix, err)
+	claimsT, ok := ptoken.Get("kubernetes.io")
+	if !ok {
+		return spiffeid.TrustDomain{}, errMissingPodClaim
+	}
+	claims, ok := claimsT.(*k8sClaims)
+	if !ok || len(claims.Pod.Name) == 0 {
+		return spiffeid.TrustDomain{}, errMissingPodClaim
 	}
 
 	var pod corev1.Pod
-	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: claims.Kubernetes.Pod.Name}, &pod)
+	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: claims.Pod.Name}, &pod)
 	if err != nil {
-		log.Errorf("failed to get pod %s/%s for requested identity: %s", req.Namespace, claims.Kubernetes.Pod.Name, err)
+		log.Errorf("failed to get pod %s/%s for requested identity: %s", req.Namespace, claims.Pod.Name, err)
 		return spiffeid.TrustDomain{}, fmt.Errorf("%s: failed to get pod of identity", errPrefix)
 	}
 	expID, ok := pod.GetAnnotations()[annotations.KeyAppID]
@@ -180,7 +186,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 
 	if pod.Spec.ServiceAccountName != prts[3] {
-		log.Errorf("service account on pod %s/%s does not match token", req.Namespace, claims.Kubernetes.Pod.Name)
+		log.Errorf("service account on pod %s/%s does not match token", req.Namespace, claims.Pod.Name)
 		return spiffeid.TrustDomain{}, fmt.Errorf("%s: pod service account mismatch", errPrefix)
 	}
 
@@ -247,19 +253,9 @@ func (k *kubernetes) executeTokenReview(ctx context.Context, token string, audie
 // k8sClaims is a subset of the claims in a Kubernetes service account token
 // containing the name of the Pod that the token was issued for.
 type k8sClaims struct {
-	Kubernetes struct {
-		Pod struct {
-			Name string `json:"name"`
-		} `json:"pod"`
-	} `json:"kubernetes.io"`
-}
-
-// Valid implements the jwt.Claims interface.
-func (k *k8sClaims) Valid() error {
-	if len(k.Kubernetes.Pod.Name) == 0 {
-		return errors.New("kubernetes.io/pod/name claim is missing")
-	}
-	return nil
+	Pod struct {
+		Name string `json:"name"`
+	} `json:"pod"`
 }
 
 func (k *kubernetes) isControlPlaneComponent(ns string, appID string) bool {
