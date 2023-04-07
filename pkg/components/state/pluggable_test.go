@@ -949,3 +949,11 @@ type failingTransactOperation struct{}
 func (failingTransactOperation) Operation() state.OperationType {
 	return "unknown"
 }
+
+func (failingTransactOperation) GetKey() string {
+	return "unknown"
+}
+
+func (failingTransactOperation) GetMetadata() map[string]string {
+	return nil
+}

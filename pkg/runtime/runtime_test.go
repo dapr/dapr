@@ -4285,6 +4285,10 @@ func (b *mockBinding) Close() error {
 	return b.closeErr
 }
 
+func (b *mockBinding) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func TestInvokeOutputBindings(t *testing.T) {
 	t.Run("output binding missing operation", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
