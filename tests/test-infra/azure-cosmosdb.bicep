@@ -73,6 +73,7 @@ resource databaseAccount 'Microsoft.DocumentDB/databaseAccounts@2021-04-15' = {
             ]
             kind: 'Hash'
           }
+          defaultTtl: -1
         }
         options: cosmosDbThroughput > 0 ? cosmosDbThroughputObj : {}
       }
