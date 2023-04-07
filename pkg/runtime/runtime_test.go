@@ -721,7 +721,7 @@ func TestInitState(t *testing.T) {
 			Version: "v1",
 			Metadata: []componentsV1alpha1.MetadataItem{
 				{
-					Name: "actorStateStore",
+					Name: actorStateStore,
 					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
@@ -5651,7 +5651,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 			Version: "v1",
 			Metadata: []componentsV1alpha1.MetadataItem{
 				{
-					Name: "actorStateStore",
+					Name: actorStateStore,
 					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
