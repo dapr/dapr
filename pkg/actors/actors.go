@@ -105,31 +105,31 @@ type transactionalStateStore interface {
 }
 
 type actorsRuntime struct {
-	appChannel             channel.AppChannel
-	placement              PlacementService
-	grpcConnectionFn       GRPCConnectionFn
-	config                 Config
-	actorsTable            *sync.Map
-	activeTimers           *sync.Map
-	activeTimersLock       sync.RWMutex
-	activeReminders        *sync.Map
-	remindersLock          sync.RWMutex
-	remindersMigrationLock sync.Mutex
-	activeRemindersLock    sync.RWMutex
-	reminders              map[string][]actorReminderReference
-	evaluationLock         sync.RWMutex
-	evaluationChan         chan struct{}
-	appHealthy             *atomic.Bool
-	certChain              *daprCredentials.CertChain
-	tracingSpec            configuration.TracingSpec
-	resiliency             resiliency.Provider
-	storeName              string
-	compStore              *compstore.ComponentStore
-	ctx                    context.Context
-	cancel                 context.CancelFunc
-	clock                  clock.WithTicker
-	internalActors         map[string]InternalActor
-	internalActorChannel   *internalActorChannel
+	appChannel           channel.AppChannel
+	placement            PlacementService
+	grpcConnectionFn     GRPCConnectionFn
+	config               Config
+	actorsTable          *sync.Map
+	activeTimers         *sync.Map
+	activeTimersLock     sync.RWMutex
+	activeReminders      *sync.Map
+	remindersLock        sync.RWMutex
+	remindersStoringLock sync.Mutex
+	activeRemindersLock  sync.RWMutex
+	reminders            map[string][]actorReminderReference
+	evaluationLock       sync.RWMutex
+	evaluationChan       chan struct{}
+	appHealthy           *atomic.Bool
+	certChain            *daprCredentials.CertChain
+	tracingSpec          configuration.TracingSpec
+	resiliency           resiliency.Provider
+	storeName            string
+	compStore            *compstore.ComponentStore
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	clock                clock.WithTicker
+	internalActors       map[string]InternalActor
+	internalActorChannel *internalActorChannel
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -1403,9 +1403,9 @@ func (a *actorsRuntime) migrateRemindersForActorType(ctx context.Context, store 
 		return nil
 	}
 
-	// Nice to have: avoid conflicting migration within the same process.
-	a.remindersMigrationLock.Lock()
-	defer a.remindersMigrationLock.Unlock()
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
+
 	log.Warnf("migrating actor metadata record for actor type %s", actorType)
 
 	// Fetch all reminders for actor type.
@@ -1662,6 +1662,9 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		return errors.New("error deleting reminder: timed out after 5s")
 	}
 
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
+
 	reminderKey := constructCompositeKey(actorType, actorID, name)
 
 	stop, exists := a.activeReminders.Load(reminderKey)
@@ -1801,6 +1804,9 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 }
 
 func (a *actorsRuntime) storeReminder(ctx context.Context, store transactionalStateStore, reminder *reminders.Reminder, stopChannel chan struct{}) error {
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
+
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
