@@ -2539,6 +2539,11 @@ func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 				return in, nil
 			},
 			OutModifier: func(out *runtimev1pb.QueryStateResponse) (any, error) {
+				// If the response is empty, return nil
+				if out == nil || len(out.Results) == 0 {
+					return nil, nil
+				}
+
 				// We need to translate this to a JSON object because one of the fields must be returned as json.RawMessage
 				qresp := &QueryResponse{
 					Results:  make([]QueryItem, len(out.Results)),
