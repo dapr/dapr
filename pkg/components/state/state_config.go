@@ -45,7 +45,7 @@ type StoreConfiguration struct {
 func SaveStateConfiguration(storeName string, metadata map[string]string) error {
 	strategy := strategyDefault
 	for k, v := range metadata {
-		if strings.ToLower(k) == strategyKey {
+		if strings.ToLower(k) == strategyKey { //nolint:gocritic
 			strategy = strings.ToLower(v)
 			break
 		}

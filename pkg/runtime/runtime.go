@@ -1798,7 +1798,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 			// set specified actor store if "actorStateStore" is true in the spec.
 			actorStoreSpecified := false
 			for k, v := range props {
-				if strings.ToLower(k) == actorStateStore {
+				if strings.ToLower(k) == actorStateStore { //nolint:gocritic
 					actorStoreSpecified = utils.IsTruthy(v)
 				}
 			}
