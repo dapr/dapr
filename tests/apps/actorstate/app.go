@@ -145,7 +145,7 @@ func initActor(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
 	reqURL := fmt.Sprintf(actorInvokeURLFormat, daprHTTPPort, actorType, id)
-	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewBuffer([]byte{}))
+	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(nil))
 	if err != nil {
 		log.Printf("actor init call failed: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -186,9 +186,9 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 		DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 	}{
 		Entities:                []string{"httpMyActorType", "grpcMyActorType"},
-		ActorIdleTimeout:        "5s",
-		ActorScanInterval:       "1s",
-		DrainOngoingCallTimeout: "1s",
+		ActorIdleTimeout:        "30s",
+		ActorScanInterval:       "10s",
+		DrainOngoingCallTimeout: "20s",
 		DrainRebalancedActors:   true,
 	})
 }
