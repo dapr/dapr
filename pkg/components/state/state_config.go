@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	strategyKey = "keyPrefix"
+	strategyKey = "keyprefix"
 
 	strategyNamespace = "namespace"
 	strategyAppid     = "appid"
@@ -43,15 +43,17 @@ type StoreConfiguration struct {
 }
 
 func SaveStateConfiguration(storeName string, metadata map[string]string) error {
-	strategy := metadata[strategyKey]
-	strategy = strings.ToLower(strategy)
-	if strategy == "" {
-		strategy = strategyDefault
-	} else {
-		err := checkKeyIllegal(metadata[strategyKey])
-		if err != nil {
-			return err
+	strategy := strategyDefault
+	for k, v := range metadata {
+		if strings.ToLower(k) == strategyKey {
+			strategy = strings.ToLower(v)
+			break
 		}
+	}
+
+	err := checkKeyIllegal(strategy)
+	if err != nil {
+		return err
 	}
 
 	statesConfigurationLock.Lock()
