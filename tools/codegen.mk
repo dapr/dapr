@@ -9,7 +9,7 @@ endif
 # Generate code
 code-generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="./tools/boilerplate.go.txt" \
-		crd:trivialVersions=true crd:crdVersions=v1 paths="./pkg/apis/..." output:crd:artifacts:config=config/crd/bases
+		crd:crdVersions=v1 paths="./pkg/apis/..." output:crd:artifacts:config=config/crd/bases
 
 # find or download controller-gen
 # download controller-gen if necessary
@@ -19,7 +19,7 @@ ifeq (, $(shell which controller-gen))
 		set -e ;\
 		CONTROLLER_GEN_TMP_DIR="$$(mktemp -d)" ;\
 		cd "$$CONTROLLER_GEN_TMP_DIR" ;\
-		go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.5.0 ; \
+		go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.11.3 ; \
 		rm -rf "$$CONTROLLER_GEN_TMP_DIR" ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen

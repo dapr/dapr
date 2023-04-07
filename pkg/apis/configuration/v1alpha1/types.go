@@ -70,8 +70,8 @@ type APISpec struct {
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
 type APIAccessRule struct {
-	Name    string `json:"name,omitempty"`
-	Version string `json:"version,omitempty"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
 	// +optional
 	Protocol string `json:"protocol,omitempty"`
 }
@@ -90,9 +90,9 @@ type SecretsSpec struct {
 
 // SecretsScope defines the scope for secrets.
 type SecretsScope struct {
+	StoreName string `json:"storeName"`
 	// +optional
 	DefaultAccess string `json:"defaultAccess,omitempty"`
-	StoreName     string `json:"storeName,omitempty"`
 	// +optional
 	AllowedSecrets []string `json:"allowedSecrets,omitempty"`
 	// +optional
@@ -106,18 +106,17 @@ type PipelineSpec struct {
 
 // HandlerSpec defines a request handlers.
 type HandlerSpec struct {
-	Name         string        `json:"name,omitempty"`
-	Type         string        `json:"type,omitempty"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	// +optional
 	SelectorSpec *SelectorSpec `json:"selector,omitempty"`
 }
 
 // MTLSSpec defines mTLS configuration.
 type MTLSSpec struct {
-	Enabled *bool `json:"enabled,omitempty"`
-	// +optional
-	WorkloadCertTTL string `json:"workloadCertTTL,omitempty"`
-	// +optional
-	AllowedClockSkew string `json:"allowedClockSkew,omitempty"`
+	Enabled          *bool   `json:"enabled,omitempty"`
+	WorkloadCertTTL  *string `json:"workloadCertTTL,omitempty"`
+	AllowedClockSkew *string `json:"allowedClockSkew,omitempty"`
 }
 
 // GetEnabled returns true if mTLS is enabled.
@@ -133,13 +132,13 @@ type SelectorSpec struct {
 
 // SelectorField defines a selector fields.
 type SelectorField struct {
-	Field string `json:"field,omitempty"`
-	Value string `json:"value,omitempty"`
+	Field string `json:"field"`
+	Value string `json:"value"`
 }
 
 // TracingSpec defines distributed tracing configuration.
 type TracingSpec struct {
-	SamplingRate string `json:"samplingRate,omitempty"`
+	SamplingRate *string `json:"samplingRate,omitempty"`
 	// +optional
 	Stdout *bool `json:"stdout,omitempty"`
 	// +optional
@@ -150,9 +149,9 @@ type TracingSpec struct {
 
 // OtelSpec defines Otel exporter configurations.
 type OtelSpec struct {
-	Protocol        string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
-	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
-	IsSecure        *bool  `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	Protocol        *string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	EndpointAddress *string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	IsSecure        *bool   `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
@@ -169,19 +168,19 @@ type MetricSpec struct {
 
 // MetricsRule defines configuration options for a metric.
 type MetricsRule struct {
-	Name   string        `json:"name,omitempty"`
-	Labels []MetricLabel `json:"labels,omitempty"`
+	Name   string        `json:"name"`
+	Labels []MetricLabel `json:"labels"`
 }
 
 // MetricsLabel defines an object that allows to set regex expressions for a label.
 type MetricLabel struct {
-	Name  string            `json:"name,omitempty"`
-	Regex map[string]string `json:"regex,omitempty"`
+	Name  string            `json:"name"`
+	Regex map[string]string `json:"regex"`
 }
 
 // AppPolicySpec defines the policy data structure for each app.
 type AppPolicySpec struct {
-	AppName string `json:"appId,omitempty" yaml:"appId,omitempty"`
+	AppName string `json:"appId" yaml:"appId"`
 	// +optional
 	DefaultAction string `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
 	// +optional
@@ -194,20 +193,17 @@ type AppPolicySpec struct {
 
 // AppOperationAction defines the data structure for each app operation.
 type AppOperationAction struct {
-	Operation string `json:"name,omitempty" yaml:"name,omitempty"`
+	Operation string `json:"name" yaml:"name"`
 	// +optional
 	HTTPVerb []string `json:"httpVerb,omitempty" yaml:"httpVerb,omitempty"`
-	Action   string   `json:"action,omitempty" yaml:"action,omitempty"`
+	Action   string   `json:"action" yaml:"action"`
 }
 
 // AccessControlSpec is the spec object in ConfigurationSpec.
 type AccessControlSpec struct {
-	// +optional
-	DefaultAction string `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
-	// +optional
-	TrustDomain string `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
-	// +optional
-	AppPolicies []AppPolicySpec `json:"policies,omitempty" yaml:"policies,omitempty"`
+	DefaultAction *string         `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
+	TrustDomain   *string         `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
+	AppPolicies   []AppPolicySpec `json:"policies,omitempty" yaml:"policies,omitempty"`
 }
 
 // FeatureSpec defines the features that are enabled/disabled.
@@ -219,7 +215,6 @@ type FeatureSpec struct {
 // ComponentsSpec describes the configuration for Dapr components
 type ComponentsSpec struct {
 	// Denylist of component types that cannot be instantiated
-	// +optional
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
 }
 
@@ -234,16 +229,13 @@ type LoggingSpec struct {
 type APILoggingSpec struct {
 	// Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly.
 	// The default value is false.
-	// +optional
 	Enabled *bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	// When enabled, obfuscates the values of URLs in HTTP API logs, logging the route name rather than the full path being invoked, which could contain PII.
 	// Default: false.
 	// This option has no effect if API logging is disabled.
-	// +optional
 	ObfuscateURLs *bool `json:"obfuscateURLs,omitempty" yaml:"obfuscateURLs,omitempty"`
 	// If true, health checks are not reported in API logs. Default: false.
 	// This option has no effect if API logging is disabled.
-	// +optional
 	OmitHealthChecks *bool `json:"omitHealthChecks,omitempty" yaml:"omitHealthChecks,omitempty"`
 }
 
