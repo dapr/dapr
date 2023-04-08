@@ -278,9 +278,9 @@ func TestGetPlacementTables(t *testing.T) {
 	t.Run("Get placement tables", func(t *testing.T) {
 		// arrange
 		conn, client, stream := newTestClient(t, serverAddress)
-		var testAppID = "testAppID"
-		var testActorType = "DogActor"
-		var testName = "127.0.0.1:50102"
+		testAppID := "testAppID"
+		testActorType := "DogActor"
+		testName := "127.0.0.1:50102"
 
 		host := &v1pb.Host{
 			Name:     testName,
