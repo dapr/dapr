@@ -72,6 +72,21 @@ require (
 )
 
 require (
+	github.com/apache/thrift v0.13.0 // indirect
+	github.com/bytedance/gopkg v0.0.0-20220817015305-b879a72dc90f // indirect
+	github.com/chenzhuoyu/iasm v0.0.0-20230222070914-0b1b64b0e762 // indirect
+	github.com/choleraehyq/pid v0.0.16 // indirect
+	github.com/cloudwego/fastpb v0.0.4-0.20230131074846-6fc453d58b96 // indirect
+	github.com/cloudwego/frugal v0.1.6 // indirect
+	github.com/cloudwego/kitex v0.5.0 // indirect
+	github.com/cloudwego/netpoll v0.3.2 // indirect
+	github.com/cloudwego/thriftgo v0.2.8 // indirect
+	github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 // indirect
+	github.com/oleiade/lane v1.0.1 // indirect
+	golang.org/x/arch v0.2.0 // indirect
+)
+
+require (
 	cloud.google.com/go v0.110.0 // indirect
 	cloud.google.com/go/compute v1.18.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
