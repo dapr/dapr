@@ -16,6 +16,7 @@ package wfengine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -298,6 +299,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
+	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
+	// will use this updated generation value for their duplication execution handling.
+	if runtimeState.ContinuedAsNew() {
+		state.Generation += 1
+	}
+
 	if !runtimeState.IsCompleted() {
 		// Create reminders for the durable timers. We only do this if the orchestration is still running.
 		for _, t := range runtimeState.PendingTimers() {
@@ -357,10 +364,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 			resp, err := wf.actors.Call(ctx, req)
 			if err != nil {
-				return newRecoverableError(
-					fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
+				if errors.Is(err, ErrDuplicateInvocation) {
+					wfLogger.Warnf("%s: activity invocation %s#%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
+					continue
+				}
+				return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
 			}
-			defer resp.Close()
+			resp.Close()
 		} else {
 			wfLogger.Warn("don't know how to process task %v", e)
 		}
@@ -439,10 +449,14 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 	// Reminders need to have unique names or else they may not fire in certain race conditions.
 	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
 	wfLogger.Debugf("%s: creating '%s' reminder with DueTime = %s", actorID, reminderName, delay)
+	dataEnc, err := json.Marshal(data)
+	if err != nil {
+		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: WorkflowActorType,
 		ActorID:   actorID,
-		Data:      data,
+		Data:      dataEnc,
 		DueTime:   delay.String(),
 		Name:      reminderName,
 		Period:    wf.reminderInterval.String(),

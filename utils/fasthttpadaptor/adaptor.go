@@ -121,3 +121,5 @@ func (w *NetHTTPResponseWriter) SetUserValue(key any, value any) {
 	}
 	w.userValues[key] = value
 }
+
+func (w *NetHTTPResponseWriter) Flush() {}

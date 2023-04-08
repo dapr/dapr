@@ -48,7 +48,7 @@ func (c FakeSecretStore) BulkGetSecret(ctx context.Context, req secretstores.Bul
 	}, nil
 }
 
-func (c FakeSecretStore) Init(metadata secretstores.Metadata) error {
+func (c FakeSecretStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
 	return nil
 }
 
@@ -91,7 +91,7 @@ func (c FailingSecretStore) BulkGetSecret(ctx context.Context, req secretstores.
 	}, nil
 }
 
-func (c FailingSecretStore) Init(metadata secretstores.Metadata) error {
+func (c FailingSecretStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
 	return nil
 }
 

@@ -15,7 +15,9 @@ package injector
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -32,6 +34,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -41,23 +44,25 @@ const (
 	port                                      = 4000
 	getKubernetesServiceAccountTimeoutSeconds = 10
 	systemGroup                               = "system:masters"
+	serviceAccountUserInfoPrefix              = "system:serviceaccount:"
 )
 
 var log = logger.NewLogger("dapr.injector")
 
 var AllowedServiceAccountInfos = []string{
-	"replicaset-controller:kube-system",
-	"deployment-controller:kube-system",
-	"cronjob-controller:kube-system",
-	"job-controller:kube-system",
-	"statefulset-controller:kube-system",
-	"daemon-set-controller:kube-system",
-	"tekton-pipelines-controller:tekton-pipelines",
+	"kube-system:replicaset-controller",
+	"kube-system:deployment-controller",
+	"kube-system:cronjob-controller",
+	"kube-system:job-controller",
+	"kube-system:statefulset-controller",
+	"kube-system:daemon-set-controller",
+	"tekton-pipelines:tekton-pipelines-controller",
 }
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
-	Run(ctx context.Context, onReady func())
+	Run(context.Context) error
+	Ready(context.Context) error
 }
 
 type injector struct {
@@ -67,6 +72,9 @@ type injector struct {
 	kubeClient   kubernetes.Interface
 	daprClient   scheme.Interface
 	authUIDs     []string
+
+	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
+	ready                chan struct{}
 }
 
 // errorToAdmissionResponse is a helper function to create an AdmissionResponse
@@ -99,7 +107,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config.
-func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) Injector {
+func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) (Injector, error) {
 	mux := http.NewServeMux()
 
 	i := &injector{
@@ -111,14 +119,35 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
+			TLSConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
 		},
 		kubeClient: kubeClient,
 		daprClient: daprClient,
 		authUIDs:   authUIDs,
+		ready:      make(chan struct{}),
 	}
 
+	matcher, err := createNamespaceNameMatcher(strings.TrimSpace(config.AllowedServiceAccountsPrefixNames))
+	if err != nil {
+		return nil, err
+	}
+	i.namespaceNameMatcher = matcher
+
 	mux.HandleFunc("/mutate", i.handleRequest)
-	return i
+	return i, nil
+}
+
+func createNamespaceNameMatcher(allowedPrefix string) (matcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher, err error) {
+	if allowedPrefix != "" {
+		matcher, err = namespacednamematcher.CreateFromString(allowedPrefix)
+		if err != nil {
+			return nil, err
+		}
+		log.Debugf("Sidecar injector configured to allowed serviceaccounts prefixed by: %s", allowedPrefix)
+	}
+	return matcher, nil
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
@@ -148,7 +177,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
 		found := false
 		for _, sa := range serviceaccounts.Items {
-			if sa.Name == serviceAccountInfo[0] && sa.Namespace == serviceAccountInfo[1] {
+			if sa.Namespace == serviceAccountInfo[0] && sa.Name == serviceAccountInfo[1] {
 				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
 				found = true
 				break
@@ -162,42 +191,45 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	return allowedUids, nil
 }
 
-func (i *injector) Run(ctx context.Context, onReady func()) {
-	go func() {
-		select {
-		case <-ctx.Done():
-			log.Info("Sidecar injector is shutting down")
-			shutdownCtx, cancel := context.WithTimeout(
-				context.Background(),
-				time.Second*5,
-			)
-			defer cancel()
-			err := i.server.Shutdown(shutdownCtx)
-			if err != nil {
-				log.Errorf("Error while shutting down injector: %v", err)
-			}
-		}
-	}()
+func (i *injector) Run(ctx context.Context) error {
+	select {
+	case <-i.ready:
+		return errors.New("injector already running")
+	default:
+		// Nop
+	}
 
 	ln, err := net.Listen("tcp", i.server.Addr)
 	if err != nil {
-		log.Fatalf("Eror while creating listener: %v", err)
+		return fmt.Errorf("error while creating listener: %w", err)
 	}
 
 	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
 
-	if onReady != nil {
-		onReady()
+	errCh := make(chan error, 1)
+	go func() {
+		srverr := i.server.ServeTLS(ln, i.config.TLSCertFile, i.config.TLSKeyFile)
+		if !errors.Is(srverr, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("sidecar injector error: %s", srverr)
+			return
+		}
+		errCh <- nil
+	}()
+
+	close(i.ready)
+
+	select {
+	case <-ctx.Done():
+		log.Info("Sidecar injector is shutting down")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err = i.server.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("error while shutting down injector: %v; %v", err, <-errCh)
+		}
+		return <-errCh
+	case err = <-errCh:
+		return err
 	}
-
-	err = i.server.ServeTLS(ln, i.config.TLSCertFile, i.config.TLSKeyFile)
-	if err != http.ErrServerClosed {
-		log.Errorf("Sidecar injector error: %s", err)
-	}
-
-	ln.Close()
-
-	log.Info("Sidecar injector stopped")
 }
 
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
@@ -234,12 +266,17 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-		if !(utils.Contains(i.authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
+		allowServiceAccountUser := i.allowServiceAccountUser(ar.Request.UserInfo.Username)
+
+		if !(allowServiceAccountUser || utils.Contains(i.authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
 			log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
 		} else if ar.Request.Kind.Kind != "Pod" {
 			log.Errorf("invalid kind for review: %s", ar.Kind)
 		} else {
-			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.config.SidecarImagePullPolicy, i.kubeClient, i.daprClient)
+			patchOps, err = i.getPodPatchOperations(r.Context(), &ar,
+				i.config.Namespace, i.config.SidecarImage, i.config.SidecarImagePullPolicy,
+				i.kubeClient, i.daprClient,
+			)
 			if err == nil {
 				patchedSuccessfully = true
 			}
@@ -305,5 +342,30 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Errorf("Admission succeeded, but pod was not patched. No sidecar injected for '%s'", diagAppID)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
+	}
+}
+
+func (i *injector) allowServiceAccountUser(reviewRequestUserInfo string) (allowedUID bool) {
+	if i.namespaceNameMatcher == nil {
+		return false
+	}
+
+	if !strings.HasPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix) {
+		return false
+	}
+	namespacedName := strings.TrimPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix)
+	namespacedNameParts := strings.Split(namespacedName, ":")
+	if len(namespacedNameParts) <= 1 {
+		return false
+	}
+	return i.namespaceNameMatcher.MatchesNamespacedName(namespacedNameParts[0], namespacedNameParts[1])
+}
+
+func (i *injector) Ready(ctx context.Context) error {
+	select {
+	case <-i.ready:
+		return nil
+	case <-ctx.Done():
+		return errors.New("timed out waiting for injector to become ready")
 	}
 }

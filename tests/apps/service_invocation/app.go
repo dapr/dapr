@@ -225,6 +225,13 @@ func opDenyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(appResponse{Message: response})
 }
 
+func opRedirectHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Location", "http://localhost:3500/v1.0/invoke/serviceinvocation-callee-1/method/opAllow")
+	w.WriteHeader(http.StatusTemporaryRedirect)
+	response := "opRedirect is called"
+	json.NewEncoder(w).Encode(appResponse{Message: response})
+}
+
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Enter testHandler")
 	var commandBody testCommandRequest
@@ -253,7 +260,7 @@ func invokeService(remoteApp, method string) (appResponse, int, error) {
 }
 
 func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, int, error) {
-	resp, err := invokeServiceWithBodyHeader(remoteApp, method, data, map[string]string{})
+	resp, err := invokeServiceWithBodyHeader(remoteApp, method, data, nil)
 	var statusCode int
 	if resp != nil {
 		statusCode = resp.StatusCode
@@ -279,7 +286,7 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 	return appResp, statusCode, nil
 }
 
-func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error) {
+func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers http.Header) (*http.Response, error) {
 	url := fmt.Sprintf("http://localhost:%s/v1.0/invoke/%s/method/%s", strconv.Itoa(daprHTTPPort), remoteApp, method)
 	fmt.Printf("invoke url is %s\n", url)
 
@@ -291,14 +298,14 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 	/* #nosec */
 	req, _ := http.NewRequest(http.MethodPost, url, t)
 	for k, v := range headers {
-		req.Header.Add(k, v)
+		req.Header[k] = v
 	}
 
 	req.Header.Add("Content-Type", jsonContentType)
 	return httpClient.Do(req)
 }
 
-func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error) {
+func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, headers http.Header) (*http.Response, error) {
 	url := fmt.Sprintf("http://localhost:%s/%s", strconv.Itoa(daprHTTPPort), method)
 	fmt.Printf("invoke url is %s\n", url)
 
@@ -309,12 +316,12 @@ func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, hea
 
 	/* #nosec */
 	req, _ := http.NewRequest(http.MethodPost, url, t)
-	req.Header.Add("dapr-app-id", remoteApp)
+	req.Header.Set("dapr-app-id", remoteApp)
 	for k, v := range headers {
-		req.Header.Add(k, v)
+		req.Header[k] = v
 	}
 
-	req.Header.Add("Content-Type", jsonContentType)
+	req.Header.Set("Content-Type", jsonContentType)
 	return httpClient.Do(req)
 }
 
@@ -347,6 +354,8 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/opAllow", opAllowHandler).Methods("POST")
 	router.HandleFunc("/opDeny", opDenyHandler).Methods("POST")
+
+	router.PathPrefix("/opRedirect").Handler(http.HandlerFunc(opRedirectHandler)).Methods("POST")
 
 	router.HandleFunc("/tests/invoke_test", testHandler)
 
@@ -401,6 +410,8 @@ func retrieveRequestObject(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", jsonContentType)
 	w.Header().Set("DaprTest-Response-1", "DaprTest-Response-Value-1")
 	w.Header().Set("DaprTest-Response-2", "DaprTest-Response-Value-2")
+	w.Header().Add("DaprTest-Response-Multi", "DaprTest-Response-Multi-1")
+	w.Header().Add("DaprTest-Response-Multi", "DaprTest-Response-Multi-2")
 
 	if val, ok := headers["Daprtest-Traceid"]; ok {
 		// val[0] is client app given trace id
@@ -410,7 +421,7 @@ func retrieveRequestObject(w http.ResponseWriter, r *http.Request) {
 	w.Write(serializedHeaders)
 }
 
-func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error)) {
+func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteApp, method string, data []byte, headers http.Header) (*http.Response, error)) {
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
@@ -432,14 +443,15 @@ func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteA
 	}
 
 	log.Printf("httpTohttpTest calling with message %s\n", string(b))
-	headers := map[string]string{
-		"DaprTest-Request-1": "DaprValue1",
-		"DaprTest-Request-2": "DaprValue2",
+	headers := map[string][]string{
+		"DaprTest-Request-1": {"DaprValue1"},
+		"DaprTest-Request-2": {"DaprValue2"},
+		"DaprTest-Multi":     {"M'illumino", "d'immenso"},
 	}
 
 	tracing, _ := strconv.ParseBool(commandBody.RemoteAppTracing)
 	if tracing {
-		headers["Daprtest-Traceid"] = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+		headers["Daprtest-Traceid"] = []string{"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 	}
 
 	resp, err := send(commandBody.RemoteApp, "retrieve_request_object", b, headers)
@@ -514,21 +526,17 @@ func testV1RequestHTTPToGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("httpTogrpcTest calling with message %s\n", string(b))
-	headers := map[string]string{
-		"DaprTest-Request-1": "DaprValue1",
-		"DaprTest-Request-2": "DaprValue2",
+	headers := map[string][]string{
+		"DaprTest-Request-1": {"DaprValue1"},
+		"DaprTest-Request-2": {"DaprValue2"},
+		"DaprTest-Multi":     {"M'illumino", "d'immenso"},
 	}
 
 	tracing, _ := strconv.ParseBool(commandBody.RemoteAppTracing)
 	if tracing {
-		headers["Daprtest-Traceid"] = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+		headers["Daprtest-Traceid"] = []string{"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 	}
-	resp, err := invokeServiceWithBodyHeader(
-		commandBody.RemoteApp,
-		"retrieve_request_object",
-		b,
-		headers,
-	)
+	resp, err := invokeServiceWithBodyHeader(commandBody.RemoteApp, "retrieve_request_object", b, headers)
 	if err != nil {
 		log.Printf("response had error %s\n", err)
 		onHTTPCallFailed(w, 0, err)
@@ -578,21 +586,18 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 
 	// Create the client
 	tracing, _ := strconv.ParseBool(commandBody.RemoteAppTracing)
-	var ctx context.Context
-	if tracing {
-		ctx = metadata.AppendToOutgoingContext(
-			r.Context(),
-			"DaprTest-Request-1", "DaprValue1",
-			"DaprTest-Request-2", "DaprValue2",
-			"Daprtest-Traceid", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-		)
-	} else {
-		ctx = metadata.AppendToOutgoingContext(
-			r.Context(),
-			"DaprTest-Request-1", "DaprValue1",
-			"DaprTest-Request-2", "DaprValue2",
-		)
+	ctx := r.Context()
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if !ok {
+		md = metadata.MD{}
 	}
+	md.Append("DaprTest-Request-1", "DaprValue1")
+	md.Append("DaprTest-Request-2", "DaprValue2")
+	md.Append("DaprTest-Multi", "M'illumino", "d'immenso")
+	if tracing {
+		md.Append("Daprtest-Traceid", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	}
+	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &runtimev1pb.InvokeServiceRequest{
 		Id: commandBody.RemoteApp,
 		Message: &commonv1pb.InvokeRequest{
@@ -625,7 +630,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 				listValue = append(listValue, base64.StdEncoding.EncodeToString([]byte(val)))
 			}
 		} else {
-			listValue = append(listValue, vals...)
+			listValue = vals
 		}
 		respHeaders[k] = listValue
 	}
@@ -669,21 +674,18 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("grpcToHTTPTest - target app: %s\n", commandBody.RemoteApp)
 
 	tracing, _ := strconv.ParseBool(commandBody.RemoteAppTracing)
-	var ctx context.Context
-	if tracing {
-		ctx = metadata.AppendToOutgoingContext(
-			r.Context(),
-			"DaprTest-Request-1", "DaprValue1",
-			"DaprTest-Request-2", "DaprValue2",
-			"Daprtest-Traceid", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-		)
-	} else {
-		ctx = metadata.AppendToOutgoingContext(
-			r.Context(),
-			"DaprTest-Request-1", "DaprValue1",
-			"DaprTest-Request-2", "DaprValue2",
-		)
+	ctx := r.Context()
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if !ok {
+		md = metadata.MD{}
 	}
+	md.Append("DaprTest-Request-1", "DaprValue1")
+	md.Append("DaprTest-Request-2", "DaprValue2")
+	md.Append("DaprTest-Multi", "M'illumino", "d'immenso")
+	if tracing {
+		md.Append("Daprtest-Traceid", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	}
+	ctx = metadata.NewOutgoingContext(ctx, md)
 
 	req := &runtimev1pb.InvokeServiceRequest{
 		Id: commandBody.RemoteApp,
@@ -718,7 +720,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 				listValue = append(listValue, base64.StdEncoding.EncodeToString([]byte(val)))
 			}
 		} else {
-			listValue = append(listValue, vals...)
+			listValue = vals
 		}
 		respHeaders[k] = listValue
 	}

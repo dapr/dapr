@@ -118,7 +118,16 @@ service Dapr {
   rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
 
   // Terminate Workflow
-  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {}
+  rpc TerminateWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
+
+  // Pause Workflow
+  rpc PauseWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
+
+  // Resume Workflow
+  rpc ResumeWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
+
+  // Raise Event for a Workflow
+  rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (RaiseEventWorkflowResponse) {}
 
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
@@ -243,7 +252,7 @@ message SaveStateRequest {
 // QueryStateRequest is the message to query state store.
 message QueryStateRequest {
   // The name of state store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The query in JSON format.
   string query = 2;
@@ -380,7 +389,7 @@ message InvokeBindingResponse {
 // GetSecretRequest is the message to get secret from secret store.
 message GetSecretRequest {
   // The name of secret store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The name of secret key.
   string key = 2;
@@ -399,7 +408,7 @@ message GetSecretResponse {
 // GetBulkSecretRequest is the message to get the secrets from secret store.
 message GetBulkSecretRequest {
   // The name of secret store.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // The metadata which will be sent to secret store components.
   map<string, string> metadata = 2;
@@ -507,6 +516,11 @@ message TransactionalActorStateOperation {
   string operationType = 1;
   string key = 2;
   google.protobuf.Any value = 3;
+  // The metadata used for transactional operations.
+  //
+  // Common metadata property:
+  // - ttlInSeconds : the time to live in seconds for the stored value.
+  map<string, string> metadata = 4;
 }
 
 // InvokeActorRequest is the message to call an actor.
@@ -624,11 +638,11 @@ message UnsubscribeConfigurationResponse {
 
 message TryLockRequest {
   // Required. The lock store name,e.g. `redis`.
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
 
   // Required. resource_id is the lock key. e.g. `order_id_111`
   // It stands for "which resource I want to protect"
-  string resource_id = 2;
+  string resource_id = 2 [json_name = "resourceId"];
 
   // Required. lock_owner indicate the identifier of lock owner.
   // You can generate a uuid as lock_owner.For example,in golang:
@@ -645,24 +659,21 @@ message TryLockRequest {
   // we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
   // 3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
   // So this field in the request shouldn't be removed.
-  string lock_owner = 3;
+  string lock_owner = 3 [json_name = "lockOwner"];
 
   // Required. The time before expiry.The time unit is second.
-  int32 expiryInSeconds = 4;
+  int32 expiry_in_seconds = 4 [json_name = "expiryInSeconds"];
 }
 
-
 message TryLockResponse {
-
   bool success = 1;
 }
 
 message UnlockRequest {
-  string store_name = 1;
+  string store_name = 1 [json_name = "storeName"];
   // resource_id is the lock key.
-  string resource_id = 2;
-
-  string lock_owner = 3;
+  string resource_id = 2 [json_name = "resourceId"];
+  string lock_owner = 3 [json_name = "lockOwner"];
 }
 
 message UnlockResponse {
@@ -677,13 +688,13 @@ message UnlockResponse {
 }
 
 message WorkflowReference {
-  string instance_id = 1;
+  string instance_id = 1 [json_name = "instanceId"];
 }
 
 message GetWorkflowRequest {
-  string instance_id  = 1;
-  string workflow_type = 2;
-  string workflow_component = 3;
+  string instance_id  = 1 [json_name = "instanceId"];
+  string workflow_component = 2 [json_name = "workflowComponent"];
+  string workflow_name = 3 [json_name = "workflowName"];
 }
 
 message GetWorkflowResponse {
@@ -693,17 +704,29 @@ message GetWorkflowResponse {
 }
 
 message StartWorkflowRequest {
-  string instance_id = 1;
-  string workflow_component = 2;
-  string workflow_name = 3;
+  string instance_id = 1 [json_name = "instanceId"];
+  string workflow_component = 2 [json_name = "workflowComponent"];
+  string workflow_name = 3 [json_name = "workflowName"];
   map<string, string> options = 4;
   bytes input = 5;
 }
 
-message TerminateWorkflowRequest {
-  string instance_id = 1;
-  string workflow_component = 2;
+message WorkflowActivityRequest {
+  string instance_id = 1 [json_name = "instanceId"];
+  string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-message TerminateWorkflowResponse {
+message WorkflowActivityResponse {
+  // Empty
+}
+
+message RaiseEventWorkflowRequest {
+  string instance_id = 1 [json_name = "instanceId"];
+  string workflow_component = 2 [json_name = "workflowComponent"];
+  string event_name = 3 [json_name = "eventName"];
+  bytes input = 4;
+}
+
+message RaiseEventWorkflowResponse {
+  // Empty
 }

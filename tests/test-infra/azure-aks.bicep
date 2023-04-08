@@ -43,7 +43,7 @@ param diagStorageResourceId string = ''
 var osDiskSizeGB = 0
 
 // Version of Kubernetes
-var kubernetesVersion = '1.24.6'
+var kubernetesVersion = '1.25.5'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2019-05-01' = {
   name: '${namePrefix}acr'
@@ -64,7 +64,7 @@ resource roleAssignContainerRegistry 'Microsoft.Authorization/roleAssignments@20
     principalId: reference('${namePrefix}-aks', '2021-07-01').identityProfile.kubeletidentity.objectId
   }
   scope: containerRegistry
-  dependsOn:[
+  dependsOn: [
     aks
   ]
 }
@@ -118,6 +118,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           count: 2
           vmSize: windowsVMSize
           osType: 'Windows'
+          osSKU: 'Windows2022'
           type: 'VirtualMachineScaleSets'
           mode: 'User'
           maxPods: 110
@@ -132,7 +133,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           vnetSubnetID: aksVNet::defaultSubnet.id
           tags: {}
         }
-      ] : [] , enableArm ? [
+      ] : [], enableArm ? [
         {
           name: 'armpol'
           osDiskSizeGB: osDiskSizeGB

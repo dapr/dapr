@@ -228,15 +228,26 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 	return subscriptions, nil
 }
 
-// DeclarativeSelfHosted loads subscriptions from the given components path.
-func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Subscription) {
-	if _, err := os.Stat(componentsPath); os.IsNotExist(err) {
+// DeclarativeLocal loads subscriptions from the given local resources path.
+func DeclarativeLocal(resourcesPaths []string, log logger.Logger) (subs []Subscription) {
+	for _, path := range resourcesPaths {
+		res := declarativeFile(path, log)
+		if len(res) > 0 {
+			subs = append(subs, res...)
+		}
+	}
+	return subs
+}
+
+// Used by DeclarativeLocal to load a single path.
+func declarativeFile(resourcesPath string, log logger.Logger) (subs []Subscription) {
+	if _, err := os.Stat(resourcesPath); os.IsNotExist(err) {
 		return subs
 	}
 
-	files, err := os.ReadDir(componentsPath)
+	files, err := os.ReadDir(resourcesPath)
 	if err != nil {
-		log.Errorf("failed to read subscriptions from path %s: %s", componentsPath, err)
+		log.Errorf("failed to read subscriptions from path %s: %s", resourcesPath, err)
 		return subs
 	}
 
@@ -249,10 +260,11 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Sub
 			log.Warnf("A non-YAML pubsub file %s was detected, it will not be loaded", f.Name())
 			continue
 		}
-		filePath := filepath.Join(componentsPath, f.Name())
+
+		filePath := filepath.Join(resourcesPath, f.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Warnf("failed to read file %s: %s", filePath, err)
+			log.Warnf("failed to read file %s: %v", f.Name(), err)
 			continue
 		}
 
@@ -260,7 +272,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) (subs []Sub
 		for _, item := range bytesArray {
 			subs, err = appendSubscription(subs, item)
 			if err != nil {
-				log.Warnf("failed to add subscription from file %s: %s", filePath, err)
+				log.Warnf("failed to add subscription from file %s: %v", f.Name(), err)
 				continue
 			}
 		}

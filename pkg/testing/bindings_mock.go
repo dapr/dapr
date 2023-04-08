@@ -16,7 +16,7 @@ type MockBinding struct {
 }
 
 // Init is a mock initialization method.
-func (m *MockBinding) Init(metadata bindings.Metadata) error {
+func (m *MockBinding) Init(ctx context.Context, metadata bindings.Metadata) error {
 	return nil
 }
 
@@ -65,7 +65,7 @@ type FailingBinding struct {
 }
 
 // Init is a mock initialization method.
-func (m *FailingBinding) Init(metadata bindings.Metadata) error {
+func (m *FailingBinding) Init(ctx context.Context, metadata bindings.Metadata) error {
 	return nil
 }
 

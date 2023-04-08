@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"golang.org/x/exp/slices"
 	"k8s.io/client-go/kubernetes"
@@ -68,17 +67,21 @@ func GetKubeClient() *kubernetes.Clientset {
 	return clientSet
 }
 
-// ToISO8601DateTimeString converts dateTime to ISO8601 Format
-// ISO8601 Format: 2020-01-01T01:01:01.10101Z.
-func ToISO8601DateTimeString(dateTime time.Time) string {
-	return dateTime.UTC().Format("2006-01-02T15:04:05.999999Z")
-}
-
 // Contains reports whether v is present in s.
 // Similar to https://pkg.go.dev/golang.org/x/exp/slices#Contains.
 func Contains[T comparable](s []T, v T) bool {
 	for _, e := range s {
 		if e == v {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsPrefixed reports whether v is prefixed by any of the strings in s.
+func ContainsPrefixed(prefixes []string, v string) bool {
+	for _, e := range prefixes {
+		if strings.HasPrefix(v, e) {
 			return true
 		}
 	}
@@ -169,6 +172,17 @@ func Filter[T any](items []T, test func(item T) bool) []T {
 		}
 	}
 	return slices.Clip(filteredItems)
+}
+
+// MapToSlice is the inversion of SliceToMap. Order is not guaranteed as map retrieval order is not.
+func MapToSlice[T comparable, V any](m map[T]V) []T {
+	l := make([]T, len(m))
+	var i int
+	for uid := range m {
+		l[i] = uid
+		i++
+	}
+	return l
 }
 
 const (

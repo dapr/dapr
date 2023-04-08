@@ -86,24 +86,19 @@ func (imr *InvokeMethodResponse) WithContentType(contentType string) *InvokeMeth
 
 // WithHeaders sets gRPC response header metadata.
 func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodResponse {
-	imr.r.Headers = MetadataToInternalMetadata(headers)
+	imr.r.Headers = metadataToInternalMetadata(headers)
 	return imr
 }
 
 // WithFastHTTPHeaders populates HTTP response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithHTTPHeaders(headers map[string][]string) *InvokeMethodResponse {
-	imr.r.Headers = MetadataToInternalMetadata(headers)
+	imr.r.Headers = metadataToInternalMetadata(headers)
 	return imr
 }
 
 // WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
-	md := DaprInternalMetadata{}
-	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = &internalv1pb.ListStringValue{
-			Values: []string{string(value)},
-		}
-	})
+	md := fasthttpHeadersToInternalMetadata(header)
 	if len(md) > 0 {
 		imr.r.Headers = md
 	}
@@ -112,7 +107,7 @@ func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHe
 
 // WithTrailers sets Trailer in internal InvokeMethodResponse.
 func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethodResponse {
-	imr.r.Trailers = MetadataToInternalMetadata(trailer)
+	imr.r.Trailers = metadataToInternalMetadata(trailer)
 	return imr
 }
 
@@ -123,6 +118,14 @@ func (imr *InvokeMethodResponse) WithReplay(enabled bool) *InvokeMethodResponse 
 		imr.replayableRequest.SetReplay(enabled)
 	}
 	return imr
+}
+
+// CanReplay returns true if the data stream can be replayed.
+func (imr *InvokeMethodResponse) CanReplay() bool {
+	// We can replay if:
+	// - The object has data in-memory
+	// - The request is replayable
+	return imr.HasMessageData() || imr.replayableRequest.CanReplay()
 }
 
 // Status gets Response status.
@@ -150,7 +153,7 @@ func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 
 // ProtoWithData returns a copy of the internal InternalInvokeResponse Proto object with the entire data stream read into the Data property.
 func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeResponse, error) {
-	if imr.r == nil || imr.r.Message == nil {
+	if imr.r == nil {
 		return nil, errors.New("message is nil")
 	}
 
@@ -166,7 +169,7 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 
 	// Read the data and store it in the object
 	data, err := imr.RawDataFull()
-	if err != nil {
+	if err != nil || len(data) == 0 {
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{
@@ -233,14 +236,10 @@ func (imr *InvokeMethodResponse) ContentType() string {
 
 // RawData returns the stream body.
 func (imr *InvokeMethodResponse) RawData() (r io.Reader) {
-	m := imr.r.Message
-	if m == nil {
-		return nil
-	}
-
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
-		return bytes.NewReader(m.Data.Value)
+		// HasMessageData() guarantees that the `imr.r.Message` and `imr.r.Message.Data` is not nil
+		return bytes.NewReader(imr.r.Message.Data.Value)
 	}
 
 	return imr.replayableRequest.RawData()

@@ -37,8 +37,13 @@ import (
 type Feature string
 
 const (
+	// Enable support for streaming in HTTP service invocation
+	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
 	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
+	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
+	// TODO: Remove this feature flag in Dapr 1.13.
+	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"
 )
 
 // end feature flags section
@@ -259,6 +264,10 @@ type APILoggingSpec struct {
 	// Default value for enabling API logging. Sidecars can always override this by setting `--enable-api-logging` to true or false explicitly.
 	// The default value is false.
 	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	// When enabled, obfuscates the values of URLs in HTTP API logs, logging the route name rather than the full path being invoked, which could contain PII.
+	// Default: false.
+	// This option has no effect if API logging is disabled.
+	ObfuscateURLs bool `json:"obfuscateURLs" yaml:"obfuscateURLs"`
 	// If true, health checks are not reported in API logs. Default: false.
 	// This option has no effect if API logging is disabled.
 	OmitHealthChecks bool `json:"omitHealthChecks,omitempty" yaml:"omitHealthChecks,omitempty"`

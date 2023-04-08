@@ -80,17 +80,13 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 
 // WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
-	imr.r.Metadata = MetadataToInternalMetadata(md)
+	imr.r.Metadata = metadataToInternalMetadata(md)
 	return imr
 }
 
 // WithFastHTTPHeaders sets fasthttp request headers.
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
-	md := map[string][]string{}
-	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = []string{string(value)}
-	})
-	imr.r.Metadata = MetadataToInternalMetadata(md)
+	imr.r.Metadata = fasthttpHeadersToInternalMetadata(header)
 	return imr
 }
 
@@ -156,6 +152,14 @@ func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
 		imr.replayableRequest.SetReplay(enabled)
 	}
 	return imr
+}
+
+// CanReplay returns true if the data stream can be replayed.
+func (imr *InvokeMethodRequest) CanReplay() bool {
+	// We can replay if:
+	// - The object has data in-memory
+	// - The request is replayable
+	return imr.HasMessageData() || imr.replayableRequest.CanReplay()
 }
 
 // EncodeHTTPQueryString generates querystring for http using http extension object.
@@ -278,12 +282,7 @@ func (imr *InvokeMethodRequest) RawDataFull() ([]byte, error) {
 
 // Adds a new header to the existing set.
 func (imr *InvokeMethodRequest) AddHeaders(header *fasthttp.RequestHeader) {
-	md := map[string][]string{}
-	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = []string{string(value)}
-	})
-
-	internalMd := MetadataToInternalMetadata(md)
+	internalMd := fasthttpHeadersToInternalMetadata(header)
 
 	if imr.r.Metadata == nil {
 		imr.r.Metadata = internalMd

@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -35,6 +36,9 @@ import (
 )
 
 const (
+	// Maximum size, in bytes, for the buffer used by CallLocalStream: 2KB.
+	StreamBufferSize = 2 << 10
+
 	// GRPCContentType is the MIME media type for grpc.
 	GRPCContentType = "application/grpc"
 	// JSONContentType is the MIME media type for JSON.
@@ -72,6 +76,16 @@ const (
 	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
 )
 
+// BufPool is a pool of *[]byte used by direct messaging (for sending on both the server and client). Their size is fixed at StreamBufferSize.
+var BufPool = sync.Pool{
+	New: func() any {
+		// Return a pointer here
+		// See https://github.com/dominikh/go-tools/issues/1336 for explanation
+		b := make([]byte, StreamBufferSize)
+		return &b
+	},
+}
+
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
 // from user app to Dapr.
 type DaprInternalMetadata map[string]*internalv1pb.ListStringValue
@@ -81,13 +95,13 @@ func IsJSONContentType(contentType string) bool {
 	return strings.HasPrefix(strings.ToLower(contentType), JSONContentType)
 }
 
-// MetadataToInternalMetadata converts metadata to dapr internal metadata map.
-func MetadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
+// metadataToInternalMetadata converts metadata to Dapr internal metadata map.
+func metadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
 	internalMD := make(DaprInternalMetadata, len(md))
 	for k, values := range md {
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
+			// Binary key requires base64 encoding for the value
 			vals := make([]string, len(values))
-			// binary key requires base64 encoded.
 			for i, val := range values {
 				vals[i] = base64.StdEncoding.EncodeToString([]byte(val))
 			}
@@ -102,6 +116,43 @@ func MetadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
 	}
 
 	return internalMD
+}
+
+// Covers *fasthttp.RequestHeader and *fasthttp.ResponseHeader
+type fasthttpHeaders interface {
+	Len() int
+	VisitAll(f func(key []byte, value []byte))
+}
+
+// fasthttpHeadersToInternalMetadata converts fasthtt headers to Dapr internal metadata map.
+func fasthttpHeadersToInternalMetadata(header fasthttpHeaders) DaprInternalMetadata {
+	internalMD := make(DaprInternalMetadata, header.Len())
+	header.VisitAll(func(key []byte, value []byte) {
+		// Note: fasthttp headers can never be binary (only gRPC supports binary headers)
+		keyStr := string(key)
+		if internalMD[keyStr] == nil || len(internalMD[keyStr].Values) == 0 {
+			internalMD[keyStr] = &internalv1pb.ListStringValue{
+				Values: []string{string(value)},
+			}
+		} else {
+			internalMD[keyStr].Values = append(internalMD[keyStr].Values, string(value))
+		}
+	})
+	return internalMD
+}
+
+// Converts a fasthttp.RequestHeader to a map.
+func fasthttpHeadersToMap(header fasthttpHeaders) map[string][]string {
+	md := map[string][]string{}
+	header.VisitAll(func(key []byte, value []byte) {
+		keyStr := string(key)
+		if len(md[keyStr]) == 0 {
+			md[keyStr] = []string{string(value)}
+		} else {
+			md[keyStr] = append(md[keyStr], string(value))
+		}
+	})
+	return md
 }
 
 // isPermanentHTTPHeader checks whether hdr belongs to the list of
@@ -220,6 +271,10 @@ func ReservedGRPCMetadataToDaprPrefixHeader(key string) string {
 func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	var traceparentValue, tracestateValue, grpctracebinValue string
 	for k, listVal := range internalMD {
+		if len(listVal.Values) == 0 {
+			continue
+		}
+
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
 		switch keyName {
@@ -236,10 +291,13 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 			continue
 		}
 
-		if len(listVal.Values) == 0 || strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader {
+		if strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader {
 			continue
 		}
-		setHeader(ReservedGRPCMetadataToDaprPrefixHeader(keyName), listVal.Values[0])
+
+		for _, v := range listVal.Values {
+			setHeader(ReservedGRPCMetadataToDaprPrefixHeader(keyName), v)
+		}
 	}
 	if IsGRPCProtocol(internalMD) {
 		// if grpcProtocol, then get grpc-trace-bin value, and attach it in HTTP traceparent and HTTP tracestate header

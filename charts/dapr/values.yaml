@@ -37,3 +37,8 @@ global:
   #   ca: "ca.crt"
   #   cert: "tls.crt"
   #   key: "tls.key"
+  argoRolloutServiceReconciler:
+    enabled: false
+
+  operator:
+    watchdogCanPatchPodLabels: false

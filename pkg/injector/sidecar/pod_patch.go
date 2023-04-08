@@ -58,6 +58,24 @@ func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []PatchOper
 	return envPatchOps
 }
 
+// AddDaprSideCarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
+func AddDaprSideCarInjectedLabel(labels map[string]string) PatchOperation {
+	if len(labels) == 0 { // empty labels
+		return PatchOperation{
+			Op:   "add",
+			Path: PatchPathLabels,
+			Value: map[string]string{
+				SidecarInjectedLabel: "true",
+			},
+		}
+	}
+	return PatchOperation{
+		Op:    "add",
+		Path:  PatchPathLabels + "/dapr.io~1sidecar-injected",
+		Value: "true",
+	}
+}
+
 // GetEnvPatchOperations adds new environment variables only if they do not exist.
 // It does not override existing values for those variables if they have been defined already.
 func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, containerIdx int) []PatchOperation {

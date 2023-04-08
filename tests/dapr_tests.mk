@@ -21,7 +21,6 @@ healthapp \
 hellodapr \
 stateapp \
 secretapp \
-workflowsapp \
 service_invocation \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
@@ -39,6 +38,7 @@ actorapp \
 actorclientapp \
 actorfeatures \
 actorinvocationapp \
+actorstate \
 actorreentrancy \
 runtime \
 runtime_init \
@@ -53,6 +53,7 @@ pluggable_redis-statestore \
 pluggable_redis-pubsub \
 pluggable_kafka-bindings \
 tracingapp \
+configurationapp \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
@@ -96,6 +97,10 @@ ifeq ($(DAPR_TEST_PUBSUB),)
 DAPR_TEST_PUBSUB=redis
 endif
 
+ifeq ($(DAPR_TEST_CONFIGURATION),)
+DAPR_TEST_CONFIGURATION=redis
+endif
+
 ifeq ($(DAPR_TEST_NAMESPACE),)
 DAPR_TEST_NAMESPACE=$(DAPR_NAMESPACE)
 endif
@@ -113,6 +118,10 @@ MINIKUBE_NODE_IP=$(shell minikube ip)
 ifeq ($(MINIKUBE_NODE_IP),)
 $(error cannot find get minikube node ip address. ensure that you have minikube environment.)
 endif
+endif
+
+ifeq ($(WINDOWS_VERSION),)
+WINDOWS_VERSION=ltsc2022
 endif
 
 # check the required environment variables
@@ -169,7 +178,8 @@ build-push-e2e-app-$(1): check-e2e-env check-e2e-cache
 		--dockerfile "$(DOCKERFILE)" \
 		--target-os "$(TARGET_OS)" \
 		--target-arch "$(TARGET_ARCH)" \
-		--cache-registry "$(DAPR_CACHE_REGISTRY)"
+		--cache-registry "$(DAPR_CACHE_REGISTRY)" \
+		--windows-version "$(WINDOWS_VERSION)"
 endef
 
 # Generate test app image build-push targets
@@ -235,7 +245,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-temporal
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -369,7 +379,7 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
+				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
 endif
@@ -379,7 +389,6 @@ setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
 	$(HELM) repo add stable https://charts.helm.sh/stable
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
-	$(HELM) repo add wener https://wenerme.github.io/charts
 	$(HELM) repo update
 
 # setup tailscale
@@ -417,20 +426,6 @@ setup-test-env-kafka:
 # delete kafka from cluster
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
-
-# install temporal to the cluster
-setup-test-env-temporal:
-	$(HELM) install --set server.replicaCount=1 \
-					--set cassandra.config.cluster_size=1 \
-					--set prometheus.enabled=false \
-					--set grafana.enabled=false \
-					--set elasticsearch.enabled=false \
-					dapr-temporal wener/temporal -f ./tests/config/temporal_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 15m0s
-
-# delete temporal from cluster
-delete-test-env-temporal:
-	$(HELM) del dapr-temporal --namespace $(DAPR_TEST_NAMESPACE) 
-
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
@@ -477,6 +472,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_CONFIGURATION)_configuration.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pubsub_no_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
