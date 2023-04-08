@@ -379,6 +379,7 @@ func TestSecretCache(t *testing.T) {
 	assert.NoError(t, err, "Expected no error")
 	assert.Equal(t, resp.Data["good-key"], "life is good", "Expected responses to be same")
 	assert.Equal(t, 1, daprt.GetSecretCount, "Expected get secret req count added")
+	time.Sleep(10 * time.Millisecond)
 	resp, err = fakeAPI.GetSecret(context.Background(), req)
 	assert.NoError(t, err, "Expected no error")
 	assert.Equal(t, resp.Data["good-key"], "life is good", "Expected responses to be same")

@@ -54,8 +54,8 @@ func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretR
 		refresh, _ = strconv.ParseBool(in.Metadata[refreshCache])
 	}
 	if cache.EnabledForSecretStore(in.StoreName) && !refresh {
-		cacheData, err := cache.GetValue(in.StoreName, req)
-		if err == nil {
+		cacheData, geterr := cache.GetValue(in.StoreName, req)
+		if geterr == nil {
 			return &runtimev1pb.GetSecretResponse{
 				Data: cacheData,
 			}, nil
