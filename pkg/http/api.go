@@ -1958,7 +1958,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
-		if resp == nil || resp.Data == nil {
+		if resp == nil || len(resp.Data) == 0 {
 			respond(reqCtx, withEmpty())
 			return
 		}
