@@ -262,11 +262,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						UpdatedAt: p.clock.Now().UnixNano(),
 					},
 				}
+				log.Debugf("Member changed upserting appid %s with entities %v", req.Id, req.Entities)
 			}
 
 		default:
 			if registeredMemberID == "" {
-				log.Error("Stream is disconnected before member is added")
+				log.Error("Stream is disconnected before member is added ", err)
 				return nil
 			}
 

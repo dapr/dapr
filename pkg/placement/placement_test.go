@@ -53,9 +53,6 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 		defer close(serverStopped)
 		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
 	}()
-	go func() {
-		testServer.MonitorLeadership(ctx)
-	}()
 
 	assert.Eventually(t, func() bool {
 		conn, err := net.Dial("tcp", ":"+strconv.Itoa(port))
@@ -261,15 +258,18 @@ func TestGetPlacementTables(t *testing.T) {
 	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
 	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		testServer.processRaftStateCommand(ctx)
+	}()
 
 	t.Run("empty actor host", func(t *testing.T) {
 		// arrange
 		conn, client, _ := newTestClient(t, serverAddress)
 		tables, err := client.GetPlacementTables(context.Background(), &empty.Empty{})
 
-		// act
-		// Close tcp connection before closing stream, which simulates the scenario
-		// where dapr runtime disconnects the connection from placement service unexpectedly.
+		// retrieve the empty placement tables
 		assert.NoError(t, err)
 		assert.Empty(t, tables.HostMap)
 		conn.Close()
@@ -292,7 +292,7 @@ func TestGetPlacementTables(t *testing.T) {
 
 		// add a host to the placement table
 		require.NoError(t, stream.Send(host))
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 
 		// get placement tables
 		tables, err := client.GetPlacementTables(context.Background(), &empty.Empty{})
