@@ -26,10 +26,15 @@ import (
 type Protocol string
 
 const (
-	// GRPCProtocol is a gRPC communication protocol.
+	// GRPCProtocol is the gRPC communication protocol.
 	GRPCProtocol Protocol = "grpc"
-	// HTTPProtocol is a HTTP communication protocol.
+	// GRPCSProtocol is the gRPC communication protocol with TLS (without validating certificates).
+	GRPCSProtocol Protocol = "grpcs"
+	// HTTPProtocol is the HTTP communication protocol.
 	HTTPProtocol Protocol = "http"
+	// HTTPSProtocol is the HTTPS communication protocol with TLS (without validating certificates).
+	HTTPSProtocol Protocol = "https"
+
 	// DefaultDaprHTTPPort is the default http port for Dapr.
 	DefaultDaprHTTPPort = 3500
 	// DefaultDaprPublicPort is the default http port for Dapr.
@@ -52,6 +57,16 @@ const (
 	DefaultAppHealthCheckPath = "/health"
 )
 
+// IsHTTP returns true if the protocol is HTTP.
+func (p Protocol) IsHTTP() bool {
+	switch p {
+	case HTTPProtocol, HTTPSProtocol:
+		return true
+	default:
+		return false
+	}
+}
+
 // Config holds the Dapr Runtime configuration.
 type Config struct {
 	ID                           string
@@ -73,7 +88,6 @@ type Config struct {
 	mtlsEnabled                  bool
 	SentryServiceAddress         string
 	CertChain                    *credentials.CertChain
-	AppSSL                       bool
 	MaxRequestBodySize           int
 	UnixDomainSocket             string
 	ReadBufferSize               int
@@ -82,6 +96,16 @@ type Config struct {
 	DisableBuiltinK8sSecretStore bool
 	AppHealthCheck               *apphealth.Config
 	AppHealthCheckHTTPPath       string
+}
+
+// IsHTTPProtocol returns true if the app is configured with HTTP.
+func (c Config) IsHTTPProtocol() bool {
+	switch c.ApplicationProtocol {
+	case HTTPProtocol, HTTPSProtocol:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewRuntimeConfigOpts contains options for NewRuntimeConfig.
@@ -104,7 +128,6 @@ type NewRuntimeConfigOpts struct {
 	MaxConcurrency               int
 	MTLSEnabled                  bool
 	SentryAddress                string
-	AppSSL                       bool
 	MaxRequestBodySize           int
 	UnixDomainSocket             string
 	ReadBufferSize               int
@@ -153,7 +176,6 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		MaxConcurrency:               opts.MaxConcurrency,
 		mtlsEnabled:                  opts.MTLSEnabled,
 		SentryServiceAddress:         opts.SentryAddress,
-		AppSSL:                       opts.AppSSL,
 		MaxRequestBodySize:           opts.MaxRequestBodySize,
 		UnixDomainSocket:             opts.UnixDomainSocket,
 		ReadBufferSize:               opts.ReadBufferSize,

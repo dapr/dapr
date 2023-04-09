@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"errors"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -39,13 +38,10 @@ func (a *DaprRuntime) ApplyBulkSubscribeResiliency(ctx context.Context, bulkSubC
 	_, err := policyRunner(func(ctx context.Context) (*[]pubsub.BulkSubscribeResponseEntry, error) {
 		var pErr error
 		bsre := []pubsub.BulkSubscribeResponseEntry{}
-		switch a.runtimeConfig.ApplicationProtocol {
-		case HTTPProtocol:
+		if a.runtimeConfig.IsHTTPProtocol() {
 			pErr = a.publishBulkMessageHTTP(ctx, &bscData, &psm, &bsre, envelope, deadLetterTopic)
-		case GRPCProtocol:
+		} else {
 			pErr = a.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsre, rawPayload)
-		default:
-			panic(errors.New("invalid application protocol"))
 		}
 		return &bsre, pErr
 	})
