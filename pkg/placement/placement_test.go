@@ -263,6 +263,8 @@ func TestGetPlacementTables(t *testing.T) {
 	go func() {
 		testServer.processRaftStateCommand(ctx)
 	}()
+	// wait for goroutine starts
+	time.Sleep(10 * time.Millisecond)
 
 	t.Run("empty actor host", func(t *testing.T) {
 		// arrange
@@ -292,7 +294,12 @@ func TestGetPlacementTables(t *testing.T) {
 
 		// add a host to the placement table
 		require.NoError(t, stream.Send(host))
-		time.Sleep(10 * time.Millisecond)
+
+		// wait until host member change requests are flushed
+		assert.Eventually(t, func() bool {
+			return len(testServer.raftNode.FSM().State().Members()) == 1
+		}, disseminateTimerInterval+500*time.Millisecond, 50*time.Millisecond,
+			"placement failed apply host registration")
 
 		// get placement tables
 		tables, err := client.GetPlacementTables(context.Background(), &empty.Empty{})
