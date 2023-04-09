@@ -189,13 +189,13 @@ func (p *Service) GetPlacementTables(ctx context.Context, empty *emptypb.Empty) 
 	response := &placementv1pb.GetPlacementTablesResponse{
 		TableVersion: version,
 	}
-	members := make(map[string]*placementv1pb.HostInfo)
+	members := make(map[string]*placementv1pb.HostInfo, len(m))
 	for k, v := range m {
 		members[k] = &placementv1pb.HostInfo{
-			Name:     v.Name,
-			AppId:    v.AppID,
-			Entities: v.Entities,
-			UpdateAt: v.UpdatedAt,
+			Name:      v.Name,
+			AppId:     v.AppID,
+			Entities:  v.Entities,
+			UpdatedAt: v.UpdatedAt,
 		}
 	}
 	response.HostMap = members

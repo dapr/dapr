@@ -56,7 +56,7 @@ message HostInfo {
   string name = 1;
   string app_id = 2;
   repeated string entities = 3;
-  int64 update_at = 4;
+  int64 updated_at = 4;
 }
 
 message GetPlacementTablesResponse {
