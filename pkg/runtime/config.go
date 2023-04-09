@@ -34,6 +34,8 @@ const (
 	HTTPProtocol Protocol = "http"
 	// HTTPSProtocol is the HTTPS communication protocol with TLS (without validating certificates).
 	HTTPSProtocol Protocol = "https"
+	// H2CProtocol is the HTTP/2 Cleartext communication protocol (HTTP/2 without TLS).
+	H2CProtocol Protocol = "h2c"
 
 	// DefaultDaprHTTPPort is the default http port for Dapr.
 	DefaultDaprHTTPPort = 3500
@@ -60,7 +62,7 @@ const (
 // IsHTTP returns true if the protocol is HTTP.
 func (p Protocol) IsHTTP() bool {
 	switch p {
-	case HTTPProtocol, HTTPSProtocol:
+	case HTTPProtocol, HTTPSProtocol, H2CProtocol:
 		return true
 	default:
 		return false
@@ -100,12 +102,7 @@ type Config struct {
 
 // IsHTTPProtocol returns true if the app is configured with HTTP.
 func (c Config) IsHTTPProtocol() bool {
-	switch c.ApplicationProtocol {
-	case HTTPProtocol, HTTPSProtocol:
-		return true
-	default:
-		return false
-	}
+	return c.ApplicationProtocol.IsHTTP()
 }
 
 // NewRuntimeConfigOpts contains options for NewRuntimeConfig.

@@ -45,6 +45,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/net/http2"
 	gogrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
@@ -2981,23 +2982,52 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 // Returns the HTTP endpoint for the app.
 func (a *DaprRuntime) getAppHTTPEndpoint() string {
 	// Application protocol is "http" or "https"
-	proto := string(a.runtimeConfig.ApplicationProtocol)
 	port := strconv.Itoa(a.runtimeConfig.ApplicationPort)
-	return proto + "://" + channel.DefaultChannelAddress + ":" + port
+	switch a.runtimeConfig.ApplicationProtocol {
+	case HTTPProtocol, H2CProtocol:
+		return "http://" + channel.DefaultChannelAddress + ":" + port
+	case HTTPSProtocol:
+		return "https://" + channel.DefaultChannelAddress + ":" + port
+	default:
+		return ""
+	}
 }
 
 // Initializes the appHTTPClient property.
 func (a *DaprRuntime) initAppHTTPClient() {
-	var tlsConfig *tls.Config
-	if a.runtimeConfig.ApplicationProtocol == HTTPSProtocol {
-		tlsConfig = &tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec
-			// For 1.11
-			MinVersion: channel.AppChannelMinTLSVersion,
+	var transport nethttp.RoundTripper
+	if a.runtimeConfig.ApplicationProtocol == H2CProtocol {
+		// Enable HTTP/2 Cleartext transport
+		transport = &http2.Transport{
+			AllowHTTP: true, // To enable using "http" as protocol
+			DialTLS: func(network, addr string, _ *tls.Config) (net.Conn, error) {
+				// Return the TCP socket without TLS
+				return net.Dial(network, addr)
+			},
+			// TODO: This may not be exactly the same as "MaxResponseHeaderBytes" so check before enabling this
+			// MaxHeaderListSize: uint32(a.runtimeConfig.ReadBufferSize << 10),
 		}
-		// TODO: Remove when the feature is finalized
-		if a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS) {
-			tlsConfig.MinVersion = 0
+	} else {
+		var tlsConfig *tls.Config
+		if a.runtimeConfig.ApplicationProtocol == HTTPSProtocol {
+			tlsConfig = &tls.Config{
+				InsecureSkipVerify: true, //nolint:gosec
+				// For 1.11
+				MinVersion: channel.AppChannelMinTLSVersion,
+			}
+			// TODO: Remove when the feature is finalized
+			if a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS) {
+				tlsConfig.MinVersion = 0
+			}
+		}
+
+		transport = &nethttp.Transport{
+			TLSClientConfig:        tlsConfig,
+			ReadBufferSize:         a.runtimeConfig.ReadBufferSize << 10,
+			MaxResponseHeaderBytes: int64(a.runtimeConfig.ReadBufferSize) << 10,
+			MaxConnsPerHost:        1024,
+			MaxIdleConns:           64, // A local channel connects to a single host
+			MaxIdleConnsPerHost:    64,
 		}
 	}
 
@@ -3005,14 +3035,7 @@ func (a *DaprRuntime) initAppHTTPClient() {
 	// We want to re-use the same client so TCP sockets can be re-used efficiently across everything that communicates with the app
 	// This is especially useful if the app supports HTTP/2
 	a.appHTTPClient = &nethttp.Client{
-		Transport: &nethttp.Transport{
-			ReadBufferSize:         a.runtimeConfig.ReadBufferSize << 10,
-			MaxResponseHeaderBytes: int64(a.runtimeConfig.ReadBufferSize) << 10,
-			MaxConnsPerHost:        1024,
-			MaxIdleConns:           64, // A local channel connects to a single host
-			MaxIdleConnsPerHost:    64,
-			TLSClientConfig:        tlsConfig,
-		},
+		Transport: transport,
 		CheckRedirect: func(req *nethttp.Request, via []*nethttp.Request) error {
 			return nethttp.ErrUseLastResponse
 		},
