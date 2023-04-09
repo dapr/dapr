@@ -293,8 +293,9 @@ func startH2C() {
 
 	h2s := &http2.Server{}
 	srv := &http.Server{
-		Addr:    ":" + appPort,
-		Handler: h2c.NewHandler(httpRouter(), h2s),
+		Addr:              ":" + appPort,
+		Handler:           h2c.NewHandler(httpRouter(), h2s),
+		ReadHeaderTimeout: 30 * time.Second,
 	}
 
 	// Stop the server when we get a termination signal
