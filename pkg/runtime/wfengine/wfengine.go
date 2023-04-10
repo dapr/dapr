@@ -73,8 +73,8 @@ func IsWorkflowRequest(path string) bool {
 }
 
 func NewWorkflowEngine(config *WFConfig) *WorkflowEngine {
-	WorkflowActorType = WorkflowActorType + "." + config.AppID + "." + getNamespace()
-	ActivityActorType = ActivityActorType + "." + config.AppID + "." + getNamespace()
+	WorkflowActorType = WorkflowActorType + "." + getNamespace() + "." + config.AppID
+	ActivityActorType = ActivityActorType + "." + getNamespace() + "." + config.AppID
 	// In order to lazily start the engine (i.e. when it is invoked
 	// by the application when it registers workflows / activities or by
 	// an API call to interact with the engine) we need to inject the engine
