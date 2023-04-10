@@ -64,7 +64,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if (testPayload && testPayload.command == "ok-to-perf") {
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
