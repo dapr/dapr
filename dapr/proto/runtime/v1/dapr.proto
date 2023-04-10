@@ -105,6 +105,12 @@ service Dapr {
   // UnlockAlpha1 unlocks a lock.
   rpc UnlockAlpha1(UnlockRequest)returns (UnlockResponse) {}
 
+  // EncryptAlpha1 encrypts a message using the Dapr encryption scheme and a key stored in the vault.
+  rpc EncryptAlpha1(stream EncryptAlpha1Request) returns (stream EncryptAlpha1Response);
+
+  // DecryptAlpha1 decrypts a message using the Dapr encryption scheme and a key stored in the vault.
+  rpc DecryptAlpha1(stream DecryptAlpha1Request) returns (stream DecryptAlpha1Response);
+
   // Gets metadata of the sidecar
   rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
 
@@ -874,6 +880,66 @@ message SubtleVerifyAlpha1Request {
 message SubtleVerifyAlpha1Response {
   // True if the signature is valid.
   bool valid = 1;
+}
+
+// EncryptAlpha1Request is the request for EncryptAlpha1.
+message EncryptAlpha1Request {
+  // Request details. Must be present in the first message only.
+  EncryptAlpha1RequestOptions options = 1;
+  // Chunk of data of arbitrary size.
+  common.v1.StreamPayload payload = 2;
+}
+
+// EncryptAlpha1RequestOptions contains options for the first message in the EncryptAlpha1 request.
+message EncryptAlpha1RequestOptions {
+  // Name of the component. Required.
+  string component_name = 1 [json_name="componentName"];
+  // Name (or name/version) of the key. Required.
+  string key_name = 2 [json_name="keyName"];
+  // Key wrapping algorithm to use. Required.
+  // Supported options include: A256KW (alias: AES), A128CBC, A192CBC, A256CBC, RSA-OAEP-256 (alias: RSA).
+  string algorithm = 3;
+  // Force cipher to use to encrypt data: "aes-gcm" or "chacha20-poly1305" (optional)
+  string cipher = 10;
+  // If true, the encrypted document does not contain a key reference.
+  // In that case, calls to the Decrypt method must provide a key reference (name or name/version).
+  // Defaults to false.
+  bool omit_decryption_key_name = 11 [json_name="omitDecryptionKeyName"]; 
+  // Key reference to embed in the encrypted document (name or name/version).
+  // This is helpful if the reference of the key used to decrypt the document is different from the one used to encrypt it.
+  // If unset, uses the reference of the key used to encrypt the document (this is the default behavior).
+  // This option is ignored if omit_decryption_key_name is true.
+  string decryption_key = 12 [json_name="decryptionKey"];
+}
+
+// EncryptAlpha1Response is the response for EncryptAlpha1.
+message EncryptAlpha1Response {
+  // Chunk of data.
+  common.v1.StreamPayload payload = 1;
+}
+
+// DecryptAlpha1Request is the request for DecryptAlpha1.
+message DecryptAlpha1Request {
+  // Request details. Must be present in the first message only.
+  DecryptAlpha1RequestOptions options = 1;
+  // Chunk of data of arbitrary size.
+  common.v1.StreamPayload payload = 2;
+}
+
+// DecryptAlpha1RequestOptions contains options for the first message in the DecryptAlpha1 request.
+message DecryptAlpha1RequestOptions {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Name (or name/version) of the key to decrypt the message.
+  // Overrides any key reference included in the message if present.
+  // This is required if the message doesn't include a key reference (i.e. was created with omit_decryption_key_name set to true).
+  string key_name = 12 [json_name="keyName"];
+}
+
+// DecryptAlpha1Response is the response for DecryptAlpha1.
+message DecryptAlpha1Response {
+  // Chunk of data.
+  common.v1.StreamPayload payload = 1;
 }
 
 message WorkflowReference {

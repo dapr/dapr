@@ -77,6 +77,10 @@ type DaprClient interface {
 	TryLockAlpha1(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error)
 	// UnlockAlpha1 unlocks a lock.
 	UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockResponse, error)
+	// EncryptAlpha1 encrypts a message using the Dapr encryption scheme and a key stored in the vault.
+	EncryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_EncryptAlpha1Client, error)
+	// DecryptAlpha1 decrypts a message using the Dapr encryption scheme and a key stored in the vault.
+	DecryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_DecryptAlpha1Client, error)
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -376,6 +380,68 @@ func (c *daprClient) UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts .
 	return out, nil
 }
 
+func (c *daprClient) EncryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_EncryptAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[1], "/dapr.proto.runtime.v1.Dapr/EncryptAlpha1", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprEncryptAlpha1Client{stream}
+	return x, nil
+}
+
+type Dapr_EncryptAlpha1Client interface {
+	Send(*EncryptAlpha1Request) error
+	Recv() (*EncryptAlpha1Response, error)
+	grpc.ClientStream
+}
+
+type daprEncryptAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprEncryptAlpha1Client) Send(m *EncryptAlpha1Request) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daprEncryptAlpha1Client) Recv() (*EncryptAlpha1Response, error) {
+	m := new(EncryptAlpha1Response)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *daprClient) DecryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_DecryptAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[2], "/dapr.proto.runtime.v1.Dapr/DecryptAlpha1", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprDecryptAlpha1Client{stream}
+	return x, nil
+}
+
+type Dapr_DecryptAlpha1Client interface {
+	Send(*DecryptAlpha1Request) error
+	Recv() (*DecryptAlpha1Response, error)
+	grpc.ClientStream
+}
+
+type daprDecryptAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprDecryptAlpha1Client) Send(m *DecryptAlpha1Request) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daprDecryptAlpha1Client) Recv() (*DecryptAlpha1Response, error) {
+	m := new(DecryptAlpha1Response)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *daprClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
 	out := new(GetMetadataResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetMetadata", in, out, opts...)
@@ -577,6 +643,10 @@ type DaprServer interface {
 	TryLockAlpha1(context.Context, *TryLockRequest) (*TryLockResponse, error)
 	// UnlockAlpha1 unlocks a lock.
 	UnlockAlpha1(context.Context, *UnlockRequest) (*UnlockResponse, error)
+	// EncryptAlpha1 encrypts a message using the Dapr encryption scheme and a key stored in the vault.
+	EncryptAlpha1(Dapr_EncryptAlpha1Server) error
+	// DecryptAlpha1 decrypts a message using the Dapr encryption scheme and a key stored in the vault.
+	DecryptAlpha1(Dapr_DecryptAlpha1Server) error
 	// Gets metadata of the sidecar
 	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -692,6 +762,12 @@ func (UnimplementedDaprServer) TryLockAlpha1(context.Context, *TryLockRequest) (
 }
 func (UnimplementedDaprServer) UnlockAlpha1(context.Context, *UnlockRequest) (*UnlockResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnlockAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) EncryptAlpha1(Dapr_EncryptAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method EncryptAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DecryptAlpha1(Dapr_DecryptAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method DecryptAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
@@ -1224,6 +1300,58 @@ func _Dapr_UnlockAlpha1_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_EncryptAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).EncryptAlpha1(&daprEncryptAlpha1Server{stream})
+}
+
+type Dapr_EncryptAlpha1Server interface {
+	Send(*EncryptAlpha1Response) error
+	Recv() (*EncryptAlpha1Request, error)
+	grpc.ServerStream
+}
+
+type daprEncryptAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprEncryptAlpha1Server) Send(m *EncryptAlpha1Response) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daprEncryptAlpha1Server) Recv() (*EncryptAlpha1Request, error) {
+	m := new(EncryptAlpha1Request)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Dapr_DecryptAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).DecryptAlpha1(&daprDecryptAlpha1Server{stream})
+}
+
+type Dapr_DecryptAlpha1Server interface {
+	Send(*DecryptAlpha1Response) error
+	Recv() (*DecryptAlpha1Request, error)
+	grpc.ServerStream
+}
+
+type daprDecryptAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprDecryptAlpha1Server) Send(m *DecryptAlpha1Response) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daprDecryptAlpha1Server) Recv() (*DecryptAlpha1Request, error) {
+	m := new(DecryptAlpha1Request)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func _Dapr_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
@@ -1689,6 +1817,18 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "SubscribeConfigurationAlpha1",
 			Handler:       _Dapr_SubscribeConfigurationAlpha1_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "EncryptAlpha1",
+			Handler:       _Dapr_EncryptAlpha1_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "DecryptAlpha1",
+			Handler:       _Dapr_DecryptAlpha1_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "dapr/proto/runtime/v1/dapr.proto",

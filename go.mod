@@ -426,3 +426,6 @@ replace (
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
+
+// TEMP UNTIL https://github.com/dapr/kit/pull/42 IS MERGED
+replace github.com/dapr/kit => github.com/italypaleale/dapr-kit v0.0.2-0.20230410163019-854be34d4766

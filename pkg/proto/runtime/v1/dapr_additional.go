@@ -13,6 +13,11 @@ limitations under the License.
 
 package runtime
 
+import (
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"google.golang.org/protobuf/proto"
+)
+
 // This file contains additional, hand-written methods added to the generated objects.
 
 // SubtleCryptoRequests is an interface for all Subtle*Request structs.
@@ -61,4 +66,24 @@ func (x *SubtleVerifyAlpha1Request) SetComponentName(name string) {
 	if x != nil {
 		x.ComponentName = name
 	}
+}
+
+// CryptoRequests is an interface for EncryptAlpha1Request and DecryptAlpha1Request.
+type CryptoRequests interface {
+	proto.Message
+
+	// GetPayload returns the payload.
+	GetPayload() *commonv1pb.StreamPayload
+	// Reset the object.
+	Reset()
+	// HasOptions returns true if the Options property is not empty.
+	HasOptions() bool
+}
+
+func (x *EncryptAlpha1Request) HasOptions() bool {
+	return x != nil && x.Options != nil
+}
+
+func (x *DecryptAlpha1Request) HasOptions() bool {
+	return x != nil && x.Options != nil
 }
