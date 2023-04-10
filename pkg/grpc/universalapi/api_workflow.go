@@ -15,8 +15,10 @@ package universalapi
 
 import (
 	"context"
-	"encoding/json"
-	"time"
+	"unicode"
+
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
@@ -24,23 +26,18 @@ import (
 )
 
 func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := messages.ErrMissingOrEmptyInstance
+	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
-	if in.WorkflowComponent == "" {
-		err := messages.ErrNoOrMissingWorkflowComponent
+
+	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	if err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
-		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
-		a.Logger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	req := workflows.WorkflowReference{
+
+	req := workflows.GetRequest{
 		InstanceID: in.InstanceId,
 	}
 	response, err := workflowComponent.Get(ctx, &req)
@@ -50,170 +47,194 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
-	id := &runtimev1pb.WorkflowReference{
-		InstanceId: response.WFInfo.InstanceID,
-	}
-
-	t, err := time.Parse(time.RFC3339, response.StartTime)
-	if err != nil {
-		err := messages.ErrTimerParse.WithFormat(err)
-		a.Logger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-
 	res := &runtimev1pb.GetWorkflowResponse{
-		InstanceId: id.InstanceId,
-		StartTime:  t.Unix(),
-		Metadata:   response.Metadata,
+		InstanceId:      response.Workflow.InstanceID,
+		WorkflowName:    response.Workflow.WorkflowName,
+		StartTime:       timestamppb.New(response.Workflow.CreatedAt),
+		LastUpdatedTime: timestamppb.New(response.Workflow.LastUpdatedAt),
+		RuntimeStatus:   response.Workflow.RuntimeStatus,
+		Properties:      response.Workflow.Properties,
 	}
 	return res, nil
 }
 
-func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error) {
+func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
+	if err := a.validateInstanceId(in.InstanceId, true /* isCreate */); err != nil {
+		a.Logger.Debug(err)
+		return &runtimev1pb.StartWorkflowResponse{}, err
+	}
+
 	if in.WorkflowName == "" {
 		err := messages.ErrWorkflowNameMissing
 		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
+		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
-	if in.WorkflowComponent == "" {
-		err := messages.ErrNoOrMissingWorkflowComponent
+	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	if err != nil {
 		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
+		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
-	if in.InstanceId == "" {
-		err := messages.ErrMissingOrEmptyInstance
-		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
-		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
-		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	var inputMap map[string]interface{}
-	json.Unmarshal(in.Input, &inputMap)
 	req := workflows.StartRequest{
-		InstanceID:   in.InstanceId,
-		Options:      in.Options,
-		WorkflowName: in.WorkflowName,
-		Input:        inputMap,
+		InstanceID:    in.InstanceId,
+		Options:       in.Options,
+		WorkflowName:  in.WorkflowName,
+		WorkflowInput: in.Input,
 	}
 
 	resp, err := workflowComponent.Start(ctx, &req)
 	if err != nil {
 		err := messages.ErrStartWorkflow.WithFormat(in.WorkflowName, err)
 		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
+		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
-	ret := &runtimev1pb.WorkflowReference{
+	ret := &runtimev1pb.StartWorkflowResponse{
 		InstanceId: resp.InstanceID,
 	}
 	return ret, nil
 }
 
 // TerminateWorkflowAlpha1 is the API handler for terminating a workflow
-func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
-	var method func(context.Context, *workflows.WorkflowReference) error
-	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
-		method = a.WorkflowComponents[in.WorkflowComponent].Terminate
+func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
+	emptyResponse := &emptypb.Empty{}
+	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
+		a.Logger.Debug(err)
+		return emptyResponse, err
 	}
-	return a.workflowActivity(ctx, in, method, messages.ErrTerminateWorkflow)
+
+	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	if err != nil {
+		a.Logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	req := &workflows.TerminateRequest{
+		InstanceID: in.InstanceId,
+	}
+	if err := workflowComponent.Terminate(ctx, req); err != nil {
+		err = messages.ErrTerminateWorkflow.WithFormat(in.InstanceId, err)
+		a.Logger.Debug(err)
+		return emptyResponse, err
+	}
+	return emptyResponse, nil
 }
 
-func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := messages.ErrMissingOrEmptyInstance
+func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+	emptyResponse := &emptypb.Empty{}
+	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
-		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
+		return emptyResponse, err
 	}
 
 	if in.EventName == "" {
 		err := messages.ErrMissingWorkflowEventName
 		a.Logger.Debug(err)
-		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
+		return emptyResponse, err
 	}
 
-	if in.WorkflowComponent == "" {
-		err := messages.ErrNoOrMissingWorkflowComponent
+	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	if err != nil {
 		a.Logger.Debug(err)
-		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
-	}
-
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
-		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
-		a.Logger.Debug(err)
-		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
+		return emptyResponse, err
 	}
 
 	req := workflows.RaiseEventRequest{
 		InstanceID: in.InstanceId,
 		EventName:  in.EventName,
-		Input:      in.Input,
+		EventData:  in.Input,
 	}
 
-	err := workflowComponent.RaiseEvent(ctx, &req)
+	err = workflowComponent.RaiseEvent(ctx, &req)
 	if err != nil {
-		err = messages.ErrRaiseEventWorkflow.WithFormat(in.InstanceId)
+		err = messages.ErrRaiseEventWorkflow.WithFormat(in.InstanceId, err)
 		a.Logger.Debug(err)
-		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
+		return emptyResponse, err
 	}
-	return &runtimev1pb.RaiseEventWorkflowResponse{}, nil
+	return emptyResponse, nil
 }
 
 // PauseWorkflowAlpha1 is the API handler for pausing a workflow
-func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
-	var method func(context.Context, *workflows.WorkflowReference) error
-	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
-		method = a.WorkflowComponents[in.WorkflowComponent].Pause
+func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
+	emptyResponse := &emptypb.Empty{}
+	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
+		a.Logger.Debug(err)
+		return emptyResponse, err
 	}
-	return a.workflowActivity(ctx, in, method, messages.ErrPauseWorkflow)
+
+	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	if err != nil {
+		a.Logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	req := &workflows.PauseRequest{
+		InstanceID: in.InstanceId,
+	}
+	if err := workflowComponent.Pause(ctx, req); err != nil {
+		err = messages.ErrPauseWorkflow.WithFormat(in.InstanceId, err)
+		a.Logger.Debug(err)
+		return emptyResponse, err
+	}
+	return emptyResponse, nil
 }
 
 // ResumeWorkflowAlpha1 is the API handler for resuming a workflow
-func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
-	var method func(context.Context, *workflows.WorkflowReference) error
-	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
-		method = a.WorkflowComponents[in.WorkflowComponent].Resume
-	}
-	return a.workflowActivity(ctx, in, method, messages.ErrResumeWorkflow)
-}
-
-// workflowActivity is a helper function to handle workflow requests for pause, resume, and terminate
-func (a *UniversalAPI) workflowActivity(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest, method func(context.Context, *workflows.WorkflowReference) error, methodErr messages.APIError) (*runtimev1pb.WorkflowActivityResponse, error) {
-	if in.InstanceId == "" {
-		err := messages.ErrMissingOrEmptyInstance
+func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
+	emptyResponse := &emptypb.Empty{}
+	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowActivityResponse{}, err
+		return emptyResponse, err
 	}
 
-	if in.WorkflowComponent == "" {
-		err := messages.ErrNoOrMissingWorkflowComponent
+	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	if err != nil {
 		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowActivityResponse{}, err
+		return emptyResponse, err
 	}
 
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
-		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
-		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowActivityResponse{}, err
-	}
-
-	req := workflows.WorkflowReference{
+	req := &workflows.ResumeRequest{
 		InstanceID: in.InstanceId,
 	}
-
-	err := method(ctx, &req)
-	if err != nil {
-		err = methodErr.WithFormat(in.InstanceId)
+	if err := workflowComponent.Resume(ctx, req); err != nil {
+		err = messages.ErrResumeWorkflow.WithFormat(in.InstanceId, err)
 		a.Logger.Debug(err)
-		return &runtimev1pb.WorkflowActivityResponse{}, err
+		return emptyResponse, err
 	}
-	return &runtimev1pb.WorkflowActivityResponse{}, nil
+	return emptyResponse, nil
+}
+
+func (a *UniversalAPI) validateInstanceId(instanceID string, isCreate bool) error {
+	if instanceID == "" {
+		return messages.ErrMissingOrEmptyInstance
+	}
+
+	if isCreate {
+		// Limit the length of the instance ID to avoid potential conflicts with state stores that have restrictive key limits.
+		maxInstanceIdLength := 64
+		if len(instanceID) > maxInstanceIdLength {
+			return messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIdLength)
+		}
+
+		// Check to see if the instance ID contains invalid characters. Valid characters are letters, digits, dashes, and underscores.
+		// See https://github.com/dapr/dapr/issues/6156 for more context on why we check this.
+		for _, c := range instanceID {
+			if !unicode.IsLetter(c) && c != '_' && c != '-' && !unicode.IsDigit(c) {
+				return messages.ErrInvalidInstanceID.WithFormat(instanceID)
+			}
+		}
+	}
+	return nil
+}
+
+func (a *UniversalAPI) getComponent(componentName string) (workflows.Workflow, error) {
+	if componentName == "" {
+		return nil, messages.ErrNoOrMissingWorkflowComponent
+	}
+
+	workflowComponent := a.WorkflowComponents[componentName]
+	if workflowComponent == nil {
+		return nil, messages.ErrWorkflowComponentDoesNotExist.WithFormat(componentName)
+	}
+	return workflowComponent, nil
 }

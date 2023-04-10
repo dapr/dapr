@@ -17,6 +17,7 @@ package dapr.proto.runtime.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
@@ -131,24 +132,24 @@ service Dapr {
 
   // SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
   rpc SubtleVerifyAlpha1(SubtleVerifyAlpha1Request) returns (SubtleVerifyAlpha1Response);
-  
-  // Start Workflow
-  rpc StartWorkflowAlpha1 (StartWorkflowRequest) returns (WorkflowReference) {}
 
-  // Get Workflow details
+  // Starts a new instance of a workflow
+  rpc StartWorkflowAlpha1 (StartWorkflowRequest) returns (StartWorkflowResponse) {}
+
+  // Gets details about a started workflow instance
   rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
 
-  // Terminate Workflow
-  rpc TerminateWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
+  // Terminates a running workflow instance
+  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (google.protobuf.Empty) {}
 
-  // Pause Workflow
-  rpc PauseWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
+  // Pauses a running workflow instance
+  rpc PauseWorkflowAlpha1 (PauseWorkflowRequest) returns (google.protobuf.Empty) {}
 
-  // Resume Workflow
-  rpc ResumeWorkflowAlpha1 (WorkflowActivityRequest) returns (WorkflowActivityResponse) {}
+  // Resumes a paused workflow instance
+  rpc ResumeWorkflowAlpha1 (ResumeWorkflowRequest) returns (google.protobuf.Empty) {}
 
-  // Raise Event for a Workflow
-  rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (RaiseEventWorkflowResponse) {}
+  // Raise an event to a running workflow instance
+  rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
 
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
@@ -876,46 +877,50 @@ message SubtleVerifyAlpha1Response {
   bool valid = 1;
 }
 
-message WorkflowReference {
-  string instance_id = 1 [json_name = "instanceId"];
-}
-
 message GetWorkflowRequest {
-  string instance_id  = 1 [json_name = "instanceId"];
+  string instance_id  = 1 [json_name = "instanceID"];
   string workflow_component = 2 [json_name = "workflowComponent"];
-  string workflow_name = 3 [json_name = "workflowName"];
 }
 
 message GetWorkflowResponse {
-  string instance_id = 1;
-  int64 start_time = 2;
-  map<string, string> metadata = 3;
+  string instance_id = 1 [json_name = "instanceID"];
+  string workflow_name = 2 [json_name = "workflowName"];
+  google.protobuf.Timestamp start_time = 3 [json_name = "createdAt"];
+  google.protobuf.Timestamp last_updated_time = 4 [json_name = "lastUpdatedAt"];
+  string runtime_status = 5 [json_name = "runtimeStatus"];
+  map<string, string> properties = 6;
 }
 
 message StartWorkflowRequest {
-  string instance_id = 1 [json_name = "instanceId"];
+  string instance_id = 1 [json_name = "instanceID"];
   string workflow_component = 2 [json_name = "workflowComponent"];
   string workflow_name = 3 [json_name = "workflowName"];
   map<string, string> options = 4;
   bytes input = 5;
 }
 
-message WorkflowActivityRequest {
-  string instance_id = 1 [json_name = "instanceId"];
+message StartWorkflowResponse {
+  string instance_id = 1 [json_name = "instanceID"];
+}
+
+message TerminateWorkflowRequest {
+  string instance_id = 1 [json_name = "instanceID"];
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-message WorkflowActivityResponse {
-  // Empty
+message PauseWorkflowRequest {
+  string instance_id = 1 [json_name = "instanceID"];
+  string workflow_component = 2 [json_name = "workflowComponent"];
+}
+
+message ResumeWorkflowRequest {
+  string instance_id = 1 [json_name = "instanceID"];
+  string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
 message RaiseEventWorkflowRequest {
-  string instance_id = 1 [json_name = "instanceId"];
+  string instance_id = 1 [json_name = "instanceID"];
   string workflow_component = 2 [json_name = "workflowComponent"];
   string event_name = 3 [json_name = "eventName"];
   bytes input = 4;
-}
-
-message RaiseEventWorkflowResponse {
-  // Empty
 }

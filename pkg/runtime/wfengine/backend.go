@@ -47,6 +47,11 @@ func NewActorBackend(engine *WorkflowEngine) *actorBackend {
 	}
 }
 
+// TODO: Replace with implementation from https://github.com/dapr/dapr/pull/6163
+func (be *actorBackend) PurgeOrchestrationState(context.Context, api.InstanceID) error {
+	return nil
+}
+
 func (be *actorBackend) SetActorRuntime(actors actors.Actors) {
 	be.actors = actors
 }
