@@ -239,7 +239,7 @@ func FromFlags() (*DaprRuntime, error) {
 			appProtocol = p
 		case string(HTTPProtocol):
 			// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
-			// TODO: Remove in a feature Dapr version
+			// TODO: Remove in a future Dapr version
 			if *appSSL {
 				log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=https' instead")
 				appProtocol = string(HTTPSProtocol)
@@ -248,7 +248,7 @@ func FromFlags() (*DaprRuntime, error) {
 			}
 		case string(GRPCProtocol):
 			// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
-			// TODO: Remove in a feature Dapr version
+			// TODO: Remove in a future Dapr version
 			if *appSSL {
 				log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=grpcs' instead")
 				appProtocol = string(GRPCSProtocol)
