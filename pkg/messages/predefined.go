@@ -95,7 +95,8 @@ const (
 
 var (
 	// Generic.
-	ErrBadRequest = APIError{"invalid request: %v", "ERR_BAD_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrBadRequest       = APIError{"invalid request: %v", "ERR_BAD_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrAPIUnimplemented = APIError{"this API is currently not implemented", "ERR_API_UNIMPLEMENTED", http.StatusNotImplemented, grpcCodes.Unimplemented}
 
 	// State.
 	ErrStateStoresNotConfigured = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
