@@ -3927,6 +3927,10 @@ func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.Subs
 	return nil
 }
 
+func (m *mockSubscribePubSub) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func TestPubSubDeadLetter(t *testing.T) {
 	testDeadLetterPubsub := "failPubsub"
 	pubsubComponent := componentsV1alpha1.Component{
@@ -4701,6 +4705,10 @@ func (m *mockPublishPubSub) Close() error {
 
 func (m *mockPublishPubSub) Features() []pubsub.Feature {
 	return nil
+}
+
+func (m *mockPublishPubSub) GetComponentMetadata() map[string]string {
+	return map[string]string{}
 }
 
 func TestInitActors(t *testing.T) {
