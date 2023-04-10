@@ -111,6 +111,27 @@ service Dapr {
   // Sets value in extended metadata of the sidecar
   rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
 
+  // SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
+  rpc SubtleGetKeyAlpha1(SubtleGetKeyAlpha1Request) returns (SubtleGetKeyAlpha1Response);
+
+  // SubtleEncryptAlpha1 encrypts a small message using a key stored in the vault.
+  rpc SubtleEncryptAlpha1(SubtleEncryptAlpha1Request) returns (SubtleEncryptAlpha1Response);
+
+  // SubtleDecryptAlpha1 decrypts a small message using a key stored in the vault.
+  rpc SubtleDecryptAlpha1(SubtleDecryptAlpha1Request) returns (SubtleDecryptAlpha1Response);
+
+  // SubtleWrapKeyAlpha1 wraps a key using a key stored in the vault.
+  rpc SubtleWrapKeyAlpha1(SubtleWrapKeyAlpha1Request) returns (SubtleWrapKeyAlpha1Response);
+
+  // SubtleUnwrapKeyAlpha1 unwraps a key using a key stored in the vault.
+  rpc SubtleUnwrapKeyAlpha1(SubtleUnwrapKeyAlpha1Request) returns (SubtleUnwrapKeyAlpha1Response);
+
+  // SubtleSignAlpha1 signs a message using a key stored in the vault.
+  rpc SubtleSignAlpha1(SubtleSignAlpha1Request) returns (SubtleSignAlpha1Response);
+
+  // SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
+  rpc SubtleVerifyAlpha1(SubtleVerifyAlpha1Request) returns (SubtleVerifyAlpha1Response);
+  
   // Start Workflow
   rpc StartWorkflowAlpha1 (StartWorkflowRequest) returns (WorkflowReference) {}
 
@@ -685,6 +706,174 @@ message UnlockResponse {
   }
 
   Status status = 1;
+}
+
+// SubtleGetKeyAlpha1Request is the request object for SubtleGetKeyAlpha1.
+message SubtleGetKeyAlpha1Request {
+  enum KeyFormat {
+    // PEM (PKIX) (default)
+    PEM = 0;
+    // JSON (JSON Web Key) as string
+    JSON = 1;
+  }
+ 
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Name (or name/version) of the key to use in the key vault
+  string name = 2;
+  // Response format
+  KeyFormat format = 3;
+}
+
+// SubtleGetKeyAlpha1Response is the response for SubtleGetKeyAlpha1.
+message SubtleGetKeyAlpha1Response {
+  // Name (or name/version) of the key.
+  // This is returned as response too in case there is a version.
+  string name = 1;
+  // Public key, encoded in the requested format
+  string public_key = 2 [json_name="publicKey"];
+}
+
+// SubtleEncryptAlpha1Request is the request for SubtleEncryptAlpha1.
+message SubtleEncryptAlpha1Request {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Message to encrypt.
+  bytes plaintext = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 6 [json_name="associatedData"];
+}
+
+// SubtleEncryptAlpha1Response is the response for SubtleEncryptAlpha1.
+message SubtleEncryptAlpha1Response {
+  // Encrypted ciphertext.
+  bytes ciphertext = 1;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 2;
+}
+
+// SubtleDecryptAlpha1Request is the request for SubtleDecryptAlpha1.
+message SubtleDecryptAlpha1Request {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Message to decrypt.
+  bytes ciphertext = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 6;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 7 [json_name="associatedData"];
+}
+
+// SubtleDecryptAlpha1Response is the response for SubtleDecryptAlpha1.
+message SubtleDecryptAlpha1Response {
+  // Decrypted plaintext.
+  bytes plaintext = 1;
+}
+
+// SubtleWrapKeyAlpha1Request is the request for SubtleWrapKeyAlpha1.
+message SubtleWrapKeyAlpha1Request {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Key to wrap
+  bytes plaintext_key = 2 [json_name="plaintextKey"];
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 6 [json_name="associatedData"];
+}
+
+// SubtleWrapKeyAlpha1Response is the response for SubtleWrapKeyAlpha1.
+message SubtleWrapKeyAlpha1Response {
+  // Wrapped key.
+  bytes wrapped_key = 1 [json_name="wrappedKey"];
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 2;
+}
+
+// SubtleUnwrapKeyAlpha1Request is the request for SubtleUnwrapKeyAlpha1.
+message SubtleUnwrapKeyAlpha1Request {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Wrapped key.
+  bytes wrapped_key = 2 [json_name="wrappedKey"];
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 6;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 7 [json_name="associatedData"];
+}
+
+// SubtleUnwrapKeyAlpha1Response is the response for SubtleUnwrapKeyAlpha1.
+message SubtleUnwrapKeyAlpha1Response {
+  // Key in plaintext
+  bytes plaintext_key = 1 [json_name="plaintextKey"];
+}
+
+// SubtleSignAlpha1Request is the request for SubtleSignAlpha1.
+message SubtleSignAlpha1Request {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Digest to sign.
+  bytes digest = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+}
+
+// SubtleSignAlpha1Response is the response for SubtleSignAlpha1.
+message SubtleSignAlpha1Response {
+  // The signature that was computed
+  bytes signature = 1;
+}
+
+// SubtleVerifyAlpha1Request is the request for SubtleVerifyAlpha1.
+message SubtleVerifyAlpha1Request {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Digest of the message.
+  bytes digest = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Signature to verify.
+  bytes signature = 5;
+}
+
+// SubtleVerifyAlpha1Response is the response for SubtleVerifyAlpha1.
+message SubtleVerifyAlpha1Response {
+  // True if the signature is valid.
+  bool valid = 1;
 }
 
 message WorkflowReference {
