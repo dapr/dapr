@@ -59,7 +59,7 @@ const (
 	DefaultAppHealthCheckPath = "/health"
 )
 
-// IsHTTP returns true if the protocol is HTTP.
+// IsHTTP returns true if the app protocol is using HTTP (including HTTPS and H2C).
 func (p Protocol) IsHTTP() bool {
 	switch p {
 	case HTTPProtocol, HTTPSProtocol, H2CProtocol:
@@ -98,11 +98,6 @@ type Config struct {
 	DisableBuiltinK8sSecretStore bool
 	AppHealthCheck               *apphealth.Config
 	AppHealthCheckHTTPPath       string
-}
-
-// IsHTTPProtocol returns true if the app is configured with HTTP.
-func (c Config) IsHTTPProtocol() bool {
-	return c.ApplicationProtocol.IsHTTP()
 }
 
 // NewRuntimeConfigOpts contains options for NewRuntimeConfig.

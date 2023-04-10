@@ -913,7 +913,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			var pErr error
-			if a.runtimeConfig.IsHTTPProtocol() {
+			if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 				pErr = a.publishMessageHTTP(ctx, psm)
 			} else {
 				pErr = a.publishMessageGRPC(ctx, psm)
@@ -1269,7 +1269,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		path = bindingName
 	}
 
-	if !a.runtimeConfig.IsHTTPProtocol() {
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		if span != nil {
 			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 		}
@@ -1589,7 +1589,7 @@ func (a *DaprRuntime) getSubscribedBindingsGRPC() ([]string, error) {
 
 func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	// if gRPC, looks for the binding in the list of bindings returned from the app
-	if !a.runtimeConfig.IsHTTPProtocol() {
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		if a.subscribeBindingList == nil {
 			list, err := a.getSubscribedBindingsGRPC()
 			if err != nil {
@@ -1865,7 +1865,7 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	}
 
 	// handle app subscriptions
-	if a.runtimeConfig.IsHTTPProtocol() {
+	if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency)
 	} else {
 		var conn gogrpc.ClientConnInterface
@@ -2956,7 +2956,7 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 	}
 
 	var ch channel.AppChannel
-	if !a.runtimeConfig.IsHTTPProtocol() {
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		ch, err = a.grpc.GetAppChannel()
 		if err != nil {
 			return err
