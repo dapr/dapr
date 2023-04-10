@@ -4772,6 +4772,208 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutQueryKey"))
 	})
+
+	t.Run("state save with no content type", func(t *testing.T) {
+		contentTypeStore := &daprt.MockStateStore{}
+
+		contentTypeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
+			if len(reqs) != 1 {
+				return false
+			}
+
+			req := reqs[0]
+
+			if req.ContentType != nil {
+				return false
+			}
+
+			_, ok := req.Metadata["contentType"]
+
+			if ok {
+				return false
+			}
+
+			return true
+		})).Return(nil)
+
+		fakeServer := newFakeHTTPServer()
+		compStore := compstore.New()
+		compStore.AddStateStore("contentTypeStore", contentTypeStore)
+		testAPI := &api{
+			universal: &universalapi.UniversalAPI{
+				Logger:     logger.NewLogger("fakeLogger"),
+				CompStore:  compStore,
+				Resiliency: resiliency.New(nil),
+			},
+		}
+		fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
+
+		apiPath := fmt.Sprintf("v1.0/state/%s", "contentTypeStore")
+
+		reqs := []state.SetRequest{
+			{
+				Value: map[string]string{
+					"key": "value",
+				},
+			},
+		}
+		b, _ := json.Marshal(reqs)
+
+		fakeServer.DoRequest("POST", apiPath, b, nil)
+	})
+
+	t.Run("state save with metadata content type", func(t *testing.T) {
+		contentTypeStore := &daprt.MockStateStore{}
+
+		contentTypeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
+			if len(reqs) != 1 {
+				return false
+			}
+
+			req := reqs[0]
+
+			if req.ContentType == nil || *req.ContentType != jsonContentTypeHeader {
+				return false
+			}
+
+			metadataContentType, ok := req.Metadata["contentType"]
+
+			if !ok || metadataContentType != jsonContentTypeHeader {
+				return false
+			}
+
+			return true
+		})).Return(nil)
+
+		fakeServer := newFakeHTTPServer()
+		compStore := compstore.New()
+		compStore.AddStateStore("contentTypeStore", contentTypeStore)
+		testAPI := &api{
+			universal: &universalapi.UniversalAPI{
+				Logger:     logger.NewLogger("fakeLogger"),
+				CompStore:  compStore,
+				Resiliency: resiliency.New(nil),
+			},
+		}
+		fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
+
+		apiPath := fmt.Sprintf("v1.0/state/%s?metadata.contentType=%s", "contentTypeStore", jsonContentTypeHeader)
+
+		reqs := []state.SetRequest{
+			{
+				Value: map[string]string{
+					"key": "value",
+				},
+			},
+		}
+		b, _ := json.Marshal(reqs)
+
+		fakeServer.DoRequest("POST", apiPath, b, nil)
+	})
+
+	t.Run("state save with content type", func(t *testing.T) {
+		contentTypeStore := &daprt.MockStateStore{}
+
+		contentTypeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
+			if len(reqs) != 1 {
+				return false
+			}
+
+			req := reqs[0]
+
+			if req.ContentType == nil || *req.ContentType != jsonContentTypeHeader {
+				return false
+			}
+
+			metadataContentType, ok := req.Metadata["contentType"]
+
+			if !ok || metadataContentType != jsonContentTypeHeader {
+				return false
+			}
+
+			return true
+		})).Return(nil)
+
+		fakeServer := newFakeHTTPServer()
+		compStore := compstore.New()
+		compStore.AddStateStore("contentTypeStore", contentTypeStore)
+		testAPI := &api{
+			universal: &universalapi.UniversalAPI{
+				Logger:     logger.NewLogger("fakeLogger"),
+				CompStore:  compStore,
+				Resiliency: resiliency.New(nil),
+			},
+		}
+		fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
+
+		apiPath := fmt.Sprintf("v1.0/state/%s", "contentTypeStore")
+
+		applicationJSON := jsonContentTypeHeader
+
+		reqs := []state.SetRequest{
+			{
+				ContentType: &applicationJSON,
+				Value: map[string]string{
+					"key": "value",
+				},
+			},
+		}
+		b, _ := json.Marshal(reqs)
+
+		fakeServer.DoRequest("POST", apiPath, b, nil)
+	})
+
+	t.Run("state save with conflicting content types", func(t *testing.T) {
+		contentTypeStore := &daprt.MockStateStore{}
+
+		applicationOctetStream := "application/octet-stream"
+
+		contentTypeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
+			if len(reqs) != 1 {
+				return false
+			}
+
+			req := reqs[0]
+
+			if req.ContentType == nil || *req.ContentType != applicationOctetStream {
+				return false
+			}
+
+			metadataContentType, ok := req.Metadata["contentType"]
+
+			if !ok || metadataContentType != applicationOctetStream {
+				return false
+			}
+
+			return true
+		})).Return(nil)
+
+		fakeServer := newFakeHTTPServer()
+		compStore := compstore.New()
+		compStore.AddStateStore("contentTypeStore", contentTypeStore)
+		testAPI := &api{
+			universal: &universalapi.UniversalAPI{
+				Logger:     logger.NewLogger("fakeLogger"),
+				CompStore:  compStore,
+				Resiliency: resiliency.New(nil),
+			},
+		}
+		fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
+
+		apiPath := fmt.Sprintf("v1.0/state/%s?metadata.contentType=%s", "contentTypeStore", jsonContentTypeHeader)
+
+		reqs := []state.SetRequest{
+			{
+				ContentType: &applicationOctetStream,
+				Value: map[string]string{
+					"key": "value",
+				},
+			},
+		}
+		b, _ := json.Marshal(reqs)
+
+		fakeServer.DoRequest("POST", apiPath, b, nil)
+	})
 }
 
 func TestStateStoreQuerierNotImplemented(t *testing.T) {

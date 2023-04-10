@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -1210,6 +1211,124 @@ func TestSaveState(t *testing.T) {
 				require.Error(t, err)
 				assert.Equal(t, tt.expectedCode, status.Code(err))
 			}
+		})
+	}
+}
+
+func TestSaveStateContentType(t *testing.T) {
+	fakeStore := &daprt.MockStateStore{}
+
+	appID := "fakeAPI"
+	applicationJSON := "application/json"
+	applicationOctetStream := "application/octet-stream"
+
+	testCases := map[string]struct {
+		testName    string
+		contentType *string
+		expectBytes bool
+	}{
+		"key1": {
+			testName:    "save state with no content type",
+			contentType: nil,
+			expectBytes: true,
+		},
+		"key2": {
+			testName:    "save state with JSON content type",
+			contentType: &applicationJSON,
+			expectBytes: false,
+		},
+		"key3": {
+			testName:    "save state with stream content type",
+			contentType: &applicationOctetStream,
+			expectBytes: true,
+		},
+	}
+
+	contentTypeProperty := "contentType"
+
+	fakeStore.On("Set", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(req *state.SetRequest) bool {
+		splitKey := strings.Split(req.Key, "||")
+		key := splitKey[1]
+
+		testCase, ok := testCases[key]
+
+		if !ok {
+			return false
+		}
+
+		expectedContentType := testCase.contentType
+		expectBytes := testCase.expectBytes
+
+		if expectedContentType != nil && (req.ContentType == nil || *req.ContentType != *expectedContentType || req.Metadata[contentTypeProperty] != *expectedContentType) {
+			return false
+		}
+
+		if expectedContentType == nil {
+			_, ok := req.Metadata[contentTypeProperty]
+
+			if req.ContentType != nil || ok {
+				return false
+			}
+		}
+
+		switch req.Value.(type) {
+		case []byte:
+			if !expectBytes {
+				return false
+			}
+		default:
+			if expectBytes {
+				return false
+			}
+		}
+
+		return true
+	})).Return(nil)
+
+	storeName := "store1"
+
+	compStore := compstore.New()
+	compStore.AddStateStore(storeName, fakeStore)
+
+	// Setup dapr api server
+	fakeAPI := &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:      appID,
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
+		},
+	}
+	server, lis := startDaprAPIServer(fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(lis)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	for key, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			metadata := map[string]string{}
+
+			if tt.contentType != nil {
+				metadata[contentTypeProperty] = *tt.contentType
+			}
+
+			req := &runtimev1pb.SaveStateRequest{
+				StoreName: storeName,
+				States: []*commonv1pb.StateItem{
+					{
+						Metadata: metadata,
+						Key:      key,
+						Value:    []byte("{ \"key\": \"value\" }"),
+					},
+				},
+			}
+
+			_, err := client.SaveState(context.Background(), req)
+
+			assert.NoError(t, err, "Expected no error")
 		})
 	}
 }

@@ -27,6 +27,8 @@ import (
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/kit/logger"
 
+	"golang.org/x/exp/maps"
+
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -54,6 +56,9 @@ const (
 	affectedRowsMetadataKey = "affected"
 	// expectedRowsMetadataKey is the metadata key used to return bulkdelete mismatch errors expected rows.
 	expectedRowsMetadataKey = "expected"
+
+	applicationJSONContentType = "application/json"
+	contentTypeMetadata        = "contentType"
 )
 
 // etagErrFromStatus get the etag error from the given gRPC status, if the error is not an etag kind error the return is the original error.
@@ -413,6 +418,7 @@ func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 		return nil, nil
 	}
 	var dataBytes []byte
+	metadata := req.GetMetadata()
 	switch reqValue := req.Value.(type) {
 	case []byte:
 		dataBytes = reqValue
@@ -425,13 +431,23 @@ func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 		if dataBytes, err = utils.Marshal(reqValue, json.Marshal); err != nil {
 			return nil, err
 		}
+
+		// Add or overwrite metadata with content type
+		newMetadata := make(map[string]string, len(metadata)+1)
+		maps.Copy(newMetadata, metadata)
+		newMetadata[contentTypeMetadata] = applicationJSONContentType
+		metadata = newMetadata
+
+		// Add or overwrite content type
+		applicationJSON := applicationJSONContentType
+		req.ContentType = &applicationJSON
 	}
 
 	return &proto.SetRequest{
 		Key:         req.GetKey(),
 		Value:       dataBytes,
 		Etag:        toETagRequest(req.ETag),
-		Metadata:    req.GetMetadata(),
+		Metadata:    metadata,
 		ContentType: strValueIfNotNil(req.ContentType),
 		Options: &proto.StateOptions{
 			Concurrency: concurrencyOf(req.Options.Concurrency),

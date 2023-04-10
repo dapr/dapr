@@ -979,6 +979,23 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			}
 		}
 
+		contentType := reqs[i].ContentType
+		metadataContentType, ok := reqs[i].Metadata[contribMetadata.ContentType]
+
+		hasShownWarning := false
+
+		if contentType != nil && !ok {
+			reqs[i].Metadata[contribMetadata.ContentType] = *contentType
+		} else if contentType == nil && ok {
+			reqs[i].ContentType = &metadataContentType
+		} else if contentType != nil && ok && *contentType != metadataContentType {
+			if !hasShownWarning {
+				log.Warnf("The content type in the request body (%s) and metadata (%s) are different. Using the content type in the request body.", *contentType, metadataContentType)
+				hasShownWarning = true
+			}
+			reqs[i].Metadata[contribMetadata.ContentType] = *contentType
+		}
+
 		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID)
 		if err != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())

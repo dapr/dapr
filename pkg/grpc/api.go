@@ -669,13 +669,19 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			Metadata: s.Metadata,
 		}
 
-		if req.Metadata[contribMetadata.ContentType] == contenttype.JSONContentType {
+		contentType, hasContentType := s.Metadata[contribMetadata.ContentType]
+
+		if contentType == contenttype.JSONContentType {
 			err = json.Unmarshal(s.Value, &req.Value)
 			if err != nil {
 				return empty, err
 			}
 		} else {
 			req.Value = s.Value
+		}
+
+		if hasContentType {
+			req.ContentType = &contentType
 		}
 
 		if s.Etag != nil {

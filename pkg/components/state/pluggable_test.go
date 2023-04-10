@@ -449,6 +449,105 @@ func TestComponentCalls(t *testing.T) {
 		assert.Equal(t, int64(1), svc.setCalled.Load())
 	})
 
+	t.Run("set should indicate JSON content if passed non-binary with no content-type", func(t *testing.T) {
+		const fakeKey, fakeData = "fakeKey", "fakeData"
+
+		svc := &server{
+			onSetCalled: func(req *proto.SetRequest) {
+				assert.Equal(t, req.Key, fakeKey)
+				assert.Equal(t, req.Value, []byte(wrapString(fakeData)))
+				assert.Equal(t, req.ContentType, "application/json")
+				assert.Equal(t, req.Metadata["contentType"], "application/json")
+			},
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		_ = stStore.Set(context.Background(), &state.SetRequest{
+			Key:   fakeKey,
+			Value: fakeData,
+		})
+
+		assert.Equal(t, int64(1), svc.setCalled.Load())
+	})
+
+	t.Run("set should indicate JSON content if passed non-binary with no content-type", func(t *testing.T) {
+		const fakeData = "fakeData"
+
+		contentTypeMetadata := "contentType"
+		contentType := "application/json"
+
+		svc := &server{
+			onSetCalled: func(req *proto.SetRequest) {
+				assert.Equal(t, req.Value, []byte(wrapString(fakeData)))
+				assert.Equal(t, req.ContentType, contentType)
+				assert.Equal(t, req.Metadata[contentTypeMetadata], contentType)
+			},
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		_ = stStore.Set(context.Background(), &state.SetRequest{
+			Value: fakeData,
+		})
+
+		assert.Equal(t, int64(1), svc.setCalled.Load())
+	})
+
+	t.Run("set should indicate JSON content if only content-type metadata is set", func(t *testing.T) {
+		const fakeData = "fakeData"
+
+		contentTypeMetadata := "contentType"
+		contentType := "application/json"
+
+		svc := &server{
+			onSetCalled: func(req *proto.SetRequest) {
+				assert.Equal(t, req.Value, []byte(wrapString(fakeData)))
+				assert.Equal(t, req.ContentType, contentType)
+				assert.Equal(t, req.Metadata[contentTypeMetadata], contentType)
+			},
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		_ = stStore.Set(context.Background(), &state.SetRequest{
+			Value: fakeData,
+			Metadata: map[string]string{
+				contentTypeMetadata: contentType,
+			},
+		})
+
+		assert.Equal(t, int64(1), svc.setCalled.Load())
+	})
+
+	t.Run("set should indicate JSON content if only content-type property is set", func(t *testing.T) {
+		const fakeData = "fakeData"
+
+		contentTypeMetadata := "contentType"
+		contentType := "application/json"
+
+		svc := &server{
+			onSetCalled: func(req *proto.SetRequest) {
+				assert.Equal(t, req.Value, []byte(wrapString(fakeData)))
+				assert.Equal(t, req.ContentType, contentType)
+				assert.Equal(t, req.Metadata[contentTypeMetadata], contentType)
+			},
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		_ = stStore.Set(context.Background(), &state.SetRequest{
+			Value:       fakeData,
+			ContentType: &contentType,
+		})
+
+		assert.Equal(t, int64(1), svc.setCalled.Load())
+	})
+
 	t.Run("ping should not return an err when grpc not returns an error", func(t *testing.T) {
 		svc := &server{}
 		stStore, cleanup, err := getStateStore(svc)
