@@ -285,7 +285,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	proto := &internalv1pb.InternalInvokeRequestStream{}
 	var (
 		n    int
-		seq  uint32
+		seq  uint64
 		done bool
 	)
 	for {
@@ -380,11 +380,10 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	// Read the response into the stream in the background
 	go func() {
 		var (
-			firstChunk = true
-			lastSeq    uint32
-			readSeq    uint32
-			payload    *commonv1pb.StreamPayload
-			readErr    error
+			expectSeq uint64
+			readSeq   uint64
+			payload   *commonv1pb.StreamPayload
+			readErr   error
 		)
 		for {
 			if ctx.Err() != nil {
@@ -401,13 +400,12 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 					return
 				}
 
-				// Check if the sequence number is greater than the previous (or 0 for the first chunk)
-				if (firstChunk && readSeq != 0) || (!firstChunk && readSeq != lastSeq+1) {
-					pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d", readSeq))
+				// Check if the sequence number is greater than the previous
+				if readSeq != expectSeq {
+					pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d (expected: %d)", readSeq, expectSeq))
 					return
 				}
-				lastSeq = readSeq
-				firstChunk = false
+				expectSeq++
 			}
 
 			// Read the next chunk
@@ -505,7 +503,7 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 
 // ReadChunk reads a chunk of data from a StreamPayload object.
 // The returned value "seq" indicates the sequence number
-func ReadChunk(payload *commonv1pb.StreamPayload, out io.Writer) (seq uint32, err error) {
+func ReadChunk(payload *commonv1pb.StreamPayload, out io.Writer) (seq uint64, err error) {
 	if len(payload.Data) > 0 {
 		var n int
 		n, err = out.Write(payload.Data)
