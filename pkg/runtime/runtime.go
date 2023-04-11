@@ -111,7 +111,7 @@ import (
 )
 
 const (
-	actorStateStore = "actorStateStore"
+	actorStateStore = "actorstatestore"
 
 	// output bindings concurrency.
 	bindingsConcurrencyParallel   = "parallel"
@@ -1796,14 +1796,20 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		// when placement address list is not empty, set specified actor store.
 		if len(a.runtimeConfig.PlacementAddresses) != 0 {
 			// set specified actor store if "actorStateStore" is true in the spec.
-			actorStoreSpecified := props[actorStateStore]
-			if actorStoreSpecified == "true" {
+			actorStoreSpecified := false
+			for k, v := range props {
+				if strings.ToLower(k) == actorStateStore { //nolint:gocritic
+					actorStoreSpecified = utils.IsTruthy(v)
+				}
+			}
+
+			if actorStoreSpecified {
 				a.actorStateStoreLock.Lock()
 				if a.actorStateStoreName == "" {
-					log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
+					log.Info("Using '" + s.ObjectMeta.Name + "' as actor state store")
 					a.actorStateStoreName = s.ObjectMeta.Name
 				} else if a.actorStateStoreName != s.ObjectMeta.Name {
-					log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+					log.Fatalf("Detected duplicate actor state store: %s and %s", a.actorStateStoreName, s.ObjectMeta.Name)
 				}
 				a.actorStateStoreLock.Unlock()
 			}
