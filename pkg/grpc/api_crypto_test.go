@@ -167,7 +167,7 @@ func TestCryptoAlpha1(t *testing.T) {
 				&runtimev1pb.EncryptAlpha1Request{
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  1,
-						Data: []byte("happy kitty, sleepy kitty, purr purr purr"),
+						Data: []byte("happy kitty, sleepy kitty, purr purr purr"), //nolint:dupword
 					},
 				},
 			}
@@ -200,7 +200,7 @@ func TestCryptoAlpha1(t *testing.T) {
 			}
 			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
 			require.NoError(t, err)
-			require.Equal(t, "soft kitty, warm kitty, little ball of fur, happy kitty, sleepy kitty, purr purr purr", string(dec))
+			require.Equal(t, "soft kitty, warm kitty, little ball of fur, happy kitty, sleepy kitty, purr purr purr", string(dec)) //nolint:dupword
 		})
 
 		t.Run("decrypt - header split in multiple chunks", func(t *testing.T) {
@@ -231,7 +231,7 @@ func TestCryptoAlpha1(t *testing.T) {
 			}
 			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
 			require.NoError(t, err)
-			require.Equal(t, "soft kitty, warm kitty, little ball of fur, happy kitty, sleepy kitty, purr purr purr", string(dec))
+			require.Equal(t, "soft kitty, warm kitty, little ball of fur, happy kitty, sleepy kitty, purr purr purr", string(dec)) //nolint:dupword
 		})
 	})
 }
