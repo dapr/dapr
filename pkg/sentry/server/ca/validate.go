@@ -112,10 +112,10 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (CABundle, error)
 	}
 
 	return CABundle{
-		trustAnchors: trustAnchors,
-		issChainPEM:  issChainPEM,
-		issChain:     issChain,
-		issKeyPEM:    issKeyPEM,
-		issKey:       issKey,
+		TrustAnchors: trustAnchors,
+		IssChainPEM:  issChainPEM,
+		IssChain:     issChain,
+		IssKeyPEM:    issKeyPEM,
+		IssKey:       issKey,
 	}, nil
 }

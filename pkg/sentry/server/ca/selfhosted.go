@@ -31,9 +31,9 @@ func (s *selfhosted) store(_ context.Context, bundle CABundle) error {
 		name string
 		data []byte
 	}{
-		{s.config.RootCertPath, bundle.trustAnchors},
-		{s.config.IssuerCertPath, bundle.issChainPEM},
-		{s.config.IssuerKeyPath, bundle.issKeyPEM},
+		{s.config.RootCertPath, bundle.TrustAnchors},
+		{s.config.IssuerCertPath, bundle.IssChainPEM},
+		{s.config.IssuerKeyPath, bundle.IssKeyPEM},
 	} {
 		if err := os.WriteFile(f.name, f.data, 0o600); err != nil {
 			return err

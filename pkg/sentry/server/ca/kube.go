@@ -82,9 +82,9 @@ func (k *kube) store(ctx context.Context, bundle CABundle) error {
 	}
 
 	s.Data = map[string][]byte{
-		filepath.Base(k.config.RootCertPath):   bundle.trustAnchors,
-		filepath.Base(k.config.IssuerCertPath): bundle.issChainPEM,
-		filepath.Base(k.config.IssuerKeyPath):  bundle.issKeyPEM,
+		filepath.Base(k.config.RootCertPath):   bundle.TrustAnchors,
+		filepath.Base(k.config.IssuerCertPath): bundle.IssChainPEM,
+		filepath.Base(k.config.IssuerKeyPath):  bundle.IssKeyPEM,
 	}
 
 	_, err = k.client.CoreV1().Secrets(k.namespace).Update(ctx, s, metav1.UpdateOptions{})
@@ -98,7 +98,7 @@ func (k *kube) store(ctx context.Context, bundle CABundle) error {
 	}
 
 	cm.Data = map[string]string{
-		filepath.Base(k.config.RootCertPath): string(bundle.trustAnchors),
+		filepath.Base(k.config.RootCertPath): string(bundle.TrustAnchors),
 	}
 
 	_, err = k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, cm, metav1.UpdateOptions{})

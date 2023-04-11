@@ -83,11 +83,11 @@ type ca struct {
 
 // CABundle is the bundle of certificates and keys used by the CA.
 type CABundle struct {
-	trustAnchors []byte
-	issChainPEM  []byte
-	issKeyPEM    []byte
-	issChain     []*x509.Certificate
-	issKey       any
+	TrustAnchors []byte
+	IssChainPEM  []byte
+	IssKeyPEM    []byte
+	IssChain     []*x509.Certificate
+	IssKey       any
 }
 
 func New(ctx context.Context, conf config.Config) (Signer, error) {
@@ -135,7 +135,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 		log.Info("Self-signed certs generated and persisted successfully")
 		monitoring.IssuerCertChanged()
-		monitoring.IssuerCertExpiry(bundle.issChain[0].NotAfter)
+		monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 	} else {
 		log.Info("Root and issuer certs found: using existing certs")
 	}
@@ -162,7 +162,7 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 	}
 	tmpl.DNSNames = append(tmpl.DNSNames, req.DNS...)
 
-	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, c.bundle.issChain[0], req.PublicKey, c.bundle.issKey)
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, c.bundle.IssChain[0], req.PublicKey, c.bundle.IssKey)
 	if err != nil {
 		return nil, err
 	}
@@ -172,12 +172,12 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	return append([]*x509.Certificate{cert}, c.bundle.issChain...), nil
+	return append([]*x509.Certificate{cert}, c.bundle.IssChain...), nil
 }
 
 // TODO: Remove this method in v1.12 since it is not used any more.
 func (c *ca) TrustAnchors() []byte {
-	return c.bundle.trustAnchors
+	return c.bundle.TrustAnchors
 }
 
 func GenerateCABundle(trustDomain string, allowedClockSkew time.Duration) (CABundle, error) {
@@ -223,10 +223,10 @@ func GenerateCABundle(trustDomain string, allowedClockSkew time.Duration) (CABun
 	}
 
 	return CABundle{
-		trustAnchors: trustAnchors,
-		issChainPEM:  issCertPEM,
-		issKeyPEM:    issKeyPEM,
-		issChain:     []*x509.Certificate{issCert},
-		issKey:       issKey,
+		TrustAnchors: trustAnchors,
+		IssChainPEM:  issCertPEM,
+		IssKeyPEM:    issKeyPEM,
+		IssChain:     []*x509.Certificate{issCert},
+		IssKey:       issKey,
 	}, nil
 }

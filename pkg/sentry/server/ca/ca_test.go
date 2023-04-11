@@ -122,11 +122,11 @@ func TestNew(t *testing.T) {
 		assert.Equal(t, issuerKeyFileContents, issuerKey)
 
 		assert.Equal(t, CABundle{
-			trustAnchors: rootFileContents,
-			issChainPEM:  issuerFileContents,
-			issKeyPEM:    issuerKeyFileContents,
-			issChain:     []*x509.Certificate{int2Crt, int1Crt},
-			issKey:       int2PK,
+			TrustAnchors: rootFileContents,
+			IssChainPEM:  issuerFileContents,
+			IssKeyPEM:    issuerKeyFileContents,
+			IssChain:     []*x509.Certificate{int2Crt, int1Crt},
+			IssKey:       int2PK,
 		}, caImp.(*ca).bundle)
 	})
 }

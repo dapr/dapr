@@ -51,9 +51,9 @@ func TestSelhosted_store(t *testing.T) {
 		}
 
 		assert.NoError(t, s.store(context.Background(), CABundle{
-			trustAnchors: []byte("root"),
-			issChainPEM:  []byte("issuer"),
-			issKeyPEM:    []byte("key"),
+			TrustAnchors: []byte("root"),
+			IssChainPEM:  []byte("issuer"),
+			IssKeyPEM:    []byte("key"),
 		}))
 
 		require.FileExists(t, rootFile)
@@ -143,11 +143,11 @@ func TestSelfhosted_get(t *testing.T) {
 			issuer:   &intPEM,
 			key:      &intPKPEM,
 			expBundle: CABundle{
-				trustAnchors: rootPEM,
-				issChainPEM:  intPEM,
-				issKeyPEM:    intPKPEM,
-				issChain:     []*x509.Certificate{intCrt},
-				issKey:       intPK,
+				TrustAnchors: rootPEM,
+				IssChainPEM:  intPEM,
+				IssKeyPEM:    intPKPEM,
+				IssChain:     []*x509.Certificate{intCrt},
+				IssKey:       intPK,
 			},
 			expOk:  true,
 			expErr: false,
