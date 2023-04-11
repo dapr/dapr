@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:goconst
 package testing
 
 import (
@@ -20,8 +21,9 @@ import (
 	// Blank import for the embed package.
 	_ "embed"
 
-	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 )
 
 var (
