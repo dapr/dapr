@@ -24,58 +24,12 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
-
-var testLogger = logger.NewLogger("testlogger")
-
-var testResiliency = &v1alpha1.Resiliency{
-	Spec: v1alpha1.ResiliencySpec{
-		Policies: v1alpha1.Policies{
-			Retries: map[string]v1alpha1.Retry{
-				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
-					MaxInterval: "100ms",
-					Policy:      "constant",
-					Duration:    "10ms",
-				},
-				"tenRetries": {
-					MaxRetries:  ptr.Of(10),
-					MaxInterval: "100ms",
-					Policy:      "constant",
-					Duration:    "10ms",
-				},
-			},
-			Timeouts: map[string]string{
-				"fast": "100ms",
-			},
-			CircuitBreakers: map[string]v1alpha1.CircuitBreaker{
-				"simpleCB": {
-					MaxRequests: 1,
-					Timeout:     "1s",
-					Trip:        "consecutiveFailures > 4",
-				},
-			},
-		},
-		Targets: v1alpha1.Targets{
-			Components: map[string]v1alpha1.ComponentPolicyNames{
-				"failSecret": {
-					Outbound: v1alpha1.PolicyNames{
-						Retry:   "singleRetry",
-						Timeout: "fast",
-					},
-				},
-			},
-		},
-	},
-}
 
 func TestSecretStoreNotConfigured(t *testing.T) {
 	// Setup Dapr API

@@ -69,9 +69,13 @@ func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, err
 	}
 
+	if res == nil {
+		return &runtimev1pb.SubtleGetKeyAlpha1Response{}, nil
+	}
+
 	// Get the key ID if present
 	kid := in.Name
-	if dk, ok := res.(*contribCrypto.Key); ok {
+	if dk, ok := res.(*contribCrypto.Key); ok && dk.KeyID() != "" {
 		kid = dk.KeyID()
 	}
 
