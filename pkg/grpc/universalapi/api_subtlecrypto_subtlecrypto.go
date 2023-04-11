@@ -204,6 +204,7 @@ func (a *UniversalAPI) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.
 	}
 
 	// Parse the plaintext key
+	// TODO: allow specifying the format of the input key
 	pk, err := kitCrypto.ParseKey(in.PlaintextKey, "")
 	if err != nil {
 		err = fmt.Errorf("failed to parse plaintext key: %w", err)
@@ -265,6 +266,7 @@ func (a *UniversalAPI) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1p
 	}
 
 	// Serialize the key
+	// TODO: Allow specifying the format to get a key as JSON or PEM
 	enc, err := kitCrypto.SerializeKey(plaintextText)
 	if err != nil {
 		err = fmt.Errorf("failed to serialize unwrapped key: %w", err)

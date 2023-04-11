@@ -32,6 +32,8 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
+var oneHundredTwentyEightBits = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+
 func TestSubtleGetKeyAlpha1(t *testing.T) {
 	fakeAPI := &UniversalAPI{
 		Logger:     testLogger,
@@ -190,6 +192,296 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
 		// The actual error is not returned to the user for security reasons
 		assert.ErrorContains(t, err, "failed to encrypt")
+	})
+}
+
+func TestSubtleDecryptAlpha1(t *testing.T) {
+	fakeAPI := &UniversalAPI{
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CryptoProviders: map[string]contribCrypto.SubtleCrypto{
+			"myvault": &daprt.FakeSubtleCrypto{},
+		},
+	}
+
+	t.Run("decrypt message", func(t *testing.T) {
+		res, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptAlpha1Request{
+			ComponentName: "myvault",
+			Ciphertext:    []byte("hello world"),
+			KeyName:       "good",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		// Message isn't actually encrypted
+		assert.Equal(t, "hello world", string(res.Plaintext))
+	})
+
+	t.Run("no provider configured", func(t *testing.T) {
+		bak := fakeAPI.CryptoProviders
+		fakeAPI.CryptoProviders = nil
+		defer func() {
+			fakeAPI.CryptoProviders = bak
+		}()
+
+		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptAlpha1Request{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+	})
+
+	t.Run("provider not found", func(t *testing.T) {
+		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptAlpha1Request{
+			ComponentName: "notfound",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+	})
+
+	t.Run("failed to decrypt", func(t *testing.T) {
+		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptAlpha1Request{
+			ComponentName: "myvault",
+			KeyName:       "error",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		// The actual error is not returned to the user for security reasons
+		assert.ErrorContains(t, err, "failed to decrypt")
+	})
+}
+
+func TestSubtleWrapKeyAlpha1(t *testing.T) {
+	fakeAPI := &UniversalAPI{
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CryptoProviders: map[string]contribCrypto.SubtleCrypto{
+			"myvault": &daprt.FakeSubtleCrypto{},
+		},
+	}
+
+	t.Run("wrap key", func(t *testing.T) {
+		res, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{
+			ComponentName: "myvault",
+			PlaintextKey:  []byte("hello world"),
+			KeyName:       "good-tag",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		assert.Equal(t, oneHundredTwentyEightBits, res.WrappedKey)
+		assert.Len(t, res.Tag, 16)
+	})
+
+	t.Run("no provider configured", func(t *testing.T) {
+		bak := fakeAPI.CryptoProviders
+		fakeAPI.CryptoProviders = nil
+		defer func() {
+			fakeAPI.CryptoProviders = bak
+		}()
+
+		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+	})
+
+	t.Run("provider not found", func(t *testing.T) {
+		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{
+			ComponentName: "notfound",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+	})
+
+	t.Run("key is empty", func(t *testing.T) {
+		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{
+			ComponentName: "myvault",
+			KeyName:       "error",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		assert.ErrorContains(t, err, "key is empty")
+	})
+
+	t.Run("failed to wrap key", func(t *testing.T) {
+		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{
+			ComponentName: "myvault",
+			KeyName:       "error",
+			PlaintextKey:  oneHundredTwentyEightBits,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		// The actual error is not returned to the user for security reasons
+		assert.ErrorContains(t, err, "failed to wrap key")
+	})
+}
+
+func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
+	fakeAPI := &UniversalAPI{
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CryptoProviders: map[string]contribCrypto.SubtleCrypto{
+			"myvault": &daprt.FakeSubtleCrypto{},
+		},
+	}
+
+	t.Run("unwrap key", func(t *testing.T) {
+		res, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyAlpha1Request{
+			ComponentName: "myvault",
+			WrappedKey:    []byte("hello world"),
+			KeyName:       "good",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		// Message isn't actually encrypted
+		assert.Equal(t, oneHundredTwentyEightBits, res.PlaintextKey)
+	})
+
+	t.Run("no provider configured", func(t *testing.T) {
+		bak := fakeAPI.CryptoProviders
+		fakeAPI.CryptoProviders = nil
+		defer func() {
+			fakeAPI.CryptoProviders = bak
+		}()
+
+		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyAlpha1Request{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+	})
+
+	t.Run("provider not found", func(t *testing.T) {
+		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyAlpha1Request{
+			ComponentName: "notfound",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+	})
+
+	t.Run("failed to unwrap key", func(t *testing.T) {
+		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyAlpha1Request{
+			ComponentName: "myvault",
+			KeyName:       "error",
+			WrappedKey:    oneHundredTwentyEightBits,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		// The actual error is not returned to the user for security reasons
+		assert.ErrorContains(t, err, "failed to unwrap key")
+	})
+}
+
+func TestSubtleSignAlpha1(t *testing.T) {
+	fakeAPI := &UniversalAPI{
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CryptoProviders: map[string]contribCrypto.SubtleCrypto{
+			"myvault": &daprt.FakeSubtleCrypto{},
+		},
+	}
+
+	t.Run("sign message", func(t *testing.T) {
+		res, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignAlpha1Request{
+			ComponentName: "myvault",
+			Digest:        []byte("hello world"),
+			KeyName:       "good",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		// Message isn't actually signed
+		assert.Equal(t, oneHundredTwentyEightBits, res.Signature)
+	})
+
+	t.Run("no provider configured", func(t *testing.T) {
+		bak := fakeAPI.CryptoProviders
+		fakeAPI.CryptoProviders = nil
+		defer func() {
+			fakeAPI.CryptoProviders = bak
+		}()
+
+		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignAlpha1Request{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+	})
+
+	t.Run("provider not found", func(t *testing.T) {
+		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignAlpha1Request{
+			ComponentName: "notfound",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+	})
+
+	t.Run("failed to sign", func(t *testing.T) {
+		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignAlpha1Request{
+			ComponentName: "myvault",
+			KeyName:       "error",
+			Digest:        oneHundredTwentyEightBits,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		// The actual error is not returned to the user for security reasons
+		assert.ErrorContains(t, err, "failed to sign")
+	})
+}
+
+func TestSubtleVerifyAlpha1(t *testing.T) {
+	fakeAPI := &UniversalAPI{
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CryptoProviders: map[string]contribCrypto.SubtleCrypto{
+			"myvault": &daprt.FakeSubtleCrypto{},
+		},
+	}
+
+	t.Run("signature is valid", func(t *testing.T) {
+		res, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{
+			ComponentName: "myvault",
+			Digest:        oneHundredTwentyEightBits,
+			Signature:     oneHundredTwentyEightBits,
+			KeyName:       "good",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		assert.True(t, res.Valid)
+	})
+
+	t.Run("signature is invalid", func(t *testing.T) {
+		res, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{
+			ComponentName: "myvault",
+			Digest:        oneHundredTwentyEightBits,
+			Signature:     oneHundredTwentyEightBits,
+			KeyName:       "bad",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		assert.False(t, res.Valid)
+	})
+
+	t.Run("no provider configured", func(t *testing.T) {
+		bak := fakeAPI.CryptoProviders
+		fakeAPI.CryptoProviders = nil
+		defer func() {
+			fakeAPI.CryptoProviders = bak
+		}()
+
+		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+	})
+
+	t.Run("provider not found", func(t *testing.T) {
+		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{
+			ComponentName: "notfound",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+	})
+
+	t.Run("failed to verify", func(t *testing.T) {
+		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{
+			ComponentName: "myvault",
+			KeyName:       "error",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		// The actual error is not returned to the user for security reasons
+		assert.ErrorContains(t, err, "failed to verify")
 	})
 }
 
