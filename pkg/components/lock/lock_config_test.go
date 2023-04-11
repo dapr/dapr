@@ -2,6 +2,7 @@ package lock
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +14,7 @@ func TestMain(m *testing.M) {
 	SaveLockConfiguration("store1", map[string]string{strategyKey: strategyNone})
 	SaveLockConfiguration("store2", map[string]string{strategyKey: strategyAppid})
 	SaveLockConfiguration("store3", map[string]string{strategyKey: strategyDefault})
-	SaveLockConfiguration("store4", map[string]string{strategyKey: strategyStoreName})
+	SaveLockConfiguration("store4", map[string]string{strings.ToUpper(strategyKey): strategyStoreName})
 	SaveLockConfiguration("store5", map[string]string{strategyKey: "other-fixed-prefix"})
 	// if strategyKey not set
 	SaveLockConfiguration("store6", map[string]string{})
@@ -34,7 +35,7 @@ func TestSaveLockConfiguration(t *testing.T) {
 		err := SaveLockConfiguration(item.storename, map[string]string{
 			strategyKey: item.prefix,
 		})
-		require.NotNil(t, err)
+		require.Error(t, err)
 	}
 }
 
