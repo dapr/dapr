@@ -100,7 +100,6 @@ type api struct {
 	accessControlList          *config.AccessControlList
 	appProtocol                string
 	extendedMetadata           sync.Map
-	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
 	getSubscriptionsFn         func() []runtimePubsub.Subscription
@@ -145,6 +144,7 @@ func NewAPI(opts APIOpts) API {
 			SecretsConfiguration: opts.SecretsConfiguration,
 			LockStores:           opts.LockStores,
 			WorkflowComponents:   opts.WorkflowComponents,
+			ShutdownFn:           opts.Shutdown,
 		},
 		directMessaging:            opts.DirectMessaging,
 		actor:                      opts.Actor,
@@ -159,7 +159,6 @@ func NewAPI(opts APIOpts) API {
 		tracingSpec:                opts.TracingSpec,
 		accessControlList:          opts.AccessControlList,
 		appProtocol:                opts.AppProtocol,
-		shutdown:                   opts.Shutdown,
 		getComponentsFn:            opts.GetComponentsFn,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		getSubscriptionsFn:         opts.GetSubscriptionsFn,
@@ -1402,15 +1401,6 @@ func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.Pu
 // SetMetadata Sets value in extended metadata of the sidecar.
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
-	return &emptypb.Empty{}, nil
-}
-
-// Shutdown the sidecar.
-func (a *api) Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
-	go func() {
-		<-ctx.Done()
-		a.shutdown()
-	}()
 	return &emptypb.Empty{}, nil
 }
 

@@ -2171,39 +2171,6 @@ func TestBulkPublish(t *testing.T) {
 	})
 }
 
-func TestShutdownEndpoints(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	shutdownCh := make(chan struct{})
-	m := mock.Mock{}
-	m.On("shutdown", mock.Anything).Return()
-	srv := &api{
-		shutdown: func() {
-			m.MethodCalled("shutdown")
-			close(shutdownCh)
-		},
-	}
-	server := startTestServerAPI(port, srv)
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := runtimev1pb.NewDaprClient(clientConn)
-
-	t.Run("Shutdown successfully - 204", func(t *testing.T) {
-		_, err := client.Shutdown(context.Background(), &emptypb.Empty{})
-		assert.NoError(t, err, "Expected no error")
-		select {
-		case <-time.After(time.Second):
-			t.Fatal("Did not shut down within 1 second")
-		case <-shutdownCh:
-			// All good
-		}
-		m.AssertCalled(t, "shutdown")
-	})
-}
-
 func TestInvokeBinding(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	srv := &api{

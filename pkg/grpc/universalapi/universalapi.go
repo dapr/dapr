@@ -37,4 +37,5 @@ type UniversalAPI struct {
 	SecretsConfiguration map[string]config.SecretsScope
 	LockStores           map[string]lock.Store
 	WorkflowComponents   map[string]workflows.Workflow
+	ShutdownFn           func()
 }

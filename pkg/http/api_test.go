@@ -734,31 +734,28 @@ func TestShutdownEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	shutdownCh := make(chan struct{})
-	m := mock.Mock{}
-	m.On("shutdown", mock.Anything).Return()
 	testAPI := &api{
-		shutdown: func() {
-			m.MethodCalled("shutdown")
-			close(shutdownCh)
+		universal: &universalapi.UniversalAPI{
+			ShutdownFn: func() {
+				close(shutdownCh)
+			},
 		},
 	}
 
 	fakeServer.StartServer(testAPI.constructShutdownEndpoints())
+	defer fakeServer.Shutdown()
 
 	t.Run("Shutdown successfully - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
+		assert.Equal(t, 204, resp.StatusCode)
 		select {
 		case <-time.After(time.Second):
 			t.Fatal("Did not shut down within 1 second")
 		case <-shutdownCh:
 			// All good
 		}
-		m.AssertCalled(t, "shutdown")
 	})
-
-	fakeServer.Shutdown()
 }
 
 func TestGetStatusCodeFromMetadata(t *testing.T) {
@@ -3657,7 +3654,9 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 		}
 		url = url[:len(url)-1]
 	}
-	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r, _ := gohttp.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 
 	for i := 0; i < len(headers); i += 2 {

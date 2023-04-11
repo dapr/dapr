@@ -95,7 +95,6 @@ type api struct {
 	readyStatus                bool
 	outboundReadyStatus        bool
 	tracingSpec                config.TracingSpec
-	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
 	maxRequestBodySize         int64 // In bytes
@@ -198,7 +197,6 @@ func NewAPI(opts APIOpts) API {
 		actor:                      opts.Actor,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
 		tracingSpec:                opts.TracingSpec,
-		shutdown:                   opts.Shutdown,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		maxRequestBodySize:         opts.MaxRequestBodySize,
 		configurationSubscribe:     make(map[string]chan struct{}),
@@ -214,6 +212,7 @@ func NewAPI(opts APIOpts) API {
 			SecretsConfiguration: opts.SecretsConfiguration,
 			LockStores:           opts.LockStores,
 			WorkflowComponents:   opts.WorkflowsComponents,
+			ShutdownFn:           opts.Shutdown,
 		},
 	}
 
@@ -458,17 +457,6 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata,
-		},
-	}
-}
-
-func (a *api) constructShutdownEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "shutdown",
-			Version: apiVersionV1,
-			Handler: a.onShutdown,
 		},
 	}
 }
@@ -1903,17 +1891,6 @@ func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	a.extendedMetadata.Store(key, string(body))
 	respond(reqCtx, withEmpty())
-}
-
-func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
-	if !reqCtx.IsPost() {
-		log.Warn("Please use POST method when invoking shutdown API")
-	}
-
-	respond(reqCtx, withEmpty())
-	go func() {
-		a.shutdown()
-	}()
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
