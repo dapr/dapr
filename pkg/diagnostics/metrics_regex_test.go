@@ -23,7 +23,7 @@ func TestRegexRulesSingle(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, false)
 
 	t.Run("single regex rule applied", func(t *testing.T) {
 		t.Cleanup(func() {

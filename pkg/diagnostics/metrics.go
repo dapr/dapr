@@ -45,7 +45,7 @@ var (
 )
 
 // InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string, rules []config.MetricsRule) error {
+func InitMetrics(appID, namespace string, rules []config.MetricsRule, enableDefaultResiliency bool) error {
 	if err := DefaultMonitoring.Init(appID); err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func InitMetrics(appID, namespace string, rules []config.MetricsRule) error {
 		return err
 	}
 
-	if err := DefaultResiliencyMonitoring.Init(appID); err != nil {
+	if err := DefaultResiliencyMonitoring.Init(appID, enableDefaultResiliency); err != nil {
 		return err
 	}
 

@@ -388,7 +388,7 @@ func FromFlags() (*DaprRuntime, error) {
 
 	// Initialize metrics only if MetricSpec is enabled.
 	if globalConfig.Spec.MetricSpec.Enabled {
-		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules, globalConfig.Spec.MetricsSpec.EnableDefaultResiliencyMetrics); mErr != nil {
 			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
 		}
 	}

@@ -102,7 +102,7 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 	})
 }
 
-// Execute invokes `oper` if the circuit breaker is in an closed state
+// Execute invokes `oper` if the circuit breaker is in a closed state
 // or for an allowed call in the half-open state. It is a wrapper around the gobreaker
 // library that is used here.
 // The circuit breaker shorts if the connection is in open state or if there are too many

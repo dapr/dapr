@@ -548,11 +548,11 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 		r.log.Debugf("Found Endpoint Policy for %s: %+v", app, policyNames)
 		if policyNames.Timeout != "" {
 			policyDef.t = r.timeouts[policyNames.Timeout]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.AppPolicyTarget)
 		}
 		if policyNames.Retry != "" {
 			policyDef.r = r.retries[policyNames.Retry]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection, diag.AppPolicyTarget)
 		}
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
@@ -573,16 +573,18 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 					}
 				}
 			}
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection, diag.AppPolicyTarget)
 		}
 	} else {
 		if defaultNames, ok := r.getDefaultPolicy(EndpointPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Endpoint %s: %+v", app, defaultNames)
 			if defaultNames.Retry != "" {
 				policyDef.r = r.retries[defaultNames.Retry]
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection, diag.AppPolicyTarget)
 			}
 			if defaultNames.Timeout != "" {
 				policyDef.t = r.timeouts[defaultNames.Timeout]
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.AppPolicyTarget)
 			}
 
 			if defaultNames.CircuitBreaker != "" {
@@ -603,7 +605,7 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 							cache.Add(endpoint, policyDef.cb)
 						}
 					}
-					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
+					diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection, diag.AppPolicyTarget)
 				}
 			}
 		}
@@ -623,7 +625,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Retry != "" {
 			policyDef.r = r.retries[policyNames.Retry]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 		}
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
@@ -651,13 +653,14 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 					}
 				}
 			}
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 		}
 	} else {
 		if defaultNames, ok := r.getDefaultPolicy(ActorPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultNames)
 			if defaultNames.Retry != "" {
 				policyDef.r = r.retries[defaultNames.Retry]
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 			}
 
 			if defaultNames.CircuitBreaker != "" {
@@ -685,7 +688,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 							cache.Add(key, policyDef.cb)
 						}
 					}
-					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
+					diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 				}
 			}
 		}
@@ -705,13 +708,14 @@ func (r *Resiliency) ActorPostLockPolicy(actorType string, id string) *PolicyDef
 		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Timeout != "" {
 			policyDef.t = r.timeouts[policyNames.Timeout]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(ActorPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 			}
 		}
 	}
@@ -730,29 +734,32 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies.Outbound)
 		if componentPolicies.Outbound.Timeout != "" {
 			policyDef.t = r.timeouts[componentPolicies.Outbound.Timeout]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.ComponentPolicyTarget)
 		}
 		if componentPolicies.Outbound.Retry != "" {
 			policyDef.r = r.retries[componentPolicies.Outbound.Retry]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection, diag.ComponentPolicyTarget)
 		}
 		if componentPolicies.Outbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
 			policyDef.cb = r.componentCBs.Get(r.log, name, template)
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection, diag.ComponentPolicyTarget)
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(ComponentPolicy{componentType: componentType, componentDirection: "Outbound"}); ok {
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 			}
 			if defaultPolicies.Retry != "" {
 				policyDef.r = r.retries[defaultPolicies.Retry]
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 			}
 			if defaultPolicies.CircuitBreaker != "" {
 				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
 				policyDef.cb = r.componentCBs.Get(r.log, name, template)
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 			}
 		}
 	}
@@ -771,29 +778,32 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 		r.log.Debugf("Found Component Inbound Policy for component %s: %+v", name, componentPolicies.Inbound)
 		if componentPolicies.Inbound.Timeout != "" {
 			policyDef.t = r.timeouts[componentPolicies.Inbound.Timeout]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.InboundPolicyFlowDirection, diag.ComponentPolicyTarget)
 		}
 		if componentPolicies.Inbound.Retry != "" {
 			policyDef.r = r.retries[componentPolicies.Inbound.Retry]
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.InboundPolicyFlowDirection, diag.ComponentPolicyTarget)
 		}
 		if componentPolicies.Inbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
 			policyDef.cb = r.componentCBs.Get(r.log, name, template)
-			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.InboundPolicyFlowDirection, diag.ComponentPolicyTarget)
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(ComponentPolicy{componentType: componentType, componentDirection: Inbound}); ok {
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.InboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 			}
 			if defaultPolicies.Retry != "" {
 				policyDef.r = r.retries[defaultPolicies.Retry]
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.InboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 			}
 			if defaultPolicies.CircuitBreaker != "" {
 				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
 				policyDef.cb = r.componentCBs.Get(r.log, name, template)
+				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.InboundPolicyFlowDirection, diag.ActorsPolicyTarget)
 			}
 		}
 	}
