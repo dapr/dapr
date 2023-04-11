@@ -350,6 +350,12 @@ func (a *UniversalAPI) CryptoValidateRequest(componentName string) (contribCrypt
 		return nil, err
 	}
 
+	if componentName == "" {
+		err := messages.ErrBadRequest.WithFormat("missing component name")
+		a.Logger.Debug(err)
+		return nil, err
+	}
+
 	component := a.CryptoProviders[componentName]
 	if component == nil {
 		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)

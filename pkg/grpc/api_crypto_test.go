@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
@@ -264,6 +265,25 @@ func TestCryptoAlpha1(t *testing.T) {
 		require.True(t, bytes.HasPrefix(largeEnc, []byte("dapr.io/enc/v1")))
 	})
 
+	t.Run("decrypt without header", func(t *testing.T) {
+		stream, err := client.DecryptAlpha1(context.Background())
+		require.NoError(t, err)
+		send := []runtimev1pb.CryptoRequests{
+			&runtimev1pb.DecryptAlpha1Request{
+				Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+					ComponentName: "myvault",
+				},
+				Payload: &commonv1pb.StreamPayload{
+					Seq:  0,
+					Data: []byte("foo"),
+				},
+			},
+		}
+		_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+		require.Error(t, err)
+		require.ErrorContains(t, err, "invalid header")
+	})
+
 	t.Run("invalid sequence number", func(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
@@ -303,6 +323,180 @@ func TestCryptoAlpha1(t *testing.T) {
 			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "invalid sequence number received: 1 (expected: 0)")
+		})
+	})
+
+	t.Run("options in non-leading message", func(t *testing.T) {
+		t.Run("encrypt", func(t *testing.T) {
+			stream, err := client.EncryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.EncryptAlpha1Request{
+					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+						ComponentName: "myvault",
+						KeyName:       "aes-passthrough",
+						Algorithm:     "AES",
+					},
+					Payload: &commonv1pb.StreamPayload{
+						Seq:  0,
+						Data: []byte("hello world"),
+					},
+				},
+				&runtimev1pb.EncryptAlpha1Request{
+					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+						ComponentName: "myvault",
+						KeyName:       "aes-passthrough",
+						Algorithm:     "AES",
+					},
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "options found in non-leading message")
+		})
+
+		t.Run("decrypt", func(t *testing.T) {
+			stream, err := client.DecryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.DecryptAlpha1Request{
+					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+						ComponentName: "myvault",
+					},
+					Payload: &commonv1pb.StreamPayload{
+						Seq:  0,
+						Data: largeEnc,
+					},
+				},
+				&runtimev1pb.DecryptAlpha1Request{
+					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+						ComponentName: "myvault",
+					},
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "options found in non-leading message")
+		})
+	})
+
+	t.Run("encrypt without required options", func(t *testing.T) {
+		t.Run("missing options", func(t *testing.T) {
+			stream, err := client.EncryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.EncryptAlpha1Request{
+					Options: nil,
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "first message does not contain the required options")
+		})
+
+		t.Run("missing component name", func(t *testing.T) {
+			stream, err := client.EncryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.EncryptAlpha1Request{
+					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+						//ComponentName: "myvault",
+						KeyName:   "aes-passthrough",
+						Algorithm: "AES",
+					},
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "missing component name")
+		})
+
+		t.Run("missing key name", func(t *testing.T) {
+			stream, err := client.EncryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.EncryptAlpha1Request{
+					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+						ComponentName: "myvault",
+						//KeyName:       "aes-passthrough",
+						Algorithm: "AES",
+					},
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "missing property 'key' in the options message")
+		})
+
+		t.Run("missing algorithm", func(t *testing.T) {
+			stream, err := client.EncryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.EncryptAlpha1Request{
+					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+						ComponentName: "myvault",
+						KeyName:       "aes-passthrough",
+						//Algorithm:     "AES",
+					},
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "missing property 'algorithm' in the options message")
+		})
+	})
+
+	t.Run("decrypt without required options", func(t *testing.T) {
+		t.Run("missing options", func(t *testing.T) {
+			stream, err := client.DecryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.DecryptAlpha1Request{
+					Options: nil,
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "first message does not contain the required options")
+		})
+
+		t.Run("missing component name", func(t *testing.T) {
+			stream, err := client.DecryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.DecryptAlpha1Request{
+					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+						//ComponentName: "myvault",
+					},
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "missing component name")
+		})
+	})
+
+	t.Run("time out while waiting for first chunk", func(t *testing.T) {
+		t.Run("encrypt", func(t *testing.T) {
+			start := time.Now()
+			stream, err := client.EncryptAlpha1(context.Background())
+			require.NoError(t, err)
+
+			_, err = stream.Recv()
+			require.Error(t, err)
+			require.ErrorContains(t, err, "error waiting for first message")
+			require.GreaterOrEqual(t, time.Since(start), cryptoFirstChunkTimeout)
+		})
+
+		t.Run("decrypt", func(t *testing.T) {
+			start := time.Now()
+			stream, err := client.DecryptAlpha1(context.Background())
+			require.NoError(t, err)
+
+			_, err = stream.Recv()
+			require.Error(t, err)
+			require.ErrorContains(t, err, "error waiting for first message")
+			require.GreaterOrEqual(t, time.Since(start), cryptoFirstChunkTimeout)
 		})
 	})
 }

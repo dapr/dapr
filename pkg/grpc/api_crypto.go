@@ -35,6 +35,9 @@ import (
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
 )
 
+// Timeout for waiting for the first message in the stream for Encrypt/Decrypt requests.
+const cryptoFirstChunkTimeout = 5 * time.Second
+
 // EncryptAlpha1 encrypts a message using the Dapr encryption scheme and a key stored in the vault.
 func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err error) { //nolint:nosnakecase
 	// Get the first message from the caller containing the options
@@ -332,7 +335,7 @@ func cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) (err error) {
 		firstMsgCh <- stream.RecvMsg(reqProto)
 	}()
 
-	firstChunkCtx, cancel := context.WithTimeout(stream.Context(), 5*time.Second)
+	firstChunkCtx, cancel := context.WithTimeout(stream.Context(), cryptoFirstChunkTimeout)
 	defer cancel()
 
 	select {
