@@ -400,7 +400,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 					return
 				}
 
-				// Check if the sequence number is greater than the previous (or 0 for the first chunk)
+				// Check if the sequence number is greater than the previous
 				if readSeq != expectSeq {
 					pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d (expected: %d)", readSeq, expectSeq))
 					return
