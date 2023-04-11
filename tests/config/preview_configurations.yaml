@@ -20,3 +20,15 @@ spec:
   features:
     - name: AppHealthCheck
       enabled: true
+
+---
+
+# TODO: Remove once ServiceInvocationStreaming feature is finalized
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: streamingconfig
+spec:
+  features:
+    - name: ServiceInvocationStreaming
+      enabled: true
