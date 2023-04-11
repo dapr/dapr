@@ -64,7 +64,7 @@ func (m *resiliencyMetrics) Init(id string, defaultMetricsEnabled bool) error {
 	m.defaultMetricsEnabled = defaultMetricsEnabled
 	return view.Register(
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
-		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey}, view.Count()),
+		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
 	)
 }
 
@@ -79,20 +79,32 @@ func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
 	}
 }
 
-// PolicyExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget) {
+// PolicyWithStatusExecuted records metric when policy is executed.
+func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget, status string) {
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, string(target)),
+			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, string(target), statusKey, status),
 			m.executionCount.M(1),
 		)
 	}
 }
 
+// PolicyExecuted records metric when policy is executed.
+func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget) {
+	m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, "")
+}
+
 // DefaultPolicyExecuted records metric when policy is executed.
 func (m *resiliencyMetrics) DefaultPolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget) {
-	if m.enabled && m.defaultMetricsEnabled {
-		m.PolicyExecuted(resiliencyName, namespace, policy, flowDirection, target)
+	if m.defaultMetricsEnabled {
+		m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, "")
+	}
+}
+
+// DefaultPolicyWithStatusExecuted records metric when policy is executed.
+func (m *resiliencyMetrics) DefaultPolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget, status string) {
+	if m.defaultMetricsEnabled {
+		m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, status)
 	}
 }

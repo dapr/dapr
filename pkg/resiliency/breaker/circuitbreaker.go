@@ -134,3 +134,20 @@ func (c CircuitBreaker) String() string {
 		c.Name, c.MaxRequests, c.Interval, c.Timeout, c.Trip,
 	)
 }
+
+// State returns the current state of the circuit breaker.
+func (c CircuitBreaker) State() string {
+	if c.breaker == nil {
+		return "unknown"
+	}
+	switch c.breaker.State() {
+	case gobreaker.StateClosed:
+		return "closed"
+	case gobreaker.StateOpen:
+		return "open"
+	case gobreaker.StateHalfOpen:
+		return "half-open"
+	default:
+		return "unknown"
+	}
+}
