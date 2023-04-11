@@ -29,6 +29,7 @@ const (
 	KeyLogAsJSON                        = "dapr.io/log-as-json"
 	KeyAppMaxConcurrency                = "dapr.io/app-max-concurrency"
 	KeyEnableMetrics                    = "dapr.io/enable-metrics"
+	KeyEnableHotReloading               = "dapr.io/enable-hot-reloading"
 	KeyMetricsPort                      = "dapr.io/metrics-port"
 	KeyEnableDebug                      = "dapr.io/enable-debug"
 	KeyDebugPort                        = "dapr.io/debug-port"
@@ -75,6 +76,7 @@ const (
 	DefaultAppSSL                            = false
 	DefaultAppProtocol                       = "http"
 	DefaultEnableMetric                      = true
+	DefaultEnableHotReloading                = false
 	DefaultMetricsPort                       = 9090
 	DefaultEnableDebug                       = false
 	DefaultDebugPort                         = 40000

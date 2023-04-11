@@ -81,6 +81,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appHealthProbeInterval := flag.Int("app-health-probe-interval", int(apphealth.DefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
 	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(apphealth.DefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	appHealthThreshold := flag.Int("app-health-threshold", int(apphealth.DefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
+	enableHotReloadFromOperator := flag.Bool("enable-hot-reloading", false, "Enable hot reloading of components on spec update. This is only supported in Kubernetes mode.")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -276,36 +277,41 @@ func FromFlags() (*DaprRuntime, error) {
 		healthThreshold = int32(*appHealthThreshold)
 	}
 
+	if *enableHotReloadFromOperator && *mode != string(modes.KubernetesMode) {
+		return nil, errors.New("--enable-hot-reloading is only supported in kubernetes mode")
+	}
+
 	runtimeConfig := NewRuntimeConfig(NewRuntimeConfigOpts{
-		ID:                           *appID,
-		PlacementAddresses:           placementAddresses,
-		ControlPlaneAddress:          *controlPlaneAddress,
-		AllowedOrigins:               *allowedOrigins,
-		ResourcesPath:                resourcesPath,
-		AppProtocol:                  appProtocol,
-		Mode:                         *mode,
-		HTTPPort:                     daprHTTP,
-		InternalGRPCPort:             daprInternalGRPC,
-		APIGRPCPort:                  daprAPIGRPC,
-		APIListenAddresses:           daprAPIListenAddressList,
-		PublicPort:                   publicPort,
-		AppPort:                      applicationPort,
-		ProfilePort:                  profPort,
-		EnableProfiling:              *enableProfiling,
-		MaxConcurrency:               concurrency,
-		MTLSEnabled:                  *enableMTLS,
-		SentryAddress:                *sentryAddress,
-		AppSSL:                       *appSSL,
-		MaxRequestBodySize:           maxRequestBodySize,
-		UnixDomainSocket:             *unixDomainSocket,
-		ReadBufferSize:               readBufferSize,
-		GracefulShutdownDuration:     gracefulShutdownDuration,
-		DisableBuiltinK8sSecretStore: *disableBuiltinK8sSecretStore,
-		EnableAppHealthCheck:         *enableAppHealthCheck,
-		AppHealthCheckPath:           *appHealthCheckPath,
-		AppHealthProbeInterval:       healthProbeInterval,
-		AppHealthProbeTimeout:        healthProbeTimeout,
-		AppHealthThreshold:           healthThreshold,
+		ID:                             *appID,
+		PlacementAddresses:             placementAddresses,
+		ControlPlaneAddress:            *controlPlaneAddress,
+		AllowedOrigins:                 *allowedOrigins,
+		ResourcesPath:                  resourcesPath,
+		AppProtocol:                    appProtocol,
+		Mode:                           *mode,
+		HTTPPort:                       daprHTTP,
+		InternalGRPCPort:               daprInternalGRPC,
+		APIGRPCPort:                    daprAPIGRPC,
+		APIListenAddresses:             daprAPIListenAddressList,
+		PublicPort:                     publicPort,
+		AppPort:                        applicationPort,
+		ProfilePort:                    profPort,
+		EnableProfiling:                *enableProfiling,
+		MaxConcurrency:                 concurrency,
+		MTLSEnabled:                    *enableMTLS,
+		SentryAddress:                  *sentryAddress,
+		AppSSL:                         *appSSL,
+		MaxRequestBodySize:             maxRequestBodySize,
+		UnixDomainSocket:               *unixDomainSocket,
+		ReadBufferSize:                 readBufferSize,
+		GracefulShutdownDuration:       gracefulShutdownDuration,
+		DisableBuiltinK8sSecretStore:   *disableBuiltinK8sSecretStore,
+		EnableAppHealthCheck:           *enableAppHealthCheck,
+		AppHealthCheckPath:             *appHealthCheckPath,
+		AppHealthProbeInterval:         healthProbeInterval,
+		AppHealthProbeTimeout:          healthProbeTimeout,
+		AppHealthThreshold:             healthThreshold,
+		EnableHotReloadingFromOperator: *enableHotReloadFromOperator,
 	})
 
 	// set environment variables

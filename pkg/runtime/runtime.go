@@ -36,7 +36,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-multierror"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -117,11 +116,6 @@ const (
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
-
-	// hot reloading is currently unsupported, but
-	// setting this environment variable restores the
-	// partial hot reloading support for k8s.
-	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 
 	defaultComponentInitTimeout = time.Second * 5
 )
@@ -484,12 +478,13 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	go a.processComponents()
 
-	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
-		log.Debug("starting to watch component updates")
-		err = a.beginComponentsUpdates()
-		if err != nil {
-			log.Warnf("failed to watch component updates: %s", err)
-		}
+	if a.runtimeConfig.EnableHotReloadingFromOperator {
+		log.Info("Watching component updates")
+		go func() {
+			if err := a.watchComponentUpdates(context.TODO()); err != nil {
+				log.Warnf("failed to watch component updates: %s", err)
+			}
+		}()
 	}
 
 	a.appendBuiltinSecretStore()
@@ -1057,101 +1052,6 @@ func (a *DaprRuntime) initProxy() {
 	})
 
 	log.Info("gRPC proxy enabled")
-}
-
-// begin components updates for kubernetes mode.
-func (a *DaprRuntime) beginComponentsUpdates() error {
-	if a.operatorClient == nil {
-		return nil
-	}
-
-	go func() {
-		parseAndUpdate := func(compRaw []byte) {
-			var component componentsV1alpha1.Component
-			if err := json.Unmarshal(compRaw, &component); err != nil {
-				log.Warnf("error deserializing component: %s", err)
-				return
-			}
-
-			if !a.isComponentAuthorized(component) {
-				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
-				return
-			}
-
-			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
-			updated := a.onComponentUpdated(component)
-			if !updated {
-				log.Info("component update skipped: .spec field unchanged")
-			}
-		}
-
-		needList := false
-		for {
-			var stream operatorv1pb.Operator_ComponentUpdateClient //nolint:nosnakecase
-
-			// Retry on stream error.
-			backoff.Retry(func() error {
-				var err error
-				stream, err = a.operatorClient.ComponentUpdate(context.Background(), &operatorv1pb.ComponentUpdateRequest{
-					Namespace: a.namespace,
-					PodName:   a.podName,
-				})
-				if err != nil {
-					log.Errorf("error from operator stream: %s", err)
-					return err
-				}
-				return nil
-			}, backoff.NewExponentialBackOff())
-
-			if needList {
-				// We should get all components again to avoid missing any updates during the failure time.
-				backoff.Retry(func() error {
-					resp, err := a.operatorClient.ListComponents(context.Background(), &operatorv1pb.ListComponentsRequest{
-						Namespace: a.namespace,
-					})
-					if err != nil {
-						log.Errorf("error listing components: %s", err)
-						return err
-					}
-
-					comps := resp.GetComponents()
-					for i := 0; i < len(comps); i++ {
-						// avoid missing any updates during the init component time.
-						go func(comp []byte) {
-							parseAndUpdate(comp)
-						}(comps[i])
-					}
-
-					return nil
-				}, backoff.NewExponentialBackOff())
-			}
-
-			for {
-				c, err := stream.Recv()
-				if err != nil {
-					// Retry on stream error.
-					needList = true
-					log.Errorf("error from operator stream: %s", err)
-					break
-				}
-
-				parseAndUpdate(c.GetComponent())
-			}
-		}
-	}()
-	return nil
-}
-
-func (a *DaprRuntime) onComponentUpdated(component componentsV1alpha1.Component) bool {
-	oldComp, exists := a.getComponent(component.Spec.Type, component.Name)
-	newComp, _ := a.processComponentSecrets(component)
-
-	if exists && reflect.DeepEqual(oldComp.Spec, newComp.Spec) {
-		return false
-	}
-
-	a.pendingComponents <- component
-	return true
 }
 
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
@@ -2688,27 +2588,27 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 
 	// Close components if they implement `io.Closer`
 	for name, component := range a.secretStores {
-		closeComponent(component, "secret store "+name, &merr)
+		merr = errors.Join(merr, closeComponent(component, "secret store "+name))
 	}
 	for name, component := range a.stateStores {
-		closeComponent(component, "state store "+name, &merr)
+		merr = errors.Join(merr, closeComponent(component, "state store "+name))
 	}
 	for name, component := range a.lockStores {
-		closeComponent(component, "lock store "+name, &merr)
+		merr = errors.Join(merr, closeComponent(component, "clock store "+name))
 	}
 	for name, component := range a.configurationStores {
-		closeComponent(component, "configuration store "+name, &merr)
+		merr = errors.Join(merr, closeComponent(component, "configuration store "+name))
 	}
 	for name, component := range a.cryptoProviders {
-		closeComponent(component, "crypto provider "+name, &merr)
+		merr = errors.Join(merr, closeComponent(component, "crypto provider "+name))
 	}
 	for name, component := range a.workflowComponents {
-		closeComponent(component, "workflow "+name, &merr)
+		merr = errors.Join(merr, closeComponent(component, "workflow component "+name))
 	}
 	// Close output bindings
 	// Input bindings are closed when a.ctx is canceled
 	for name, component := range a.outputBindings {
-		closeComponent(component, "output binding "+name, &merr)
+		merr = errors.Join(merr, closeComponent(component, "output binding "+name))
 	}
 	// Close pubsub publisher
 	// The subscriber part is closed when a.ctx is canceled
@@ -2716,21 +2616,22 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 		if pubSub.component == nil {
 			continue
 		}
-		closeComponent(pubSub.component, "pub sub "+name, &merr)
+		merr = errors.Join(merr, closeComponent(pubSub.component, "pubsub "+name))
 	}
-	closeComponent(a.nameResolver, "name resolver", &merr)
+	merr = errors.Join(merr, closeComponent(a.nameResolver, "name resolver"))
 
 	return merr
 }
 
-func closeComponent(component any, logmsg string, merr *error) {
+func closeComponent(component any, logmsg string) error {
 	if closer, ok := component.(io.Closer); ok && closer != nil {
 		if err := closer.Close(); err != nil {
 			err = fmt.Errorf("error closing %s: %w", logmsg, err)
-			*merr = multierror.Append(*merr, err)
 			log.Warn(err)
+			return err
 		}
 	}
+	return nil
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
