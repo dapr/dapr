@@ -400,7 +400,7 @@ func TestCryptoAlpha1(t *testing.T) {
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
-						//ComponentName: "myvault",
+						// ComponentName: "myvault",
 						KeyName:   "aes-passthrough",
 						Algorithm: "AES",
 					},
@@ -418,7 +418,7 @@ func TestCryptoAlpha1(t *testing.T) {
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
 						ComponentName: "myvault",
-						//KeyName:       "aes-passthrough",
+						// KeyName:       "aes-passthrough",
 						Algorithm: "AES",
 					},
 				},
@@ -436,7 +436,7 @@ func TestCryptoAlpha1(t *testing.T) {
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
-						//Algorithm:     "AES",
+						// Algorithm:     "AES",
 					},
 				},
 			}
@@ -466,7 +466,7 @@ func TestCryptoAlpha1(t *testing.T) {
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
-						//ComponentName: "myvault",
+						// ComponentName: "myvault",
 					},
 				},
 			}
