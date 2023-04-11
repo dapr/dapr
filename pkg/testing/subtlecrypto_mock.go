@@ -90,6 +90,8 @@ func (c FakeSubtleCrypto) WrapKey(ctx context.Context, plaintextKey jwk.Key, alg
 		tag = oneHundredTwentyEightBits
 	case "error":
 		err = errors.New("simulated error")
+	case "aes-passthrough":
+		err = plaintextKey.Raw(&wrappedKey)
 	}
 	return
 }
@@ -97,10 +99,12 @@ func (c FakeSubtleCrypto) WrapKey(ctx context.Context, plaintextKey jwk.Key, alg
 func (c FakeSubtleCrypto) UnwrapKey(ctx context.Context, wrappedKey []byte, algorithm string, keyName string, nonce []byte, tag []byte, associatedData []byte) (plaintextKey jwk.Key, err error) {
 	// Doesn't actually do any encryption
 	switch keyName {
-	case "good":
+	case "good", "good-notag", "good-tag":
 		return jwk.FromRaw(oneHundredTwentyEightBits)
 	case "error":
 		err = errors.New("simulated error")
+	case "aes-passthrough":
+		return jwk.FromRaw(wrappedKey)
 	}
 	return
 }

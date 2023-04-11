@@ -72,18 +72,82 @@ func (x *SubtleVerifyAlpha1Request) SetComponentName(name string) {
 type CryptoRequests interface {
 	proto.Message
 
+	// SetPayload sets the payload.
+	SetPayload(payload *commonv1pb.StreamPayload)
 	// GetPayload returns the payload.
 	GetPayload() *commonv1pb.StreamPayload
 	// Reset the object.
 	Reset()
+	// SetOptions sets the Options property.
+	SetOptions(opts proto.Message)
 	// HasOptions returns true if the Options property is not empty.
 	HasOptions() bool
+}
+
+func (x *EncryptAlpha1Request) SetPayload(payload *commonv1pb.StreamPayload) {
+	if x == nil {
+		return
+	}
+
+	x.Payload = payload
+}
+
+func (x *EncryptAlpha1Request) SetOptions(opts proto.Message) {
+	if x == nil {
+		return
+	}
+
+	x.Options = opts.(*EncryptAlpha1RequestOptions)
 }
 
 func (x *EncryptAlpha1Request) HasOptions() bool {
 	return x != nil && x.Options != nil
 }
 
+func (x *DecryptAlpha1Request) SetPayload(payload *commonv1pb.StreamPayload) {
+	if x == nil {
+		return
+	}
+
+	x.Payload = payload
+}
+
+func (x *DecryptAlpha1Request) SetOptions(opts proto.Message) {
+	if x == nil {
+		return
+	}
+
+	x.Options = opts.(*DecryptAlpha1RequestOptions)
+}
+
 func (x *DecryptAlpha1Request) HasOptions() bool {
 	return x != nil && x.Options != nil
+}
+
+// CryptoResponses is an interface for EncryptAlpha1Response and DecryptAlpha1Response.
+type CryptoResponses interface {
+	proto.Message
+
+	// SetPayload sets the payload.
+	SetPayload(payload *commonv1pb.StreamPayload)
+	// GetPayload returns the payload.
+	GetPayload() *commonv1pb.StreamPayload
+	// Reset the object.
+	Reset()
+}
+
+func (x *EncryptAlpha1Response) SetPayload(payload *commonv1pb.StreamPayload) {
+	if x == nil {
+		return
+	}
+
+	x.Payload = payload
+}
+
+func (x *DecryptAlpha1Response) SetPayload(payload *commonv1pb.StreamPayload) {
+	if x == nil {
+		return
+	}
+
+	x.Payload = payload
 }
