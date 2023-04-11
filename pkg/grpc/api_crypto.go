@@ -188,12 +188,17 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 
 	// Start the encryption or decryption
 	// Errors here are synchronous and can be returned to the user right away
-	var out io.Reader
+	var (
+		out      io.Reader
+		resProto runtimev1pb.CryptoResponses
+	)
 	switch o := opts.(type) {
 	case encv1.EncryptOptions:
 		out, err = encv1.Encrypt(inReader, o)
+		resProto = &runtimev1pb.EncryptAlpha1Response{}
 	case encv1.DecryptOptions:
 		out, err = encv1.Decrypt(inReader, o)
+		resProto = &runtimev1pb.DecryptAlpha1Response{}
 	default:
 		// It's ok to panic here since this indicates a development-time error.
 		a.Logger.Fatal("Invalid type for opts argument")
@@ -211,7 +216,6 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	}()
 
 	// Send the response to the client
-	resProto := &runtimev1pb.EncryptAlpha1Response{}
 	var (
 		sendSeq uint64
 		done    bool
@@ -235,10 +239,10 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 
 		// Send the message if there's any data
 		if n > 0 {
-			resProto.Payload = &commonv1pb.StreamPayload{
+			resProto.SetPayload(&commonv1pb.StreamPayload{
 				Data: (*buf)[:n],
 				Seq:  sendSeq,
-			}
+			})
 			sendSeq++
 
 			err = stream.SendMsg(resProto)
@@ -256,7 +260,8 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 		}
 
 		// Reset the object so we can re-use it
-		resProto.Reset()
+		// Use `resProto.Reset()` if more properties are added
+		resProto.SetPayload(nil)
 	}
 
 	return nil

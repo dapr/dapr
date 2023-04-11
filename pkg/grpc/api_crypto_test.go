@@ -16,6 +16,7 @@ package grpc
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -232,6 +233,76 @@ func TestCryptoAlpha1(t *testing.T) {
 			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
 			require.NoError(t, err)
 			require.Equal(t, "soft kitty, warm kitty, little ball of fur, happy kitty, sleepy kitty, purr purr purr", string(dec)) //nolint:dupword
+		})
+	})
+
+	// This is used to encrypt a large document so we can use it for testing
+	var largeEnc []byte
+	t.Run("encrypt large document", func(t *testing.T) {
+		largeData := make([]byte, 100<<10) // 100KB
+		_, err := io.ReadFull(rand.Reader, largeData)
+		require.NoError(t, err)
+
+		stream, err := client.EncryptAlpha1(context.Background())
+		require.NoError(t, err)
+		send := []runtimev1pb.CryptoRequests{
+			&runtimev1pb.EncryptAlpha1Request{
+				Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+					ComponentName: "myvault",
+					KeyName:       "aes-passthrough",
+					Algorithm:     "AES",
+				},
+				Payload: &commonv1pb.StreamPayload{
+					Seq:  0,
+					Data: largeData,
+				},
+			},
+		}
+		largeEnc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+		require.NoError(t, err)
+		require.Greater(t, len(largeEnc), len(largeData))
+		require.True(t, bytes.HasPrefix(largeEnc, []byte("dapr.io/enc/v1")))
+	})
+
+	t.Run("invalid sequence number", func(t *testing.T) {
+		t.Run("encrypt", func(t *testing.T) {
+			stream, err := client.EncryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.EncryptAlpha1Request{
+					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+						ComponentName: "myvault",
+						KeyName:       "aes-passthrough",
+						Algorithm:     "AES",
+					},
+					Payload: &commonv1pb.StreamPayload{
+						Seq:  1, // Skipped 0
+						Data: []byte("hello world"),
+					},
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "invalid sequence number received: 1 (expected: 0)")
+		})
+
+		t.Run("decrypt", func(t *testing.T) {
+			stream, err := client.DecryptAlpha1(context.Background())
+			require.NoError(t, err)
+			send := []runtimev1pb.CryptoRequests{
+				&runtimev1pb.DecryptAlpha1Request{
+					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+						ComponentName: "myvault",
+					},
+					Payload: &commonv1pb.StreamPayload{
+						Seq:  1, // Skipped 0
+						Data: largeEnc,
+					},
+				},
+			}
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "invalid sequence number received: 1 (expected: 0)")
 		})
 	})
 }
