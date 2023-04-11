@@ -1806,7 +1806,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 			if actorStoreSpecified {
 				a.actorStateStoreLock.Lock()
 				if a.actorStateStoreName == "" {
-					log.Info("Using actor state store: " + s.ObjectMeta.Name)
+					log.Info("Using '" + s.ObjectMeta.Name + "' as actor state store")
 					a.actorStateStoreName = s.ObjectMeta.Name
 				} else if a.actorStateStoreName != s.ObjectMeta.Name {
 					log.Fatalf("Detected duplicate actor state store: %s and %s", a.actorStateStoreName, s.ObjectMeta.Name)
