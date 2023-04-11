@@ -99,7 +99,7 @@ message StreamPayload {
   bytes data = 1;
 
   // Sequence number. This is a counter that starts from 0 and increments by 1 on each chunk sent.
-  uint32 seq = 2;
+  uint64 seq = 2;
 }
 
 // StateItem represents state key, value, and additional options to save state.
