@@ -65,10 +65,10 @@ type ConfigurationSpec struct {
 
 // APISpec describes the configuration for Dapr APIs.
 type APISpec struct {
-	// List of allowed APIs. Can be used in conjunction with Denied.
+	// List of allowed APIs. Can be used in conjunction with denied.
 	// +optional
 	Allowed []APIAccessRule `json:"allowed,omitempty"`
-	// List of disallowed APIs. Can be used in conjunction with Allowed.
+	// List of disallowed APIs. Can be used in conjunction with allowed.
 	// +optional
 	Denied []APIAccessRule `json:"denied,omitempty"`
 }

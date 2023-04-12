@@ -85,7 +85,7 @@ spec:
                 description: APISpec describes the configuration for Dapr APIs.
                 properties:
                   allowed:
-                    description: List of allowed APIs. Can be used in conjunction with Denied.
+                    description: List of allowed APIs. Can be used in conjunction with denied.
                     items:
                       description: APIAccessRule describes an access rule for allowing or disallowing a Dapr API.
                       properties:
@@ -101,7 +101,7 @@ spec:
                       type: object
                     type: array
                   denied:
-                    description: List of disallowed APIs. Can be used in conjunction with Allowed.
+                    description: List of disallowed APIs. Can be used in conjunction with allowed.
                     items:
                       description: APIAccessRule describes an access rule for allowing or disallowing a Dapr API.
                       properties:
