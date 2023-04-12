@@ -22,6 +22,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,7 +48,7 @@ const (
 var (
 	componentName       string = "redis"
 	subscriptionId      string = ""
-	runID               string = uuid.Must(uuid.NewRandom()).String()
+	runID               string = strings.ReplaceAll(uuid.Must(uuid.NewRandom()).String(), "-", "_")
 	counter             int    = 0
 	tr                  *runner.TestRunner
 	subscribedKeyValues map[string]*Item
@@ -127,8 +128,8 @@ func generateKeyValues(keyCount int, version string) map[string]*Item {
 	m := make(map[string]*Item, keyCount)
 	k := counter
 	for ; k < counter+keyCount; k++ {
-		key := runID + "-key-" + strconv.Itoa(k)
-		val := runID + "-val-" + strconv.Itoa(k)
+		key := runID + "_key_" + strconv.Itoa(k)
+		val := runID + "_val_" + strconv.Itoa(k)
 		m[key] = &Item{
 			Value:    val,
 			Version:  version,
@@ -144,7 +145,7 @@ func updateKeyValues(mymap map[string]*Item, version string) map[string]*Item {
 	m := make(map[string]*Item, len(mymap))
 	k := counter
 	for key := range mymap {
-		updatedVal := runID + "-val-" + strconv.Itoa(k)
+		updatedVal := runID + "_val_" + strconv.Itoa(k)
 		m[key] = &Item{
 			Value:    updatedVal,
 			Version:  version,
@@ -166,7 +167,7 @@ func getKeys(mymap map[string]*Item) []string {
 }
 
 func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {
-	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
+	updateUrl := fmt.Sprintf("http://%s/update-key-values/add", appExternalUrl)
 	items := generateKeyValues(10, v1)
 	itemsInBytes, _ := json.Marshal(items)
 	resp, statusCode, err := utils.HTTPPostWithStatus(updateUrl, itemsInBytes)
@@ -205,7 +206,7 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpoin
 	subscriptionId = appResp.Message
 	time.Sleep(defaultWaitTime) // Waiting for subscribe operation to complete
 
-	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
+	updateUrl := fmt.Sprintf("http://%s/update-key-values/add", appExternalUrl)
 	itemsInBytes, _ := json.Marshal(items)
 	resp, statusCode, err = utils.HTTPPostWithStatus(updateUrl, itemsInBytes)
 	require.NoError(t, err, "error updating key values")
@@ -244,7 +245,7 @@ func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string, endpo
 	require.NoError(t, err, "error unsubscribing to key values")
 
 	items := updateKeyValues(subscribedKeyValues, v1)
-	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
+	updateUrl := fmt.Sprintf("http://%s/update-key-values/update", appExternalUrl)
 	itemsInBytes, _ := json.Marshal(items)
 	resp, statusCode, err := utils.HTTPPostWithStatus(updateUrl, itemsInBytes)
 	require.NoError(t, err, "error updating key values")
