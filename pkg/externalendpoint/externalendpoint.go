@@ -4,10 +4,11 @@ import (
 	"os"
 	"path/filepath"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	externalHTTPEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"gopkg.in/yaml.v2"
 )
