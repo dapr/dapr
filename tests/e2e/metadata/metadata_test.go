@@ -25,7 +25,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -40,10 +39,15 @@ const (
 )
 
 type mockMetadata struct {
-	ID                   string                     `json:"id"`
-	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
-	Extended             map[string]string          `json:"extended"`
-	RegisteredComponents []mockRegisteredComponent  `json:"components"`
+	ID                   string                    `json:"id"`
+	ActiveActorsCount    []activeActorsCount       `json:"actors"`
+	Extended             map[string]string         `json:"extended"`
+	RegisteredComponents []mockRegisteredComponent `json:"components"`
+}
+
+type activeActorsCount struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
 }
 
 type mockRegisteredComponent struct {

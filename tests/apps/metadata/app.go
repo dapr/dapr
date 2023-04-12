@@ -25,8 +25,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors"
-
 	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -48,10 +46,15 @@ type requestResponse struct {
 }
 
 type mockMetadata struct {
-	ID                   string                     `json:"id"`
-	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
-	Extended             map[string]string          `json:"extended"`
-	RegisteredComponents []mockRegisteredComponent  `json:"components"`
+	ID                   string                    `json:"id"`
+	ActiveActorsCount    []activeActorsCount       `json:"actors"`
+	Extended             map[string]string         `json:"extended"`
+	RegisteredComponents []mockRegisteredComponent `json:"components"`
+}
+
+type activeActorsCount struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
 }
 
 type mockRegisteredComponent struct {

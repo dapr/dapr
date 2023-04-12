@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/kit/logger"
@@ -79,7 +80,7 @@ type Actors interface {
 	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
-	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
+	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
 }
 
@@ -126,12 +127,6 @@ type actorsRuntime struct {
 	clock                  clock.WithTicker
 	internalActors         map[string]InternalActor
 	internalActorChannel   *internalActorChannel
-}
-
-// ActiveActorsCount contain actorType and count of actors each type has.
-type ActiveActorsCount struct {
-	Type  string `json:"type"`
-	Count int    `json:"count"`
 }
 
 // ActorMetadata represents information about the actor type.
@@ -1919,8 +1914,8 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 	return nil
 }
 
-func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
-	actorCountMap := make(map[string]int, len(a.config.HostedActorTypes))
+func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
+	actorCountMap := make(map[string]int32, len(a.config.HostedActorTypes))
 	for _, actorType := range a.config.HostedActorTypes {
 		if !isInternalActor(actorType) {
 			actorCountMap[actorType] = 0
@@ -1934,10 +1929,10 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 		return true
 	})
 
-	activeActorsCount := make([]ActiveActorsCount, len(actorCountMap))
+	activeActorsCount := make([]*runtimev1pb.ActiveActorsCount, len(actorCountMap))
 	n := 0
 	for actorType, count := range actorCountMap {
-		activeActorsCount[n] = ActiveActorsCount{Type: actorType, Count: count}
+		activeActorsCount[n] = &runtimev1pb.ActiveActorsCount{Type: actorType, Count: count}
 		n++
 	}
 

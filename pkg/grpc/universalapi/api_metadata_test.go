@@ -35,7 +35,7 @@ func TestGetMetadata(t *testing.T) {
 	fakeComponent.Name = "testComponent"
 
 	mockActors := new(actors.MockActors)
-	mockActors.On("GetActiveActorsCount").Return(actors.ActiveActorsCount{
+	mockActors.On("GetActiveActorsCount").Return(&runtimev1pb.ActiveActorsCount{
 		Count: 10,
 		Type:  "abcd",
 	})

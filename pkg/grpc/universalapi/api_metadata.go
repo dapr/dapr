@@ -37,15 +37,9 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 	extendedMetadata[daprRuntimeVersionKey] = buildinfo.Version()
 
 	// Active actors count
-	// TODO: Change GetActiveActorsCount to return the pb object directly
 	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
 	if a.Actors != nil {
-		for _, actorTypeCount := range a.Actors.GetActiveActorsCount(ctx) {
-			activeActorsCount = append(activeActorsCount, &runtimev1pb.ActiveActorsCount{
-				Type:  actorTypeCount.Type,
-				Count: int32(actorTypeCount.Count),
-			})
-		}
+		activeActorsCount = a.Actors.GetActiveActorsCount(ctx)
 	}
 
 	// Components
