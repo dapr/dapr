@@ -760,7 +760,7 @@ func (x *GetExternalHTTPEndpointResponse) GetExternalhttpendpoint() []byte {
 	return nil
 }
 
-// ListExternalHTTPEndpointsResponse includes the list of available resiliency configurations.
+// ListExternalHTTPEndpointsResponse includes the list of available external http endpoint configurations.
 type ListExternalHTTPEndpointsResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -910,7 +910,7 @@ func (x *ExternalHTTPEndpointsUpdateRequest) GetPodName() string {
 	return ""
 }
 
-// ComponentUpdateEvent includes the updated component event.
+// ExternalHTTPEndpointsUpdateEvent includes the updated external http endpoint event.
 type ExternalHTTPEndpointsUpdateEvent struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
