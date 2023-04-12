@@ -2745,7 +2745,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 		TestPubsubName: map[string]compstore.TopicRouteElem{
-			"topic1": compstore.TopicRouteElem{
+			"topic1": {
 				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
 			},
 		},
@@ -2863,7 +2863,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 		TestPubsubName: map[string]compstore.TopicRouteElem{
-			"topic1": compstore.TopicRouteElem{
+			"topic1": {
 				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
 			},
 		},
@@ -2959,7 +2959,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 		TestPubsubName: map[string]compstore.TopicRouteElem{
-			"topic1": compstore.TopicRouteElem{
+			"topic1": {
 				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
 			},
 		},
@@ -3371,7 +3371,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 				TestPubsubName: map[string]compstore.TopicRouteElem{
-					topic: compstore.TopicRouteElem{
+					topic: {
 						Rules: []*runtimePubsub.Rule{{Path: topic}},
 					},
 				},

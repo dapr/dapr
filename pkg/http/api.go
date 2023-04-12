@@ -205,6 +205,7 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSubtleCryptoEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
@@ -2435,14 +2436,6 @@ func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 			},
 		},
 	)
-}
-
-func (a *api) isSecretAllowed(storeName, key string) bool {
-	if config, ok := a.CompStore.GetSecretsConfiguration(storeName); ok {
-		return config.IsSecretAllowed(key)
-	}
-	// By default, if a configuration is not defined for a secret store, return true.
-	return true
 }
 
 func (a *api) SetAppChannel(appChannel channel.AppChannel) {
