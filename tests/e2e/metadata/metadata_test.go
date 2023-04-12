@@ -57,6 +57,14 @@ type mockRegisteredComponent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
+func testSetMetadata(t *testing.T, metadataAppExternalURL string) {
+	t.Log("Setting sidecar metadata")
+	url := fmt.Sprintf("%s/test/setMetadata", metadataAppExternalURL)
+	resp, err := utils.HTTPPost(url, []byte(`{"key":"newkey","value":"newvalue"}`))
+	require.NoError(t, err)
+	require.NotEmpty(t, resp, "response must not be empty!")
+}
+
 func testGetMetadata(t *testing.T, metadataAppExternalURL string) {
 	t.Log("Getting sidecar metadata")
 	url := fmt.Sprintf("%s/test/getMetadata", metadataAppExternalURL)
@@ -67,10 +75,13 @@ func testGetMetadata(t *testing.T, metadataAppExternalURL string) {
 	err = json.Unmarshal(resp, &metadata)
 	require.NoError(t, err)
 	for _, comp := range metadata.RegisteredComponents {
-		require.NotEmpty(t, comp.Name, "component name must not be empty!")
-		require.NotEmpty(t, comp.Type, "component type must not be empty!")
+		require.NotEmpty(t, comp.Name, "component name must not be empty")
+		require.NotEmpty(t, comp.Type, "component type must not be empty")
 		require.True(t, len(comp.Capabilities) >= 0, "component capabilities key must be present!")
 	}
+	require.NotEmpty(t, metadata.Extended)
+	require.NotEmpty(t, metadata.Extended["daprRuntimeVersion"])
+	require.Equal(t, "newvalue", metadata.Extended["newkey"])
 }
 
 func TestMain(m *testing.M) {
@@ -96,7 +107,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestMetadataapp(t *testing.T) {
+func TestMetadata(t *testing.T) {
 	t.Log("Enter TestMetadataHTTP")
 	metadataAppExternalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, metadataAppExternalURL, "metadataAppExternalURL must not be empty!")
@@ -105,5 +116,7 @@ func TestMetadataapp(t *testing.T) {
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(metadataAppExternalURL, numHealthChecks)
 	require.NoError(t, err)
+
+	testSetMetadata(t, metadataAppExternalURL)
 	testGetMetadata(t, metadataAppExternalURL)
 }

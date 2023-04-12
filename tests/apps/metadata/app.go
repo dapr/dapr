@@ -14,35 +14,37 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
+	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"github.com/dapr/dapr/tests/apps/utils"
+	"github.com/go-chi/chi/v5"
 )
 
-const appPort = 3000
-
-// kubernetes is the name of the secret store
 const (
+	appPort = 3000
 	/* #nosec */
 	metadataURL = "http://localhost:3500/v1.0/metadata"
 )
 
+var httpClient = utils.NewHTTPClient()
+
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
-	StartTime int    `json:"start_time,omitempty"`
-	EndTime   int    `json:"end_time,omitempty"`
-	Message   string `json:"message,omitempty"`
+	StartTime time.Time `json:"start_time,omitempty"`
+	EndTime   time.Time `json:"end_time,omitempty"`
+	Message   string    `json:"message,omitempty"`
+}
+
+type setMetadataRequest struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 type mockMetadata struct {
@@ -69,9 +71,41 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func setMetadata(r *http.Request) error {
+	var data setMetadataRequest
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		return err
+	}
+
+	if data.Key == "" || data.Value == "" {
+		return errors.New("key or value in request must be set")
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPut,
+		metadataURL+"/"+data.Key,
+		strings.NewReader(data.Value),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("content-type", "text/plain")
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("invalid status code: %d", res.StatusCode)
+	}
+
+	return nil
+}
+
 func getMetadata() (data mockMetadata, err error) {
 	var metadata mockMetadata
-	res, err := http.Get(metadataURL)
+	res, err := httpClient.Get(metadataURL)
 	if err != nil {
 		return metadata, fmt.Errorf("could not get sidecar metadata %s", err.Error())
 	}
@@ -100,10 +134,17 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	uri := r.URL.RequestURI()
 	statusCode := http.StatusOK
 
-	res.StartTime = epoch()
+	res.StartTime = time.Now()
 
-	cmd := mux.Vars(r)["command"]
+	cmd := chi.URLParam(r, "command")
 	switch cmd {
+	case "setMetadata":
+		err = setMetadata(r)
+		if err != nil {
+			statusCode = http.StatusInternalServerError
+			res.Message = err.Error()
+		}
+		res.Message = "ok"
 	case "getMetadata":
 		metadata, err = getMetadata()
 		if err != nil {
@@ -116,64 +157,35 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		res.Message = err.Error()
 	}
 
-	res.EndTime = epoch()
+	res.EndTime = time.Now()
 
 	if statusCode != http.StatusOK {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(metadata)
-}
 
-// epoch returns the current unix epoch timestamp
-func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+	if res.Message == "" {
+		json.NewEncoder(w).Encode(metadata)
+	} else {
+		json.NewEncoder(w).Encode(res)
+	}
 }
 
 // appRouter initializes restful api router
-func appRouter() *mux.Router {
-	router := mux.NewRouter().StrictSlash(true)
+func appRouter() http.Handler {
+	router := chi.NewRouter()
 
-	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/test/{command}", handler).Methods("GET")
-	router.Use(mux.CORSMethodMiddleware(router))
+	router.Use(utils.LoggerMiddleware)
+
+	router.Get("/", indexHandler)
+	router.HandleFunc("/test/{command}", handler)
 
 	return router
-}
-
-func startServer() {
-	// Create a server capable of supporting HTTP2 Cleartext connections
-	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-	h2s := &http2.Server{}
-	//nolint:gosec
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: h2c.NewHandler(appRouter(), h2s),
-	}
-
-	// Stop the server when we get a termination signal
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT) //nolint:staticcheck
-	go func() {
-		// Wait for cancelation signal
-		<-stopCh
-		log.Println("Shutdown signal received")
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	// Blocking call
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
-	}
-	log.Println("Server shut down")
 }
 
 func main() {
 	log.Printf("Metadata App - listening on http://localhost:%d", appPort)
 	log.Printf("Metadata endpoint - to be served at %s", metadataURL)
-	startServer()
+	utils.StartServer(appPort, appRouter, true, false)
 }
