@@ -23,7 +23,6 @@ import (
 	nethttp "net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -44,7 +43,6 @@ import (
 	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -76,57 +74,24 @@ type API interface {
 }
 
 type api struct {
-	universal                  *universalapi.UniversalAPI
-	endpoints                  []Endpoint
-	publicEndpoints            []Endpoint
-	directMessaging            messaging.DirectMessaging
-	appChannel                 channel.AppChannel
-	getComponentsFn            func() []componentsV1alpha1.Component
-	getSubscriptionsFn         func() []runtimePubsub.Subscription
-	resiliency                 resiliency.Provider
-	stateStores                map[string]state.Store
-	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]chan struct{}
-	actor                      actors.Actors
-	pubsubAdapter              runtimePubsub.Adapter
-	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	id                         string
-	extendedMetadata           sync.Map
-	readyStatus                bool
-	outboundReadyStatus        bool
-	tracingSpec                config.TracingSpec
-	getComponentsCapabilitesFn func() map[string][]string
-	daprRunTimeVersion         string
-	maxRequestBodySize         int64 // In bytes
-	isStreamingEnabled         bool
-}
-
-type registeredComponent struct {
-	Name         string   `json:"name"`
-	Type         string   `json:"type"`
-	Version      string   `json:"version"`
-	Capabilities []string `json:"capabilities"`
-}
-
-type pubsubSubscription struct {
-	PubsubName      string                    `json:"pubsubname"`
-	Topic           string                    `json:"topic"`
-	DeadLetterTopic string                    `json:"deadLetterTopic"`
-	Metadata        map[string]string         `json:"metadata"`
-	Rules           []*pubsubSubscriptionRule `json:"rules,omitempty"`
-}
-
-type pubsubSubscriptionRule struct {
-	Match string `json:"match"`
-	Path  string `json:"path"`
-}
-
-type metadata struct {
-	ID                   string                     `json:"id"`
-	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
-	Extended             map[string]string          `json:"extended"`
-	RegisteredComponents []registeredComponent      `json:"components"`
-	Subscriptions        []pubsubSubscription       `json:"subscriptions"`
+	universal              *universalapi.UniversalAPI
+	endpoints              []Endpoint
+	publicEndpoints        []Endpoint
+	directMessaging        messaging.DirectMessaging
+	appChannel             channel.AppChannel
+	resiliency             resiliency.Provider
+	stateStores            map[string]state.Store
+	configurationStores    map[string]configuration.Store
+	configurationSubscribe map[string]chan struct{}
+	actor                  actors.Actors
+	pubsubAdapter          runtimePubsub.Adapter
+	sendToOutputBindingFn  func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	id                     string
+	readyStatus            bool
+	outboundReadyStatus    bool
+	tracingSpec            config.TracingSpec
+	maxRequestBodySize     int64 // In bytes
+	isStreamingEnabled     bool
 }
 
 const (
@@ -185,34 +150,35 @@ type APIOpts struct {
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
 	api := &api{
-		id:                         opts.AppID,
-		appChannel:                 opts.AppChannel,
-		directMessaging:            opts.DirectMessaging,
-		getComponentsFn:            opts.GetComponentsFn,
-		getSubscriptionsFn:         opts.GetSubscriptionsFn,
-		resiliency:                 opts.Resiliency,
-		stateStores:                opts.StateStores,
-		configurationStores:        opts.ConfigurationStores,
-		pubsubAdapter:              opts.PubsubAdapter,
-		actor:                      opts.Actor,
-		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
-		tracingSpec:                opts.TracingSpec,
-		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-		maxRequestBodySize:         opts.MaxRequestBodySize,
-		configurationSubscribe:     make(map[string]chan struct{}),
-		isStreamingEnabled:         opts.IsStreamingEnabled,
-		daprRunTimeVersion:         buildinfo.Version(),
+		id:                     opts.AppID,
+		appChannel:             opts.AppChannel,
+		directMessaging:        opts.DirectMessaging,
+		resiliency:             opts.Resiliency,
+		stateStores:            opts.StateStores,
+		configurationStores:    opts.ConfigurationStores,
+		pubsubAdapter:          opts.PubsubAdapter,
+		actor:                  opts.Actor,
+		sendToOutputBindingFn:  opts.SendToOutputBindingFn,
+		tracingSpec:            opts.TracingSpec,
+		maxRequestBodySize:     opts.MaxRequestBodySize,
+		configurationSubscribe: make(map[string]chan struct{}),
+		isStreamingEnabled:     opts.IsStreamingEnabled,
 		universal: &universalapi.UniversalAPI{
 			AppID:                opts.AppID,
 			Logger:               log,
 			Resiliency:           opts.Resiliency,
+			Actors:               opts.Actor,
 			CryptoProviders:      opts.CryptoProviders,
 			StateStores:          opts.StateStores,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
 			LockStores:           opts.LockStores,
 			WorkflowComponents:   opts.WorkflowsComponents,
-			ShutdownFn:           opts.Shutdown,
+
+			ShutdownFn:                 opts.Shutdown,
+			GetComponentsFn:            opts.GetComponentsFn,
+			GetSubscriptionsFn:         opts.GetSubscriptionsFn,
+			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		},
 	}
 
@@ -440,23 +406,6 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onRenameActorReminder,
-		},
-	}
-}
-
-func (a *api) constructMetadataEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "metadata",
-			Version: apiVersionV1,
-			Handler: a.onGetMetadata,
-		},
-		{
-			Methods: []string{fasthttp.MethodPut},
-			Route:   "metadata/{key}",
-			Version: apiVersionV1,
-			Handler: a.onPutMetadata,
 		},
 	}
 }
@@ -1809,88 +1758,6 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		}
 		respond(reqCtx, withJSON(fasthttp.StatusOK, resp.Data))
 	}
-}
-
-func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
-	temp := make(map[string]string)
-
-	// Copy synchronously so it can be serialized to JSON.
-	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = value.(string)
-
-		return true
-	})
-	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
-	activeActorsCount := []actors.ActiveActorsCount{}
-	if a.actor != nil {
-		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
-	}
-	componentsCapabilties := a.getComponentsCapabilitesFn()
-	components := a.getComponentsFn()
-	registeredComponents := make([]registeredComponent, 0, len(components))
-	for _, comp := range components {
-		registeredComp := registeredComponent{
-			Name:         comp.Name,
-			Version:      comp.Spec.Version,
-			Type:         comp.Spec.Type,
-			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
-		}
-		registeredComponents = append(registeredComponents, registeredComp)
-	}
-
-	subscriptions := a.getSubscriptionsFn()
-	ps := []pubsubSubscription{}
-	for _, s := range subscriptions {
-		ps = append(ps, pubsubSubscription{
-			PubsubName:      s.PubsubName,
-			Topic:           s.Topic,
-			Metadata:        s.Metadata,
-			DeadLetterTopic: s.DeadLetterTopic,
-			Rules:           convertPubsubSubscriptionRules(s.Rules),
-		})
-	}
-
-	mtd := metadata{
-		ID:                   a.id,
-		ActiveActorsCount:    activeActorsCount,
-		Extended:             temp,
-		RegisteredComponents: registeredComponents,
-		Subscriptions:        ps,
-	}
-
-	mtdBytes, err := json.Marshal(mtd)
-	if err != nil {
-		msg := NewErrorResponse("ERR_METADATA_GET", fmt.Sprintf(messages.ErrMetadataGet, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-	} else {
-		respond(reqCtx, withJSON(fasthttp.StatusOK, mtdBytes))
-	}
-}
-
-func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
-	if val, ok := dict[key]; ok {
-		return val
-	}
-	return make([]string, 0)
-}
-
-func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) []*pubsubSubscriptionRule {
-	out := make([]*pubsubSubscriptionRule, 0)
-	for _, r := range rules {
-		out = append(out, &pubsubSubscriptionRule{
-			Match: fmt.Sprintf("%s", r.Match),
-			Path:  r.Path,
-		})
-	}
-	return out
-}
-
-func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
-	key := fmt.Sprintf("%v", reqCtx.UserValue("key"))
-	body := reqCtx.PostBody()
-	a.extendedMetadata.Store(key, string(body))
-	respond(reqCtx, withEmpty())
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {

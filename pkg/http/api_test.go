@@ -24,7 +24,6 @@ import (
 	"net"
 	gohttp "net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +31,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/fasthttputil"
@@ -2246,136 +2246,101 @@ func TestV1ActorEndpoints(t *testing.T) {
 func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	mockActors := new(actors.MockActors)
+	mockActors.On("GetActiveActorsCount")
+
 	testAPI := &api{
-		actor: nil,
-		getComponentsFn: func() []componentsV1alpha1.Component {
-			return []componentsV1alpha1.Component{
-				{
-					ObjectMeta: metaV1.ObjectMeta{
-						Name: "MockComponent1Name",
-					},
-					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    "mock.component1Type",
-						Version: "v1.0",
-						Metadata: []componentsV1alpha1.MetadataItem{
-							{
-								Name: "actorMockComponent1",
-								Value: componentsV1alpha1.DynamicValue{
-									JSON: v1.JSON{Raw: []byte("true")},
+		universal: &universalapi.UniversalAPI{
+			AppID:  "xyz",
+			Actors: mockActors,
+			GetComponentsFn: func() []componentsV1alpha1.Component {
+				return []componentsV1alpha1.Component{
+					{
+						ObjectMeta: metaV1.ObjectMeta{
+							Name: "MockComponent1Name",
+						},
+						Spec: componentsV1alpha1.ComponentSpec{
+							Type:    "mock.component1Type",
+							Version: "v1.0",
+							Metadata: []componentsV1alpha1.MetadataItem{
+								{
+									Name: "actorMockComponent1",
+									Value: componentsV1alpha1.DynamicValue{
+										JSON: v1.JSON{Raw: []byte("true")},
+									},
 								},
 							},
 						},
 					},
-				},
-				{
-					ObjectMeta: metaV1.ObjectMeta{
-						Name: "MockComponent2Name",
-					},
-					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    "mock.component2Type",
-						Version: "v1.0",
-						Metadata: []componentsV1alpha1.MetadataItem{
-							{
-								Name: "actorMockComponent2",
-								Value: componentsV1alpha1.DynamicValue{
-									JSON: v1.JSON{Raw: []byte("true")},
+					{
+						ObjectMeta: metaV1.ObjectMeta{
+							Name: "MockComponent2Name",
+						},
+						Spec: componentsV1alpha1.ComponentSpec{
+							Type:    "mock.component2Type",
+							Version: "v1.0",
+							Metadata: []componentsV1alpha1.MetadataItem{
+								{
+									Name: "actorMockComponent2",
+									Value: componentsV1alpha1.DynamicValue{
+										JSON: v1.JSON{Raw: []byte("true")},
+									},
 								},
 							},
 						},
 					},
-				},
-			}
-		},
-		extendedMetadata: sync.Map{},
-		getComponentsCapabilitesFn: func() map[string][]string {
-			capsMap := make(map[string][]string)
-			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
-			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
-			return capsMap
-		},
-		getSubscriptionsFn: func() []runtimePubsub.Subscription {
-			return []runtimePubsub.Subscription{
-				{
-					PubsubName:      "test",
-					Topic:           "topic",
-					DeadLetterTopic: "dead",
-					Metadata:        map[string]string{},
-					Rules: []*runtimePubsub.Rule{
-						{
-							Match: &expr.Expr{},
-							Path:  "path",
+				}
+			},
+			GetComponentsCapabilitesFn: func() map[string][]string {
+				capsMap := make(map[string][]string)
+				capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
+				capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
+				return capsMap
+			},
+			GetSubscriptionsFn: func() []runtimePubsub.Subscription {
+				return []runtimePubsub.Subscription{
+					{
+						PubsubName:      "test",
+						Topic:           "topic",
+						DeadLetterTopic: "dead",
+						Metadata:        map[string]string{},
+						Rules: []*runtimePubsub.Rule{
+							{
+								Match: &expr.Expr{},
+								Path:  "path",
+							},
 						},
 					},
-				},
-			}
+				}
+			},
+			ExtendedMetadata: map[string]string{
+				"test": "value",
+			},
 		},
 	}
-	// PutMetadata only stroes string(request body)
-	testAPI.extendedMetadata.Store("test", "value")
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
-	expectedBody := metadata{
-		ID: "xyz",
-		ActiveActorsCount: []actors.ActiveActorsCount{
-			{
-				Type:  "abcd",
-				Count: 10,
-			},
-			{
-				Type:  "xyz",
-				Count: 5,
-			},
-		},
-		Extended: map[string]string{
-			"test":               "value",
-			"daprRuntimeVersion": "edge",
-		},
-		RegisteredComponents: []registeredComponent{
-			{
-				Name:         "MockComponent1Name",
-				Type:         "mock.component1Type",
-				Version:      "v1.0",
-				Capabilities: []string{"mock.feat.MockComponent1Name"},
-			},
-			{
-				Name:         "MockComponent2Name",
-				Type:         "mock.component2Type",
-				Version:      "v1.0",
-				Capabilities: []string{"mock.feat.MockComponent2Name"},
-			},
-		},
-		Subscriptions: []pubsubSubscription{
-			{
-				PubsubName:      "test",
-				Topic:           "topic",
-				DeadLetterTopic: "dead",
-				Metadata:        map[string]string{},
-				Rules: []*pubsubSubscriptionRule{
-					{
-						Match: "",
-						Path:  "path",
-					},
-				},
-			},
-		},
-	}
-	expectedBodyBytes, _ := json.Marshal(expectedBody)
+	t.Run("Set Metadata", func(t *testing.T) {
+		resp := fakeServer.DoRequest("PUT", "v1.0/metadata/foo", []byte("bar"), nil)
+		assert.Equal(t, 204, resp.StatusCode)
+	})
 
-	t.Run("Metadata - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/metadata"
-		mockActors := new(actors.MockActors)
+	expectedBody := `{"id":"xyz","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}]}`
 
-		mockActors.On("GetActiveActorsCount")
+	t.Run("Get Metadata", func(t *testing.T) {
+		resp := fakeServer.DoRequest("GET", "v1.0/metadata", nil, nil)
 
-		testAPI.id = "xyz"
-		testAPI.actor = mockActors
-		testAPI.daprRunTimeVersion = "edge"
-
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// Compact the response JSON to harmonize it
+		if len(resp.RawBody) > 0 {
+			compact := &bytes.Buffer{}
+			err := json.Compact(compact, resp.RawBody)
+			require.NoError(t, err)
+			resp.RawBody = compact.Bytes()
+		}
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.ElementsMatch(t, expectedBodyBytes, resp.RawBody)
+		assert.Equal(t, expectedBody, string(resp.RawBody))
 		mockActors.AssertNumberOfCalls(t, "GetActiveActorsCount", 1)
 	})
 

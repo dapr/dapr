@@ -16,26 +16,38 @@ limitations under the License.
 package universalapi
 
 import (
+	"sync"
+
 	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/workflows"
+	"github.com/dapr/dapr/pkg/actors"
+	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/kit/logger"
 )
 
 // UniversalAPI contains the implementation of gRPC APIs that are also used by the HTTP server.
 type UniversalAPI struct {
-	AppID                string
-	Logger               logger.Logger
-	Resiliency           resiliency.Provider
-	CryptoProviders      map[string]contribCrypto.SubtleCrypto
-	StateStores          map[string]state.Store
-	SecretStores         map[string]secretstores.SecretStore
-	SecretsConfiguration map[string]config.SecretsScope
-	LockStores           map[string]lock.Store
-	WorkflowComponents   map[string]workflows.Workflow
-	ShutdownFn           func()
+	AppID                      string
+	Logger                     logger.Logger
+	Resiliency                 resiliency.Provider
+	Actors                     actors.Actors
+	CryptoProviders            map[string]contribCrypto.SubtleCrypto
+	StateStores                map[string]state.Store
+	SecretStores               map[string]secretstores.SecretStore
+	SecretsConfiguration       map[string]config.SecretsScope
+	LockStores                 map[string]lock.Store
+	WorkflowComponents         map[string]workflows.Workflow
+	ShutdownFn                 func()
+	GetComponentsFn            func() []componentsV1alpha.Component
+	GetComponentsCapabilitesFn func() map[string][]string
+	GetSubscriptionsFn         func() []runtimePubsub.Subscription
+	ExtendedMetadata           map[string]string
+
+	extendedMetadataLock sync.RWMutex
 }

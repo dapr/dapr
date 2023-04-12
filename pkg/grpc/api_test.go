@@ -47,15 +47,12 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors"
-	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
@@ -2345,106 +2342,6 @@ func TestExecuteStateTransaction(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestGetMetadata(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-	fakeComponent := componentsV1alpha.Component{}
-	fakeComponent.Name = "testComponent"
-
-	mockActors := new(actors.MockActors)
-	mockActors.On("GetActiveActorsCount").Return(actors.ActiveActorsCount{
-		Count: 10,
-		Type:  "abcd",
-	})
-
-	fakeAPI := &api{
-		id:    "fakeAPI",
-		actor: mockActors,
-		getComponentsFn: func() []componentsV1alpha.Component {
-			return []componentsV1alpha.Component{fakeComponent}
-		},
-		getComponentsCapabilitesFn: func() map[string][]string {
-			capsMap := make(map[string][]string)
-			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
-			return capsMap
-		},
-		getSubscriptionsFn: func() []runtimePubsub.Subscription {
-			return []runtimePubsub.Subscription{
-				{
-					PubsubName:      "test",
-					Topic:           "topic",
-					DeadLetterTopic: "dead",
-					Metadata:        map[string]string{},
-					Rules: []*runtimePubsub.Rule{
-						{
-							Match: &expr.Expr{},
-							Path:  "path",
-						},
-					},
-				},
-			}
-		},
-	}
-	fakeAPI.extendedMetadata.Store("testKey", "testValue")
-	server := startDaprAPIServer(port, fakeAPI, "")
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := runtimev1pb.NewDaprClient(clientConn)
-	response, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
-	assert.NoError(t, err, "Expected no error")
-	assert.Equal(t, response.Id, "fakeAPI")
-	assert.Len(t, response.RegisteredComponents, 1, "One component should be returned")
-	assert.Equal(t, response.RegisteredComponents[0].Name, "testComponent")
-	assert.Contains(t, response.ExtendedMetadata, "testKey")
-	assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
-	assert.Len(t, response.RegisteredComponents[0].Capabilities, 1, "One capabilities should be returned")
-	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
-	assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
-	assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
-	assert.Len(t, response.Subscriptions, 1)
-	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
-	assert.Equal(t, response.Subscriptions[0].Topic, "topic")
-	assert.Equal(t, response.Subscriptions[0].DeadLetterTopic, "dead")
-	assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
-	assert.Len(t, response.Subscriptions[0].Rules.Rules, 1)
-	assert.Equal(t, fmt.Sprintf("%s", response.Subscriptions[0].Rules.Rules[0].Match), "")
-	assert.Equal(t, response.Subscriptions[0].Rules.Rules[0].Path, "path")
-}
-
-func TestSetMetadata(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-	fakeComponent := componentsV1alpha.Component{}
-	fakeComponent.Name = "testComponent"
-	fakeAPI := &api{
-		id: "fakeAPI",
-	}
-	server := startDaprAPIServer(port, fakeAPI, "")
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := runtimev1pb.NewDaprClient(clientConn)
-	req := &runtimev1pb.SetMetadataRequest{
-		Key:   "testKey",
-		Value: "testValue",
-	}
-	_, err := client.SetMetadata(context.Background(), req)
-	assert.NoError(t, err, "Expected no error")
-	temp := make(map[string]string)
-
-	// Copy synchronously so it can be serialized to JSON.
-	fakeAPI.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = value.(string)
-		return true
-	})
-
-	assert.Contains(t, temp, "testKey")
-	assert.Equal(t, temp["testKey"], "testValue")
 }
 
 func TestStateStoreErrors(t *testing.T) {

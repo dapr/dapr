@@ -42,7 +42,6 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -64,10 +63,7 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-const (
-	daprHTTPStatusHeader  = "dapr-http-status"
-	daprRuntimeVersionKey = "daprRuntimeVersion"
-)
+const daprHTTPStatusHeader = "dapr-http-status"
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
@@ -99,11 +95,6 @@ type api struct {
 	tracingSpec                config.TracingSpec
 	accessControlList          *config.AccessControlList
 	appProtocol                string
-	extendedMetadata           sync.Map
-	getComponentsFn            func() []componentsV1alpha.Component
-	getComponentsCapabilitesFn func() map[string][]string
-	getSubscriptionsFn         func() []runtimePubsub.Subscription
-	daprRunTimeVersion         string
 }
 
 // APIOpts contains options for NewAPI.
@@ -138,31 +129,32 @@ func NewAPI(opts APIOpts) API {
 			AppID:                opts.AppID,
 			Logger:               apiServerLogger,
 			Resiliency:           opts.Resiliency,
+			Actors:               opts.Actor,
 			CryptoProviders:      opts.CryptoProviders,
 			StateStores:          opts.StateStores,
 			SecretStores:         opts.SecretStores,
 			SecretsConfiguration: opts.SecretsConfiguration,
 			LockStores:           opts.LockStores,
 			WorkflowComponents:   opts.WorkflowComponents,
-			ShutdownFn:           opts.Shutdown,
+
+			ShutdownFn:                 opts.Shutdown,
+			GetComponentsFn:            opts.GetComponentsFn,
+			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+			GetSubscriptionsFn:         opts.GetSubscriptionsFn,
 		},
-		directMessaging:            opts.DirectMessaging,
-		actor:                      opts.Actor,
-		id:                         opts.AppID,
-		resiliency:                 opts.Resiliency,
-		appChannel:                 opts.AppChannel,
-		pubsubAdapter:              opts.PubsubAdapter,
-		stateStores:                opts.StateStores,
-		configurationStores:        opts.ConfigurationStores,
-		configurationSubscribe:     make(map[string]chan struct{}),
-		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
-		tracingSpec:                opts.TracingSpec,
-		accessControlList:          opts.AccessControlList,
-		appProtocol:                opts.AppProtocol,
-		getComponentsFn:            opts.GetComponentsFn,
-		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-		getSubscriptionsFn:         opts.GetSubscriptionsFn,
-		daprRunTimeVersion:         buildinfo.Version(),
+		directMessaging:        opts.DirectMessaging,
+		actor:                  opts.Actor,
+		id:                     opts.AppID,
+		resiliency:             opts.Resiliency,
+		appChannel:             opts.AppChannel,
+		pubsubAdapter:          opts.PubsubAdapter,
+		stateStores:            opts.StateStores,
+		configurationStores:    opts.ConfigurationStores,
+		configurationSubscribe: make(map[string]chan struct{}),
+		sendToOutputBindingFn:  opts.SendToOutputBindingFn,
+		tracingSpec:            opts.TracingSpec,
+		accessControlList:      opts.AccessControlList,
+		appProtocol:            opts.AppProtocol,
 	}
 }
 
@@ -1321,87 +1313,6 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
-}
-
-func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
-	extendedMetadata := make(map[string]string)
-	// Copy synchronously so it can be serialized to JSON.
-	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		extendedMetadata[key.(string)] = value.(string)
-		return true
-	})
-	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
-
-	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
-	if a.actor != nil {
-		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
-			activeActorsCount = append(activeActorsCount, &runtimev1pb.ActiveActorsCount{
-				Type:  actorTypeCount.Type,
-				Count: int32(actorTypeCount.Count),
-			})
-		}
-	}
-
-	components := a.getComponentsFn()
-	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
-	componentsCapabilities := a.getComponentsCapabilitesFn()
-	for _, comp := range components {
-		registeredComp := &runtimev1pb.RegisteredComponents{
-			Name:         comp.Name,
-			Version:      comp.Spec.Version,
-			Type:         comp.Spec.Type,
-			Capabilities: getOrDefaultCapabilities(componentsCapabilities, comp.Name),
-		}
-		registeredComponents = append(registeredComponents, registeredComp)
-	}
-
-	subscriptions := a.getSubscriptionsFn()
-	ps := []*runtimev1pb.PubsubSubscription{}
-	for _, s := range subscriptions {
-		ps = append(ps, &runtimev1pb.PubsubSubscription{
-			PubsubName:      s.PubsubName,
-			Topic:           s.Topic,
-			Metadata:        s.Metadata,
-			DeadLetterTopic: s.DeadLetterTopic,
-			Rules:           convertPubsubSubscriptionRules(s.Rules),
-		})
-	}
-
-	response := &runtimev1pb.GetMetadataResponse{
-		Id:                   a.id,
-		ExtendedMetadata:     extendedMetadata,
-		RegisteredComponents: registeredComponents,
-		ActiveActorsCount:    activeActorsCount,
-		Subscriptions:        ps,
-	}
-
-	return response, nil
-}
-
-func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
-	if val, ok := dict[key]; ok {
-		return val
-	}
-	return make([]string, 0)
-}
-
-func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
-	out := &runtimev1pb.PubsubSubscriptionRules{
-		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
-	}
-	for _, r := range rules {
-		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
-			Match: fmt.Sprintf("%s", r.Match),
-			Path:  r.Path,
-		})
-	}
-	return out
-}
-
-// SetMetadata Sets value in extended metadata of the sidecar.
-func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
-	a.extendedMetadata.Store(in.Key, in.Value)
-	return &emptypb.Empty{}, nil
 }
 
 func stringValueOrEmpty(value *string) string {
