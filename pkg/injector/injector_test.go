@@ -108,7 +108,7 @@ func TestAnnotations(t *testing.T) {
 			m := map[string]string{annotations.KeyAppPort: "3000"}
 			an := annotations.New(m)
 			p, err := an.GetInt32(annotations.KeyAppPort)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			assert.Equal(t, int32(3000), p)
 		})
 
@@ -116,7 +116,7 @@ func TestAnnotations(t *testing.T) {
 			m := map[string]string{annotations.KeyAppPort: "a"}
 			an := annotations.New(m)
 			p, err := an.GetInt32(annotations.KeyAppPort)
-			assert.NotNil(t, err)
+			assert.Error(t, err)
 			assert.Equal(t, int32(-1), p)
 		})
 	})
@@ -138,7 +138,7 @@ func TestAnnotations(t *testing.T) {
 
 		t.Run("valid https protocol", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppProtocol: "https"}
-			an := sidecar.Annotations(m)
+			an := annotations.New(m)
 			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
 			assert.Equal(t, "https", p)
 		})
@@ -172,7 +172,7 @@ func TestAnnotations(t *testing.T) {
 			m := map[string]string{}
 			an := annotations.New(m)
 			maxConcurrency, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			assert.Equal(t, int32(-1), maxConcurrency)
 		})
 
@@ -180,14 +180,14 @@ func TestAnnotations(t *testing.T) {
 			m := map[string]string{annotations.KeyAppMaxConcurrency: "invalid"}
 			an := annotations.New(m)
 			_, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
-			assert.NotNil(t, err)
+			assert.Error(t, err)
 		})
 
 		t.Run("valid max concurrency - should be 10", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppMaxConcurrency: "10"}
 			an := annotations.New(m)
 			maxConcurrency, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			assert.Equal(t, int32(10), maxConcurrency)
 		})
 	})
