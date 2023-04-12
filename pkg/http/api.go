@@ -1773,9 +1773,8 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
-			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		msg := messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 
 		return
@@ -1876,9 +1875,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
-			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		msg := messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 
 		return

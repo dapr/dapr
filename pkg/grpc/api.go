@@ -180,7 +180,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+		return nil, "", "", false, messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
 	}
 
 	return thepubsub, pubsubName, topic, rawPayload, nil
