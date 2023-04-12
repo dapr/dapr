@@ -91,6 +91,29 @@ func TestMain(m *testing.M) {
 				"CONTROL_PORT": "3000",
 			},
 		},
+		{
+			AppName:                "healthapp-h2c",
+			AppPort:                4000,
+			AppProtocol:            "h2c",
+			DaprEnabled:            true,
+			ImageName:              "e2e-healthapp",
+			Replicas:               1,
+			IngressEnabled:         true,
+			IngressPort:            3000,
+			MetricsEnabled:         true,
+			EnableAppHealthCheck:   true,
+			AppHealthCheckPath:     "/healthz",
+			AppHealthProbeInterval: 3,
+			AppHealthProbeTimeout:  200,
+			AppHealthThreshold:     3,
+			AppEnv: map[string]string{
+				"APP_PROTOCOL": "h2c",
+				"APP_PORT":     "4000",
+				"CONTROL_PORT": "3000",
+			},
+			// TODO: Remove once AppHealthCheck feature is finalized
+			Config: "healthcheckconfig",
+		},
 	}
 
 	log.Print("Creating TestRunner")
@@ -105,6 +128,10 @@ func TestAppHealthCheckHTTP(t *testing.T) {
 
 func TestAppHealthCheckGRPC(t *testing.T) {
 	testAppHealthCheckProtocol(t, "grpc")
+}
+
+func TestAppHealthCheckH2C(t *testing.T) {
+	testAppHealthCheckProtocol(t, "h2c")
 }
 
 func testAppHealthCheckProtocol(t *testing.T, protocol string) {
