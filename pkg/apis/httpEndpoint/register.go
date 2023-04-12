@@ -11,13 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package externalendpoint
+package httpendpoint
 
-import (
-	externalendpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
+const (
+	GroupName = "dapr.io"
 )
-
-// ExternalHTTPEndpointHandler is an interface for reacting on external HTTP endpoint changes.
-type ExternalHTTPEndpointHandler interface {
-	OnExternalHTTPEndpointUpdated(endpoint externalendpointsV1alpha1.ExternalHTTPEndpoint)
-}

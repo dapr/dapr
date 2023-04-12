@@ -58,8 +58,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/actors"
+	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/HTTPEndpoint/v1alpha1"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	externalHTTPEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
@@ -68,9 +68,9 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/externalendpoint"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
+	"github.com/dapr/dapr/pkg/httpendpoint"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -243,8 +243,8 @@ type DaprRuntime struct {
 
 	workflowEngine *wfengine.WorkflowEngine
 
-	externalEndpoints []externalHTTPEndpointV1alpha1.ExternalHTTPEndpoint
-	endpointsLock     *sync.RWMutex
+	httpEndpoints []httpEndpointV1alpha1.HTTPEndpoint
+	endpointsLock *sync.RWMutex
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -317,7 +317,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
 		bulkSubLock:                &sync.Mutex{},
-		externalEndpoints:          make([]externalHTTPEndpointV1alpha1.ExternalHTTPEndpoint, 0),
+		httpEndpoints:              make([]httpEndpointV1alpha1.HTTPEndpoint, 0),
 		endpointsLock:              &sync.RWMutex{},
 	}
 
@@ -498,7 +498,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		if err != nil {
 			log.Warnf("failed to watch component updates: %s", err)
 		}
-		// TODO(@Sam): a.beginExternalHTTPEndpointsUpdates()?
+		// TODO(@Sam): a.beginHTTPEndpointsUpdates()?
 	}
 
 	a.appendBuiltinSecretStore()
@@ -514,9 +514,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
-	err = a.loadExternalHTTPEndpoints(opts)
+	err = a.loadHTTPEndpoints(opts)
 	if err != nil {
-		log.Warnf("failed to load external HTTP endpoints: %s", err)
+		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
 
 	// Setup allow/deny list for secrets
@@ -561,7 +561,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.daprHTTPAPI != nil {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
-
+	log.Infof("sanity check for sam for a.daprHTTPAPI %v and a.runtimeConfig.ApplicationPort %v", a.daprHTTPAPI, a.runtimeConfig.ApplicationPort)
 	a.blockUntilAppIsReady()
 
 	err = a.createAppChannel()
@@ -2683,21 +2683,21 @@ func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component)
 	return componentPreprocessRes{}
 }
 
-func (a *DaprRuntime) loadExternalHTTPEndpoints(opts *runtimeOpts) error {
-	var loader externalendpoint.EndpointsLoader
+func (a *DaprRuntime) loadHTTPEndpoints(opts *runtimeOpts) error {
+	var loader httpendpoint.EndpointsLoader
 	log.Infof("runtimeConfig.Mode %s", a.runtimeConfig.Mode)
 
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		loader = externalendpoint.NewKubernetesExternalHTTPEndpoints(a.runtimeConfig.Kubernetes, a.namespace, a.operatorClient, a.podName)
+		loader = httpendpoint.NewKubernetesHTTPEndpoints(a.runtimeConfig.Kubernetes, a.namespace, a.operatorClient, a.podName)
 	case modes.StandaloneMode:
-		loader = externalendpoint.NewLocalExternalHTTPEndpoints(a.runtimeConfig.Standalone.ResourcesPath...)
+		loader = httpendpoint.NewLocalHTTPEndpoints(a.runtimeConfig.Standalone.ResourcesPath...)
 	default:
 		return nil
 	}
 
 	log.Info("Loading endpoints")
-	endpoints, err := loader.LoadExternalHTTPEndpoints()
+	endpoints, err := loader.LoadHTTPEndpoints()
 	if err != nil {
 		return err
 	}
@@ -2706,18 +2706,18 @@ func (a *DaprRuntime) loadExternalHTTPEndpoints(opts *runtimeOpts) error {
 	// TODO(@Sam): authorized endpoints todos here?
 
 	a.endpointsLock.Lock()
-	a.externalEndpoints = endpoints
+	a.httpEndpoints = endpoints
 	a.endpointsLock.Unlock()
 
 	return nil
 }
 
 // TODO(@Sam):
-// func (a *DaprRuntime) onExternalHTTPEndpointUpdated(endpoint externalendpoint.V1alpha1.ExternalHTTPEndpoint) bool {
+// func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpendpoint.V1alpha1.HTTPEndpoint) bool {
 // }
 
 // TODO(@Sam):
-// func (a *DaprRuntime) beginExternalHTTPEndpointsUpdates() error {
+// func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 // }
 
 func (a *DaprRuntime) stopActor() {

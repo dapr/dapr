@@ -29,8 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/HTTPEndpoint/v1alpha1"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	externalhttpendpointapi "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
@@ -418,28 +418,28 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, 0, len(res.GetResiliencies()))
 	})
-	t.Run("list external http endpoints namespace scoping", func(t *testing.T) {
+	t.Run("list http endpoints namespace scoping", func(t *testing.T) {
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		assert.NoError(t, err)
 
-		err = externalhttpendpointapi.AddToScheme(s)
+		err = httpendpointapi.AddToScheme(s)
 		assert.NoError(t, err)
 
-		av, kind := externalhttpendpointapi.SchemeGroupVersion.WithKind("ExternalHTTPEndpoint").ToAPIVersionAndKind()
+		av, kind := httpendpointapi.SchemeGroupVersion.WithKind("HTTPEndpoint").ToAPIVersionAndKind()
 		typeMeta := metav1.TypeMeta{
 			Kind:       kind,
 			APIVersion: av,
 		}
 		client := fake.NewClientBuilder().
 			WithScheme(s).
-			WithObjects(&externalhttpendpointapi.ExternalHTTPEndpoint{
+			WithObjects(&httpendpointapi.HTTPEndpoint{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj1",
 					Namespace: "namespace-a",
 				},
-			}, &externalhttpendpointapi.ExternalHTTPEndpoint{
+			}, &httpendpointapi.HTTPEndpoint{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj2",
@@ -450,25 +450,25 @@ func TestListsNamespaced(t *testing.T) {
 
 		api := NewAPIServer(client).(*apiServer)
 
-		res, err := api.ListExternalHTTPEndpoints(context.TODO(), &operatorv1pb.ListExternalHTTPEndpointsRequest{
+		res, err := api.ListHTTPEndpoints(context.TODO(), &operatorv1pb.ListHTTPEndpointsRequest{
 			Namespace: "namespace-a",
 		})
 
 		assert.Nil(t, err)
-		assert.Equal(t, 1, len(res.GetExternalhttpendpoints()))
+		assert.Equal(t, 1, len(res.GetHttpEndpoints()))
 
-		var endpoint externalhttpendpointapi.ExternalHTTPEndpoint
-		err = yaml.Unmarshal(res.GetExternalhttpendpoints()[0], &endpoint)
+		var endpoint httpendpointapi.HTTPEndpoint
+		err = yaml.Unmarshal(res.GetHttpEndpoints()[0], &endpoint)
 		assert.Nil(t, err)
 
 		assert.Equal(t, "obj1", endpoint.Name)
 		assert.Equal(t, "namespace-a", endpoint.Namespace)
 
-		res, err = api.ListExternalHTTPEndpoints(context.TODO(), &operatorv1pb.ListExternalHTTPEndpointsRequest{
+		res, err = api.ListHTTPEndpoints(context.TODO(), &operatorv1pb.ListHTTPEndpointsRequest{
 			Namespace: "namespace-c",
 		})
 		assert.Nil(t, err)
-		assert.Equal(t, 0, len(res.GetExternalhttpendpoints()))
+		assert.Equal(t, 0, len(res.GetHttpEndpoints()))
 	})
 }
 

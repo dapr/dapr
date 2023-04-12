@@ -24,13 +24,15 @@ import (
 //+genclient:noStatus
 //+kubebuilder:object:root=true
 
-// ExternalHTTPEndpoint describes an Dapr ExternalHTTPEndpoint type to allow for external service invocation.
-type ExternalHTTPEndpoint struct {
+// HTTPEndpoint describes an Dapr HTTPEndpoint type to allow for external service invocation.
+// This can include being external to Dapr,
+// as well as being external to the environment.
+type HTTPEndpoint struct {
 	metav1.TypeMeta `json:",inline"`
 	//+optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	//+optional
-	Spec ExternalHTTPEndpointSpec `json:"spec,omitempty"`
+	Spec HTTPEndpointSpec `json:"spec,omitempty"`
 	//+optional
 	Auth `json:"auth,omitempty"`
 	//+optional
@@ -38,18 +40,18 @@ type ExternalHTTPEndpoint struct {
 }
 
 // Kind returns the component kind.
-func (ExternalHTTPEndpoint) Kind() string {
-	return "ExternalHTTPEndpoint"
+func (HTTPEndpoint) Kind() string {
+	return "HTTPEndpoint"
 }
 
-// ExternalHTTPEndpointSpec describes an access specification for allowing external service invocations.
-type ExternalHTTPEndpointSpec struct {
-	Allowed  []ExternalAPISpec `json:"allowed,omitempty"`
-	Metadata []MetadataItem    `json:"metadata"`
+// HTTPEndpointSpec describes an access specification for allowing potentially external service invocations.
+type HTTPEndpointSpec struct {
+	Allowed  []APISpec      `json:"allowed,omitempty"`
+	Metadata []MetadataItem `json:"metadata"`
 }
 
-// ExternalAPISpec describes the configuration for Dapr API communication with external services.
-type ExternalAPISpec struct {
+// APISpec describes the configuration for Dapr API communication with potentially external services.
+type APISpec struct {
 	BaseURL string `json:"baseUrl" validate:"required"`
 	//+optional
 	Headers map[string]string `json:"headers"`
@@ -80,12 +82,12 @@ type Auth struct {
 
 //+kubebuilder:object:root=true
 
-// ExternalHTTPEndpointList is a list of Dapr ExternalHTTPEndpoints.
-type ExternalHTTPEndpointList struct {
+// HTTPEndpointList is a list of Dapr HTTPEndpoints.
+type HTTPEndpointList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
 
-	Items []ExternalHTTPEndpoint `json:"items"`
+	Items []HTTPEndpoint `json:"items"`
 }
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value.

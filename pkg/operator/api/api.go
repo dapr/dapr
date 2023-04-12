@@ -31,9 +31,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/HTTPEndpoint/v1alpha1"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	externalhttpendpointsapi "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
@@ -56,7 +56,7 @@ type Server interface {
 	Run(ctx context.Context, certChain *daprCredentials.CertChain) error
 	Ready(context.Context) error
 	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
-	OnExternalHTTPEndpointUpdated(ctx context.Context, endpoint *externalhttpendpointsapi.ExternalHTTPEndpoint)
+	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
 }
 
 type apiServer struct {
@@ -66,7 +66,7 @@ type apiServer struct {
 	connLock               sync.Mutex
 	endpointLock           sync.Mutex
 	allConnUpdateChan      map[string]chan *componentsapi.Component
-	allEndpointsUpdateChan map[string]chan *externalhttpendpointsapi.ExternalHTTPEndpoint
+	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
 	readyCh                chan struct{}
 	running                atomic.Bool
 }
@@ -76,7 +76,7 @@ func NewAPIServer(client client.Client) Server {
 	return &apiServer{
 		Client:                 client,
 		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
-		allEndpointsUpdateChan: make(map[string]chan *externalhttpendpointsapi.ExternalHTTPEndpoint),
+		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		readyCh:                make(chan struct{}),
 	}
 }
@@ -134,7 +134,7 @@ func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsa
 	a.connLock.Unlock()
 }
 
-func (a *apiServer) OnExternalHTTPEndpointUpdated(_ context.Context, endpoint *externalhttpendpointsapi.ExternalHTTPEndpoint) {
+func (a *apiServer) OnHTTPEndpointUpdated(_ context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
 	a.endpointLock.Lock()
 	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
 		endpointUpdateChan <- endpoint
@@ -376,50 +376,50 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	}
 }
 
-// GetExternalHTTPEndpoint returns a specified external http endpoint object.
-func (a *apiServer) GetExternalHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetExternalHTTPEndpointResponse, error) {
+// GetHTTPEndpoint returns a specified http endpoint object.
+func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
 	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
-	var resiliencyConfig resiliencyapi.Resiliency
-	if err := a.Client.Get(ctx, key, &resiliencyConfig); err != nil {
-		return nil, fmt.Errorf("error getting resiliency: %w", err)
+	var endpointConfig httpendpointsapi.HTTPEndpoint
+	if err := a.Client.Get(ctx, key, &endpointConfig); err != nil {
+		return nil, fmt.Errorf("error getting http endpoint: %w", err)
 	}
-	b, err := json.Marshal(&resiliencyConfig)
+	b, err := json.Marshal(&endpointConfig)
 	if err != nil {
-		return nil, fmt.Errorf("error marshalling resiliency: %w", err)
+		return nil, fmt.Errorf("error marshalling http endpoint: %w", err)
 	}
-	return &operatorv1pb.GetExternalHTTPEndpointResponse{
-		Externalhttpendpoint: b,
+	return &operatorv1pb.GetHTTPEndpointResponse{
+		HttpEndpoint: b,
 	}, nil
 }
 
-// ListExternalHTTPEndpoints gets the list of applied external http endpoints.
-func (a *apiServer) ListExternalHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListExternalHTTPEndpointsRequest) (*operatorv1pb.ListExternalHTTPEndpointsResponse, error) {
-	resp := &operatorv1pb.ListExternalHTTPEndpointsResponse{
-		Externalhttpendpoints: [][]byte{},
+// ListHTTPEndpoints gets the list of applied http endpoints.
+func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
+	resp := &operatorv1pb.ListHTTPEndpointsResponse{
+		HttpEndpoints: [][]byte{},
 	}
 
-	var endpoints externalhttpendpointsapi.ExternalHTTPEndpointList
+	var endpoints httpendpointsapi.HTTPEndpointList
 	if err := a.Client.List(ctx, &endpoints, &client.ListOptions{
 		Namespace: in.Namespace,
 	}); err != nil {
-		return nil, fmt.Errorf("error listing external http endpoints: %w", err)
+		return nil, fmt.Errorf("error listing http endpoints: %w", err)
 	}
 
 	for _, item := range endpoints.Items {
 		b, err := json.Marshal(item)
 		if err != nil {
-			log.Warnf("Error unmarshalling external http endpoints: %s", err)
+			log.Warnf("Error unmarshalling http endpoints: %s", err)
 			continue
 		}
-		resp.Externalhttpendpoints = append(resp.Externalhttpendpoints, b)
+		resp.HttpEndpoints = append(resp.HttpEndpoints, b)
 	}
 
 	return resp, nil
 }
 
-// ExternalHTTPEndpointUpdate updates Dapr sidecars whenever an external http endpoint in the cluster is modified.
-func (a *apiServer) ExternalHTTPEndpointUpdate(in *operatorv1pb.ExternalHTTPEndpointsUpdateRequest, srv operatorv1pb.Operator_ExternalHTTPEndpointsUpdateServer) error { //nolint:nosnakecase
-	log.Info("sidecar connected for external http endpoint updates")
+// HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
+func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointsUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointsUpdateServer) error { //nolint:nosnakecase
+	log.Info("sidecar connected for http endpoint updates")
 	keyObj, err := uuid.NewRandom()
 	if err != nil {
 		return err
@@ -427,7 +427,7 @@ func (a *apiServer) ExternalHTTPEndpointUpdate(in *operatorv1pb.ExternalHTTPEndp
 	key := keyObj.String()
 
 	a.endpointLock.Lock()
-	a.allEndpointsUpdateChan[key] = make(chan *externalhttpendpointsapi.ExternalHTTPEndpoint, 1)
+	a.allEndpointsUpdateChan[key] = make(chan *httpendpointsapi.HTTPEndpoint, 1)
 	updateChan := a.allEndpointsUpdateChan[key]
 	a.endpointLock.Unlock()
 
@@ -437,7 +437,7 @@ func (a *apiServer) ExternalHTTPEndpointUpdate(in *operatorv1pb.ExternalHTTPEndp
 		delete(a.allEndpointsUpdateChan, key)
 	}()
 
-	updateExternalHTTPEndpointFunc := func(ctx context.Context, e *externalhttpendpointsapi.ExternalHTTPEndpoint) {
+	updateHTTPEndpointFunc := func(ctx context.Context, e *httpendpointsapi.HTTPEndpoint) {
 		if e.Namespace != in.Namespace {
 			return
 		}
@@ -446,19 +446,19 @@ func (a *apiServer) ExternalHTTPEndpointUpdate(in *operatorv1pb.ExternalHTTPEndp
 
 		b, err := json.Marshal(&e)
 		if err != nil {
-			log.Warnf("error serializing external http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			log.Warnf("error serializing  http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
 			return
 		}
 
-		err = srv.Send(&operatorv1pb.ExternalHTTPEndpointsUpdateEvent{
-			Externalhttpendpoints: b,
+		err = srv.Send(&operatorv1pb.HTTPEndpointsUpdateEvent{
+			HttpEndpoints: b,
 		})
 		if err != nil {
-			log.Warnf("error updating sidecar with external http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			log.Warnf("error updating sidecar with http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
 			return
 		}
 
-		log.Infof("updated sidecar with external http endpoint %s from pod %s/%s", e.GetName(), in.Namespace, in.PodName)
+		log.Infof("updated sidecar with http endpoint %s from pod %s/%s", e.GetName(), in.Namespace, in.PodName)
 	}
 
 	var wg sync.WaitGroup
@@ -474,7 +474,7 @@ func (a *apiServer) ExternalHTTPEndpointUpdate(in *operatorv1pb.ExternalHTTPEndp
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				updateExternalHTTPEndpointFunc(srv.Context(), c)
+				updateHTTPEndpointFunc(srv.Context(), c)
 			}()
 		}
 	}

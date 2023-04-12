@@ -37,10 +37,10 @@ type OperatorClient interface {
 	ListResiliency(ctx context.Context, in *ListResiliencyRequest, opts ...grpc.CallOption) (*ListResiliencyResponse, error)
 	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
 	ListSubscriptionsV2(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
-	// Returns a list of external http endpoints
-	ListExternalHTTPEndpoints(ctx context.Context, in *ListExternalHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListExternalHTTPEndpointsResponse, error)
-	// Sends events to Dapr sidecars upon external http endpoint changes.
-	ExternalHTTPEndpointsUpdate(ctx context.Context, in *ExternalHTTPEndpointsUpdateRequest, opts ...grpc.CallOption) (Operator_ExternalHTTPEndpointsUpdateClient, error)
+	// Returns a list of http endpoints
+	ListHTTPEndpoints(ctx context.Context, in *ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListHTTPEndpointsResponse, error)
+	// Sends events to Dapr sidecars upon http endpoint changes.
+	HTTPEndpointsUpdate(ctx context.Context, in *HTTPEndpointsUpdateRequest, opts ...grpc.CallOption) (Operator_HTTPEndpointsUpdateClient, error)
 }
 
 type operatorClient struct {
@@ -137,21 +137,21 @@ func (c *operatorClient) ListSubscriptionsV2(ctx context.Context, in *ListSubscr
 	return out, nil
 }
 
-func (c *operatorClient) ListExternalHTTPEndpoints(ctx context.Context, in *ListExternalHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListExternalHTTPEndpointsResponse, error) {
-	out := new(ListExternalHTTPEndpointsResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListExternalHTTPEndpoints", in, out, opts...)
+func (c *operatorClient) ListHTTPEndpoints(ctx context.Context, in *ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListHTTPEndpointsResponse, error) {
+	out := new(ListHTTPEndpointsResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *operatorClient) ExternalHTTPEndpointsUpdate(ctx context.Context, in *ExternalHTTPEndpointsUpdateRequest, opts ...grpc.CallOption) (Operator_ExternalHTTPEndpointsUpdateClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[1], "/dapr.proto.operator.v1.Operator/ExternalHTTPEndpointsUpdate", opts...)
+func (c *operatorClient) HTTPEndpointsUpdate(ctx context.Context, in *HTTPEndpointsUpdateRequest, opts ...grpc.CallOption) (Operator_HTTPEndpointsUpdateClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[1], "/dapr.proto.operator.v1.Operator/HTTPEndpointsUpdate", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &operatorExternalHTTPEndpointsUpdateClient{stream}
+	x := &operatorHTTPEndpointsUpdateClient{stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -161,17 +161,17 @@ func (c *operatorClient) ExternalHTTPEndpointsUpdate(ctx context.Context, in *Ex
 	return x, nil
 }
 
-type Operator_ExternalHTTPEndpointsUpdateClient interface {
-	Recv() (*ExternalHTTPEndpointsUpdateEvent, error)
+type Operator_HTTPEndpointsUpdateClient interface {
+	Recv() (*HTTPEndpointsUpdateEvent, error)
 	grpc.ClientStream
 }
 
-type operatorExternalHTTPEndpointsUpdateClient struct {
+type operatorHTTPEndpointsUpdateClient struct {
 	grpc.ClientStream
 }
 
-func (x *operatorExternalHTTPEndpointsUpdateClient) Recv() (*ExternalHTTPEndpointsUpdateEvent, error) {
-	m := new(ExternalHTTPEndpointsUpdateEvent)
+func (x *operatorHTTPEndpointsUpdateClient) Recv() (*HTTPEndpointsUpdateEvent, error) {
+	m := new(HTTPEndpointsUpdateEvent)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -196,10 +196,10 @@ type OperatorServer interface {
 	ListResiliency(context.Context, *ListResiliencyRequest) (*ListResiliencyResponse, error)
 	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
 	ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
-	// Returns a list of external http endpoints
-	ListExternalHTTPEndpoints(context.Context, *ListExternalHTTPEndpointsRequest) (*ListExternalHTTPEndpointsResponse, error)
-	// Sends events to Dapr sidecars upon external http endpoint changes.
-	ExternalHTTPEndpointsUpdate(*ExternalHTTPEndpointsUpdateRequest, Operator_ExternalHTTPEndpointsUpdateServer) error
+	// Returns a list of http endpoints
+	ListHTTPEndpoints(context.Context, *ListHTTPEndpointsRequest) (*ListHTTPEndpointsResponse, error)
+	// Sends events to Dapr sidecars upon http endpoint changes.
+	HTTPEndpointsUpdate(*HTTPEndpointsUpdateRequest, Operator_HTTPEndpointsUpdateServer) error
 }
 
 // UnimplementedOperatorServer should be embedded to have forward compatible implementations.
@@ -227,11 +227,11 @@ func (UnimplementedOperatorServer) ListResiliency(context.Context, *ListResilien
 func (UnimplementedOperatorServer) ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptionsV2 not implemented")
 }
-func (UnimplementedOperatorServer) ListExternalHTTPEndpoints(context.Context, *ListExternalHTTPEndpointsRequest) (*ListExternalHTTPEndpointsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListExternalHTTPEndpoints not implemented")
+func (UnimplementedOperatorServer) ListHTTPEndpoints(context.Context, *ListHTTPEndpointsRequest) (*ListHTTPEndpointsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListHTTPEndpoints not implemented")
 }
-func (UnimplementedOperatorServer) ExternalHTTPEndpointsUpdate(*ExternalHTTPEndpointsUpdateRequest, Operator_ExternalHTTPEndpointsUpdateServer) error {
-	return status.Errorf(codes.Unimplemented, "method ExternalHTTPEndpointsUpdate not implemented")
+func (UnimplementedOperatorServer) HTTPEndpointsUpdate(*HTTPEndpointsUpdateRequest, Operator_HTTPEndpointsUpdateServer) error {
+	return status.Errorf(codes.Unimplemented, "method HTTPEndpointsUpdate not implemented")
 }
 
 // UnsafeOperatorServer may be embedded to opt out of forward compatibility for this service.
@@ -374,42 +374,42 @@ func _Operator_ListSubscriptionsV2_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Operator_ListExternalHTTPEndpoints_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListExternalHTTPEndpointsRequest)
+func _Operator_ListHTTPEndpoints_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListHTTPEndpointsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(OperatorServer).ListExternalHTTPEndpoints(ctx, in)
+		return srv.(OperatorServer).ListHTTPEndpoints(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/ListExternalHTTPEndpoints",
+		FullMethod: "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OperatorServer).ListExternalHTTPEndpoints(ctx, req.(*ListExternalHTTPEndpointsRequest))
+		return srv.(OperatorServer).ListHTTPEndpoints(ctx, req.(*ListHTTPEndpointsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Operator_ExternalHTTPEndpointsUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(ExternalHTTPEndpointsUpdateRequest)
+func _Operator_HTTPEndpointsUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(HTTPEndpointsUpdateRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(OperatorServer).ExternalHTTPEndpointsUpdate(m, &operatorExternalHTTPEndpointsUpdateServer{stream})
+	return srv.(OperatorServer).HTTPEndpointsUpdate(m, &operatorHTTPEndpointsUpdateServer{stream})
 }
 
-type Operator_ExternalHTTPEndpointsUpdateServer interface {
-	Send(*ExternalHTTPEndpointsUpdateEvent) error
+type Operator_HTTPEndpointsUpdateServer interface {
+	Send(*HTTPEndpointsUpdateEvent) error
 	grpc.ServerStream
 }
 
-type operatorExternalHTTPEndpointsUpdateServer struct {
+type operatorHTTPEndpointsUpdateServer struct {
 	grpc.ServerStream
 }
 
-func (x *operatorExternalHTTPEndpointsUpdateServer) Send(m *ExternalHTTPEndpointsUpdateEvent) error {
+func (x *operatorHTTPEndpointsUpdateServer) Send(m *HTTPEndpointsUpdateEvent) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -445,8 +445,8 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Operator_ListSubscriptionsV2_Handler,
 		},
 		{
-			MethodName: "ListExternalHTTPEndpoints",
-			Handler:    _Operator_ListExternalHTTPEndpoints_Handler,
+			MethodName: "ListHTTPEndpoints",
+			Handler:    _Operator_ListHTTPEndpoints_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -456,8 +456,8 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 		{
-			StreamName:    "ExternalHTTPEndpointsUpdate",
-			Handler:       _Operator_ExternalHTTPEndpointsUpdate_Handler,
+			StreamName:    "HTTPEndpointsUpdate",
+			Handler:       _Operator_HTTPEndpointsUpdate_Handler,
 			ServerStreams: true,
 		},
 	},

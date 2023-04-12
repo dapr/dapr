@@ -6,20 +6,20 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.5.0
   creationTimestamp: null
-  name: externalhttpendpoints.dapr.io
+  name: httpendpoints.dapr.io
 spec:
   group: dapr.io
   names:
-    kind: ExternalHTTPEndpoint
-    listKind: ExternalHTTPEndpointList
-    plural: externalhttpendpoints
-    singular: externalhttpendpoint
+    kind: HTTPEndpoint
+    listKind: HTTPEndpointList
+    plural: httpendpoints
+    singular: httpendpoint
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ExternalHTTPEndpoint describes an Dapr ExternalHTTPEndpoint type to allow for external service invocation.
+        description: HTTPEndpoint describes an Dapr HTTPEndpoint type to allow for external service invocation. This can include being external to Dapr, as well as being external to the environment.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -42,11 +42,11 @@ spec:
               type: string
             type: array
           spec:
-            description: ExternalHTTPEndpointSpec describes an access specification for allowing external service invocations.
+            description: HTTPEndpointSpec describes an access specification for allowing potentially external service invocations.
             properties:
               allowed:
                 items:
-                  description: ExternalAPISpec describes the configuration for Dapr API communication with external services.
+                  description: APISpec describes the configuration for Dapr API communication with potentially external services.
                   properties:
                     baseUrl:
                       type: string

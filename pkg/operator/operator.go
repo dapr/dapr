@@ -34,9 +34,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/HTTPEndpoint/v1alpha1"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	externalendpointsapi "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -94,7 +94,7 @@ func init() {
 	_ = componentsapi.AddToScheme(scheme)
 	_ = configurationapi.AddToScheme(scheme)
 	_ = resiliencyapi.AddToScheme(scheme)
-	_ = externalendpointsapi.AddToScheme(scheme)
+	_ = httpendpointsapi.AddToScheme(scheme)
 	_ = subscriptionsapiV1alpha1.AddToScheme(scheme)
 	_ = subscriptionsapiV2alpha1.AddToScheme(scheme)
 }
@@ -177,12 +177,12 @@ func (o *operator) syncComponent(ctx context.Context) func(obj interface{}) {
 	}
 }
 
-func (o *operator) syncExternalHTTPEndpoint(ctx context.Context) func(obj interface{}) {
+func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
 	return func(obj interface{}) {
-		e, ok := obj.(*externalendpointsapi.ExternalHTTPEndpoint)
+		e, ok := obj.(*httpendpointsapi.HTTPEndpoint)
 		if ok {
-			log.Debugf("Observed external http endpoint to be synced: %s/%s", e.Namespace, e.Name)
-			o.apiServer.OnExternalHTTPEndpointUpdated(ctx, e)
+			log.Debugf("Observed http endpoint to be synced: %s/%s", e.Namespace, e.Name)
+			o.apiServer.OnHTTPEndpointUpdated(ctx, e)
 		}
 	}
 }
@@ -340,19 +340,19 @@ func (o *operator) Run(ctx context.Context) error {
 			return errors.New("failed to wait for cache sync")
 		}
 
-		externalHTTPEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &externalendpointsapi.ExternalHTTPEndpoint{})
+		httpEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &httpendpointsapi.HTTPEndpoint{})
 		if rErr != nil {
-			return fmt.Errorf("unable to get external http endpoint informer: %w", rErr)
+			return fmt.Errorf("unable to get http endpoint informer: %w", rErr)
 		}
 
-		_, rErr = externalHTTPEndpointInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: o.syncExternalHTTPEndpoint(ctx),
+		_, rErr = httpEndpointInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: o.syncHTTPEndpoint(ctx),
 			UpdateFunc: func(_, newObj interface{}) {
-				o.syncExternalHTTPEndpoint(ctx)(newObj)
+				o.syncHTTPEndpoint(ctx)(newObj)
 			},
 		})
 		if rErr != nil {
-			return fmt.Errorf("unable to add external http endpoint informer event handler: %w", rErr)
+			return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
 		}
 		<-ctx.Done()
 		return nil

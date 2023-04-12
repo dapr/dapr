@@ -11,11 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package externalendpoint
+package httpendpoint
 
-import externalEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
+import (
+	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/HTTPEndpoint/v1alpha1"
+)
 
-// EndpointsLoader is an interface for returning Dapr external HTTP endpoints.
-type EndpointsLoader interface {
-	LoadExternalHTTPEndpoints() ([]externalEndpointsV1alpha1.ExternalHTTPEndpoint, error)
+// HTTPEndpointHandler is an interface for reacting on HTTP endpoint changes.
+type HTTPEndpointHandler interface {
+	OnHTTPEndpointUpdated(endpoint httpEndpointsV1alpha1.HTTPEndpoint)
 }
