@@ -153,11 +153,11 @@ func TestActorState(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
-			myData := []byte(`[{"operation":"upsert","request":{"key":"myTTLKey","value":"myTTLData","metadata":{"ttlInSeconds":"5"}}}]`)
+			myData := []byte(`[{"operation":"upsert","request":{"key":"myTTLKey","value":"myTTLData","metadata":{"ttlInSeconds":"3"}}}]`)
 			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), myData)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, code)
-			assert.Empty(t, string(resp))
+			assert.Empty(t, resp)
 
 			// Ensure the data isn't deleted yet.
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
@@ -165,10 +165,12 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusOK, code)
 			assert.Equal(t, `"myTTLData"`, string(resp))
 
+			// Data should be deleted within 10s, since TTL is 3s
 			assert.Eventually(t, func() bool {
-				resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
+				resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
+				t.Logf("err: %v. received: %s (%d)", err, resp, code)
 				return err == nil && code == http.StatusNoContent && string(resp) == ""
-			}, 10*time.Second, time.Second/2, "state should be deleted after TTL: %s", code)
+			}, 10*time.Second, time.Second)
 		})
 	})
 
@@ -303,14 +305,16 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusOK, code)
 
 			assert.Eventually(t, func() bool {
-				b, err = json.Marshal(&runtimev1.GetActorStateRequest{
-					ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorIDTTL", actuid),
-					Key: "myTTLKey",
+				b, err := json.Marshal(&runtimev1.GetActorStateRequest{
+					ActorType: "grpcMyActorType",
+					ActorId:   fmt.Sprintf("%s-myActorIDTTL", actuid),
+					Key:       "myTTLKey",
 				})
 				require.NoError(t, err)
 				resp, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
+				t.Logf("err: %v. received: %s (%d)", err, resp, code)
 				return err == nil && code == http.StatusOK && string(resp) == "{}"
-			}, 10*time.Second, time.Second/2)
+			}, 10*time.Second, time.Second)
 		})
 	})
 }

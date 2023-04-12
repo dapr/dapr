@@ -5,12 +5,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: reentrantactor
+  name: configurationapp
   labels:
-    testapp: reentrantactor
+    testapp: configurationapp
 spec:
   selector:
-    testapp: reentrantactor
+    testapp: configurationapp
   ports:
   - protocol: TCP
     port: 80
@@ -21,26 +21,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: reentrantactor
+  name: configurationapp
   labels:
-    testapp: reentrantactor
+    testapp: configurationapp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      testapp: reentrantactor
+      testapp: configurationapp
   template:
     metadata:
       labels:
-        testapp: reentrantactor
+        testapp: configurationapp
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/app-id: "reentrantactor"
+        dapr.io/app-id: "configurationapp"
         dapr.io/app-port: "3000"
     spec:
       containers:
-      - name: actorreentrancy
-        image: halspang/e2e-actorreentrancy:dev
+      - name: configurationapp
+        image: dapriotest/e2e-hellodapr
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
