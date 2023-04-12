@@ -656,6 +656,308 @@ func (x *ListSubscriptionsRequest) GetNamespace() string {
 	return ""
 }
 
+// GetExternalHTTPEndpointRequest is the request to get an external http endpoint configuration.
+type GetExternalHTTPEndpointRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Name      string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace string `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+}
+
+func (x *GetExternalHTTPEndpointRequest) Reset() {
+	*x = GetExternalHTTPEndpointRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetExternalHTTPEndpointRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetExternalHTTPEndpointRequest) ProtoMessage() {}
+
+func (x *GetExternalHTTPEndpointRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetExternalHTTPEndpointRequest.ProtoReflect.Descriptor instead.
+func (*GetExternalHTTPEndpointRequest) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_operator_v1_operator_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetExternalHTTPEndpointRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetExternalHTTPEndpointRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+// GetExternalHTTPEndpointResponse includes the requested external http endpoint configuration.
+type GetExternalHTTPEndpointResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Externalhttpendpoint []byte `protobuf:"bytes,1,opt,name=externalhttpendpoint,proto3" json:"externalhttpendpoint,omitempty"`
+}
+
+func (x *GetExternalHTTPEndpointResponse) Reset() {
+	*x = GetExternalHTTPEndpointResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetExternalHTTPEndpointResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetExternalHTTPEndpointResponse) ProtoMessage() {}
+
+func (x *GetExternalHTTPEndpointResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetExternalHTTPEndpointResponse.ProtoReflect.Descriptor instead.
+func (*GetExternalHTTPEndpointResponse) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_operator_v1_operator_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetExternalHTTPEndpointResponse) GetExternalhttpendpoint() []byte {
+	if x != nil {
+		return x.Externalhttpendpoint
+	}
+	return nil
+}
+
+// ListExternalHTTPEndpointsResponse includes the list of available resiliency configurations.
+type ListExternalHTTPEndpointsResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Externalhttpendpoints [][]byte `protobuf:"bytes,1,rep,name=externalhttpendpoints,proto3" json:"externalhttpendpoints,omitempty"`
+}
+
+func (x *ListExternalHTTPEndpointsResponse) Reset() {
+	*x = ListExternalHTTPEndpointsResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListExternalHTTPEndpointsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExternalHTTPEndpointsResponse) ProtoMessage() {}
+
+func (x *ListExternalHTTPEndpointsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExternalHTTPEndpointsResponse.ProtoReflect.Descriptor instead.
+func (*ListExternalHTTPEndpointsResponse) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_operator_v1_operator_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListExternalHTTPEndpointsResponse) GetExternalhttpendpoints() [][]byte {
+	if x != nil {
+		return x.Externalhttpendpoints
+	}
+	return nil
+}
+
+type ListExternalHTTPEndpointsRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Namespace string `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+}
+
+func (x *ListExternalHTTPEndpointsRequest) Reset() {
+	*x = ListExternalHTTPEndpointsRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListExternalHTTPEndpointsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExternalHTTPEndpointsRequest) ProtoMessage() {}
+
+func (x *ListExternalHTTPEndpointsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExternalHTTPEndpointsRequest.ProtoReflect.Descriptor instead.
+func (*ListExternalHTTPEndpointsRequest) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_operator_v1_operator_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListExternalHTTPEndpointsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+type ExternalHTTPEndpointsUpdateRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	PodName   string `protobuf:"bytes,2,opt,name=podName,proto3" json:"podName,omitempty"`
+}
+
+func (x *ExternalHTTPEndpointsUpdateRequest) Reset() {
+	*x = ExternalHTTPEndpointsUpdateRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[16]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ExternalHTTPEndpointsUpdateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalHTTPEndpointsUpdateRequest) ProtoMessage() {}
+
+func (x *ExternalHTTPEndpointsUpdateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[16]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalHTTPEndpointsUpdateRequest.ProtoReflect.Descriptor instead.
+func (*ExternalHTTPEndpointsUpdateRequest) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_operator_v1_operator_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ExternalHTTPEndpointsUpdateRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *ExternalHTTPEndpointsUpdateRequest) GetPodName() string {
+	if x != nil {
+		return x.PodName
+	}
+	return ""
+}
+
+// ComponentUpdateEvent includes the updated component event.
+type ExternalHTTPEndpointsUpdateEvent struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Externalhttpendpoints []byte `protobuf:"bytes,1,opt,name=externalhttpendpoints,proto3" json:"externalhttpendpoints,omitempty"`
+}
+
+func (x *ExternalHTTPEndpointsUpdateEvent) Reset() {
+	*x = ExternalHTTPEndpointsUpdateEvent{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[17]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ExternalHTTPEndpointsUpdateEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalHTTPEndpointsUpdateEvent) ProtoMessage() {}
+
+func (x *ExternalHTTPEndpointsUpdateEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_operator_v1_operator_proto_msgTypes[17]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalHTTPEndpointsUpdateEvent.ProtoReflect.Descriptor instead.
+func (*ExternalHTTPEndpointsUpdateEvent) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_operator_v1_operator_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ExternalHTTPEndpointsUpdateEvent) GetExternalhttpendpoints() []byte {
+	if x != nil {
+		return x.Externalhttpendpoints
+	}
+	return nil
+}
+
 var File_dapr_proto_operator_v1_operator_proto protoreflect.FileDescriptor
 
 var file_dapr_proto_operator_v1_operator_proto_rawDesc = []byte{
@@ -717,7 +1019,39 @@ var file_dapr_proto_operator_v1_operator_proto_rawDesc = []byte{
 	0x0a, 0x07, 0x70, 0x6f, 0x64, 0x4e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
 	0x07, 0x70, 0x6f, 0x64, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x6e, 0x61, 0x6d, 0x65,
 	0x73, 0x70, 0x61, 0x63, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x6e, 0x61, 0x6d,
-	0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x32, 0xad, 0x06, 0x0a, 0x08, 0x4f, 0x70, 0x65, 0x72, 0x61,
+	0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x22, 0x52, 0x0a, 0x1e, 0x47, 0x65, 0x74, 0x45, 0x78, 0x74,
+	0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e,
+	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1c, 0x0a, 0x09,
+	0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x09, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x22, 0x55, 0x0a, 0x1f, 0x47, 0x65,
+	0x74, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e, 0x64,
+	0x70, 0x6f, 0x69, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x32, 0x0a,
+	0x14, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x68, 0x74, 0x74, 0x70, 0x65, 0x6e, 0x64,
+	0x70, 0x6f, 0x69, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x14, 0x65, 0x78, 0x74,
+	0x65, 0x72, 0x6e, 0x61, 0x6c, 0x68, 0x74, 0x74, 0x70, 0x65, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e,
+	0x74, 0x22, 0x59, 0x0a, 0x21, 0x4c, 0x69, 0x73, 0x74, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61,
+	0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x34, 0x0a, 0x15, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6e,
+	0x61, 0x6c, 0x68, 0x74, 0x74, 0x70, 0x65, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x18,
+	0x01, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x15, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x68,
+	0x74, 0x74, 0x70, 0x65, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x22, 0x40, 0x0a, 0x20,
+	0x4c, 0x69, 0x73, 0x74, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50,
+	0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x12, 0x1c, 0x0a, 0x09, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x09, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x22, 0x5c,
+	0x0a, 0x22, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e,
+	0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x12, 0x1c, 0x0a, 0x09, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63,
+	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x70, 0x6f, 0x64, 0x4e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x07, 0x70, 0x6f, 0x64, 0x4e, 0x61, 0x6d, 0x65, 0x22, 0x58, 0x0a, 0x20,
+	0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e, 0x64, 0x70,
+	0x6f, 0x69, 0x6e, 0x74, 0x73, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74,
+	0x12, 0x34, 0x0a, 0x15, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x68, 0x74, 0x74, 0x70,
+	0x65, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52,
+	0x15, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x68, 0x74, 0x74, 0x70, 0x65, 0x6e, 0x64,
+	0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x32, 0xdc, 0x08, 0x0a, 0x08, 0x4f, 0x70, 0x65, 0x72, 0x61,
 	0x74, 0x6f, 0x72, 0x12, 0x73, 0x0a, 0x0f, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74,
 	0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x12, 0x2e, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72,
 	0x6f, 0x74, 0x6f, 0x2e, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x6f, 0x72, 0x2e, 0x76, 0x31, 0x2e,
@@ -768,11 +1102,30 @@ var file_dapr_proto_operator_v1_operator_proto_rawDesc = []byte{
 	0x74, 0x1a, 0x31, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x6f,
 	0x70, 0x65, 0x72, 0x61, 0x74, 0x6f, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x53,
 	0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x42, 0x35, 0x5a, 0x33, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
-	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70,
-	0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x6f,
-	0x72, 0x2f, 0x76, 0x31, 0x3b, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x6f, 0x72, 0x62, 0x06, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x92, 0x01, 0x0a, 0x19, 0x4c, 0x69, 0x73, 0x74, 0x45,
+	0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e, 0x64, 0x70, 0x6f,
+	0x69, 0x6e, 0x74, 0x73, 0x12, 0x38, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x6f, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
+	0x73, 0x74, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e,
+	0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x39,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x6f, 0x70, 0x65, 0x72,
+	0x61, 0x74, 0x6f, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x45, 0x78, 0x74, 0x65,
+	0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74,
+	0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x97, 0x01, 0x0a, 0x1b,
+	0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e, 0x64, 0x70,
+	0x6f, 0x69, 0x6e, 0x74, 0x73, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x12, 0x3a, 0x2e, 0x64, 0x61,
+	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x6f,
+	0x72, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54,
+	0x50, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x38, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x6f, 0x72, 0x2e, 0x76, 0x31,
+	0x2e, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x54, 0x54, 0x50, 0x45, 0x6e, 0x64,
+	0x70, 0x6f, 0x69, 0x6e, 0x74, 0x73, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x45, 0x76, 0x65, 0x6e,
+	0x74, 0x22, 0x00, 0x30, 0x01, 0x42, 0x35, 0x5a, 0x33, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
+	0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b,
+	0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x6f, 0x72,
+	0x2f, 0x76, 0x31, 0x3b, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x6f, 0x72, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -787,39 +1140,49 @@ func file_dapr_proto_operator_v1_operator_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_operator_v1_operator_proto_rawDescData
 }
 
-var file_dapr_proto_operator_v1_operator_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_dapr_proto_operator_v1_operator_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_dapr_proto_operator_v1_operator_proto_goTypes = []interface{}{
-	(*ListComponentsRequest)(nil),     // 0: dapr.proto.operator.v1.ListComponentsRequest
-	(*ComponentUpdateRequest)(nil),    // 1: dapr.proto.operator.v1.ComponentUpdateRequest
-	(*ComponentUpdateEvent)(nil),      // 2: dapr.proto.operator.v1.ComponentUpdateEvent
-	(*ListComponentResponse)(nil),     // 3: dapr.proto.operator.v1.ListComponentResponse
-	(*GetConfigurationRequest)(nil),   // 4: dapr.proto.operator.v1.GetConfigurationRequest
-	(*GetConfigurationResponse)(nil),  // 5: dapr.proto.operator.v1.GetConfigurationResponse
-	(*ListSubscriptionsResponse)(nil), // 6: dapr.proto.operator.v1.ListSubscriptionsResponse
-	(*GetResiliencyRequest)(nil),      // 7: dapr.proto.operator.v1.GetResiliencyRequest
-	(*GetResiliencyResponse)(nil),     // 8: dapr.proto.operator.v1.GetResiliencyResponse
-	(*ListResiliencyRequest)(nil),     // 9: dapr.proto.operator.v1.ListResiliencyRequest
-	(*ListResiliencyResponse)(nil),    // 10: dapr.proto.operator.v1.ListResiliencyResponse
-	(*ListSubscriptionsRequest)(nil),  // 11: dapr.proto.operator.v1.ListSubscriptionsRequest
-	(*emptypb.Empty)(nil),             // 12: google.protobuf.Empty
+	(*ListComponentsRequest)(nil),              // 0: dapr.proto.operator.v1.ListComponentsRequest
+	(*ComponentUpdateRequest)(nil),             // 1: dapr.proto.operator.v1.ComponentUpdateRequest
+	(*ComponentUpdateEvent)(nil),               // 2: dapr.proto.operator.v1.ComponentUpdateEvent
+	(*ListComponentResponse)(nil),              // 3: dapr.proto.operator.v1.ListComponentResponse
+	(*GetConfigurationRequest)(nil),            // 4: dapr.proto.operator.v1.GetConfigurationRequest
+	(*GetConfigurationResponse)(nil),           // 5: dapr.proto.operator.v1.GetConfigurationResponse
+	(*ListSubscriptionsResponse)(nil),          // 6: dapr.proto.operator.v1.ListSubscriptionsResponse
+	(*GetResiliencyRequest)(nil),               // 7: dapr.proto.operator.v1.GetResiliencyRequest
+	(*GetResiliencyResponse)(nil),              // 8: dapr.proto.operator.v1.GetResiliencyResponse
+	(*ListResiliencyRequest)(nil),              // 9: dapr.proto.operator.v1.ListResiliencyRequest
+	(*ListResiliencyResponse)(nil),             // 10: dapr.proto.operator.v1.ListResiliencyResponse
+	(*ListSubscriptionsRequest)(nil),           // 11: dapr.proto.operator.v1.ListSubscriptionsRequest
+	(*GetExternalHTTPEndpointRequest)(nil),     // 12: dapr.proto.operator.v1.GetExternalHTTPEndpointRequest
+	(*GetExternalHTTPEndpointResponse)(nil),    // 13: dapr.proto.operator.v1.GetExternalHTTPEndpointResponse
+	(*ListExternalHTTPEndpointsResponse)(nil),  // 14: dapr.proto.operator.v1.ListExternalHTTPEndpointsResponse
+	(*ListExternalHTTPEndpointsRequest)(nil),   // 15: dapr.proto.operator.v1.ListExternalHTTPEndpointsRequest
+	(*ExternalHTTPEndpointsUpdateRequest)(nil), // 16: dapr.proto.operator.v1.ExternalHTTPEndpointsUpdateRequest
+	(*ExternalHTTPEndpointsUpdateEvent)(nil),   // 17: dapr.proto.operator.v1.ExternalHTTPEndpointsUpdateEvent
+	(*emptypb.Empty)(nil),                      // 18: google.protobuf.Empty
 }
 var file_dapr_proto_operator_v1_operator_proto_depIdxs = []int32{
 	1,  // 0: dapr.proto.operator.v1.Operator.ComponentUpdate:input_type -> dapr.proto.operator.v1.ComponentUpdateRequest
 	0,  // 1: dapr.proto.operator.v1.Operator.ListComponents:input_type -> dapr.proto.operator.v1.ListComponentsRequest
 	4,  // 2: dapr.proto.operator.v1.Operator.GetConfiguration:input_type -> dapr.proto.operator.v1.GetConfigurationRequest
-	12, // 3: dapr.proto.operator.v1.Operator.ListSubscriptions:input_type -> google.protobuf.Empty
+	18, // 3: dapr.proto.operator.v1.Operator.ListSubscriptions:input_type -> google.protobuf.Empty
 	7,  // 4: dapr.proto.operator.v1.Operator.GetResiliency:input_type -> dapr.proto.operator.v1.GetResiliencyRequest
 	9,  // 5: dapr.proto.operator.v1.Operator.ListResiliency:input_type -> dapr.proto.operator.v1.ListResiliencyRequest
 	11, // 6: dapr.proto.operator.v1.Operator.ListSubscriptionsV2:input_type -> dapr.proto.operator.v1.ListSubscriptionsRequest
-	2,  // 7: dapr.proto.operator.v1.Operator.ComponentUpdate:output_type -> dapr.proto.operator.v1.ComponentUpdateEvent
-	3,  // 8: dapr.proto.operator.v1.Operator.ListComponents:output_type -> dapr.proto.operator.v1.ListComponentResponse
-	5,  // 9: dapr.proto.operator.v1.Operator.GetConfiguration:output_type -> dapr.proto.operator.v1.GetConfigurationResponse
-	6,  // 10: dapr.proto.operator.v1.Operator.ListSubscriptions:output_type -> dapr.proto.operator.v1.ListSubscriptionsResponse
-	8,  // 11: dapr.proto.operator.v1.Operator.GetResiliency:output_type -> dapr.proto.operator.v1.GetResiliencyResponse
-	10, // 12: dapr.proto.operator.v1.Operator.ListResiliency:output_type -> dapr.proto.operator.v1.ListResiliencyResponse
-	6,  // 13: dapr.proto.operator.v1.Operator.ListSubscriptionsV2:output_type -> dapr.proto.operator.v1.ListSubscriptionsResponse
-	7,  // [7:14] is the sub-list for method output_type
-	0,  // [0:7] is the sub-list for method input_type
+	15, // 7: dapr.proto.operator.v1.Operator.ListExternalHTTPEndpoints:input_type -> dapr.proto.operator.v1.ListExternalHTTPEndpointsRequest
+	16, // 8: dapr.proto.operator.v1.Operator.ExternalHTTPEndpointsUpdate:input_type -> dapr.proto.operator.v1.ExternalHTTPEndpointsUpdateRequest
+	2,  // 9: dapr.proto.operator.v1.Operator.ComponentUpdate:output_type -> dapr.proto.operator.v1.ComponentUpdateEvent
+	3,  // 10: dapr.proto.operator.v1.Operator.ListComponents:output_type -> dapr.proto.operator.v1.ListComponentResponse
+	5,  // 11: dapr.proto.operator.v1.Operator.GetConfiguration:output_type -> dapr.proto.operator.v1.GetConfigurationResponse
+	6,  // 12: dapr.proto.operator.v1.Operator.ListSubscriptions:output_type -> dapr.proto.operator.v1.ListSubscriptionsResponse
+	8,  // 13: dapr.proto.operator.v1.Operator.GetResiliency:output_type -> dapr.proto.operator.v1.GetResiliencyResponse
+	10, // 14: dapr.proto.operator.v1.Operator.ListResiliency:output_type -> dapr.proto.operator.v1.ListResiliencyResponse
+	6,  // 15: dapr.proto.operator.v1.Operator.ListSubscriptionsV2:output_type -> dapr.proto.operator.v1.ListSubscriptionsResponse
+	14, // 16: dapr.proto.operator.v1.Operator.ListExternalHTTPEndpoints:output_type -> dapr.proto.operator.v1.ListExternalHTTPEndpointsResponse
+	17, // 17: dapr.proto.operator.v1.Operator.ExternalHTTPEndpointsUpdate:output_type -> dapr.proto.operator.v1.ExternalHTTPEndpointsUpdateEvent
+	9,  // [9:18] is the sub-list for method output_type
+	0,  // [0:9] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -975,6 +1338,78 @@ func file_dapr_proto_operator_v1_operator_proto_init() {
 				return nil
 			}
 		}
+		file_dapr_proto_operator_v1_operator_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetExternalHTTPEndpointRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_operator_v1_operator_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetExternalHTTPEndpointResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_operator_v1_operator_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListExternalHTTPEndpointsResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_operator_v1_operator_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListExternalHTTPEndpointsRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_operator_v1_operator_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ExternalHTTPEndpointsUpdateRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_operator_v1_operator_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ExternalHTTPEndpointsUpdateEvent); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -982,7 +1417,7 @@ func file_dapr_proto_operator_v1_operator_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_operator_v1_operator_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

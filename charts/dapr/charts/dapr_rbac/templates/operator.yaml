@@ -40,7 +40,7 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["dapr.io"]
-    resources: ["components", "configurations", "subscriptions", "resiliencies"]
+    resources: ["components", "configurations", "subscriptions", "resiliencies", "externalhttpendpoints"]
     verbs: [ "get", "list", "watch"]
 {{- end }}
 {{- if .Values.global.argoRolloutServiceReconciler.enabled }}
@@ -113,7 +113,7 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["dapr.io"]
-    resources: ["components", "configurations", "subscriptions", "resiliencies"]
+    resources: ["components", "configurations", "subscriptions", "resiliencies", "externalhttpendpoints"]
     verbs: [ "get", "list", "watch"]
 {{- end }}
 {{- if .Values.global.argoRolloutServiceReconciler.enabled }}

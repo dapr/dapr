@@ -34,6 +34,10 @@ service Operator {
   rpc ListResiliency (ListResiliencyRequest) returns (ListResiliencyResponse) {}
   // Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
   rpc ListSubscriptionsV2 (ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
+  // Returns a list of external http endpoints
+  rpc ListExternalHTTPEndpoints (ListExternalHTTPEndpointsRequest) returns (ListExternalHTTPEndpointsResponse) {}
+  // Sends events to Dapr sidecars upon external http endpoint changes.
+  rpc ExternalHTTPEndpointsUpdate (ExternalHTTPEndpointsUpdateRequest) returns (stream ExternalHTTPEndpointsUpdateEvent) {}
 }
 
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
@@ -99,4 +103,34 @@ message ListResiliencyResponse {
 message ListSubscriptionsRequest {
   string podName = 1;
   string namespace = 2;
+}
+
+// GetExternalHTTPEndpointRequest is the request to get an external http endpoint configuration.
+message GetExternalHTTPEndpointRequest {
+  string name = 1;
+  string namespace = 2;
+}
+
+// GetExternalHTTPEndpointResponse includes the requested external http endpoint configuration.
+message GetExternalHTTPEndpointResponse {
+  bytes externalhttpendpoint = 1;
+}
+
+// ListExternalHTTPEndpointsResponse includes the list of available external http endpoint configurations.
+message ListExternalHTTPEndpointsResponse {
+  repeated bytes externalhttpendpoints = 1;
+}
+
+message ListExternalHTTPEndpointsRequest {
+  string namespace = 2;
+}
+
+message ExternalHTTPEndpointsUpdateRequest {
+  string namespace = 1;
+  string podName = 2;
+}
+
+// ExternalHTTPEndpointsUpdateEvent includes the updated external http endpoint event.
+message ExternalHTTPEndpointsUpdateEvent {
+  bytes externalhttpendpoints = 1;
 }

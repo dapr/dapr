@@ -33,6 +33,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	externalhttpendpointsapi "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
@@ -55,24 +56,28 @@ type Server interface {
 	Run(ctx context.Context, certChain *daprCredentials.CertChain) error
 	Ready(context.Context) error
 	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
+	OnExternalHTTPEndpointUpdated(ctx context.Context, endpoint *externalhttpendpointsapi.ExternalHTTPEndpoint)
 }
 
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client client.Client
 	// notify all dapr runtime
-	connLock          sync.Mutex
-	allConnUpdateChan map[string]chan *componentsapi.Component
-	readyCh           chan struct{}
-	running           atomic.Bool
+	connLock               sync.Mutex
+	endpointLock           sync.Mutex
+	allConnUpdateChan      map[string]chan *componentsapi.Component
+	allEndpointsUpdateChan map[string]chan *externalhttpendpointsapi.ExternalHTTPEndpoint
+	readyCh                chan struct{}
+	running                atomic.Bool
 }
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(client client.Client) Server {
 	return &apiServer{
-		Client:            client,
-		allConnUpdateChan: make(map[string]chan *componentsapi.Component),
-		readyCh:           make(chan struct{}),
+		Client:                 client,
+		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
+		allEndpointsUpdateChan: make(map[string]chan *externalhttpendpointsapi.ExternalHTTPEndpoint),
+		readyCh:                make(chan struct{}),
 	}
 }
 
@@ -127,6 +132,14 @@ func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsa
 		connUpdateChan <- component
 	}
 	a.connLock.Unlock()
+}
+
+func (a *apiServer) OnExternalHTTPEndpointUpdated(_ context.Context, endpoint *externalhttpendpointsapi.ExternalHTTPEndpoint) {
+	a.endpointLock.Lock()
+	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
+		endpointUpdateChan <- endpoint
+	}
+	a.endpointLock.Unlock()
 }
 
 func (a *apiServer) Ready(ctx context.Context) error {
@@ -358,6 +371,110 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			go func() {
 				defer wg.Done()
 				updateComponentFunc(srv.Context(), c)
+			}()
+		}
+	}
+}
+
+// GetExternalHTTPEndpoint returns a specified external http endpoint object.
+func (a *apiServer) GetExternalHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetExternalHTTPEndpointResponse, error) {
+	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
+	var resiliencyConfig resiliencyapi.Resiliency
+	if err := a.Client.Get(ctx, key, &resiliencyConfig); err != nil {
+		return nil, fmt.Errorf("error getting resiliency: %w", err)
+	}
+	b, err := json.Marshal(&resiliencyConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling resiliency: %w", err)
+	}
+	return &operatorv1pb.GetExternalHTTPEndpointResponse{
+		Externalhttpendpoint: b,
+	}, nil
+}
+
+// ListExternalHTTPEndpoints gets the list of applied external http endpoints.
+func (a *apiServer) ListExternalHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListExternalHTTPEndpointsRequest) (*operatorv1pb.ListExternalHTTPEndpointsResponse, error) {
+	resp := &operatorv1pb.ListExternalHTTPEndpointsResponse{
+		Externalhttpendpoints: [][]byte{},
+	}
+
+	var endpoints externalhttpendpointsapi.ExternalHTTPEndpointList
+	if err := a.Client.List(ctx, &endpoints, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
+		return nil, fmt.Errorf("error listing external http endpoints: %w", err)
+	}
+
+	for _, item := range endpoints.Items {
+		b, err := json.Marshal(item)
+		if err != nil {
+			log.Warnf("Error unmarshalling external http endpoints: %s", err)
+			continue
+		}
+		resp.Externalhttpendpoints = append(resp.Externalhttpendpoints, b)
+	}
+
+	return resp, nil
+}
+
+// ExternalHTTPEndpointUpdate updates Dapr sidecars whenever an external http endpoint in the cluster is modified.
+func (a *apiServer) ExternalHTTPEndpointUpdate(in *operatorv1pb.ExternalHTTPEndpointsUpdateRequest, srv operatorv1pb.Operator_ExternalHTTPEndpointsUpdateServer) error { //nolint:nosnakecase
+	log.Info("sidecar connected for external http endpoint updates")
+	keyObj, err := uuid.NewRandom()
+	if err != nil {
+		return err
+	}
+	key := keyObj.String()
+
+	a.endpointLock.Lock()
+	a.allEndpointsUpdateChan[key] = make(chan *externalhttpendpointsapi.ExternalHTTPEndpoint, 1)
+	updateChan := a.allEndpointsUpdateChan[key]
+	a.endpointLock.Unlock()
+
+	defer func() {
+		a.endpointLock.Lock()
+		defer a.endpointLock.Unlock()
+		delete(a.allEndpointsUpdateChan, key)
+	}()
+
+	updateExternalHTTPEndpointFunc := func(ctx context.Context, e *externalhttpendpointsapi.ExternalHTTPEndpoint) {
+		if e.Namespace != in.Namespace {
+			return
+		}
+
+		// TODO(@Sam): process endpoint secrets
+
+		b, err := json.Marshal(&e)
+		if err != nil {
+			log.Warnf("error serializing external http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			return
+		}
+
+		err = srv.Send(&operatorv1pb.ExternalHTTPEndpointsUpdateEvent{
+			Externalhttpendpoints: b,
+		})
+		if err != nil {
+			log.Warnf("error updating sidecar with external http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			return
+		}
+
+		log.Infof("updated sidecar with external http endpoint %s from pod %s/%s", e.GetName(), in.Namespace, in.PodName)
+	}
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	for {
+		select {
+		case <-srv.Context().Done():
+			return nil
+		case c, ok := <-updateChan:
+			if !ok {
+				return nil
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				updateExternalHTTPEndpointFunc(srv.Context(), c)
 			}()
 		}
 	}
