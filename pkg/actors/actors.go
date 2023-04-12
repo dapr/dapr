@@ -1505,7 +1505,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 		}
 
 		policyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
-		bgr, err := policyRunner(func(ctx context.Context) (*bulkGetRes, error) {
+		bgr, pErr := policyRunner(func(ctx context.Context) (*bulkGetRes, error) {
 			rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, getRequests)
 			if rErr != nil {
 				return &bulkGetRes{}, rErr
@@ -1519,8 +1519,8 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 			bgr = &bulkGetRes{}
 		}
 		if bgr.bulkGet {
-			if err != nil {
-				return nil, nil, err
+			if pErr != nil {
+				return nil, nil, pErr
 			}
 		} else {
 			// TODO(artursouza): refactor this fallback into default implementation in contrib.

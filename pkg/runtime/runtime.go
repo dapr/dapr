@@ -239,14 +239,6 @@ type pubsubSubscribedMessage struct {
 	pubsub     string
 }
 
-type pubsubItem struct {
-	component           pubsub.PubSub
-	scopedSubscriptions []string
-	scopedPublishings   []string
-	allowedTopics       []string
-	namespaceScoped     bool
-}
-
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -867,13 +859,10 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			var pErr error
-			switch a.runtimeConfig.ApplicationProtocol {
-			case HTTPProtocol:
+			if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 				pErr = a.publishMessageHTTP(ctx, psm)
-			case GRPCProtocol:
+			} else {
 				pErr = a.publishMessageGRPC(ctx, psm)
-			default:
-				pErr = backoff.Permanent(errors.New("invalid application protocol"))
 			}
 			var rErr *RetriableError
 			if errors.As(pErr, &rErr) {
@@ -1229,7 +1218,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		path = bindingName
 	}
 
-	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		if span != nil {
 			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 		}
@@ -1533,7 +1522,7 @@ func (a *DaprRuntime) getSubscribedBindingsGRPC() ([]string, error) {
 
 func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	// if gRPC, looks for the binding in the list of bindings returned from the app
-	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		if a.subscribeBindingList == nil {
 			list, err := a.getSubscribedBindingsGRPC()
 			if err != nil {
@@ -1739,14 +1728,20 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		// when placement address list is not empty, set specified actor store.
 		if len(a.runtimeConfig.PlacementAddresses) != 0 {
 			// set specified actor store if "actorStateStore" is true in the spec.
-			actorStoreSpecified := props[actorStateStore]
-			if actorStoreSpecified == "true" {
+			actorStoreSpecified := false
+			for k, v := range props {
+				if strings.ToLower(k) == actorStateStore { //nolint:gocritic
+					actorStoreSpecified = utils.IsTruthy(v)
+				}
+			}
+
+			if actorStoreSpecified {
 				a.actorStateStoreLock.Lock()
 				if a.actorStateStoreName == "" {
-					log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
+					log.Info("Using '" + s.ObjectMeta.Name + "' as actor state store")
 					a.actorStateStoreName = s.ObjectMeta.Name
 				} else if a.actorStateStoreName != s.ObjectMeta.Name {
-					log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+					log.Fatalf("Detected duplicate actor state store: %s and %s", a.actorStateStoreName, s.ObjectMeta.Name)
 				}
 				a.actorStateStoreLock.Unlock()
 			}
@@ -1806,9 +1801,9 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	}
 
 	// handle app subscriptions
-	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+	if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency)
-	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+	} else {
 		var conn gogrpc.ClientConnInterface
 		conn, err = a.grpc.GetAppClient()
 		if err != nil {
@@ -2887,13 +2882,12 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 	}
 
 	var ch channel.AppChannel
-	switch a.runtimeConfig.ApplicationProtocol {
-	case GRPCProtocol:
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		ch, err = a.grpc.GetAppChannel()
 		if err != nil {
 			return err
 		}
-	case HTTPProtocol:
+	} else {
 		pipeline, err := a.buildAppHTTPPipeline()
 		if err != nil {
 			return err
@@ -2904,8 +2898,6 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 			return err
 		}
 		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
-	default:
-		return fmt.Errorf("cannot create app channel for protocol %s", a.runtimeConfig.ApplicationProtocol)
 	}
 
 	a.appChannel = ch

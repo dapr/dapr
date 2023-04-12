@@ -2675,7 +2675,7 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
 		resiliency: resiliency.New(nil),
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
 		},
 	}
@@ -2784,7 +2784,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
 		resiliency: resiliency.New(nil),
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
 		},
 	}
@@ -2844,7 +2844,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddLock(storeName, fakeLockStore)
 	testAPI := &api{
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			Logger:     l,
 			CompStore:  compStore,
 			Resiliency: resiliencyConfig,
@@ -3014,7 +3014,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	compStore.AddWorkflow(componentName, fakeWorkflowComponent)
 	testAPI := &api{
 		resiliency: resiliencyConfig,
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliencyConfig,
@@ -3730,7 +3730,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	compStore.AddStateStore("store1", fakeStore)
 	compStore.AddStateStore("failStore", failingStore)
 	testAPI := &api{resiliency: resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)}
-	testAPI.UniversalAPI = &universalapi.UniversalAPI{
+	testAPI.universal = &universalapi.UniversalAPI{
 		Logger:     logger.NewLogger("fakeLogger"),
 		CompStore:  compStore,
 		Resiliency: testAPI.resiliency,
@@ -3749,16 +3749,16 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
-				for name := range testAPI.CompStore.ListStateStores() {
-					testAPI.CompStore.DeleteStateStore(name)
+				for name := range testAPI.universal.CompStore.ListStateStores() {
+					testAPI.universal.CompStore.DeleteStateStore(name)
 				}
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 500, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 
-				testAPI.CompStore.AddStateStore("store1", fakeStore)
-				testAPI.CompStore.AddStateStore("failStore", failingStore)
+				testAPI.universal.CompStore.AddStateStore("store1", fakeStore)
+				testAPI.universal.CompStore.AddStateStore("failStore", failingStore)
 
 				// act
 				resp = fakeServer.DoRequest(method, apiPath, nil, nil)
@@ -4261,7 +4261,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", fakeStateStore{})
 	testAPI := &api{
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
@@ -4280,7 +4280,7 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", fakeStateStore{})
 	testAPI := &api{
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
@@ -4299,7 +4299,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore(storeName, fakeStateStoreQuerier{})
 	testAPI := &api{
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
@@ -4506,7 +4506,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	}
 	testAPI := &api{
 		resiliency: res,
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			Logger:     l,
 			CompStore:  compStore,
 			Resiliency: res,
@@ -4603,12 +4603,12 @@ func TestV1SecretEndpoints(t *testing.T) {
 	t.Run("Get secret - 500 for secret store not congfigured", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
-		for name := range testAPI.CompStore.ListSecretStores() {
-			testAPI.CompStore.DeleteSecretStore(name)
+		for name := range testAPI.universal.CompStore.ListSecretStores() {
+			testAPI.universal.CompStore.DeleteSecretStore(name)
 		}
 		defer func() {
 			for name, store := range fakeStores {
-				testAPI.CompStore.AddSecretStore(name, store)
+				testAPI.universal.CompStore.AddSecretStore(name, store)
 			}
 		}()
 
@@ -4911,7 +4911,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	compStore.AddStateStore("storeNonTransactional", fakeStoreNonTransactional)
 
 	testAPI := &api{
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
 		},
 		resiliency: resiliency.New(nil),

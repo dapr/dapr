@@ -73,7 +73,7 @@ type API interface {
 }
 
 type api struct {
-	*universalapi.UniversalAPI
+	universal                  *universalapi.UniversalAPI
 	endpoints                  []Endpoint
 	publicEndpoints            []Endpoint
 	directMessaging            messaging.DirectMessaging
@@ -185,7 +185,7 @@ func NewAPI(opts APIOpts) API {
 		maxRequestBodySize:         opts.MaxRequestBodySize,
 		isStreamingEnabled:         opts.IsStreamingEnabled,
 		daprRunTimeVersion:         buildinfo.Version(),
-		UniversalAPI: &universalapi.UniversalAPI{
+		universal: &universalapi.UniversalAPI{
 			AppID:      opts.AppID,
 			Logger:     log,
 			Resiliency: opts.Resiliency,
@@ -263,19 +263,19 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
 			Version: apiVersionV1alpha1,
-			Handler: a.onWorkflowActivityHandler(a.PauseWorkflowAlpha1),
+			Handler: a.onWorkflowActivityHandler(a.universal.PauseWorkflowAlpha1),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
 			Version: apiVersionV1alpha1,
-			Handler: a.onWorkflowActivityHandler(a.ResumeWorkflowAlpha1),
+			Handler: a.onWorkflowActivityHandler(a.universal.ResumeWorkflowAlpha1),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
-			Handler: a.onWorkflowActivityHandler(a.TerminateWorkflowAlpha1),
+			Handler: a.onWorkflowActivityHandler(a.universal.TerminateWorkflowAlpha1),
 		},
 	}
 }
@@ -709,7 +709,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
-	if a.CompStore.StateStoresLen() == 0 {
+	if a.universal.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -718,7 +718,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	state, ok := a.CompStore.GetStateStore(storeName)
+	state, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
 		log.Debug(err)
@@ -734,7 +734,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 // Instance ID: Identifier of the specific run
 func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.StartWorkflowAlpha1,
+		a.universal.StartWorkflowAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.StartWorkflowRequest, *runtimev1pb.WorkflowReference]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
 				in.WorkflowName = reqCtx.UserValue(workflowName).(string)
@@ -748,7 +748,7 @@ func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
 
 func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.GetWorkflowAlpha1,
+		a.universal.GetWorkflowAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetWorkflowRequest, *runtimev1pb.GetWorkflowResponse]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
@@ -776,7 +776,7 @@ func (a *api) onWorkflowActivityHandler(handler workflowActivityHandler) fasthtt
 
 func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.RaiseEventWorkflowAlpha1,
+		a.universal.RaiseEventWorkflowAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *runtimev1pb.RaiseEventWorkflowResponse]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
@@ -853,7 +853,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
-	if a.CompStore.ConfigurationsLen() == 0 {
+	if a.universal.CompStore.ConfigurationsLen() == 0 {
 		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_CONFIGURED", messages.ErrConfigurationStoresNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -862,7 +862,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.Reques
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	conf, ok := a.CompStore.GetConfiguration(storeName)
+	conf, ok := a.universal.CompStore.GetConfiguration(storeName)
 	if !ok {
 		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -2258,7 +2258,7 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if a.CompStore.StateStoresLen() == 0 {
+	if a.universal.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -2266,7 +2266,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
-	store, ok := a.CompStore.GetStateStore(storeName)
+	store, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
 		log.Debug(err)
@@ -2407,7 +2407,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.QueryStateAlpha1,
+		a.universal.QueryStateAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.QueryStateRequest, *runtimev1pb.QueryStateResponse]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,

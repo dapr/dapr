@@ -41,7 +41,7 @@ func (a *api) constructDistributedLockEndpoints() []Endpoint {
 
 func (a *api) onTryLockAlpha1() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.TryLockAlpha1,
+		a.universal.TryLockAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.TryLockRequest, *runtimev1pb.TryLockResponse]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockRequest, error) {
 				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
@@ -55,7 +55,7 @@ func (a *api) onTryLockAlpha1() fasthttp.RequestHandler {
 
 func (a *api) onUnlockAlpha1() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.UnlockAlpha1,
+		a.universal.UnlockAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.UnlockRequest, *runtimev1pb.UnlockResponse]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockRequest, error) {
 				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
