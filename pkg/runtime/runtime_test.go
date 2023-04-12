@@ -721,7 +721,7 @@ func TestInitState(t *testing.T) {
 			Version: "v1",
 			Metadata: []componentsV1alpha1.MetadataItem{
 				{
-					Name: "actorStateStore",
+					Name: actorStateStore,
 					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
@@ -5663,7 +5663,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 			Version: "v1",
 			Metadata: []componentsV1alpha1.MetadataItem{
 				{
-					Name: "actorStateStore",
+					Name: strings.ToUpper(actorStateStore),
 					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
@@ -5723,8 +5723,16 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 			"primaryEncryptionKey": encryptKey,
 		},
 	}}
+	expectedMetadataUppercase := state.Metadata{Base: mdata.Base{
+		Name: TestPubsubName,
+		Properties: map[string]string{
+			strings.ToUpper(actorStateStore): "true",
+			"primaryEncryptionKey":           encryptKey,
+		},
+	}}
 
 	mockStateStore.On("Init", expectedMetadata).Return(e)
+	mockStateStore.On("Init", expectedMetadataUppercase).Return(e)
 
 	return mockStateStore
 }
