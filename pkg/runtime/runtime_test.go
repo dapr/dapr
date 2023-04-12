@@ -721,7 +721,7 @@ func TestInitState(t *testing.T) {
 			Version: "v1",
 			Metadata: []componentsV1alpha1.MetadataItem{
 				{
-					Name: "actorStateStore",
+					Name: actorStateStore,
 					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
@@ -4189,7 +4189,6 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int)
 		MaxConcurrency:               -1,
 		MTLSEnabled:                  false,
 		SentryAddress:                "",
-		AppSSL:                       false,
 		MaxRequestBodySize:           4,
 		UnixDomainSocket:             "",
 		ReadBufferSize:               4,
@@ -4647,7 +4646,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPProtocol), 1024)
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPSProtocol), 1024)
 		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
@@ -5651,7 +5650,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 			Version: "v1",
 			Metadata: []componentsV1alpha1.MetadataItem{
 				{
-					Name: "actorStateStore",
+					Name: strings.ToUpper(actorStateStore),
 					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
@@ -5711,8 +5710,16 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 			"primaryEncryptionKey": encryptKey,
 		},
 	}}
+	expectedMetadataUppercase := state.Metadata{Base: mdata.Base{
+		Name: TestPubsubName,
+		Properties: map[string]string{
+			strings.ToUpper(actorStateStore): "true",
+			"primaryEncryptionKey":           encryptKey,
+		},
+	}}
 
 	mockStateStore.On("Init", expectedMetadata).Return(e)
+	mockStateStore.On("Init", expectedMetadataUppercase).Return(e)
 
 	return mockStateStore
 }
