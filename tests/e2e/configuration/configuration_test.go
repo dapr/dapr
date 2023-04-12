@@ -38,6 +38,10 @@ const (
 	v1                  = "1.0.0"
 	numHealthChecks     = 60              // Number of times to check for endpoint health per app.
 	defaultWaitTime     = 5 * time.Second // Time to wait for app to receive the updates
+	redisComponent      = "redis"
+	redisConfigStore    = "redis-configstore"
+	postgresComponent   = "postgres"
+	postgresConfigStore = "postgres-configstore"
 )
 
 var (
@@ -102,7 +106,7 @@ func TestMain(m *testing.M) {
 
 var configurationTests = []struct {
 	name    string
-	handler func(t *testing.T, appExternalUrl string, protocol string, endpointType string)
+	handler func(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType)
 }{
 	{
 		name:    "testGet",
@@ -161,7 +165,7 @@ func getKeys(mymap map[string]*Item) []string {
 	return keys
 }
 
-func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
+func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {
 	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
 	items := generateKeyValues(10, v1)
 	itemsInBytes, _ := json.Marshal(items)
@@ -171,7 +175,7 @@ func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType 
 
 	keys := getKeys(items)
 	keysInBytes, _ := json.Marshal(keys)
-	url := fmt.Sprintf("http://%s/get-key-values/%s/%s", appExternalUrl, protocol, endpointType)
+	url := fmt.Sprintf("http://%s/get-key-values/%s/%s/%s", appExternalUrl, protocol, endpointType, component.configStore)
 	resp, statusCode, err = utils.HTTPPostWithStatus(url, keysInBytes)
 	require.NoError(t, err, "error getting key values")
 
@@ -184,11 +188,11 @@ func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType 
 	require.Equalf(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
 }
 
-func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
+func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {
 	items := generateKeyValues(10, v1)
 	keys := getKeys(items)
 	keysInBytes, _ := json.Marshal(keys)
-	url := fmt.Sprintf("http://%s/subscribe/%s/%s", appExternalUrl, protocol, endpointType)
+	url := fmt.Sprintf("http://%s/subscribe/%s/%s/%s/%s", appExternalUrl, protocol, endpointType, component.configStore, component.name)
 	resp, statusCode, err := utils.HTTPPostWithStatus(url, keysInBytes)
 	require.NoError(t, err, "error subscribing to key values")
 	subscribedKeyValues = items
@@ -227,15 +231,15 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpoin
 	require.ElementsMatch(t, expectedUpdates, receivedMessages.ReceivedUpdates, "expected %s, got %s", expectedUpdates, receivedMessages.ReceivedUpdates)
 }
 
-func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
+func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {
 	// Unsubscribe with incorrect subscriptionId
-	url := fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, "incorrect-id", protocol, endpointType)
+	url := fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s/%s", appExternalUrl, "incorrect-id", protocol, endpointType, component.configStore)
 	resp, err := utils.HTTPGet(url)
 	require.NoError(t, err, "error unsubscribing to key values")
 	require.Contains(t, string(resp), "error subscriptionID not found")
 
 	// Unsubscribe with correct subscriptionId
-	url = fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, subscriptionId, protocol, endpointType)
+	url = fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s/%s", appExternalUrl, subscriptionId, protocol, endpointType, component.configStore)
 	_, err = utils.HTTPGet(url)
 	require.NoError(t, err, "error unsubscribing to key values")
 
@@ -268,6 +272,22 @@ var apps []struct {
 	},
 }
 
+type componentType struct {
+	name        string
+	configStore string
+}
+
+var components []componentType = []componentType{
+	{
+		name:        redisComponent,
+		configStore: redisConfigStore,
+	},
+	{
+		name:        postgresComponent,
+		configStore: postgresConfigStore,
+	},
+}
+
 var protocols []string = []string{
 	"http",
 	"grpc",
@@ -288,18 +308,21 @@ func TestConfiguration(t *testing.T) {
 		_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 		require.NoError(t, err)
 
-		// Initialize the configuration updater
-		url := fmt.Sprintf("http://%s/initialize-updater", externalURL)
-		componentNameInBytes, _ := json.Marshal(componentName)
-		resp, statusCode, err := utils.HTTPPostWithStatus(url, componentNameInBytes)
-		require.NoError(t, err, "error initializing configuration updater")
-		require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
-		for _, protocol := range protocols {
-			for _, endpointType := range endpointTypes {
-				for _, tt := range configurationTests {
-					t.Run(tt.name, func(t *testing.T) {
-						tt.handler(t, externalURL, protocol, endpointType)
-					})
+		// Run whole test-suite for each component (redis, postgres)
+		for _, component := range components {
+			// Initialize the configuration updater
+			url := fmt.Sprintf("http://%s/initialize-updater", externalURL)
+			componentNameInBytes, _ := json.Marshal(component.name)
+			resp, statusCode, err := utils.HTTPPostWithStatus(url, componentNameInBytes)
+			require.NoError(t, err, "error initializing configuration updater")
+			require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
+			for _, protocol := range protocols {
+				for _, endpointType := range endpointTypes {
+					for _, tt := range configurationTests {
+						t.Run(tt.name, func(t *testing.T) {
+							tt.handler(t, externalURL, protocol, endpointType, component)
+						})
+					}
 				}
 			}
 		}
