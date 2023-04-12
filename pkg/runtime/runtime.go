@@ -1293,7 +1293,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				}
 			}
 		}
-	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+	} else {
 		policyDef := a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding)
 
 		reqMetadata := make(map[string][]string, len(metadata))
@@ -1535,7 +1535,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 				return true, nil
 			}
 		}
-	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+	} else {
 		// if HTTP, check if there's an endpoint listening for that binding
 		path, _ := a.compStore.GetInputBindingRoute(binding)
 		req := invokev1.NewInvokeMethodRequest(path).
@@ -2606,33 +2606,33 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	// Close components if they implement `io.Closer`
 	for name, component := range a.compStore.ListSecretStores() {
 		a.compStore.DeleteSecretStore(name)
-		merr = errors.Join(merr, closeComponent(name, component, "secret store "+name))
+		merr = errors.Join(merr, closeComponent(component, "secret store "+name))
 	}
 	for name, component := range a.compStore.ListStateStores() {
 		a.compStore.DeleteStateStore(name)
-		merr = errors.Join(merr, closeComponent(name, component, "state store "+name))
+		merr = errors.Join(merr, closeComponent(component, "state store "+name))
 	}
 	for name, component := range a.compStore.ListLocks() {
 		a.compStore.DeleteLock(name)
-		merr = errors.Join(merr, closeComponent(name, component, "clock store "+name))
+		merr = errors.Join(merr, closeComponent(component, "clock store "+name))
 	}
 	for name, component := range a.compStore.ListConfigurations() {
 		a.compStore.DeleteConfiguration(name)
-		merr = errors.Join(merr, closeComponent(name, component, "configuration store "+name))
+		merr = errors.Join(merr, closeComponent(component, "configuration store "+name))
 	}
 	for name, component := range a.compStore.ListCryptoProviders() {
 		a.compStore.DeleteCryptoProvider(name)
-		merr = errors.Join(merr, closeComponent(name, component, "crypto provider "+name))
+		merr = errors.Join(merr, closeComponent(component, "crypto provider "+name))
 	}
 	for name, component := range a.compStore.ListWorkflows() {
 		a.compStore.DeleteWorkflow(name)
-		merr = errors.Join(merr, closeComponent(name, component, "workflow component "+name))
+		merr = errors.Join(merr, closeComponent(component, "workflow component "+name))
 	}
 	// Close output bindings
 	// Input bindings are closed when a.ctx is canceled
 	for name, component := range a.compStore.ListOutputBindings() {
 		a.compStore.DeleteOutputBinding(name)
-		merr = errors.Join(merr, closeComponent(name, component, "output binding "+name))
+		merr = errors.Join(merr, closeComponent(component, "output binding "+name))
 	}
 	// Close pubsub publisher
 	// The subscriber part is closed when a.ctx is canceled
@@ -2641,9 +2641,9 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 		if pubSub.Component == nil {
 			continue
 		}
-		merr = errors.Join(merr, closeComponent(name, pubSub.Component, "pubsub "+name))
+		merr = errors.Join(merr, closeComponent(pubSub.Component, "pubsub "+name))
 	}
-	merr = errors.Join(merr, closeComponent("", a.nameResolver, "name resolver"))
+	merr = errors.Join(merr, closeComponent(a.nameResolver, "name resolver"))
 
 	for _, component := range a.compStore.ListComponents() {
 		a.compStore.DeleteComponent(component.Spec.Type, component.Name)
@@ -2652,7 +2652,7 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	return merr
 }
 
-func closeComponent(name string, component any, logmsg string) error {
+func closeComponent(component any, logmsg string) error {
 	if closer, ok := component.(io.Closer); ok && closer != nil {
 		if err := closer.Close(); err != nil {
 			err = fmt.Errorf("error closing %s: %w", logmsg, err)

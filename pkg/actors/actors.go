@@ -645,8 +645,9 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 	}
 
 	operations := make([]state.TransactionalStateOperation, len(req.Operations))
-	baseKey := constructCompositeKey(a.config.AppID, req.ActorKey()) + daprSeparator
+	baseKey := constructCompositeKey(a.config.AppID, req.ActorKey())
 	metadata := map[string]string{metadataPartitionKey: baseKey}
+	baseKey += daprSeparator
 	for i, o := range req.Operations {
 		operations[i], err = o.StateOperation(baseKey, StateOperationOpts{
 			Metadata: metadata,
