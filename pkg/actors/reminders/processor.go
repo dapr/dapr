@@ -18,7 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	clocklib "github.com/benbjohnson/clock"
+	kclock "k8s.io/utils/clock"
 )
 
 var ErrProcessorStopped = errors.New("processor is stopped")
@@ -27,7 +27,7 @@ var ErrProcessorStopped = errors.New("processor is stopped")
 type Processor struct {
 	executeFn          func(r *Reminder)
 	queue              *Queue
-	clock              clocklib.Clock
+	clock              kclock.Clock
 	lock               sync.Mutex
 	processorRunningCh chan struct{}
 	stopCh             chan struct{}
@@ -36,7 +36,7 @@ type Processor struct {
 
 // NewProcessor returns a new Processor object.
 // executeFn is the callback invoked when the reminder is to be executed; this will be invoked in a background goroutine.
-func NewProcessor(executeFn func(r *Reminder), clock clocklib.Clock) *Processor {
+func NewProcessor(executeFn func(r *Reminder), clock kclock.Clock) *Processor {
 	queue := NewQueue()
 
 	return &Processor{
@@ -135,7 +135,7 @@ func (p *Processor) stopLoop() {
 func (p *Processor) processLoop() {
 	var (
 		r      *Reminder
-		t      *clocklib.Timer
+		t      kclock.Timer
 		stopCh chan struct{}
 	)
 
@@ -150,11 +150,11 @@ loop:
 			break loop
 		}
 
-		t = p.clock.Timer(p.clock.Until(r.NextTick()))
+		t = p.clock.NewTimer(r.NextTick().Sub(p.clock.Now()))
 
 		select {
 		// Wait for when it's time to execute the reminder
-		case <-t.C:
+		case <-t.C():
 			// Pop the reminder now that we're ready to process it
 			// There's a small chance this is a different reminder than the one we peeked before
 			p.lock.Lock()

@@ -19,14 +19,14 @@ import (
 	"testing"
 	"time"
 
-	clocklib "github.com/benbjohnson/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clocktesting "k8s.io/utils/clock/testing"
 )
 
 func TestProcessor(t *testing.T) {
 	// Create the processor
-	clock := clocklib.NewMock()
+	clock := clocktesting.NewFakeClock(time.Now())
 	executeCh := make(chan *Reminder)
 	processor := NewProcessor(func(r *Reminder) {
 		executeCh <- r
@@ -63,12 +63,12 @@ func TestProcessor(t *testing.T) {
 	// Makes tickers advance
 	// Note that step must be > 500ms
 	advanceTickers := func(step time.Duration, count int) {
-		clock.Add(50 * time.Millisecond)
+		clock.Step(50 * time.Millisecond)
 		// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync (especially when testing with -race)
 		runtime.Gosched()
 		time.Sleep(50 * time.Millisecond)
 		for i := 0; i < count; i++ {
-			clock.Add(step)
+			clock.Step(step)
 			// Sleep on the wall clock for a few ms to allow the background goroutine to get in sync (especially when testing with -race)
 			runtime.Gosched()
 			time.Sleep(50 * time.Millisecond)
