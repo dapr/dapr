@@ -24,7 +24,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -269,13 +268,13 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		operation := req.Message().Method
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
-		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
+		if a.appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
 				httpVerb = httpExt.GetVerb()
 			}
 		}
-		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol, a.accessControlList)
+		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocolIsHTTP, a.accessControlList)
 
 		if !callAllowed {
 			return status.Errorf(codes.PermissionDenied, errMsg)
