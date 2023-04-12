@@ -58,6 +58,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	externalHTTPEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/externalHTTPEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
@@ -66,6 +67,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/externalendpoint"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -239,6 +241,9 @@ type DaprRuntime struct {
 	tracerProvider *sdktrace.TracerProvider
 
 	workflowEngine *wfengine.WorkflowEngine
+
+	externalEndpoints []externalHTTPEndpointV1alpha1.ExternalHTTPEndpoint
+	endpointsLock     *sync.RWMutex
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -311,6 +316,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
 		bulkSubLock:                &sync.Mutex{},
+		externalEndpoints:          make([]externalHTTPEndpointV1alpha1.ExternalHTTPEndpoint, 0),
+		endpointsLock:              &sync.RWMutex{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -490,6 +497,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		if err != nil {
 			log.Warnf("failed to watch component updates: %s", err)
 		}
+		// TODO(@Sam): a.beginExternalHTTPEndpointsUpdates()?
 	}
 
 	a.appendBuiltinSecretStore()
@@ -503,6 +511,11 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
+	}
+
+	err = a.loadExternalHTTPEndpoints(opts)
+	if err != nil {
+		log.Warnf("failed to load external HTTP endpoints: %s", err)
 	}
 
 	// Setup allow/deny list for secrets
@@ -2665,6 +2678,43 @@ func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component)
 	}
 	return componentPreprocessRes{}
 }
+
+func (a *DaprRuntime) loadExternalHTTPEndpoints(opts *runtimeOpts) error {
+	var loader externalendpoint.EndpointsLoader
+	log.Infof("runtimeConfig.Mode %s", a.runtimeConfig.Mode)
+
+	switch a.runtimeConfig.Mode {
+	case modes.KubernetesMode:
+		loader = externalendpoint.NewKubernetesExternalHTTPEndpoints(a.runtimeConfig.Kubernetes, a.namespace, a.operatorClient, a.podName)
+	case modes.StandaloneMode:
+		loader = externalendpoint.NewLocalExternalHTTPEndpoints(a.runtimeConfig.Standalone.ResourcesPath...)
+	default:
+		return nil
+	}
+
+	log.Info("Loading endpoints")
+	endpoints, err := loader.LoadExternalHTTPEndpoints()
+	if err != nil {
+		return err
+	}
+	log.Infof("here are my endpoints %v", endpoints)
+
+	// TODO(@Sam): authorized endpoints todos here?
+
+	a.endpointsLock.Lock()
+	a.externalEndpoints = endpoints
+	a.endpointsLock.Unlock()
+
+	return nil
+}
+
+// TODO(@Sam):
+// func (a *DaprRuntime) onExternalHTTPEndpointUpdated(endpoint externalendpoint.V1alpha1.ExternalHTTPEndpoint) bool {
+// }
+
+// TODO(@Sam):
+// func (a *DaprRuntime) beginExternalHTTPEndpointsUpdates() error {
+// }
 
 func (a *DaprRuntime) stopActor() {
 	if a.actor != nil {
