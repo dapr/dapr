@@ -136,6 +136,13 @@ func TestAnnotations(t *testing.T) {
 			assert.Equal(t, "http", p)
 		})
 
+		t.Run("valid https protocol", func(t *testing.T) {
+			m := map[string]string{annotations.KeyAppProtocol: "https"}
+			an := sidecar.Annotations(m)
+			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
+			assert.Equal(t, "https", p)
+		})
+
 		t.Run("get default http protocol", func(t *testing.T) {
 			m := map[string]string{}
 			an := sidecar.Annotations(m)

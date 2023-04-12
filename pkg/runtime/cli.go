@@ -53,7 +53,7 @@ func FromFlags() (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
-	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
+	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
 	componentsPath := flag.String("components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
 	var resourcesPath stringSliceFlag
 	flag.Var(&resourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
@@ -69,7 +69,7 @@ func FromFlags() (*DaprRuntime, error) {
 	waitCommand := flag.Bool("wait", false, "wait for Dapr outbound ready")
 	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code; set to -1 for no limits")
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
-	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
+	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts a TLS connection [Deprecated, use '--app-protocol https|grpcs']")
 	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", DefaultMaxRequestBodySize, "Increasing max size of request body in MB to handle uploading of big files")
 	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
@@ -235,9 +235,26 @@ func FromFlags() (*DaprRuntime, error) {
 	{
 		p := strings.ToLower(*appProtocolPtr)
 		switch p {
-		case string(HTTPProtocol),
-			string(GRPCProtocol):
+		case string(GRPCSProtocol), string(HTTPSProtocol), string(H2CProtocol):
 			appProtocol = p
+		case string(HTTPProtocol):
+			// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
+			// TODO: Remove in a future Dapr version
+			if *appSSL {
+				log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=https' instead")
+				appProtocol = string(HTTPSProtocol)
+			} else {
+				appProtocol = string(HTTPProtocol)
+			}
+		case string(GRPCProtocol):
+			// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
+			// TODO: Remove in a future Dapr version
+			if *appSSL {
+				log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=grpcs' instead")
+				appProtocol = string(GRPCSProtocol)
+			} else {
+				appProtocol = string(GRPCProtocol)
+			}
 		case "":
 			appProtocol = string(HTTPProtocol)
 		default:
@@ -295,7 +312,6 @@ func FromFlags() (*DaprRuntime, error) {
 		MaxConcurrency:               concurrency,
 		MTLSEnabled:                  *enableMTLS,
 		SentryAddress:                *sentryAddress,
-		AppSSL:                       *appSSL,
 		MaxRequestBodySize:           maxRequestBodySize,
 		UnixDomainSocket:             *unixDomainSocket,
 		ReadBufferSize:               readBufferSize,
@@ -411,7 +427,10 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 	log.Info("Resiliency configuration loaded")
 
-	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
+	accessControlList, err = acl.ParseAccessControlSpec(
+		globalConfig.Spec.AccessControlSpec,
+		runtimeConfig.ApplicationProtocol.IsHTTP(),
+	)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
