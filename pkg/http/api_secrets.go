@@ -40,7 +40,7 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 
 func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.GetSecret,
+		a.GetSecret,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetSecretRequest, *runtimev1pb.GetSecretResponse]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretRequest, error) {
 				in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
@@ -63,7 +63,7 @@ func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
 
 func (a *api) onBulkGetSecretHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.GetBulkSecret,
+		a.GetBulkSecret,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetBulkSecretRequest, *runtimev1pb.GetBulkSecretResponse]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretRequest, error) {
 				in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)

@@ -68,7 +68,7 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 
 func (a *api) onPostSubtleCryptoGetKey() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.SubtleGetKeyAlpha1,
+		a.SubtleGetKeyAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleGetKeyAlpha1Request, *runtimev1pb.SubtleGetKeyAlpha1Response]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleGetKeyAlpha1Request],
 		},
@@ -77,7 +77,7 @@ func (a *api) onPostSubtleCryptoGetKey() fasthttp.RequestHandler {
 
 func (a *api) onPostSubtleCryptoEncrypt() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.SubtleEncryptAlpha1,
+		a.SubtleEncryptAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleEncryptAlpha1Request, *runtimev1pb.SubtleEncryptAlpha1Response]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleEncryptAlpha1Request],
 		},
@@ -86,7 +86,7 @@ func (a *api) onPostSubtleCryptoEncrypt() fasthttp.RequestHandler {
 
 func (a *api) onPostSubtleCryptoDecrypt() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.SubtleDecryptAlpha1,
+		a.SubtleDecryptAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleDecryptAlpha1Request, *runtimev1pb.SubtleDecryptAlpha1Response]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleDecryptAlpha1Request],
 		},
@@ -95,7 +95,7 @@ func (a *api) onPostSubtleCryptoDecrypt() fasthttp.RequestHandler {
 
 func (a *api) onPostSubtleCryptoWrapKey() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.SubtleWrapKeyAlpha1,
+		a.SubtleWrapKeyAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleWrapKeyAlpha1Request, *runtimev1pb.SubtleWrapKeyAlpha1Response]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleWrapKeyAlpha1Request],
 		},
@@ -104,7 +104,7 @@ func (a *api) onPostSubtleCryptoWrapKey() fasthttp.RequestHandler {
 
 func (a *api) onPostSubtleCryptoUnwrapKey() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.SubtleUnwrapKeyAlpha1,
+		a.SubtleUnwrapKeyAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleUnwrapKeyAlpha1Request, *runtimev1pb.SubtleUnwrapKeyAlpha1Response]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleUnwrapKeyAlpha1Request],
 		},
@@ -113,7 +113,7 @@ func (a *api) onPostSubtleCryptoUnwrapKey() fasthttp.RequestHandler {
 
 func (a *api) onPostSubtleCryptoSign() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.SubtleSignAlpha1,
+		a.SubtleSignAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleSignAlpha1Request, *runtimev1pb.SubtleSignAlpha1Response]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleSignAlpha1Request],
 		},
@@ -122,7 +122,7 @@ func (a *api) onPostSubtleCryptoSign() fasthttp.RequestHandler {
 
 func (a *api) onPostSubtleCryptoVerify() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		a.universal.SubtleVerifyAlpha1,
+		a.SubtleVerifyAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleVerifyAlpha1Request, *runtimev1pb.SubtleVerifyAlpha1Response]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleVerifyAlpha1Request],
 		},
