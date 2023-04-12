@@ -1899,6 +1899,9 @@ func TestPublishTopic(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
 	srv := &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID: "fakeAPI",
+		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(req *pubsub.PublishRequest) error {
 				if req.Topic == "error-topic" {
@@ -2095,6 +2098,9 @@ func TestBulkPublish(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
 	fakeAPI := &api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID: "fakeAPI",
+		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
 				mock := daprt.MockPubSub{}
