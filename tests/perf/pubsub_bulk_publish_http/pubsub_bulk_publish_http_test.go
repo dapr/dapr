@@ -67,9 +67,10 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestPubsubPublishHttpPerformance(t *testing.T) {
+func TestPubsubBulkPublishHttpPerformance(t *testing.T) {
 	k6Test := loadtest.NewK6(
 		"./test.js",
+		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithAppID(k6AppName),
 		loadtest.WithName(k6AppName),
 		loadtest.WithRunnerEnvVar(brokersEnvVar, brokersNames),

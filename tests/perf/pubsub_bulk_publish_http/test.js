@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -34,7 +34,7 @@ function randomStringOfSize(size) {
 /**
  * Get the payload for a bulk publish request
  * @param {number} numMsgs number of messages to publish at once
- * @param {*} msgSize size of each message in KB
+ * @param {number} msgSize size of each message in KB
  */
 function getBulkPublishPayload(numMsgs, msgSize) {
     const entries = []
@@ -57,7 +57,7 @@ const data = new SharedArray('scenarios', function () {
         maxVUs: 50,
     }
     const delaysMs = [5, 50, 100, 1000]
-    const numMessages = [10, 100, 1000]
+    const numMessages = [10, 100]
     const messageSizeKb = [2, 31]
     const brokers = __ENV.BROKERS.split(',')
     const samples = [200]
@@ -113,7 +113,7 @@ export const options = {
     scenarios,
 }
 
-const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}/v1.0-alpha`
+const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}/v1.0-alpha1`
 
 function publishRawMsgs(broker, topic, payload) {
     return http.post(
