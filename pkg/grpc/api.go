@@ -1313,6 +1313,7 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
+	a.UniversalAPI.Actors = actor
 }
 
 func stringValueOrEmpty(value *string) string {
