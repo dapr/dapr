@@ -1213,8 +1213,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
-	path, ok := a.compStore.GetInputBindingRoute(bindingName)
-	if !ok || path == "" {
+	path, _ := a.compStore.GetInputBindingRoute(bindingName)
+	if path == "" {
 		path = bindingName
 	}
 
