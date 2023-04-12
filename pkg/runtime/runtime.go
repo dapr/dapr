@@ -1552,7 +1552,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		LockStores:                  a.lockStores,
 		PubsubAdapter:               a.getPublishAdapter(),
 		DirectMessaging:             a.directMessaging,
-		Actor:                       a.actor,
+		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
 		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
 		AccessControlList:           a.accessControlList,
