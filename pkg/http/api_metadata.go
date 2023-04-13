@@ -14,11 +14,7 @@ limitations under the License.
 package http
 
 import (
-	"bytes"
-	"encoding/json"
-
 	"github.com/valyala/fasthttp"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -47,20 +43,20 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 		UniversalFastHTTPHandlerOpts[*emptypb.Empty, *runtimev1pb.GetMetadataResponse]{
 			OutModifier: func(out *runtimev1pb.GetMetadataResponse) (any, error) {
 				// In the protos, the property subscriptions[*].rules is serialized as subscriptions[*].rules.rules
-				// To maintain backwards-compatibility, we need to do this "hacky" thing
-				// First, remove the subscriptions from the proto before encoding it
-				subsProto := out.Subscriptions
-				out.Subscriptions = nil
-				enc, err := protojson.Marshal(out)
-				if err != nil {
-					return nil, err
+				// To maintain backwards-compatibility, we need to copy into a custom struct and marshal that instead
+				res := &metadataResponse{
+					ID:       out.Id,
+					Extended: out.ExtendedMetadata,
+					// We can embed the proto object directly only for as long as the protojson key is == json key
+					ActiveActorsCount:    out.ActiveActorsCount,
+					RegisteredComponents: out.RegisteredComponents,
 				}
 
-				// Now, marshal the subscriptions in a custom struct
-				if len(subsProto) > 0 {
-					subs := make([]pubsubSubscription, len(subsProto))
-					for i, v := range subsProto {
-						subs[i] = pubsubSubscription{
+				// Copy the subscriptions into a custom struct
+				if len(out.Subscriptions) > 0 {
+					subs := make([]metadataResponsePubsubSubscription, len(out.Subscriptions))
+					for i, v := range out.Subscriptions {
+						subs[i] = metadataResponsePubsubSubscription{
 							PubsubName:      v.PubsubName,
 							Topic:           v.Topic,
 							Metadata:        v.Metadata,
@@ -68,36 +64,19 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 						}
 
 						if v.Rules != nil && len(v.Rules.Rules) > 0 {
-							subs[i].Rules = make([]pubsubSubscriptionRule, len(v.Rules.Rules))
+							subs[i].Rules = make([]metadataResponsePubsubSubscriptionRule, len(v.Rules.Rules))
 							for j, r := range v.Rules.Rules {
-								subs[i].Rules[j] = pubsubSubscriptionRule{
+								subs[i].Rules[j] = metadataResponsePubsubSubscriptionRule{
 									Match: r.Match,
 									Path:  r.Path,
 								}
 							}
 						}
 					}
-
-					// Do the marshalling
-					subsEnc, err := json.Marshal(subs)
-					if err != nil {
-						return nil, err
-					}
-
-					// And "inject" in the JSON
-					const token = `,"subscriptions":`
-					buf := bytes.NewBuffer(enc[0 : len(enc)-1])
-					buf.Grow(len(subsEnc) + len(token) + 1)
-					buf.WriteString(token)
-					buf.Write(subsEnc)
-					buf.WriteByte(byte('}'))
-					enc = buf.Bytes()
+					res.Subscriptions = subs
 				}
 
-				return &UniversalHTTPRawResponse{
-					Body:        enc,
-					ContentType: jsonContentTypeHeader,
-				}, nil
+				return res, nil
 			},
 		},
 	)
@@ -121,15 +100,23 @@ func (a *api) onPutMetadata() fasthttp.RequestHandler {
 	)
 }
 
-type pubsubSubscription struct {
-	PubsubName      string                   `json:"pubsubname"`
-	Topic           string                   `json:"topic"`
-	Metadata        map[string]string        `json:"metadata,omitempty"`
-	Rules           []pubsubSubscriptionRule `json:"rules,omitempty"`
-	DeadLetterTopic string                   `json:"deadLetterTopic"`
+type metadataResponse struct {
+	ID                   string                               `json:"id,omitempty"`
+	ActiveActorsCount    []*runtimev1pb.ActiveActorsCount     `json:"actors,omitempty"`
+	RegisteredComponents []*runtimev1pb.RegisteredComponents  `json:"components,omitempty"`
+	Extended             map[string]string                    `json:"extended,omitempty"`
+	Subscriptions        []metadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
 }
 
-type pubsubSubscriptionRule struct {
+type metadataResponsePubsubSubscription struct {
+	PubsubName      string                                   `json:"pubsubname"`
+	Topic           string                                   `json:"topic"`
+	Metadata        map[string]string                        `json:"metadata,omitempty"`
+	Rules           []metadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
+	DeadLetterTopic string                                   `json:"deadLetterTopic"`
+}
+
+type metadataResponsePubsubSubscriptionRule struct {
 	Match string `json:"match,omitempty"`
 	Path  string `json:"path,omitempty"`
 }
