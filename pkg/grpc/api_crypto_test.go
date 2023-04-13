@@ -26,22 +26,22 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
-	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestCryptoAlpha1(t *testing.T) {
+	compStore := compstore.New()
+	compStore.AddCryptoProvider("myvault", &daprt.FakeSubtleCrypto{})
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
 			Logger:     apiServerLogger,
 			Resiliency: resiliency.New(nil),
-			CryptoProviders: map[string]contribCrypto.SubtleCrypto{
-				"myvault": &daprt.FakeSubtleCrypto{},
-			},
+			CompStore:  compStore,
 		},
 	}
 
