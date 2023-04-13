@@ -45,6 +45,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/net/http2"
 	gogrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
@@ -918,13 +919,10 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			var pErr error
-			switch a.runtimeConfig.ApplicationProtocol {
-			case HTTPProtocol:
+			if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 				pErr = a.publishMessageHTTP(ctx, psm)
-			case GRPCProtocol:
+			} else {
 				pErr = a.publishMessageGRPC(ctx, psm)
-			default:
-				pErr = backoff.Permanent(errors.New("invalid application protocol"))
 			}
 			var rErr *RetriableError
 			if errors.As(pErr, &rErr) {
@@ -1275,7 +1273,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		path = bindingName
 	}
 
-	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		if span != nil {
 			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 		}
@@ -1350,7 +1348,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				}
 			}
 		}
-	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+	} else {
 		policyDef := a.resiliency.ComponentInboundPolicy(bindingName, resiliency.Binding)
 
 		reqMetadata := make(map[string][]string, len(metadata))
@@ -1568,7 +1566,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		SendToOutputBindingFn:       a.sendToOutputBinding,
 		TracingSpec:                 a.globalConfig.GetTracingSpec(),
 		AccessControlList:           a.accessControlList,
-		AppProtocol:                 string(a.runtimeConfig.ApplicationProtocol),
+		AppProtocolIsHTTP:           a.runtimeConfig.ApplicationProtocol.IsHTTP(),
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
@@ -1601,7 +1599,7 @@ func (a *DaprRuntime) getSubscribedBindingsGRPC() ([]string, error) {
 
 func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	// if gRPC, looks for the binding in the list of bindings returned from the app
-	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		if a.subscribeBindingList == nil {
 			list, err := a.getSubscribedBindingsGRPC()
 			if err != nil {
@@ -1614,7 +1612,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 				return true, nil
 			}
 		}
-	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+	} else {
 		// if HTTP, check if there's an endpoint listening for that binding
 		path := a.inputBindingRoutes[binding]
 		req := invokev1.NewInvokeMethodRequest(path).
@@ -1883,9 +1881,9 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	}
 
 	// handle app subscriptions
-	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+	if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency)
-	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+	} else {
 		var conn gogrpc.ClientConnInterface
 		conn, err = a.grpc.GetAppClient()
 		if err != nil {
@@ -2979,13 +2977,12 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 	}
 
 	var ch channel.AppChannel
-	switch a.runtimeConfig.ApplicationProtocol {
-	case GRPCProtocol:
+	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 		ch, err = a.grpc.GetAppChannel()
 		if err != nil {
 			return err
 		}
-	case HTTPProtocol:
+	} else {
 		pipeline, err := a.buildAppHTTPPipeline()
 		if err != nil {
 			return err
@@ -2996,8 +2993,6 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 			return err
 		}
 		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
-	default:
-		return fmt.Errorf("cannot create app channel for protocol %s", a.runtimeConfig.ApplicationProtocol)
 	}
 
 	a.appChannel = ch
@@ -3007,27 +3002,53 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 
 // Returns the HTTP endpoint for the app.
 func (a *DaprRuntime) getAppHTTPEndpoint() string {
+	// Application protocol is "http" or "https"
 	port := strconv.Itoa(a.runtimeConfig.ApplicationPort)
-	if a.runtimeConfig.AppSSL {
-		return "https://" + channel.DefaultChannelAddress + ":" + port
-	} else {
+	switch a.runtimeConfig.ApplicationProtocol {
+	case HTTPProtocol, H2CProtocol:
 		return "http://" + channel.DefaultChannelAddress + ":" + port
+	case HTTPSProtocol:
+		return "https://" + channel.DefaultChannelAddress + ":" + port
+	default:
+		return ""
 	}
 }
 
 // Initializes the appHTTPClient property.
 func (a *DaprRuntime) initAppHTTPClient() {
-	var tlsConfig *tls.Config
-	if a.runtimeConfig.AppSSL {
-		tlsConfig = &tls.Config{
-			//nolint:gosec
-			InsecureSkipVerify: true,
-			// For 1.11
-			MinVersion: channel.AppChannelMinTLSVersion,
+	var transport nethttp.RoundTripper
+	if a.runtimeConfig.ApplicationProtocol == H2CProtocol {
+		// Enable HTTP/2 Cleartext transport
+		transport = &http2.Transport{
+			AllowHTTP: true, // To enable using "http" as protocol
+			DialTLS: func(network, addr string, _ *tls.Config) (net.Conn, error) {
+				// Return the TCP socket without TLS
+				return net.Dial(network, addr)
+			},
+			// TODO: This may not be exactly the same as "MaxResponseHeaderBytes" so check before enabling this
+			// MaxHeaderListSize: uint32(a.runtimeConfig.ReadBufferSize << 10),
 		}
-		// TODO: Remove when the feature is finalized
-		if a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS) {
-			tlsConfig.MinVersion = 0
+	} else {
+		var tlsConfig *tls.Config
+		if a.runtimeConfig.ApplicationProtocol == HTTPSProtocol {
+			tlsConfig = &tls.Config{
+				InsecureSkipVerify: true, //nolint:gosec
+				// For 1.11
+				MinVersion: channel.AppChannelMinTLSVersion,
+			}
+			// TODO: Remove when the feature is finalized
+			if a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS) {
+				tlsConfig.MinVersion = 0
+			}
+		}
+
+		transport = &nethttp.Transport{
+			TLSClientConfig:        tlsConfig,
+			ReadBufferSize:         a.runtimeConfig.ReadBufferSize << 10,
+			MaxResponseHeaderBytes: int64(a.runtimeConfig.ReadBufferSize) << 10,
+			MaxConnsPerHost:        1024,
+			MaxIdleConns:           64, // A local channel connects to a single host
+			MaxIdleConnsPerHost:    64,
 		}
 	}
 
@@ -3035,14 +3056,7 @@ func (a *DaprRuntime) initAppHTTPClient() {
 	// We want to re-use the same client so TCP sockets can be re-used efficiently across everything that communicates with the app
 	// This is especially useful if the app supports HTTP/2
 	a.appHTTPClient = &nethttp.Client{
-		Transport: &nethttp.Transport{
-			ReadBufferSize:         a.runtimeConfig.ReadBufferSize << 10,
-			MaxResponseHeaderBytes: int64(a.runtimeConfig.ReadBufferSize) << 10,
-			MaxConnsPerHost:        1024,
-			MaxIdleConns:           64, // A local channel connects to a single host
-			MaxIdleConnsPerHost:    64,
-			TLSClientConfig:        tlsConfig,
-		},
+		Transport: transport,
 		CheckRedirect: func(req *nethttp.Request, via []*nethttp.Request) error {
 			return nethttp.ErrUseLastResponse
 		},
@@ -3328,7 +3342,7 @@ func createGRPCManager(runtimeConfig *Config, globalConfig *config.Configuration
 	if runtimeConfig != nil {
 		grpcAppChannelConfig.Port = runtimeConfig.ApplicationPort
 		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.MaxConcurrency
-		grpcAppChannelConfig.SSLEnabled = runtimeConfig.AppSSL
+		grpcAppChannelConfig.EnableTLS = (runtimeConfig.ApplicationProtocol == GRPCSProtocol)
 		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.MaxRequestBodySize
 		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.ReadBufferSize
 	}

@@ -59,8 +59,6 @@ const (
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
 	SpiffeIDPrefix      = "spiffe://"
-	HTTPProtocol        = "http"
-	GRPCProtocol        = "grpc"
 )
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
