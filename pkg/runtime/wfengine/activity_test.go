@@ -30,7 +30,7 @@ import (
 func TestDedupeActivityInvocation(t *testing.T) {
 	// We do just enough to get the activity actor properly initialized
 	ctx := context.Background()
-	_, engine := startEngine(ctx, task.NewTaskRegistry())
+	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
 
 	// Get a reference to the activity actor so we can invoke it directly, without going through a workflow.
 	activityActor := engine.InternalActors()[wfengine.ActivityActorType]
