@@ -22,6 +22,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -85,9 +86,9 @@ type bulkSubscribeCallData struct {
 //  4. Check if any error has occurred so far in processing for any of the message and invoke DLQ, if configured.
 //  5. Send back responses array to broker interface.
 func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.PolicyDefinition,
-	psName string, topic string, route TopicRouteElem, namespacedConsumer bool,
+	psName string, topic string, route compstore.TopicRouteElem, namespacedConsumer bool,
 ) error {
-	ps, ok := a.pubSubs[psName]
+	ps, ok := a.compStore.GetPubSub(psName)
 	if !ok {
 		return runtimePubsub.NotFoundError{PubsubName: psName}
 	}
@@ -99,10 +100,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 
 	req := pubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
-		Metadata: route.metadata,
+		Metadata: route.Metadata,
 		BulkSubscribeConfig: pubsub.BulkSubscribeConfig{
-			MaxMessagesCount:   int(route.bulkSubscribe.MaxMessagesCount),
-			MaxAwaitDurationMs: int(route.bulkSubscribe.MaxAwaitDurationMs),
+			MaxMessagesCount:   int(route.BulkSubscribe.MaxMessagesCount),
+			MaxAwaitDurationMs: int(route.BulkSubscribe.MaxAwaitDurationMs),
 		},
 	}
 
@@ -123,7 +124,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 			psName:          psName,
 			topic:           topic,
 		}
-		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
+		rawPayload, err := contribMetadata.IsRawPayload(route.Metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route); dlqErr != nil {
@@ -149,7 +150,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+				if rPath == "" && a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
@@ -170,13 +171,13 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 				if pubsub.HasExpired(cloudEvent) {
 					log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 					bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
-					if route.deadLetterTopic != "" {
+					if route.DeadLetterTopic != "" {
 						_ = a.sendToDeadLetter(psName, &pubsub.NewMessage{
 							Data:        message.Event,
 							Topic:       topic,
 							Metadata:    message.Metadata,
 							ContentType: &message.ContentType,
-						}, route.deadLetterTopic)
+						}, route.DeadLetterTopic)
 					}
 					bulkResponses[i].EntryId = message.EntryId
 					bulkResponses[i].Error = nil
@@ -188,7 +189,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+				if rPath == "" && a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 					continue
 				}
 				if message.ContentType == "" {
@@ -225,20 +226,20 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 		return bulkResponses, err
 	}
 
-	if bulkSubscriber, ok := ps.component.(pubsub.BulkSubscriber); ok {
+	if bulkSubscriber, ok := ps.Component.(pubsub.BulkSubscriber); ok {
 		return bulkSubscriber.BulkSubscribe(ctx, req, bulkHandler)
 	}
 
-	return runtimePubsub.NewDefaultBulkSubscriber(ps.component).BulkSubscribe(ctx, req, bulkHandler)
+	return runtimePubsub.NewDefaultBulkSubscriber(ps.Component).BulkSubscribe(ctx, req, bulkHandler)
 }
 
 // sendBulkToDLQIfConfigured sends the message to the dead letter queue if configured.
 func (a *DaprRuntime) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, msg *pubsub.BulkMessage,
-	sendAllEntries bool, route TopicRouteElem,
+	sendAllEntries bool, route compstore.TopicRouteElem,
 ) error {
 	bscData := *bulkSubCallData
-	if route.deadLetterTopic != "" {
-		if dlqErr := a.sendBulkToDeadLetter(bulkSubCallData, msg, route.deadLetterTopic, sendAllEntries); dlqErr == nil {
+	if route.DeadLetterTopic != "" {
+		if dlqErr := a.sendBulkToDeadLetter(bulkSubCallData, msg, route.DeadLetterTopic, sendAllEntries); dlqErr == nil {
 			// dlq has been configured and whole bulk of messages is successfully sent to dlq.
 			return nil
 		}
@@ -250,11 +251,11 @@ func (a *DaprRuntime) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCall
 }
 
 // getRouteIfProcessable returns the route path if the message is processable.
-func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, route TopicRouteElem, message *pubsub.BulkMessageEntry,
+func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, route compstore.TopicRouteElem, message *pubsub.BulkMessageEntry,
 	i int, matchElem interface{},
 ) (string, error) {
 	bscData := *bulkSubCallData
-	rPath, shouldProcess, routeErr := findMatchingRoute(route.rules, matchElem)
+	rPath, shouldProcess, routeErr := findMatchingRoute(route.Rules, matchElem)
 	if routeErr != nil {
 		log.Errorf("Error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", bscData.psName, bscData.topic, message.EntryId, routeErr)
 		setBulkResponseEntry(bscData.bulkResponses, i, message.EntryId, routeErr)
@@ -264,13 +265,13 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, bulkSubCallData
 		// The event does not match any route specified so ignore it.
 		log.Warnf("No matching route for event in pubsub %s and topic %s; skipping", bscData.psName, bscData.topic)
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)]++
-		if route.deadLetterTopic != "" {
+		if route.DeadLetterTopic != "" {
 			_ = a.sendToDeadLetter(bscData.psName, &pubsub.NewMessage{
 				Data:        message.Event,
 				Topic:       bscData.topic,
 				Metadata:    message.Metadata,
 				ContentType: &message.ContentType,
-			}, route.deadLetterTopic)
+			}, route.DeadLetterTopic)
 		}
 		setBulkResponseEntry(bscData.bulkResponses, i, message.EntryId, nil)
 		return "", nil
@@ -280,7 +281,7 @@ func (a *DaprRuntime) getRouteIfProcessable(ctx context.Context, bulkSubCallData
 
 // createEnvelopeAndInvokeSubscriber creates the envelope and invokes the subscriber.
 func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm pubsubBulkSubscribedMessage,
-	msg *pubsub.BulkMessage, route TopicRouteElem, path string, policyDef *resiliency.PolicyDefinition,
+	msg *pubsub.BulkMessage, route compstore.TopicRouteElem, path string, policyDef *resiliency.PolicyDefinition,
 	rawPayload bool,
 ) error {
 	bscData := *bulkSubCallData
@@ -297,7 +298,7 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, bul
 		Pubsub:   bscData.psName,
 		Metadata: msg.Metadata,
 	})
-	_, e := a.ApplyBulkSubscribeResiliency(ctx, bulkSubCallData, psm, route.deadLetterTopic,
+	_, e := a.ApplyBulkSubscribeResiliency(ctx, bulkSubCallData, psm, route.DeadLetterTopic,
 		path, policyDef, rawPayload, envelope)
 	return e
 }
