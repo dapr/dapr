@@ -29,9 +29,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const (
-	defaultNamespace = "default"
-)
+const defaultNamespace = "default"
 
 type WorkflowEngine struct {
 	IsRunning bool
