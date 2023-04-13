@@ -240,7 +240,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 	if IsGRPCProtocol(internalMD) {
 		processGRPCToGRPCTraceHeader(ctx, md, grpctracebinValue)
 	} else {
-		// if httpProtocol, then pass HTTP traceparent and HTTP tracestate header values, attach it in grpc-trace-bin header
+		// if HTTP protocol, then pass HTTP traceparent and HTTP tracestate header values, attach it in grpc-trace-bin header
 		processHTTPToGRPCTraceHeader(ctx, md, traceparentValue, tracestateValue)
 	}
 	return md
