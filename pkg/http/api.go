@@ -39,7 +39,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -78,8 +77,6 @@ type api struct {
 	publicEndpoints            []Endpoint
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
-	getComponentsFn            func() []componentsV1alpha1.Component
-	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	resiliency                 resiliency.Provider
 	actor                      actors.Actors
 	pubsubAdapter              runtimePubsub.Adapter
@@ -1816,7 +1813,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
 	componentsCapabilties := a.getComponentsCapabilitesFn()
-	components := a.getComponentsFn()
+	components := a.universal.CompStore.ListComponents()
 	registeredComponents := make([]registeredComponent, 0, len(components))
 	for _, comp := range components {
 		registeredComp := registeredComponent{
@@ -1828,7 +1825,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions := a.getSubscriptionsFn()
+	subscriptions := a.universal.CompStore.ListSubscriptions()
 	ps := []pubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, pubsubSubscription{
