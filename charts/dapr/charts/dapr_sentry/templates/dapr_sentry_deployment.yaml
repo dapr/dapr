@@ -8,6 +8,12 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{ if and .Values.tls.issuer.certPEM (and .Values.tls.issuer.keyPEM .Values.tls.root.certPEM) }}
+data:
+  issuer.crt: {{ b64enc .Values.tls.issuer.certPEM | trim }}
+  issuer.key: {{ b64enc .Values.tls.issuer.keyPEM | trim }}
+  ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
+{{ end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -18,6 +24,10 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{ if .Values.tls.root.certPEM }}
+data:
+  ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
+{{end}}
 ---
 apiVersion: apps/v1
 kind: Deployment
