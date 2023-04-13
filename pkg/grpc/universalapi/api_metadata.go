@@ -43,7 +43,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 	}
 
 	// Components
-	components := a.GetComponentsFn()
+	components := a.CompStore.ListComponents()
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, len(components))
 	componentsCapabilities := a.GetComponentsCapabilitesFn()
 	for i, comp := range components {
@@ -56,7 +56,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 	}
 
 	// Subscriptions
-	subscriptions := a.GetSubscriptionsFn()
+	subscriptions := a.CompStore.ListSubscriptions()
 	ps := make([]*runtimev1pb.PubsubSubscription, len(subscriptions))
 	for i, s := range subscriptions {
 		ps[i] = &runtimev1pb.PubsubSubscription{

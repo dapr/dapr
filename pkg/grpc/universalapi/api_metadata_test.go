@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/expr"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -40,32 +41,31 @@ func TestGetMetadata(t *testing.T) {
 		Type:  "abcd",
 	})
 
-	fakeAPI := &UniversalAPI{
-		AppID:  "fakeAPI",
-		Actors: mockActors,
-		GetComponentsFn: func() []componentsV1alpha.Component {
-			return []componentsV1alpha.Component{fakeComponent}
+	compStore := compstore.New()
+	compStore.AddComponent(fakeComponent)
+	compStore.SetSubscriptions([]runtimePubsub.Subscription{
+		{
+			PubsubName:      "test",
+			Topic:           "topic",
+			DeadLetterTopic: "dead",
+			Metadata:        map[string]string{},
+			Rules: []*runtimePubsub.Rule{
+				{
+					Match: &expr.Expr{},
+					Path:  "path",
+				},
+			},
 		},
+	})
+
+	fakeAPI := &UniversalAPI{
+		AppID:     "fakeAPI",
+		Actors:    mockActors,
+		CompStore: compStore,
 		GetComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
-		},
-		GetSubscriptionsFn: func() []runtimePubsub.Subscription {
-			return []runtimePubsub.Subscription{
-				{
-					PubsubName:      "test",
-					Topic:           "topic",
-					DeadLetterTopic: "dead",
-					Metadata:        map[string]string{},
-					Rules: []*runtimePubsub.Rule{
-						{
-							Match: &expr.Expr{},
-							Path:  "path",
-						},
-					},
-				},
-			}
 		},
 		ExtendedMetadata: map[string]string{
 			"testKey": "testValue",

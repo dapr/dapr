@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,15 +32,10 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
-	contribCrypto "github.com/dapr/components-contrib/crypto"
-	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -59,6 +53,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -81,18 +76,14 @@ type API interface {
 
 type api struct {
 	*universalapi.UniversalAPI
-	directMessaging            messaging.DirectMessaging
-	appChannel                 channel.AppChannel
-	resiliency                 resiliency.Provider
-	stateStores                map[string]state.Store
-	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
-	configurationSubscribeLock sync.Mutex
-	pubsubAdapter              runtimePubsub.Adapter
-	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec                config.TracingSpec
-	accessControlList          *config.AccessControlList
-	appProtocolIsHTTP          bool
+	directMessaging       messaging.DirectMessaging
+	appChannel            channel.AppChannel
+	resiliency            resiliency.Provider
+	pubsubAdapter         runtimePubsub.Adapter
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec           config.TracingSpec
+	accessControlList     *config.AccessControlList
+	appProtocolIsHTTP     bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -100,13 +91,7 @@ type APIOpts struct {
 	AppID                       string
 	AppChannel                  channel.AppChannel
 	Resiliency                  resiliency.Provider
-	StateStores                 map[string]state.Store
-	SecretStores                map[string]secretstores.SecretStore
-	SecretsConfiguration        map[string]config.SecretsScope
-	ConfigurationStores         map[string]configuration.Store
-	CryptoProviders             map[string]contribCrypto.SubtleCrypto
-	WorkflowComponents          map[string]workflows.Workflow
-	LockStores                  map[string]lock.Store
+	CompStore                   *compstore.ComponentStore
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
 	Actors                      actors.Actors
@@ -115,42 +100,28 @@ type APIOpts struct {
 	AccessControlList           *config.AccessControlList
 	AppProtocolIsHTTP           bool
 	Shutdown                    func()
-	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
-	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	return &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:                opts.AppID,
-			Logger:               apiServerLogger,
-			Resiliency:           opts.Resiliency,
-			Actors:               opts.Actors,
-			CryptoProviders:      opts.CryptoProviders,
-			StateStores:          opts.StateStores,
-			SecretStores:         opts.SecretStores,
-			SecretsConfiguration: opts.SecretsConfiguration,
-			LockStores:           opts.LockStores,
-			WorkflowComponents:   opts.WorkflowComponents,
-
+			AppID:                      opts.AppID,
+			Logger:                     apiServerLogger,
+			Resiliency:                 opts.Resiliency,
+			Actors:                     opts.Actors,
+			CompStore:                  opts.CompStore,
 			ShutdownFn:                 opts.Shutdown,
-			GetComponentsFn:            opts.GetComponentsFn,
 			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-			GetSubscriptionsFn:         opts.GetSubscriptionsFn,
 		},
-		directMessaging:        opts.DirectMessaging,
-		resiliency:             opts.Resiliency,
-		appChannel:             opts.AppChannel,
-		pubsubAdapter:          opts.PubsubAdapter,
-		stateStores:            opts.StateStores,
-		configurationStores:    opts.ConfigurationStores,
-		configurationSubscribe: make(map[string]chan struct{}),
-		sendToOutputBindingFn:  opts.SendToOutputBindingFn,
-		tracingSpec:            opts.TracingSpec,
-		accessControlList:      opts.AccessControlList,
-		appProtocolIsHTTP:      opts.AppProtocolIsHTTP,
+		directMessaging:       opts.DirectMessaging,
+		resiliency:            opts.Resiliency,
+		appChannel:            opts.AppChannel,
+		sendToOutputBindingFn: opts.SendToOutputBindingFn,
+		tracingSpec:           opts.TracingSpec,
+		accessControlList:     opts.AccessControlList,
+		appProtocolIsHTTP:     opts.AppProtocolIsHTTP,
 	}
 }
 
@@ -651,18 +622,19 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 }
 
 func (a *api) getStateStore(name string) (state.Store, error) {
-	if len(a.stateStores) == 0 {
+	if a.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
 
-	if a.stateStores[name] == nil {
+	state, ok := a.CompStore.GetStateStore(name)
+	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(name)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
-	return a.stateStores[name], nil
+	return state, nil
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
@@ -1320,14 +1292,15 @@ func stringValueOrEmpty(value *string) string {
 }
 
 func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
-	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+	if a.CompStore.ConfigurationsLen() == 0 {
 		return nil, status.Error(codes.FailedPrecondition, messages.ErrConfigurationStoresNotConfigured)
 	}
 
-	if a.configurationStores[name] == nil {
+	conf, ok := a.CompStore.GetConfiguration(name)
+	if !ok {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrConfigurationStoreNotFound, name)
 	}
-	return a.configurationStores[name], nil
+	return conf, nil
 }
 
 func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
@@ -1456,9 +1429,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	}
 
 	stop := make(chan struct{})
-	a.configurationSubscribeLock.Lock()
-	a.configurationSubscribe[subscribeID] = stop
-	a.configurationSubscribeLock.Unlock()
+	a.CompStore.AddConfigurationSubscribe(subscribeID, stop)
 	<-stop
 
 	return nil
@@ -1474,19 +1445,15 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 		}, err
 	}
 
-	a.configurationSubscribeLock.Lock()
-	defer a.configurationSubscribeLock.Unlock()
-
 	subscribeID := request.GetId()
 
-	stop, ok := a.configurationSubscribe[subscribeID]
+	_, ok := a.CompStore.GetConfigurationSubscribe(subscribeID)
 	if !ok {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
 			Ok: true,
 		}, nil
 	}
-	delete(a.configurationSubscribe, subscribeID)
-	close(stop)
+	a.CompStore.DeleteConfigurationSubscribe(subscribeID)
 
 	policyRunner := resiliency.NewRunner[any](ctx,
 		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
@@ -1515,13 +1482,6 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 }
 
 func (a *api) Close() error {
-	a.configurationSubscribeLock.Lock()
-	defer a.configurationSubscribeLock.Unlock()
-
-	for k, stop := range a.configurationSubscribe {
-		close(stop)
-		delete(a.configurationSubscribe, k)
-	}
-
+	a.CompStore.DeleteAllConfigurationSubscribe()
 	return nil
 }
