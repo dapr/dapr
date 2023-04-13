@@ -604,11 +604,8 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				ContentType: "application/json",
 			},
 			{
-				EntryId: "2",
-				Event: map[string]string{
-					"key":   "second",
-					"value": "second value",
-				},
+				EntryId:     "2",
+				Event:       "this is not a cloudevent!",
 				ContentType: "application/cloudevents+json",
 				Metadata: map[string]string{
 					"md1": "mdVal1",
