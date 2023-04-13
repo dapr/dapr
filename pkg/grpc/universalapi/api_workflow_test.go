@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -165,11 +166,16 @@ func TestPauseResumeWorkflow(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, wf := range fakeWorkflows {
+		compStore.AddWorkflow(name, wf)
+	}
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:             testLogger,
-		Resiliency:         resiliency.New(nil),
-		WorkflowComponents: fakeWorkflows,
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	for _, tt := range testCases {

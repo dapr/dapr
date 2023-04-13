@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
@@ -192,8 +193,10 @@ func getActorRuntime() actors.Actors {
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          config.ApplicationConfig{},
 	})
+	compStore := compstore.New()
+	compStore.AddStateStore("workflowStore", store)
 	actors := actors.NewActors(actors.ActorsOpts{
-		StateStore:     store,
+		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),
