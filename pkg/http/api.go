@@ -136,6 +136,7 @@ func NewAPI(opts APIOpts) API {
 		appChannel:            opts.AppChannel,
 		directMessaging:       opts.DirectMessaging,
 		resiliency:            opts.Resiliency,
+		pubsubAdapter:         opts.PubsubAdapter,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		maxRequestBodySize:    opts.MaxRequestBodySize,
