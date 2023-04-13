@@ -34,8 +34,8 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
+	workflowComponent, ok := a.CompStore.GetWorkflow(in.WorkflowComponent)
+	if !ok {
 		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -88,8 +88,8 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
+	workflowComponent, ok := a.CompStore.GetWorkflow(in.WorkflowComponent)
+	if !ok {
 		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
@@ -119,8 +119,10 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 // TerminateWorkflowAlpha1 is the API handler for terminating a workflow
 func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
 	var method func(context.Context, *workflows.WorkflowReference) error
-	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
-		method = a.WorkflowComponents[in.WorkflowComponent].Terminate
+	if in.WorkflowComponent != "" {
+		if wf, ok := a.CompStore.GetWorkflow(in.WorkflowComponent); ok {
+			method = wf.Terminate
+		}
 	}
 	return a.workflowActivity(ctx, in, method, messages.ErrTerminateWorkflow)
 }
@@ -144,8 +146,8 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
 	}
 
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
+	workflowComponent, ok := a.CompStore.GetWorkflow(in.WorkflowComponent)
+	if !ok {
 		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.RaiseEventWorkflowResponse{}, err
@@ -169,8 +171,10 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 // PauseWorkflowAlpha1 is the API handler for pausing a workflow
 func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
 	var method func(context.Context, *workflows.WorkflowReference) error
-	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
-		method = a.WorkflowComponents[in.WorkflowComponent].Pause
+	if in.WorkflowComponent != "" {
+		if wf, ok := a.CompStore.GetWorkflow(in.WorkflowComponent); ok {
+			method = wf.Pause
+		}
 	}
 	return a.workflowActivity(ctx, in, method, messages.ErrPauseWorkflow)
 }
@@ -178,8 +182,10 @@ func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 // ResumeWorkflowAlpha1 is the API handler for resuming a workflow
 func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error) {
 	var method func(context.Context, *workflows.WorkflowReference) error
-	if in.WorkflowComponent != "" && a.WorkflowComponents[in.WorkflowComponent] != nil {
-		method = a.WorkflowComponents[in.WorkflowComponent].Resume
+	if in.WorkflowComponent != "" {
+		if wf, ok := a.CompStore.GetWorkflow(in.WorkflowComponent); ok {
+			method = wf.Resume
+		}
 	}
 	return a.workflowActivity(ctx, in, method, messages.ErrResumeWorkflow)
 }
@@ -198,8 +204,7 @@ func (a *UniversalAPI) workflowActivity(ctx context.Context, in *runtimev1pb.Wor
 		return &runtimev1pb.WorkflowActivityResponse{}, err
 	}
 
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
+	if _, ok := a.CompStore.GetWorkflow(in.WorkflowComponent); !ok {
 		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.WorkflowActivityResponse{}, err

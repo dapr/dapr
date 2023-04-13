@@ -127,7 +127,7 @@ type tryLockUnlockRequest interface {
 func (a *UniversalAPI) lockValidateRequest(req tryLockUnlockRequest) (lock.Store, error) {
 	var err error
 
-	if len(a.LockStores) == 0 {
+	if a.CompStore.LocksLen() == 0 {
 		err = messages.ErrLockStoresNotConfigured
 		a.Logger.Debug(err)
 		return nil, err
@@ -144,7 +144,7 @@ func (a *UniversalAPI) lockValidateRequest(req tryLockUnlockRequest) (lock.Store
 	}
 
 	// 2. find lock component
-	store, ok := a.LockStores[req.GetStoreName()]
+	store, ok := a.CompStore.GetLock(req.GetStoreName())
 	if !ok {
 		err = messages.ErrLockStoreNotFound.WithFormat(req.GetStoreName())
 		a.Logger.Debug(err)
