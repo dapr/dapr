@@ -609,7 +609,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					"key":   "second",
 					"value": "second value",
 				},
-				ContentType: "text/xml",
+				ContentType: "application/cloudevents+json",
 				Metadata: map[string]string{
 					"md1": "mdVal1",
 					"md2": "mdVal2",
