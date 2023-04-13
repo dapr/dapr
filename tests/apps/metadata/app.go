@@ -23,8 +23,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/dapr/dapr/tests/apps/utils"
-	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -136,7 +137,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	res.StartTime = time.Now()
 
-	cmd := chi.URLParam(r, "command")
+	cmd := mux.Vars(r)["command"]
 	switch cmd {
 	case "setMetadata":
 		err = setMetadata(r)
@@ -174,11 +175,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 // appRouter initializes restful api router
 func appRouter() http.Handler {
-	router := chi.NewRouter()
+	router := mux.NewRouter().StrictSlash(true)
 
 	router.Use(utils.LoggerMiddleware)
 
-	router.Get("/", indexHandler)
+	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/{command}", handler)
 
 	return router
