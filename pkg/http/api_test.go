@@ -593,8 +593,8 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Bulk Publish dataContentType mismatch - 400", func(t *testing.T) {
-		dCTMismatch := []bulkPublishMessageEntry{
+	t.Run("Bulk Publish invalid cloudevent - 400", func(t *testing.T) {
+		reqInvalidCE := []bulkPublishMessageEntry{
 			{
 				EntryId: "1",
 				Event: map[string]string{
@@ -607,6 +607,42 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				EntryId:     "2",
 				Event:       "this is not a cloudevent!",
 				ContentType: "application/cloudevents+json",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		rBytes, _ := json.Marshal(reqInvalidCE)
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, rBytes, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_CLOUD_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "cannot create cloudevent")
+		}
+	})
+
+	t.Run("Bulk Publish dataContentType mismatch - 400", func(t *testing.T) {
+		dCTMismatch := []bulkPublishMessageEntry{
+			{
+				EntryId: "1",
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				EntryId: "2",
+				Event: map[string]string{
+					"key":   "second",
+					"value": "second value",
+				},
+				ContentType: "text/xml",
 				Metadata: map[string]string{
 					"md1": "mdVal1",
 					"md2": "mdVal2",
