@@ -113,16 +113,20 @@ export const options = {
     scenarios,
 }
 
-const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}/v1.0-alpha1`
+const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
 function publishRawMsgs(broker, topic, payload) {
     return http.post(
-        `${DAPR_ADDRESS}/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
+        `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
         payload
     )
 }
 export default function () {
     const result = publishRawMsgs(__ENV.BROKER, __ENV.TOPIC, __ENV.PAYLOAD)
+    if (result.status >= 300) {
+        console.log(`Publish failed: ${result.status}`)
+    }
+
     check(result, {
         'response code was 2xx': (result) =>
             result.status >= 200 && result.status < 300,
@@ -130,7 +134,11 @@ export default function () {
 }
 
 export function teardown(_) {
-    const shutdownResult = http.post(`${DAPR_ADDRESS}/shutdown`)
+    const shutdownResult = http.post(`${DAPR_ADDRESS}/v1.0/shutdown`)
+    if (shutdownResult.status >= 300) {
+        console.log(`Shutdown failed: ${shutdownResult.status}`)
+    }
+
     check(shutdownResult, {
         'shutdown response status code is 2xx':
             shutdownResult.status >= 200 && shutdownResult.status < 300,
