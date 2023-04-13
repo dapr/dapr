@@ -112,7 +112,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	if isLocal {
 		// proxy locally to the app
 		if p.acl != nil {
-			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl) //nolint:nosnakecase
+			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, false, p.acl) //nolint:nosnakecase
 			if !ok {
 				return ctx, nil, nil, nopTeardown, status.Errorf(codes.PermissionDenied, authError)
 			}

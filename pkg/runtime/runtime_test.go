@@ -4193,7 +4193,6 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int)
 		MaxConcurrency:               -1,
 		MTLSEnabled:                  false,
 		SentryAddress:                "",
-		AppSSL:                       false,
 		MaxRequestBodySize:           4,
 		UnixDomainSocket:             "",
 		ReadBufferSize:               4,
@@ -4655,7 +4654,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPProtocol), 1024)
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPSProtocol), 1024)
 		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false

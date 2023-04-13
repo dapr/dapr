@@ -97,7 +97,7 @@ type api struct {
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec                config.TracingSpec
 	accessControlList          *config.AccessControlList
-	appProtocol                string
+	appProtocolIsHTTP          bool
 	extendedMetadata           sync.Map
 	shutdown                   func()
 	getComponentsFn            func() []componentsV1alpha.Component
@@ -124,7 +124,7 @@ type APIOpts struct {
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	AccessControlList           *config.AccessControlList
-	AppProtocol                 string
+	AppProtocolIsHTTP           bool
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
@@ -157,7 +157,7 @@ func NewAPI(opts APIOpts) API {
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
 		tracingSpec:                opts.TracingSpec,
 		accessControlList:          opts.AccessControlList,
-		appProtocol:                opts.AppProtocol,
+		appProtocolIsHTTP:          opts.AppProtocolIsHTTP,
 		shutdown:                   opts.Shutdown,
 		getComponentsFn:            opts.GetComponentsFn,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
