@@ -36,7 +36,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-multierror"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -97,6 +96,7 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -149,86 +149,62 @@ var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in 
 
 var cloudEventDuplicateKeys = sets.NewString(pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field)
 
-type TopicRoutes map[string]TopicRouteElem
-
-type TopicRouteElem struct {
-	metadata        map[string]string
-	rules           []*runtimePubsub.Rule
-	deadLetterTopic string
-	bulkSubscribe   *runtimePubsub.BulkSubscribe
-}
-
 // Type of function that determines if a component is authorized.
 // The function receives the component and must return true if the component is authorized.
 type ComponentAuthorizer func(component componentsV1alpha1.Component) bool
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
-	ctx                       context.Context
-	cancel                    context.CancelFunc
-	runtimeConfig             *Config
-	globalConfig              *config.Configuration
-	accessControlList         *config.AccessControlList
-	componentsLock            *sync.RWMutex
-	components                []componentsV1alpha1.Component
-	grpc                      *grpc.Manager
-	appChannel                channel.AppChannel
-	appConfig                 config.ApplicationConfig
-	directMessaging           messaging.DirectMessaging
-	stateStoreRegistry        *stateLoader.Registry
-	secretStoresRegistry      *secretstoresLoader.Registry
-	nameResolutionRegistry    *nrLoader.Registry
-	workflowComponentRegistry *workflowsLoader.Registry
-	stateStores               map[string]state.Store
-	actor                     actors.Actors
-	bindingsRegistry          *bindingsLoader.Registry
-	subscribeBindingList      []string
-	inputBindings             map[string]bindings.InputBinding
-	outputBindings            map[string]bindings.OutputBinding
-	inputBindingsCtx          context.Context
-	inputBindingsCancel       context.CancelFunc
-	secretStores              map[string]secretstores.SecretStore
-	pubSubRegistry            *pubsubLoader.Registry
-	pubSubs                   map[string]pubsubItem // Key is "componentName"
-	workflowComponents        map[string]wfs.Workflow
-	nameResolver              nr.Resolver
-	httpMiddlewareRegistry    *httpMiddlewareLoader.Registry
-	hostAddress               string
-	actorStateStoreName       string
-	actorStateStoreLock       *sync.RWMutex
-	authenticator             security.Authenticator
-	namespace                 string
-	podName                   string
-	daprHTTPAPI               http.API
-	daprGRPCAPI               grpc.API
-	operatorClient            operatorv1pb.OperatorClient
-	pubsubCtx                 context.Context
-	pubsubCancel              context.CancelFunc
-	topicsLock                *sync.RWMutex
-	topicRoutes               map[string]TopicRoutes        // Key is "componentName"
-	topicCtxCancels           map[string]context.CancelFunc // Key is "componentName||topicName"
-	subscriptions             []runtimePubsub.Subscription
-	inputBindingRoutes        map[string]string
-	shutdownC                 chan error
-	running                   atomic.Bool
-	apiClosers                []io.Closer
-	componentAuthorizers      []ComponentAuthorizer
-	appHealth                 *apphealth.AppHealth
-	appHealthReady            func() // Invoked the first time the app health becomes ready
-	appHealthLock             *sync.Mutex
-	bulkSubLock               *sync.Mutex
-	appHTTPClient             *nethttp.Client
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	runtimeConfig        *Config
+	globalConfig         *config.Configuration
+	accessControlList    *config.AccessControlList
+	grpc                 *grpc.Manager
+	appChannel           channel.AppChannel
+	appConfig            config.ApplicationConfig
+	directMessaging      messaging.DirectMessaging
+	actor                actors.Actors
+	subscribeBindingList []string
 
-	secretsConfiguration map[string]config.SecretsScope
+	nameResolver         nr.Resolver
+	hostAddress          string
+	actorStateStoreName  string
+	actorStateStoreLock  *sync.RWMutex
+	authenticator        security.Authenticator
+	namespace            string
+	podName              string
+	daprHTTPAPI          http.API
+	daprGRPCAPI          grpc.API
+	operatorClient       operatorv1pb.OperatorClient
+	pubsubCtx            context.Context
+	pubsubCancel         context.CancelFunc
+	topicsLock           *sync.RWMutex
+	topicCtxCancels      map[string]context.CancelFunc // Key is "componentName||topicName"
+	shutdownC            chan error
+	running              atomic.Bool
+	apiClosers           []io.Closer
+	componentAuthorizers []ComponentAuthorizer
+	appHealth            *apphealth.AppHealth
+	appHealthReady       func() // Invoked the first time the app health becomes ready
+	appHealthLock        *sync.Mutex
+	bulkSubLock          *sync.Mutex
+	appHTTPClient        *nethttp.Client
+	compStore            *compstore.ComponentStore
 
+	stateStoreRegistry         *stateLoader.Registry
+	secretStoresRegistry       *secretstoresLoader.Registry
+	nameResolutionRegistry     *nrLoader.Registry
+	workflowComponentRegistry  *workflowsLoader.Registry
+	bindingsRegistry           *bindingsLoader.Registry
+	pubSubRegistry             *pubsubLoader.Registry
+	httpMiddlewareRegistry     *httpMiddlewareLoader.Registry
 	configurationStoreRegistry *configurationLoader.Registry
-	configurationStores        map[string]configuration.Store
-
-	lockStoreRegistry *lockLoader.Registry
-	lockStores        map[string]lock.Store
+	lockStoreRegistry          *lockLoader.Registry
+	inputBindingsCtx           context.Context
+	inputBindingsCancel        context.CancelFunc
 
 	cryptoProviderRegistry *cryptoLoader.Registry
-	cryptoProviders        map[string]contribCrypto.SubtleCrypto
 
 	pendingComponents          chan componentsV1alpha1.Component
 	pendingComponentDependents map[string][]componentsV1alpha1.Component
@@ -247,13 +223,7 @@ type ComponentsCallback func(components ComponentRegistry) error
 type ComponentRegistry struct {
 	Actors          actors.Actors
 	DirectMessaging messaging.DirectMessaging
-	StateStores     map[string]state.Store
-	InputBindings   map[string]bindings.InputBinding
-	OutputBindings  map[string]bindings.OutputBinding
-	SecretStores    map[string]secretstores.SecretStore
-	PubSubs         map[string]pubsub.PubSub
-	CryptoProviders map[string]contribCrypto.SubtleCrypto
-	Workflows       map[string]wfs.Workflow
+	CompStore       *compstore.ComponentStore
 }
 
 type componentPreprocessRes struct {
@@ -269,14 +239,6 @@ type pubsubSubscribedMessage struct {
 	pubsub     string
 }
 
-type pubsubItem struct {
-	component           pubsub.PubSub
-	scopedSubscriptions []string
-	scopedPublishings   []string
-	allowedTopics       []string
-	namespaceScoped     bool
-}
-
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -287,22 +249,9 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		runtimeConfig:              runtimeConfig,
 		globalConfig:               globalConfig,
 		accessControlList:          accessControlList,
-		componentsLock:             &sync.RWMutex{},
-		components:                 make([]componentsV1alpha1.Component, 0),
 		actorStateStoreLock:        &sync.RWMutex{},
 		grpc:                       createGRPCManager(runtimeConfig, globalConfig),
-		inputBindings:              map[string]bindings.InputBinding{},
-		outputBindings:             map[string]bindings.OutputBinding{},
-		secretStores:               map[string]secretstores.SecretStore{},
-		stateStores:                map[string]state.Store{},
-		pubSubs:                    map[string]pubsubItem{},
 		topicsLock:                 &sync.RWMutex{},
-		inputBindingRoutes:         map[string]string{},
-		secretsConfiguration:       map[string]config.SecretsScope{},
-		configurationStores:        map[string]configuration.Store{},
-		lockStores:                 map[string]lock.Store{},
-		cryptoProviders:            map[string]contribCrypto.SubtleCrypto{},
-		workflowComponents:         map[string]wfs.Workflow{},
 		pendingComponents:          make(chan componentsV1alpha1.Component),
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
@@ -312,6 +261,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
 		bulkSubLock:                &sync.Mutex{},
+		compStore:                  compstore.New(),
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -613,19 +563,10 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 	}
 
 	if opts.componentsCallback != nil {
-		pubsubs := make(map[string]pubsub.PubSub, len(a.pubSubs))
-		for k, v := range a.pubSubs {
-			pubsubs[k] = v.component
-		}
 		if err = opts.componentsCallback(ComponentRegistry{
 			Actors:          a.actor,
 			DirectMessaging: a.directMessaging,
-			StateStores:     a.stateStores,
-			InputBindings:   a.inputBindings,
-			OutputBindings:  a.outputBindings,
-			SecretStores:    a.secretStores,
-			PubSubs:         pubsubs,
-			Workflows:       a.workflowComponents,
+			CompStore:       a.compStore,
 		}); err != nil {
 			log.Fatalf("failed to register components with callback: %s", err)
 		}
@@ -692,7 +633,7 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	// Populate in a map for easy lookup by store name.
 	if a.globalConfig.Spec.Secrets != nil {
 		for _, scope := range a.globalConfig.Spec.Secrets.Scopes {
-			a.secretsConfiguration[scope.StoreName] = scope
+			a.compStore.AddSecretsConfiguration(scope.StoreName, scope)
 		}
 	}
 }
@@ -701,7 +642,7 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 	pipeline.Handlers = make([]func(next nethttp.Handler) nethttp.Handler, 0, len(spec.Handlers))
 	for i := 0; i < len(spec.Handlers); i++ {
 		middlewareSpec := spec.Handlers[i]
-		component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
+		component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
 		if !exists {
 			// Log the error but continue with initializing the pipeline
 			log.Error("couldn't find middleware component defined in configuration with name %s and type %s/%s",
@@ -775,13 +716,18 @@ func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, dead
 	return nil
 }
 
-func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route TopicRouteElem) error {
+func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route compstore.TopicRouteElem) error {
 	subKey := pubsubTopicKey(name, topic)
 
 	a.topicsLock.Lock()
 	defer a.topicsLock.Unlock()
 
-	allowed := a.isPubSubOperationAllowed(name, topic, a.pubSubs[name].scopedSubscriptions)
+	pubSub, ok := a.compStore.GetPubSub(name)
+	if !ok {
+		return fmt.Errorf("pubsub '%s' not found", name)
+	}
+
+	allowed := a.isPubSubOperationAllowed(name, topic, pubSub.ScopedSubscriptions)
 	if !allowed {
 		return fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", topic, name)
 	}
@@ -794,11 +740,11 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	policyDef := a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub)
-	routeMetadata := route.metadata
+	routeMetadata := route.Metadata
 
-	namespaced := a.pubSubs[name].namespaceScoped
+	namespaced := pubSub.NamespaceScoped
 
-	if route.bulkSubscribe != nil && route.bulkSubscribe.Enabled {
+	if route.BulkSubscribe != nil && route.BulkSubscribe.Enabled {
 		err := a.bulkSubscribeTopic(ctx, policyDef, name, topic, route, namespaced)
 		if err != nil {
 			cancel()
@@ -813,7 +759,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		subscribeTopic = a.namespace + topic
 	}
 
-	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
+	err := pubSub.Component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
@@ -824,15 +770,15 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		msg.Metadata[pubsubName] = name
 
 		msgTopic := msg.Topic
-		if a.pubSubs[name].namespaceScoped {
+		if pubSub.NamespaceScoped {
 			msgTopic = strings.Replace(msgTopic, a.namespace, "", 1)
 		}
 
-		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
+		rawPayload, err := contribMetadata.IsRawPayload(route.Metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if route.deadLetterTopic != "" {
-				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+			if route.DeadLetterTopic != "" {
+				if dlqErr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 					return nil
@@ -849,8 +795,8 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
-				if route.deadLetterTopic != "" {
-					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+				if route.DeadLetterTopic != "" {
+					if dlqErr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 						return nil
@@ -863,8 +809,8 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
-				if route.deadLetterTopic != "" {
-					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+				if route.DeadLetterTopic != "" {
+					if dlqErr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 						return nil
@@ -879,17 +825,17 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 
-			if route.deadLetterTopic != "" {
-				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
+			if route.DeadLetterTopic != "" {
+				_ = a.sendToDeadLetter(name, msg, route.DeadLetterTopic)
 			}
 			return nil
 		}
 
-		routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
+		routePath, shouldProcess, err := findMatchingRoute(route.Rules, cloudEvent)
 		if err != nil {
 			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msgTopic, err)
-			if route.deadLetterTopic != "" {
-				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+			if route.DeadLetterTopic != "" {
+				if dlqErr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
 					return nil
@@ -902,8 +848,8 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			// The event does not match any route specified so ignore it.
 			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msgTopic)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
-			if route.deadLetterTopic != "" {
-				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
+			if route.DeadLetterTopic != "" {
+				_ = a.sendToDeadLetter(name, msg, route.DeadLetterTopic)
 			}
 			return nil
 		}
@@ -935,10 +881,10 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			if route.deadLetterTopic == "" {
+			if route.DeadLetterTopic == "" {
 				return err
 			}
-			_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
+			_ = a.sendToDeadLetter(name, msg, route.DeadLetterTopic)
 			return nil
 		}
 		return err
@@ -1145,7 +1091,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 }
 
 func (a *DaprRuntime) onComponentUpdated(component componentsV1alpha1.Component) bool {
-	oldComp, exists := a.getComponent(component.Spec.Type, component.Name)
+	oldComp, exists := a.compStore.GetComponent(component.Spec.Type, component.Name)
 	newComp, _ := a.processComponentSecrets(component)
 
 	if exists && reflect.DeepEqual(oldComp.Spec, newComp.Spec) {
@@ -1188,7 +1134,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		return nil, errors.New("operation field is missing from request")
 	}
 
-	if binding, ok := a.outputBindings[name]; ok {
+	if binding, ok := a.compStore.GetOutputBinding(name); ok {
 		ops := binding.Operations()
 		for _, o := range ops {
 			if o == req.Operation {
@@ -1212,16 +1158,19 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
-			if a.stateStores != nil {
-				policyRunner := resiliency.NewRunner[any](a.ctx,
-					a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
-				)
-				_, err := policyRunner(func(ctx context.Context) (any, error) {
-					return nil, a.stateStores[response.StoreName].BulkSet(ctx, reqs)
-				})
-				if err != nil {
-					log.Errorf("error saving state from app response: %s", err)
-				}
+			state, ok := a.compStore.GetStateStore(response.StoreName)
+			if !ok {
+				return
+			}
+
+			policyRunner := resiliency.NewRunner[any](a.ctx,
+				a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
+			)
+			_, err := policyRunner(func(ctx context.Context) (any, error) {
+				return nil, state.BulkSet(ctx, reqs)
+			})
+			if err != nil {
+				log.Errorf("error saving state from app response: %s", err)
 			}
 		}(response.State)
 	}
@@ -1268,7 +1217,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
-	path := a.inputBindingRoutes[bindingName]
+	path, _ := a.compStore.GetInputBindingRoute(bindingName)
 	if path == "" {
 		path = bindingName
 	}
@@ -1446,16 +1395,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		AppID:                       a.runtimeConfig.ID,
 		AppChannel:                  a.appChannel,
 		DirectMessaging:             a.directMessaging,
-		GetComponentsFn:             a.getComponents,
-		GetSubscriptionsFn:          a.getSubscriptionsCache,
 		Resiliency:                  a.resiliency,
-		StateStores:                 a.stateStores,
-		WorkflowsComponents:         a.workflowComponents,
-		LockStores:                  a.lockStores,
-		CryptoProviders:             a.cryptoProviders,
-		SecretStores:                a.secretStores,
-		SecretsConfiguration:        a.secretsConfiguration,
-		ConfigurationStores:         a.configurationStores,
 		PubsubAdapter:               a.getPublishAdapter(),
 		Actor:                       a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
@@ -1463,6 +1403,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
 		MaxRequestBodySize:          int64(a.runtimeConfig.MaxRequestBodySize) << 20, // Convert from MB to bytes
+		CompStore:                   a.compStore,
 	})
 
 	var obfuscateUrls, logHealthChecks bool
@@ -1553,13 +1494,6 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		AppID:                       a.runtimeConfig.ID,
 		AppChannel:                  a.appChannel,
 		Resiliency:                  a.resiliency,
-		StateStores:                 a.stateStores,
-		SecretStores:                a.secretStores,
-		WorkflowComponents:          a.workflowComponents,
-		SecretsConfiguration:        a.secretsConfiguration,
-		ConfigurationStores:         a.configurationStores,
-		CryptoProviders:             a.cryptoProviders,
-		LockStores:                  a.lockStores,
 		PubsubAdapter:               a.getPublishAdapter(),
 		DirectMessaging:             a.directMessaging,
 		Actor:                       a.actor,
@@ -1568,14 +1502,13 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		AccessControlList:           a.accessControlList,
 		AppProtocolIsHTTP:           a.runtimeConfig.ApplicationProtocol.IsHTTP(),
 		Shutdown:                    a.ShutdownWithWait,
-		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		GetSubscriptionsFn:          a.getSubscriptionsCache,
+		CompStore:                   a.compStore,
 	})
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
-	if len(a.pubSubs) == 0 {
+	if a.compStore.PubSubsLen() == 0 {
 		return nil
 	}
 
@@ -1614,7 +1547,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 		}
 	} else {
 		// if HTTP, check if there's an endpoint listening for that binding
-		path := a.inputBindingRoutes[binding]
+		path, _ := a.compStore.GetInputBindingRoute(binding)
 		req := invokev1.NewInvokeMethodRequest(path).
 			WithHTTPExtension(nethttp.MethodOptions, "").
 			WithContentType(invokev1.JSONContentType)
@@ -1647,13 +1580,14 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 	}
 
 	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
-	a.inputBindingRoutes[c.Name] = c.Name
+	a.compStore.AddInputBindingRoute(c.Name, c.Name)
 	for _, item := range c.Spec.Metadata {
 		if item.Name == "route" {
-			a.inputBindingRoutes[c.ObjectMeta.Name] = item.Value.String()
+			a.compStore.AddInputBindingRoute(c.ObjectMeta.Name, item.Value.String())
+			break
 		}
 	}
-	a.inputBindings[c.Name] = binding
+	a.compStore.AddInputBinding(c.Name, binding)
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
 }
@@ -1673,7 +1607,7 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 			return NewInitError(InitComponentFailure, fName, err)
 		}
 		log.Infof("successful init for output binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
-		a.outputBindings[c.ObjectMeta.Name] = binding
+		a.compStore.AddOutputBinding(c.ObjectMeta.Name, binding)
 		diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	}
 	return nil
@@ -1693,7 +1627,7 @@ func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 			return NewInitError(InitComponentFailure, fName, err)
 		}
 
-		a.configurationStores[s.ObjectMeta.Name] = store
+		a.compStore.AddConfiguration(s.ObjectMeta.Name, store)
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 	}
 
@@ -1720,7 +1654,7 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 		return NewInitError(InitComponentFailure, fName, err)
 	}
 	// save lock related configuration
-	a.lockStores[s.ObjectMeta.Name] = store
+	a.compStore.AddLock(s.ObjectMeta.Name, store)
 	err = lockLoader.SaveLockConfiguration(s.ObjectMeta.Name, props)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
@@ -1754,7 +1688,7 @@ func (a *DaprRuntime) initWorkflowComponent(s componentsV1alpha1.Component) erro
 		return NewInitError(InitComponentFailure, fName, err)
 	}
 	// save workflow related configuration
-	a.workflowComponents[s.ObjectMeta.Name] = workflowComp
+	a.compStore.AddWorkflow(s.ObjectMeta.Name, workflowComp)
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 
 	return nil
@@ -1771,7 +1705,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 	if store != nil {
 		secretStoreName := a.authSecretStoreOrDefault(s)
 
-		secretStore := a.getSecretStore(secretStoreName)
+		secretStore, _ := a.compStore.GetSecretStore(secretStoreName)
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
 		if encErr != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
@@ -1793,7 +1727,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 			return NewInitError(InitComponentFailure, fName, err)
 		}
 
-		a.stateStores[s.ObjectMeta.Name] = store
+		a.compStore.AddStateStore(s.ObjectMeta.Name, store)
 		err = stateLoader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
@@ -1861,13 +1795,9 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription
 	return subs[:i]
 }
 
-func (a *DaprRuntime) getSubscriptionsCache() []runtimePubsub.Subscription {
-	return a.subscriptions
-}
-
 func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
-	if a.subscriptions != nil {
-		return a.subscriptions, nil
+	if subs := a.compStore.ListSubscriptions(); len(subs) > 0 {
+		return subs, nil
 	}
 
 	var (
@@ -1916,16 +1846,16 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 		}
 	}
 
-	a.subscriptions = subscriptions
+	a.compStore.SetSubscriptions(subscriptions)
 	return subscriptions, nil
 }
 
-func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
-	if a.topicRoutes != nil {
-		return a.topicRoutes, nil
+func (a *DaprRuntime) getTopicRoutes() (map[string]compstore.TopicRoutes, error) {
+	if !a.compStore.TopicRoutesIsNil() {
+		return a.compStore.GetTopicRoutes(), nil
 	}
 
-	topicRoutes := make(map[string]TopicRoutes)
+	topicRoutes := make(map[string]compstore.TopicRoutes)
 
 	if a.appChannel == nil {
 		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
@@ -1939,14 +1869,14 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 
 	for _, s := range subscriptions {
 		if topicRoutes[s.PubsubName] == nil {
-			topicRoutes[s.PubsubName] = TopicRoutes{}
+			topicRoutes[s.PubsubName] = compstore.TopicRoutes{}
 		}
 
-		topicRoutes[s.PubsubName][s.Topic] = TopicRouteElem{
-			metadata:        s.Metadata,
-			rules:           s.Rules,
-			deadLetterTopic: s.DeadLetterTopic,
-			bulkSubscribe:   s.BulkSubscribe,
+		topicRoutes[s.PubsubName][s.Topic] = compstore.TopicRouteElem{
+			Metadata:        s.Metadata,
+			Rules:           s.Rules,
+			DeadLetterTopic: s.DeadLetterTopic,
+			BulkSubscribe:   s.BulkSubscribe,
 		}
 	}
 
@@ -1963,7 +1893,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 			log.Infof("app is subscribed to the following topics: [%s] through pubsub=%s", topics, pubsubName)
 		}
 	}
-	a.topicRoutes = topicRoutes
+	a.compStore.SetTopicRoutes(topicRoutes)
 	return topicRoutes, nil
 }
 
@@ -1991,13 +1921,13 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 
 	pubsubName := c.ObjectMeta.Name
 
-	a.pubSubs[pubsubName] = pubsubItem{
-		component:           pubSub,
-		scopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties),
-		scopedPublishings:   scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties),
-		allowedTopics:       scopes.GetAllowedTopics(properties),
-		namespaceScoped:     metadataContainsNamespace(c.Spec.Metadata),
-	}
+	a.compStore.AddPubSub(pubsubName, compstore.PubsubItem{
+		Component:           pubSub,
+		ScopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties),
+		ScopedPublishings:   scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties),
+		AllowedTopics:       scopes.GetAllowedTopics(properties),
+		NamespaceScoped:     metadataContainsNamespace(c.Spec.Metadata),
+	})
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 
 	return nil
@@ -2008,18 +1938,18 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	a.topicsLock.RLock()
-	ps, ok := a.pubSubs[req.PubsubName]
+	ps, ok := a.compStore.GetPubSub(req.PubsubName)
 	a.topicsLock.RUnlock()
 
 	if !ok {
 		return runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
-	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
+	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.ScopedPublishings); !allowed {
 		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	if ps.namespaceScoped {
+	if ps.NamespaceScoped {
 		req.Topic = a.namespace + req.Topic
 	}
 
@@ -2027,27 +1957,27 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
 	)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, ps.component.Publish(ctx, req)
+		return nil, ps.Component.Publish(ctx, req)
 	})
 	return err
 }
 
 func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	// context.TODO() is used here as later on a context will have to be passed in for each publish separately
-	ps, ok := a.pubSubs[req.PubsubName]
+	ps, ok := a.compStore.GetPubSub(req.PubsubName)
 	if !ok {
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
-	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
+	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.ScopedPublishings); !allowed {
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 	policyDef := a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
-	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
+	if bulkPublisher, ok := ps.Component.(pubsub.BulkPublisher); ok {
 		return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, bulkPublisher)
 	}
 	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
-	defaultBulkPublisher := runtimePubsub.NewDefaultBulkPublisher(ps.component)
+	defaultBulkPublisher := runtimePubsub.NewDefaultBulkPublisher(ps.Component)
 
 	return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, defaultBulkPublisher)
 }
@@ -2063,8 +1993,8 @@ func metadataContainsNamespace(items []componentsV1alpha1.MetadataItem) bool {
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
-func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]TopicRouteElem) (err error) {
-	_, ok := a.pubSubs[name]
+func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]compstore.TopicRouteElem) (err error) {
+	_, ok := a.compStore.GetPubSub(name)
 	if !ok {
 		return fmt.Errorf("pubsub component %s does not exist", name)
 	}
@@ -2081,19 +2011,24 @@ func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[str
 
 // GetPubSub is an adapter method to find a pubsub by name.
 func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
-	ps, ok := a.pubSubs[pubsubName]
+	ps, ok := a.compStore.GetPubSub(pubsubName)
 	if !ok {
 		return nil
 	}
-	return ps.component
+	return ps.Component
 }
 
 func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
 	inAllowedTopics := false
 
+	pubSub, ok := a.compStore.GetPubSub(pubsubName)
+	if !ok {
+		return false
+	}
+
 	// first check if allowedTopics contain it
-	if len(a.pubSubs[pubsubName].allowedTopics) > 0 {
-		for _, t := range a.pubSubs[pubsubName].allowedTopics {
+	if len(pubSub.AllowedTopics) > 0 {
+		for _, t := range pubSub.AllowedTopics {
 			if t == topic {
 				inAllowedTopics = true
 				break
@@ -2455,7 +2390,6 @@ func (a *DaprRuntime) initActors() error {
 	})
 
 	act := actors.NewActors(actors.ActorsOpts{
-		StateStore:       a.stateStores[a.actorStateStoreName],
 		AppChannel:       a.appChannel,
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
@@ -2463,6 +2397,7 @@ func (a *DaprRuntime) initActors() error {
 		TracingSpec:      a.globalConfig.GetTracingSpec(),
 		Resiliency:       a.resiliency,
 		StateStoreName:   a.actorStateStoreName,
+		CompStore:        a.compStore,
 	})
 	err = act.Init()
 	if err == nil {
@@ -2522,10 +2457,6 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 
 	authorizedComps := a.getAuthorizedComponents(comps)
 
-	a.componentsLock.Lock()
-	a.components = authorizedComps
-	a.componentsLock.Unlock()
-
 	// Iterate through the list twice
 	// First, we look for secret stores and load those, then all other components
 	// Sure, we could sort the list of authorizedComps... but this is simpler and most certainly faster
@@ -2543,24 +2474,6 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	}
 
 	return nil
-}
-
-func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Component) {
-	a.componentsLock.Lock()
-	defer a.componentsLock.Unlock()
-
-	replaced := false
-	for i, c := range a.components {
-		if c.Spec.Type == component.Spec.Type && c.ObjectMeta.Name == component.Name {
-			a.components[i] = component
-			replaced = true
-			break
-		}
-	}
-
-	if !replaced {
-		a.components = append(a.components, component)
-	}
 }
 
 func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) components.Category {
@@ -2636,7 +2549,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	}
 
 	log.Info("Component loaded: " + comp.LogName())
-	a.appendOrReplaceComponents(comp)
+	a.compStore.AddComponent(comp)
 	diag.DefaultMonitoring.ComponentLoaded()
 
 	dependency := componentDependency(compCategory, comp.Name)
@@ -2706,50 +2619,64 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	var merr error
 
 	// Close components if they implement `io.Closer`
-	for name, component := range a.secretStores {
-		closeComponent(component, "secret store "+name, &merr)
+	for name, component := range a.compStore.ListSecretStores() {
+		a.compStore.DeleteSecretStore(name)
+		merr = errors.Join(merr, closeComponent(component, "secret store "+name))
 	}
-	for name, component := range a.stateStores {
-		closeComponent(component, "state store "+name, &merr)
+	for name, component := range a.compStore.ListStateStores() {
+		a.compStore.DeleteStateStore(name)
+		merr = errors.Join(merr, closeComponent(component, "state store "+name))
 	}
-	for name, component := range a.lockStores {
-		closeComponent(component, "lock store "+name, &merr)
+	for name, component := range a.compStore.ListLocks() {
+		a.compStore.DeleteLock(name)
+		merr = errors.Join(merr, closeComponent(component, "clock store "+name))
 	}
-	for name, component := range a.configurationStores {
-		closeComponent(component, "configuration store "+name, &merr)
+	for name, component := range a.compStore.ListConfigurations() {
+		a.compStore.DeleteConfiguration(name)
+		merr = errors.Join(merr, closeComponent(component, "configuration store "+name))
 	}
-	for name, component := range a.cryptoProviders {
-		closeComponent(component, "crypto provider "+name, &merr)
+	for name, component := range a.compStore.ListCryptoProviders() {
+		a.compStore.DeleteCryptoProvider(name)
+		merr = errors.Join(merr, closeComponent(component, "crypto provider "+name))
 	}
-	for name, component := range a.workflowComponents {
-		closeComponent(component, "workflow "+name, &merr)
+	for name, component := range a.compStore.ListWorkflows() {
+		a.compStore.DeleteWorkflow(name)
+		merr = errors.Join(merr, closeComponent(component, "workflow component "+name))
 	}
 	// Close output bindings
 	// Input bindings are closed when a.ctx is canceled
-	for name, component := range a.outputBindings {
-		closeComponent(component, "output binding "+name, &merr)
+	for name, component := range a.compStore.ListOutputBindings() {
+		a.compStore.DeleteOutputBinding(name)
+		merr = errors.Join(merr, closeComponent(component, "output binding "+name))
 	}
 	// Close pubsub publisher
 	// The subscriber part is closed when a.ctx is canceled
-	for name, pubSub := range a.pubSubs {
-		if pubSub.component == nil {
+	for name, pubSub := range a.compStore.ListPubSubs() {
+		a.compStore.DeletePubSub(name)
+		if pubSub.Component == nil {
 			continue
 		}
-		closeComponent(pubSub.component, "pub sub "+name, &merr)
+		merr = errors.Join(merr, closeComponent(pubSub.Component, "pubsub "+name))
 	}
-	closeComponent(a.nameResolver, "name resolver", &merr)
+	merr = errors.Join(merr, closeComponent(a.nameResolver, "name resolver"))
+
+	for _, component := range a.compStore.ListComponents() {
+		a.compStore.DeleteComponent(component.Spec.Type, component.Name)
+	}
 
 	return merr
 }
 
-func closeComponent(component any, logmsg string, merr *error) {
+func closeComponent(component any, logmsg string) error {
 	if closer, ok := component.(io.Closer); ok && closer != nil {
 		if err := closer.Close(); err != nil {
 			err = fmt.Errorf("error closing %s: %w", logmsg, err)
-			*merr = multierror.Append(*merr, err)
 			log.Warn(err)
+			return err
 		}
 	}
+
+	return nil
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
@@ -2862,8 +2789,8 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 			continue
 		}
 
-		secretStore := a.getSecretStore(secretStoreName)
-		if secretStore == nil {
+		secretStore, ok := a.compStore.GetSecretStore(secretStoreName)
+		if !ok {
 			log.Warnf("Component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
 			return component, secretStoreName
 		}
@@ -2912,13 +2839,6 @@ func (a *DaprRuntime) authSecretStoreOrDefault(comp componentsV1alpha1.Component
 		}
 	}
 	return comp.SecretStore
-}
-
-func (a *DaprRuntime) getSecretStore(storeName string) secretstores.SecretStore {
-	if storeName == "" {
-		return nil
-	}
-	return a.secretStores[storeName]
 }
 
 func (a *DaprRuntime) blockUntilAppIsReady() {
@@ -3108,7 +3028,7 @@ func (a *DaprRuntime) initCryptoProvider(c componentsV1alpha1.Component) error {
 		return NewInitError(InitComponentFailure, fName, err)
 	}
 
-	a.cryptoProviders[c.ObjectMeta.Name] = component
+	a.compStore.AddCryptoProvider(c.ObjectMeta.Name, component)
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
 }
@@ -3127,7 +3047,7 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 		return NewInitError(InitComponentFailure, fName, err)
 	}
 
-	a.secretStores[c.ObjectMeta.Name] = secretStore
+	a.compStore.AddSecretStore(c.ObjectMeta.Name, secretStore)
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
 }
@@ -3163,30 +3083,9 @@ func (a *DaprRuntime) toBaseMetadata(c componentsV1alpha1.Component) contribMeta
 	}
 }
 
-func (a *DaprRuntime) getComponent(componentType string, name string) (componentsV1alpha1.Component, bool) {
-	a.componentsLock.RLock()
-	defer a.componentsLock.RUnlock()
-
-	for i, c := range a.components {
-		if c.Spec.Type == componentType && c.ObjectMeta.Name == name {
-			return a.components[i], true
-		}
-	}
-	return componentsV1alpha1.Component{}, false
-}
-
-func (a *DaprRuntime) getComponents() []componentsV1alpha1.Component {
-	a.componentsLock.RLock()
-	defer a.componentsLock.RUnlock()
-
-	comps := make([]componentsV1alpha1.Component, len(a.components))
-	copy(comps, a.components)
-	return comps
-}
-
 func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 	capabilities := make(map[string][]string)
-	for key, store := range a.stateStores {
+	for key, store := range a.compStore.ListStateStores() {
 		features := store.Features()
 		stateStoreCapabilities := featureTypeToString(features)
 		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
@@ -3194,21 +3093,21 @@ func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 		}
 		capabilities[key] = stateStoreCapabilities
 	}
-	for key, pubSubItem := range a.pubSubs {
-		features := pubSubItem.component.Features()
+	for key, pubSubItem := range a.compStore.ListPubSubs() {
+		features := pubSubItem.Component.Features()
 		capabilities[key] = featureTypeToString(features)
 	}
-	for key := range a.inputBindings {
+	for key := range a.compStore.ListInputBindings() {
 		capabilities[key] = []string{"INPUT_BINDING"}
 	}
-	for key := range a.outputBindings {
+	for key := range a.compStore.ListOutputBindings() {
 		if val, found := capabilities[key]; found {
 			capabilities[key] = append(val, "OUTPUT_BINDING")
 		} else {
 			capabilities[key] = []string{"OUTPUT_BINDING"}
 		}
 	}
-	for key, store := range a.secretStores {
+	for key, store := range a.compStore.ListSecretStores() {
 		features := store.Features()
 		capabilities[key] = featureTypeToString(features)
 	}
@@ -3264,7 +3163,7 @@ func (a *DaprRuntime) startSubscriptions() {
 	// PubSub subscribers are stopped via cancellation of the main runtime's context
 	a.pubsubCtx, a.pubsubCancel = context.WithCancel(a.ctx)
 	a.topicCtxCancels = map[string]context.CancelFunc{}
-	for pubsubName := range a.pubSubs {
+	for pubsubName := range a.compStore.ListPubSubs() {
 		if err := a.beginPubSub(pubsubName); err != nil {
 			log.Errorf("error occurred while beginning pubsub %s: %v", pubsubName, err)
 		}
@@ -3284,7 +3183,7 @@ func (a *DaprRuntime) stopSubscriptions() {
 	a.topicCtxCancels = nil
 
 	// Delete the cached topics and routes
-	a.topicRoutes = nil
+	a.compStore.SetTopicRoutes(nil)
 }
 
 func (a *DaprRuntime) startReadingFromBindings() (err error) {
@@ -3300,7 +3199,7 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	// Input bindings are stopped via cancellation of the main runtime's context
 	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
 
-	for name, binding := range a.inputBindings {
+	for name, binding := range a.compStore.ListInputBindings() {
 		isSubscribed, err := a.isAppSubscribedToBinding(name)
 		if err != nil {
 			return err
