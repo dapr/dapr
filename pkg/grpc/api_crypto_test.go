@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
@@ -47,12 +46,11 @@ func TestCryptoAlpha1(t *testing.T) {
 	}
 
 	// Run test server
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
 	// Create gRPC test client
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)

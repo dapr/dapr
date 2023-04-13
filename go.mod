@@ -428,4 +428,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // TEMP UNTIL https://github.com/dapr/kit/pull/42 IS MERGED
-replace github.com/dapr/kit => github.com/italypaleale/dapr-kit v0.0.2-0.20230411030145-11d548ed915a
+replace github.com/dapr/kit => github.com/italypaleale/dapr-kit v0.0.2-0.20230412203039-0210051428b8
