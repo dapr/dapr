@@ -1393,7 +1393,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		DirectMessaging:             a.directMessaging,
 		Resiliency:                  a.resiliency,
 		PubsubAdapter:               a.getPublishAdapter(),
-		Actor:                       a.actor,
+		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
 		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
 		Shutdown:                    a.ShutdownWithWait,
