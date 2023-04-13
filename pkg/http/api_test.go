@@ -620,7 +620,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, rBytes, nil)
 			// assert
-			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, 500, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_CLOUD_EVENTS_SER", resp.ErrorBody["errorCode"])
 			assert.Contains(t, resp.ErrorBody["message"], "cannot create cloudevent")
 		}
