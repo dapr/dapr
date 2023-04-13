@@ -2283,45 +2283,60 @@ func TestV1ActorEndpoints(t *testing.T) {
 func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	compStore := compstore.New()
+	compStore.AddComponent(componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "MockComponent1Name",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "mock.component1Type",
+			Version: "v1.0",
+			Metadata: []componentsV1alpha1.MetadataItem{
+				{
+					Name: "actorMockComponent1",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("true")},
+					},
+				},
+			},
+		},
+	})
+	compStore.AddComponent(componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "MockComponent2Name",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "mock.component2Type",
+			Version: "v1.0",
+			Metadata: []componentsV1alpha1.MetadataItem{
+				{
+					Name: "actorMockComponent2",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("true")},
+					},
+				},
+			},
+		},
+	})
+	compStore.SetSubscriptions([]runtimePubsub.Subscription{
+		{
+			PubsubName:      "test",
+			Topic:           "topic",
+			DeadLetterTopic: "dead",
+			Metadata:        map[string]string{},
+			Rules: []*runtimePubsub.Rule{
+				{
+					Match: &expr.Expr{},
+					Path:  "path",
+				},
+			},
+		},
+	})
+
 	testAPI := &api{
 		actor: nil,
-		getComponentsFn: func() []componentsV1alpha1.Component {
-			return []componentsV1alpha1.Component{
-				{
-					ObjectMeta: metaV1.ObjectMeta{
-						Name: "MockComponent1Name",
-					},
-					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    "mock.component1Type",
-						Version: "v1.0",
-						Metadata: []componentsV1alpha1.MetadataItem{
-							{
-								Name: "actorMockComponent1",
-								Value: componentsV1alpha1.DynamicValue{
-									JSON: v1.JSON{Raw: []byte("true")},
-								},
-							},
-						},
-					},
-				},
-				{
-					ObjectMeta: metaV1.ObjectMeta{
-						Name: "MockComponent2Name",
-					},
-					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    "mock.component2Type",
-						Version: "v1.0",
-						Metadata: []componentsV1alpha1.MetadataItem{
-							{
-								Name: "actorMockComponent2",
-								Value: componentsV1alpha1.DynamicValue{
-									JSON: v1.JSON{Raw: []byte("true")},
-								},
-							},
-						},
-					},
-				},
-			}
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
 		},
 		extendedMetadata: sync.Map{},
 		getComponentsCapabilitesFn: func() map[string][]string {
@@ -2329,22 +2344,6 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
-		},
-		getSubscriptionsFn: func() []runtimePubsub.Subscription {
-			return []runtimePubsub.Subscription{
-				{
-					PubsubName:      "test",
-					Topic:           "topic",
-					DeadLetterTopic: "dead",
-					Metadata:        map[string]string{},
-					Rules: []*runtimePubsub.Rule{
-						{
-							Match: &expr.Expr{},
-							Path:  "path",
-						},
-					},
-				},
-			}
 		},
 	}
 	// PutMetadata only stroes string(request body)
