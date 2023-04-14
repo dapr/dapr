@@ -65,6 +65,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
@@ -590,6 +591,39 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, 400, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_REQUEST_METADATA", resp.ErrorBody["errorCode"])
 			assert.Contains(t, resp.ErrorBody["message"], "failed deserializing metadata")
+		}
+	})
+
+	t.Run("Bulk Publish invalid cloudevent - 400", func(t *testing.T) {
+		reqInvalidCE := []bulkPublishMessageEntry{
+			{
+				EntryId: "1",
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				EntryId:     "2",
+				Event:       "this is not a cloudevent!",
+				ContentType: "application/cloudevents+json",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		rBytes, _ := json.Marshal(reqInvalidCE)
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, rBytes, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_CLOUD_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "cannot create cloudevent")
 		}
 	})
 
@@ -2249,45 +2283,60 @@ func TestV1ActorEndpoints(t *testing.T) {
 func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	compStore := compstore.New()
+	compStore.AddComponent(componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "MockComponent1Name",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "mock.component1Type",
+			Version: "v1.0",
+			Metadata: []componentsV1alpha1.MetadataItem{
+				{
+					Name: "actorMockComponent1",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("true")},
+					},
+				},
+			},
+		},
+	})
+	compStore.AddComponent(componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "MockComponent2Name",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "mock.component2Type",
+			Version: "v1.0",
+			Metadata: []componentsV1alpha1.MetadataItem{
+				{
+					Name: "actorMockComponent2",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("true")},
+					},
+				},
+			},
+		},
+	})
+	compStore.SetSubscriptions([]runtimePubsub.Subscription{
+		{
+			PubsubName:      "test",
+			Topic:           "topic",
+			DeadLetterTopic: "dead",
+			Metadata:        map[string]string{},
+			Rules: []*runtimePubsub.Rule{
+				{
+					Match: &expr.Expr{},
+					Path:  "path",
+				},
+			},
+		},
+	})
+
 	testAPI := &api{
 		actor: nil,
-		getComponentsFn: func() []componentsV1alpha1.Component {
-			return []componentsV1alpha1.Component{
-				{
-					ObjectMeta: metaV1.ObjectMeta{
-						Name: "MockComponent1Name",
-					},
-					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    "mock.component1Type",
-						Version: "v1.0",
-						Metadata: []componentsV1alpha1.MetadataItem{
-							{
-								Name: "actorMockComponent1",
-								Value: componentsV1alpha1.DynamicValue{
-									JSON: v1.JSON{Raw: []byte("true")},
-								},
-							},
-						},
-					},
-				},
-				{
-					ObjectMeta: metaV1.ObjectMeta{
-						Name: "MockComponent2Name",
-					},
-					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    "mock.component2Type",
-						Version: "v1.0",
-						Metadata: []componentsV1alpha1.MetadataItem{
-							{
-								Name: "actorMockComponent2",
-								Value: componentsV1alpha1.DynamicValue{
-									JSON: v1.JSON{Raw: []byte("true")},
-								},
-							},
-						},
-					},
-				},
-			}
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
 		},
 		extendedMetadata: sync.Map{},
 		getComponentsCapabilitesFn: func() map[string][]string {
@@ -2295,22 +2344,6 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
-		},
-		getSubscriptionsFn: func() []runtimePubsub.Subscription {
-			return []runtimePubsub.Subscription{
-				{
-					PubsubName:      "test",
-					Topic:           "topic",
-					DeadLetterTopic: "dead",
-					Metadata:        map[string]string{},
-					Rules: []*runtimePubsub.Rule{
-						{
-							Match: &expr.Expr{},
-							Path:  "path",
-						},
-					},
-				},
-			}
 		},
 	}
 	// PutMetadata only stroes string(request body)
@@ -2670,12 +2703,13 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 	storeName := "store1"
 	badStoreName := "nonExistStore"
 
-	fakeConfigurationStores := map[string]configuration.Store{
-		storeName: fakeConfigurationStore,
-	}
+	compStore := compstore.New()
+	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
-		resiliency:          resiliency.New(nil),
-		configurationStores: fakeConfigurationStores,
+		resiliency: resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
 
@@ -2778,12 +2812,13 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 
 	storeName := "store1"
 
-	fakeConfigurationStores := map[string]configuration.Store{
-		storeName: fakeConfigurationStore,
-	}
+	compStore := compstore.New()
+	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
-		resiliency:          resiliency.New(nil),
-		configurationStores: fakeConfigurationStores,
+		resiliency: resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
 
@@ -2837,12 +2872,13 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 	l := logger.NewLogger("fakeLogger")
 	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
+
+	compStore := compstore.New()
+	compStore.AddLock(storeName, fakeLockStore)
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			Logger: l,
-			LockStores: map[string]lock.Store{
-				storeName: fakeLockStore,
-			},
+			Logger:     l,
+			CompStore:  compStore,
 			Resiliency: resiliencyConfig,
 		},
 	}
@@ -3005,16 +3041,15 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 	componentName := "dapr"
 
-	workflowComponents := map[string]workflowContrib.Workflow{
-		componentName: fakeWorkflowComponent,
-	}
 	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency)
+	compStore := compstore.New()
+	compStore.AddWorkflow(componentName, fakeWorkflowComponent)
 	testAPI := &api{
 		resiliency: resiliencyConfig,
 		universal: &universalapi.UniversalAPI{
-			Logger:             logger.NewLogger("fakeLogger"),
-			WorkflowComponents: workflowComponents,
-			Resiliency:         resiliencyConfig,
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: resiliencyConfig,
 		},
 	}
 
@@ -3723,18 +3758,14 @@ func TestV1StateEndpoints(t *testing.T) {
 			map[string]int{},
 		),
 	}
-	fakeStores := map[string]state.Store{
-		"store1":    fakeStore,
-		"failStore": failingStore,
-	}
-	testAPI := &api{
-		stateStores: fakeStores,
-		resiliency:  resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency),
-	}
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStore)
+	compStore.AddStateStore("failStore", failingStore)
+	testAPI := &api{resiliency: resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)}
 	testAPI.universal = &universalapi.UniversalAPI{
-		Logger:      logger.NewLogger("fakeLogger"),
-		StateStores: fakeStores,
-		Resiliency:  testAPI.resiliency,
+		Logger:     logger.NewLogger("fakeLogger"),
+		CompStore:  compStore,
+		Resiliency: testAPI.resiliency,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -3750,15 +3781,16 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
-				testAPI.stateStores = nil
-				testAPI.universal.StateStores = nil
+				for name := range testAPI.universal.CompStore.ListStateStores() {
+					testAPI.universal.CompStore.DeleteStateStore(name)
+				}
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 500, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 
-				testAPI.stateStores = fakeStores
-				testAPI.universal.StateStores = fakeStores
+				testAPI.universal.CompStore.AddStateStore("store1", fakeStore)
+				testAPI.universal.CompStore.AddStateStore("failStore", failingStore)
 
 				// act
 				resp = fakeServer.DoRequest(method, apiPath, nil, nil)
@@ -4258,11 +4290,13 @@ func TestV1StateEndpoints(t *testing.T) {
 
 func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStateStore{})
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			Logger:      logger.NewLogger("fakeLogger"),
-			StateStores: map[string]state.Store{"store1": fakeStateStore{}},
-			Resiliency:  resiliency.New(nil),
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
@@ -4275,11 +4309,13 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 
 func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStateStore{})
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			Logger:      logger.NewLogger("fakeLogger"),
-			StateStores: map[string]state.Store{"store1": fakeStateStoreQuerier{}},
-			Resiliency:  resiliency.New(nil),
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
@@ -4292,11 +4328,13 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 func TestStateStoreQuerierEncrypted(t *testing.T) {
 	storeName := "encrypted-store1"
 	fakeServer := newFakeHTTPServer()
+	compStore := compstore.New()
+	compStore.AddStateStore(storeName, fakeStateStoreQuerier{})
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			Logger:      logger.NewLogger("fakeLogger"),
-			StateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
-			Resiliency:  resiliency.New(nil),
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
@@ -4490,13 +4528,20 @@ func TestV1SecretEndpoints(t *testing.T) {
 
 	l := logger.NewLogger("fakeLogger")
 	res := resiliency.FromConfigurations(l, testResiliency)
+
+	compStore := compstore.New()
+	for name, conf := range secretsConfiguration {
+		compStore.AddSecretsConfiguration(name, conf)
+	}
+	for name, store := range fakeStores {
+		compStore.AddSecretStore(name, store)
+	}
 	testAPI := &api{
 		resiliency: res,
 		universal: &universalapi.UniversalAPI{
-			Logger:               l,
-			SecretsConfiguration: secretsConfiguration,
-			SecretStores:         fakeStores,
-			Resiliency:           res,
+			Logger:     l,
+			CompStore:  compStore,
+			Resiliency: res,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
@@ -4590,9 +4635,13 @@ func TestV1SecretEndpoints(t *testing.T) {
 	t.Run("Get secret - 500 for secret store not congfigured", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
-		testAPI.universal.SecretStores = nil
+		for name := range testAPI.universal.CompStore.ListSecretStores() {
+			testAPI.universal.CompStore.DeleteSecretStore(name)
+		}
 		defer func() {
-			testAPI.universal.SecretStores = fakeStores
+			for name, store := range fakeStores {
+				testAPI.universal.CompStore.AddSecretStore(name, store)
+			}
 		}()
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -4889,13 +4938,15 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	var fakeStore state.Store = fakeStateStoreQuerier{}
 	fakeStoreNonTransactional := new(daprt.MockStateStore)
-	fakeStores := map[string]state.Store{
-		"store1":                fakeStore,
-		"storeNonTransactional": fakeStoreNonTransactional,
-	}
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStore)
+	compStore.AddStateStore("storeNonTransactional", fakeStoreNonTransactional)
+
 	testAPI := &api{
-		stateStores: fakeStores,
-		resiliency:  resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
