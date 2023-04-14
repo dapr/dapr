@@ -44,6 +44,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 	reqProto := &runtimev1pb.EncryptAlpha1Request{}
 	err = cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
+		// This is already an APIError object.
 		a.Logger.Debug(err)
 		return err
 	}
@@ -55,7 +56,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 		return err
 	}
 	if reqProto.Options.KeyName == "" {
-		err = messages.ErrBadRequest.WithFormat("missing property 'key' in the options message")
+		err = messages.ErrBadRequest.WithFormat("missing property 'keyName' in the options message")
 		a.Logger.Debug(err)
 		return err
 	}
@@ -98,6 +99,7 @@ func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err er
 	reqProto := &runtimev1pb.DecryptAlpha1Request{}
 	err = cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
+		// This is already an APIError object.
 		a.Logger.Debug(err)
 		return err
 	}
@@ -263,7 +265,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 		}
 
 		// Reset the object so we can re-use it
-		// Use `resProto.Reset()` if more properties are added
+		// Use `resProto.Reset()` if more properties are added besides Payload to the proto
 		resProto.SetPayload(nil)
 	}
 
@@ -327,7 +329,7 @@ func (a *api) cryptoGetUnwrapKeyFn(ctx context.Context, componentName string, co
 	}
 }
 
-func cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) (err error) {
+func cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) error {
 	// Wait for the first message from the caller containing the options
 	// We put a timeout of 5 seconds on receiving the first message
 	firstMsgCh := make(chan error, 1)
@@ -341,12 +343,10 @@ func cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) (err error) {
 	select {
 	case <-firstChunkCtx.Done():
 		return messages.ErrBadRequest.WithFormat(fmt.Errorf("error waiting for first message: %w", firstChunkCtx.Err()))
-	case err = <-firstMsgCh:
-		// Nop
-	}
-
-	if err != nil {
-		return messages.ErrCryptoOperation.WithFormat(fmt.Errorf("error receiving the first message: %w", err))
+	case err := <-firstMsgCh:
+		if err != nil {
+			return messages.ErrCryptoOperation.WithFormat(fmt.Errorf("error receiving the first message: %w", err))
+		}
 	}
 
 	return nil
