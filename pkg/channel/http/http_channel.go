@@ -301,7 +301,12 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Add)
-	channelReq.Header.Set("content-type", req.ContentType())
+
+	if ct := req.ContentType(); ct != "" {
+		channelReq.Header.Set("content-type", ct)
+	} else {
+		channelReq.Header.Del("content-type")
+	}
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
