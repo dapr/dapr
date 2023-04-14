@@ -41,7 +41,7 @@ const cryptoFirstChunkTimeout = 5 * time.Second
 // EncryptAlpha1 encrypts a message using the Dapr encryption scheme and a key stored in the vault.
 func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err error) { //nolint:nosnakecase
 	// Get the first message from the caller containing the options
-	reqProto := &runtimev1pb.EncryptAlpha1Request{}
+	reqProto := &runtimev1pb.EncryptRequest{}
 	err = cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
 		// This is already an APIError object.
@@ -81,7 +81,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 
 		// The next values are optional and could be empty
 		OmitKeyName:       reqProto.Options.OmitDecryptionKeyName,
-		DecryptionKeyName: reqProto.Options.DecryptionKey,
+		DecryptionKeyName: reqProto.Options.DecryptionKeyName,
 	}
 
 	// Set the cipher if present
@@ -96,7 +96,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 // DecryptAlpha1 decrypts a message using the Dapr encryption scheme and a key stored in the vault.
 func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err error) { //nolint:nosnakecase
 	// Get the first message from the caller containing the options
-	reqProto := &runtimev1pb.DecryptAlpha1Request{}
+	reqProto := &runtimev1pb.DecryptRequest{}
 	err = cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
 		// This is already an APIError object.
@@ -200,10 +200,10 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	switch o := opts.(type) {
 	case encv1.EncryptOptions:
 		out, err = encv1.Encrypt(inReader, o)
-		resProto = &runtimev1pb.EncryptAlpha1Response{}
+		resProto = &runtimev1pb.EncryptResponse{}
 	case encv1.DecryptOptions:
 		out, err = encv1.Decrypt(inReader, o)
-		resProto = &runtimev1pb.DecryptAlpha1Response{}
+		resProto = &runtimev1pb.DecryptResponse{}
 	default:
 		// It's ok to panic here since this indicates a development-time error.
 		a.Logger.Fatal("Invalid type for opts argument")

@@ -25,37 +25,37 @@ import (
 )
 
 // SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
-func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleGetKeyAlpha1Request) (*runtimev1pb.SubtleGetKeyAlpha1Response, error) {
+func (a *UniversalAPI) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequest) (*runtimev1pb.SubtleGetKeyResponse, error) {
 	return nil, messages.ErrAPIUnimplemented
 }
 
 // SubtleEncryptAlpha1 encrypts a small message using a key stored in the vault.
-func (a *UniversalAPI) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleEncryptAlpha1Request) (*runtimev1pb.SubtleEncryptAlpha1Response, error) {
+func (a *UniversalAPI) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleEncryptRequest) (*runtimev1pb.SubtleEncryptResponse, error) {
 	return nil, messages.ErrAPIUnimplemented
 }
 
 // SubtleDecryptAlpha1 decrypts a small message using a key stored in the vault.
-func (a *UniversalAPI) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleDecryptAlpha1Request) (*runtimev1pb.SubtleDecryptAlpha1Response, error) {
+func (a *UniversalAPI) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleDecryptRequest) (*runtimev1pb.SubtleDecryptResponse, error) {
 	return nil, messages.ErrAPIUnimplemented
 }
 
 // SubtleWrapKeyAlpha1 wraps a key using a key stored in the vault.
-func (a *UniversalAPI) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleWrapKeyAlpha1Request) (*runtimev1pb.SubtleWrapKeyAlpha1Response, error) {
+func (a *UniversalAPI) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRequest) (*runtimev1pb.SubtleWrapKeyResponse, error) {
 	return nil, messages.ErrAPIUnimplemented
 }
 
 // SubtleUnwrapKeyAlpha1 unwraps a key using a key stored in the vault.
-func (a *UniversalAPI) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyAlpha1Request) (*runtimev1pb.SubtleUnwrapKeyAlpha1Response, error) {
+func (a *UniversalAPI) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyRequest) (*runtimev1pb.SubtleUnwrapKeyResponse, error) {
 	return nil, messages.ErrAPIUnimplemented
 }
 
 // SubtleSignAlpha1 signs a message using a key stored in the vault.
-func (a *UniversalAPI) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.SubtleSignAlpha1Request) (*runtimev1pb.SubtleSignAlpha1Response, error) {
+func (a *UniversalAPI) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.SubtleSignRequest) (*runtimev1pb.SubtleSignResponse, error) {
 	return nil, messages.ErrAPIUnimplemented
 }
 
 // SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
-func (a *UniversalAPI) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.SubtleVerifyAlpha1Request) (*runtimev1pb.SubtleVerifyAlpha1Response, error) {
+func (a *UniversalAPI) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.SubtleVerifyRequest) (*runtimev1pb.SubtleVerifyResponse, error) {
 	return nil, messages.ErrAPIUnimplemented
 }
 

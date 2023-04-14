@@ -62,8 +62,8 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
 						Algorithm:     "AES",
@@ -74,7 +74,7 @@ func TestCryptoAlpha1(t *testing.T) {
 					},
 				},
 			}
-			enc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			enc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.NoError(t, err)
 			require.True(t, bytes.HasPrefix(enc, []byte("dapr.io/enc/v1")))
 		})
@@ -84,8 +84,8 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.DecryptAlpha1Request{
-					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+				&runtimev1pb.DecryptRequest{
+					Options: &runtimev1pb.DecryptRequestOptions{
 						ComponentName: "myvault",
 					},
 					Payload: &commonv1pb.StreamPayload{
@@ -94,7 +94,7 @@ func TestCryptoAlpha1(t *testing.T) {
 					},
 				},
 			}
-			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptResponse{})
 			require.NoError(t, err)
 			require.Equal(t, "hello world", string(dec))
 		})
@@ -107,21 +107,21 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
 						Algorithm:     "AES",
 					},
 				},
-				&runtimev1pb.EncryptAlpha1Request{
+				&runtimev1pb.EncryptRequest{
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  0,
 						Data: []byte("hello world"),
 					},
 				},
 			}
-			enc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			enc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.NoError(t, err)
 			require.True(t, bytes.HasPrefix(enc, []byte("dapr.io/enc/v1")))
 		})
@@ -131,19 +131,19 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.DecryptAlpha1Request{
-					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+				&runtimev1pb.DecryptRequest{
+					Options: &runtimev1pb.DecryptRequestOptions{
 						ComponentName: "myvault",
 					},
 				},
-				&runtimev1pb.DecryptAlpha1Request{
+				&runtimev1pb.DecryptRequest{
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  0,
 						Data: enc,
 					},
 				},
 			}
-			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptResponse{})
 			require.NoError(t, err)
 			require.Equal(t, "hello world", string(dec))
 		})
@@ -156,27 +156,27 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
 						Algorithm:     "AES",
 					},
 				},
-				&runtimev1pb.EncryptAlpha1Request{
+				&runtimev1pb.EncryptRequest{
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  0,
 						Data: []byte("soft kitty, warm kitty, little ball of fur, "),
 					},
 				},
-				&runtimev1pb.EncryptAlpha1Request{
+				&runtimev1pb.EncryptRequest{
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  1,
 						Data: []byte("happy kitty, sleepy kitty, purr purr purr"), //nolint:dupword
 					},
 				},
 			}
-			enc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			enc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.NoError(t, err)
 			require.True(t, bytes.HasPrefix(enc, []byte("dapr.io/enc/v1")))
 		})
@@ -186,26 +186,26 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.DecryptAlpha1Request{
-					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+				&runtimev1pb.DecryptRequest{
+					Options: &runtimev1pb.DecryptRequestOptions{
 						ComponentName: "myvault",
 					},
 				},
-				&runtimev1pb.DecryptAlpha1Request{
+				&runtimev1pb.DecryptRequest{
 					Payload: &commonv1pb.StreamPayload{
 						Seq: 0,
 						// 180 is an arbitrary number that should fall in the middle of the first chunk, after the header (which is of variable length but in this test should not be more than 150-160 bytes)
 						Data: enc[0:180],
 					},
 				},
-				&runtimev1pb.DecryptAlpha1Request{
+				&runtimev1pb.DecryptRequest{
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  1,
 						Data: enc[180:],
 					},
 				},
 			}
-			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptResponse{})
 			require.NoError(t, err)
 			require.Equal(t, "soft kitty, warm kitty, little ball of fur, happy kitty, sleepy kitty, purr purr purr", string(dec)) //nolint:dupword
 		})
@@ -216,8 +216,8 @@ func TestCryptoAlpha1(t *testing.T) {
 			defer stream.CloseSend()
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.DecryptAlpha1Request{
-					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+				&runtimev1pb.DecryptRequest{
+					Options: &runtimev1pb.DecryptRequestOptions{
 						ComponentName: "myvault",
 					},
 					Payload: &commonv1pb.StreamPayload{
@@ -226,21 +226,21 @@ func TestCryptoAlpha1(t *testing.T) {
 						Data: enc[0:50],
 					},
 				},
-				&runtimev1pb.DecryptAlpha1Request{
+				&runtimev1pb.DecryptRequest{
 					Payload: &commonv1pb.StreamPayload{
 						Seq: 1,
 						// 180 is an arbitrary number that should fall somewhere in the middle of the first chunk
 						Data: enc[50:180],
 					},
 				},
-				&runtimev1pb.DecryptAlpha1Request{
+				&runtimev1pb.DecryptRequest{
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  2,
 						Data: enc[180:],
 					},
 				},
 			}
-			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			dec, err := cryptoSendRequest(stream, send, &runtimev1pb.DecryptResponse{})
 			require.NoError(t, err)
 			require.Equal(t, "soft kitty, warm kitty, little ball of fur, happy kitty, sleepy kitty, purr purr purr", string(dec)) //nolint:dupword
 		})
@@ -257,8 +257,8 @@ func TestCryptoAlpha1(t *testing.T) {
 		require.NoError(t, err)
 		defer stream.CloseSend()
 		send := []runtimev1pb.CryptoRequests{
-			&runtimev1pb.EncryptAlpha1Request{
-				Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+			&runtimev1pb.EncryptRequest{
+				Options: &runtimev1pb.EncryptRequestOptions{
 					ComponentName: "myvault",
 					KeyName:       "aes-passthrough",
 					Algorithm:     "AES",
@@ -269,7 +269,7 @@ func TestCryptoAlpha1(t *testing.T) {
 				},
 			},
 		}
-		largeEnc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+		largeEnc, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 		require.NoError(t, err)
 		require.Greater(t, len(largeEnc), len(largeData))
 		require.True(t, bytes.HasPrefix(largeEnc, []byte("dapr.io/enc/v1")))
@@ -280,8 +280,8 @@ func TestCryptoAlpha1(t *testing.T) {
 		require.NoError(t, err)
 		defer stream.CloseSend()
 		send := []runtimev1pb.CryptoRequests{
-			&runtimev1pb.DecryptAlpha1Request{
-				Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+			&runtimev1pb.DecryptRequest{
+				Options: &runtimev1pb.DecryptRequestOptions{
 					ComponentName: "myvault",
 				},
 				Payload: &commonv1pb.StreamPayload{
@@ -290,7 +290,7 @@ func TestCryptoAlpha1(t *testing.T) {
 				},
 			},
 		}
-		_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+		_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptResponse{})
 		require.Error(t, err)
 		require.ErrorContains(t, err, "invalid header")
 	})
@@ -301,8 +301,8 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
 						Algorithm:     "AES",
@@ -313,7 +313,7 @@ func TestCryptoAlpha1(t *testing.T) {
 					},
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "invalid sequence number received: 1 (expected: 0)")
 		})
@@ -323,8 +323,8 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.DecryptAlpha1Request{
-					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+				&runtimev1pb.DecryptRequest{
+					Options: &runtimev1pb.DecryptRequestOptions{
 						ComponentName: "myvault",
 					},
 					Payload: &commonv1pb.StreamPayload{
@@ -333,7 +333,7 @@ func TestCryptoAlpha1(t *testing.T) {
 					},
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "invalid sequence number received: 1 (expected: 0)")
 		})
@@ -345,8 +345,8 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
 						Algorithm:     "AES",
@@ -356,15 +356,15 @@ func TestCryptoAlpha1(t *testing.T) {
 						Data: []byte("hello world"),
 					},
 				},
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
 						Algorithm:     "AES",
 					},
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "options found in non-leading message")
 		})
@@ -374,8 +374,8 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.DecryptAlpha1Request{
-					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+				&runtimev1pb.DecryptRequest{
+					Options: &runtimev1pb.DecryptRequestOptions{
 						ComponentName: "myvault",
 					},
 					Payload: &commonv1pb.StreamPayload{
@@ -383,13 +383,13 @@ func TestCryptoAlpha1(t *testing.T) {
 						Data: largeEnc,
 					},
 				},
-				&runtimev1pb.DecryptAlpha1Request{
-					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+				&runtimev1pb.DecryptRequest{
+					Options: &runtimev1pb.DecryptRequestOptions{
 						ComponentName: "myvault",
 					},
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "options found in non-leading message")
 		})
@@ -401,11 +401,11 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
+				&runtimev1pb.EncryptRequest{
 					Options: nil,
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "first message does not contain the required options")
 		})
@@ -415,15 +415,15 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						// ComponentName: "myvault",
 						KeyName:   "aes-passthrough",
 						Algorithm: "AES",
 					},
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "missing component name")
 		})
@@ -433,17 +433,17 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						// KeyName:       "aes-passthrough",
 						Algorithm: "AES",
 					},
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.Error(t, err)
-			require.ErrorContains(t, err, "missing property 'key' in the options message")
+			require.ErrorContains(t, err, "missing property 'keyName' in the options message")
 		})
 
 		t.Run("missing algorithm", func(t *testing.T) {
@@ -451,15 +451,15 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.EncryptAlpha1Request{
-					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
+				&runtimev1pb.EncryptRequest{
+					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
 						// Algorithm:     "AES",
 					},
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "missing property 'algorithm' in the options message")
 		})
@@ -471,11 +471,11 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.DecryptAlpha1Request{
+				&runtimev1pb.DecryptRequest{
 					Options: nil,
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.DecryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "first message does not contain the required options")
 		})
@@ -485,13 +485,13 @@ func TestCryptoAlpha1(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
-				&runtimev1pb.DecryptAlpha1Request{
-					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
+				&runtimev1pb.DecryptRequest{
+					Options: &runtimev1pb.DecryptRequestOptions{
 						// ComponentName: "myvault",
 					},
 				},
 			}
-			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptAlpha1Response{})
+			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.Error(t, err)
 			require.ErrorContains(t, err, "missing component name")
 		})

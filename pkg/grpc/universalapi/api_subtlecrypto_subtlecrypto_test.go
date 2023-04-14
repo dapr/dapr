@@ -45,10 +45,10 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	}
 
 	t.Run("return key in PEM format", func(t *testing.T) {
-		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{
+		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{
 			ComponentName: "myvault",
 			Name:          "good-key",
-			Format:        runtimev1pb.SubtleGetKeyAlpha1Request_PEM,
+			Format:        runtimev1pb.SubtleGetKeyRequest_PEM,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -57,10 +57,10 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("return key in JSON format", func(t *testing.T) {
-		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{
+		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{
 			ComponentName: "myvault",
 			Name:          "good-key",
-			Format:        runtimev1pb.SubtleGetKeyAlpha1Request_JSON,
+			Format:        runtimev1pb.SubtleGetKeyRequest_JSON,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -69,7 +69,7 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("default to PEM format", func(t *testing.T) {
-		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{
+		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{
 			ComponentName: "myvault",
 			Name:          "good-key",
 		})
@@ -80,7 +80,7 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("key not found", func(t *testing.T) {
-		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{
+		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{
 			ComponentName: "myvault",
 			Name:          "not-found",
 		})
@@ -91,7 +91,7 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("key has key ID", func(t *testing.T) {
-		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{
+		res, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{
 			ComponentName: "myvault",
 			Name:          "with-name",
 		})
@@ -107,13 +107,13 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
 
-		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{})
+		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
-		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{
+		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
@@ -121,9 +121,9 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("invalid format", func(t *testing.T) {
-		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{
+		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{
 			ComponentName: "myvault",
-			Format:        runtimev1pb.SubtleGetKeyAlpha1Request_KeyFormat(-9000),
+			Format:        runtimev1pb.SubtleGetKeyRequest_KeyFormat(-9000),
 		})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, messages.ErrBadRequest)
@@ -131,7 +131,7 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("failed to get key", func(t *testing.T) {
-		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyAlpha1Request{
+		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{
 			ComponentName: "myvault",
 			Name:          "error-key",
 		})
@@ -152,7 +152,7 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 	}
 
 	t.Run("encrypt message", func(t *testing.T) {
-		res, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptAlpha1Request{
+		res, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptRequest{
 			ComponentName: "myvault",
 			Plaintext:     []byte("hello world"),
 			KeyName:       "good-tag",
@@ -170,13 +170,13 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
 
-		_, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptAlpha1Request{})
+		_, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptRequest{})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
-		_, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptAlpha1Request{
+		_, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptRequest{
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
@@ -184,7 +184,7 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 	})
 
 	t.Run("failed to encrypt", func(t *testing.T) {
-		_, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptAlpha1Request{
+		_, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptRequest{
 			ComponentName: "myvault",
 			KeyName:       "error",
 		})
@@ -206,7 +206,7 @@ func TestSubtleDecryptAlpha1(t *testing.T) {
 	}
 
 	t.Run("decrypt message", func(t *testing.T) {
-		res, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptAlpha1Request{
+		res, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptRequest{
 			ComponentName: "myvault",
 			Ciphertext:    []byte("hello world"),
 			KeyName:       "good",
@@ -223,13 +223,13 @@ func TestSubtleDecryptAlpha1(t *testing.T) {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
 
-		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptAlpha1Request{})
+		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptRequest{})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
-		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptAlpha1Request{
+		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptRequest{
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
@@ -237,7 +237,7 @@ func TestSubtleDecryptAlpha1(t *testing.T) {
 	})
 
 	t.Run("failed to decrypt", func(t *testing.T) {
-		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptAlpha1Request{
+		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptRequest{
 			ComponentName: "myvault",
 			KeyName:       "error",
 		})
@@ -259,7 +259,7 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 	}
 
 	t.Run("wrap key", func(t *testing.T) {
-		res, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{
+		res, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyRequest{
 			ComponentName: "myvault",
 			PlaintextKey:  []byte("hello world"),
 			KeyName:       "good-tag",
@@ -276,13 +276,13 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
 
-		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{})
+		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyRequest{})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
-		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{
+		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyRequest{
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
@@ -290,7 +290,7 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("key is empty", func(t *testing.T) {
-		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{
+		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyRequest{
 			ComponentName: "myvault",
 			KeyName:       "error",
 		})
@@ -300,7 +300,7 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("failed to wrap key", func(t *testing.T) {
-		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyAlpha1Request{
+		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyRequest{
 			ComponentName: "myvault",
 			KeyName:       "error",
 			PlaintextKey:  oneHundredTwentyEightBits,
@@ -323,7 +323,7 @@ func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
 	}
 
 	t.Run("unwrap key", func(t *testing.T) {
-		res, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyAlpha1Request{
+		res, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyRequest{
 			ComponentName: "myvault",
 			WrappedKey:    []byte("hello world"),
 			KeyName:       "good",
@@ -340,13 +340,13 @@ func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
 
-		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyAlpha1Request{})
+		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyRequest{})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
-		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyAlpha1Request{
+		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyRequest{
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
@@ -354,7 +354,7 @@ func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("failed to unwrap key", func(t *testing.T) {
-		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyAlpha1Request{
+		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyRequest{
 			ComponentName: "myvault",
 			KeyName:       "error",
 			WrappedKey:    oneHundredTwentyEightBits,
@@ -377,7 +377,7 @@ func TestSubtleSignAlpha1(t *testing.T) {
 	}
 
 	t.Run("sign message", func(t *testing.T) {
-		res, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignAlpha1Request{
+		res, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignRequest{
 			ComponentName: "myvault",
 			Digest:        []byte("hello world"),
 			KeyName:       "good",
@@ -394,13 +394,13 @@ func TestSubtleSignAlpha1(t *testing.T) {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
 
-		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignAlpha1Request{})
+		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignRequest{})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
-		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignAlpha1Request{
+		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignRequest{
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
@@ -408,7 +408,7 @@ func TestSubtleSignAlpha1(t *testing.T) {
 	})
 
 	t.Run("failed to sign", func(t *testing.T) {
-		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignAlpha1Request{
+		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignRequest{
 			ComponentName: "myvault",
 			KeyName:       "error",
 			Digest:        oneHundredTwentyEightBits,
@@ -431,7 +431,7 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 	}
 
 	t.Run("signature is valid", func(t *testing.T) {
-		res, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{
+		res, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyRequest{
 			ComponentName: "myvault",
 			Digest:        oneHundredTwentyEightBits,
 			Signature:     oneHundredTwentyEightBits,
@@ -443,7 +443,7 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 	})
 
 	t.Run("signature is invalid", func(t *testing.T) {
-		res, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{
+		res, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyRequest{
 			ComponentName: "myvault",
 			Digest:        oneHundredTwentyEightBits,
 			Signature:     oneHundredTwentyEightBits,
@@ -460,13 +460,13 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
 
-		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{})
+		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyRequest{})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
-		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{
+		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyRequest{
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
@@ -474,7 +474,7 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 	})
 
 	t.Run("failed to verify", func(t *testing.T) {
-		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyAlpha1Request{
+		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyRequest{
 			ComponentName: "myvault",
 			KeyName:       "error",
 		})

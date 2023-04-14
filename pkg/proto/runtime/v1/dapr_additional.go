@@ -26,49 +26,49 @@ type SubtleCryptoRequests interface {
 	SetComponentName(name string)
 }
 
-func (x *SubtleGetKeyAlpha1Request) SetComponentName(name string) {
+func (x *SubtleGetKeyRequest) SetComponentName(name string) {
 	if x != nil {
 		x.ComponentName = name
 	}
 }
 
-func (x *SubtleEncryptAlpha1Request) SetComponentName(name string) {
+func (x *SubtleEncryptRequest) SetComponentName(name string) {
 	if x != nil {
 		x.ComponentName = name
 	}
 }
 
-func (x *SubtleDecryptAlpha1Request) SetComponentName(name string) {
+func (x *SubtleDecryptRequest) SetComponentName(name string) {
 	if x != nil {
 		x.ComponentName = name
 	}
 }
 
-func (x *SubtleWrapKeyAlpha1Request) SetComponentName(name string) {
+func (x *SubtleWrapKeyRequest) SetComponentName(name string) {
 	if x != nil {
 		x.ComponentName = name
 	}
 }
 
-func (x *SubtleUnwrapKeyAlpha1Request) SetComponentName(name string) {
+func (x *SubtleUnwrapKeyRequest) SetComponentName(name string) {
 	if x != nil {
 		x.ComponentName = name
 	}
 }
 
-func (x *SubtleSignAlpha1Request) SetComponentName(name string) {
+func (x *SubtleSignRequest) SetComponentName(name string) {
 	if x != nil {
 		x.ComponentName = name
 	}
 }
 
-func (x *SubtleVerifyAlpha1Request) SetComponentName(name string) {
+func (x *SubtleVerifyRequest) SetComponentName(name string) {
 	if x != nil {
 		x.ComponentName = name
 	}
 }
 
-// CryptoRequests is an interface for EncryptAlpha1Request and DecryptAlpha1Request.
+// CryptoRequests is an interface for EncryptRequest and DecryptRequest.
 type CryptoRequests interface {
 	proto.Message
 
@@ -84,7 +84,7 @@ type CryptoRequests interface {
 	HasOptions() bool
 }
 
-func (x *EncryptAlpha1Request) SetPayload(payload *commonv1pb.StreamPayload) {
+func (x *EncryptRequest) SetPayload(payload *commonv1pb.StreamPayload) {
 	if x == nil {
 		return
 	}
@@ -92,19 +92,19 @@ func (x *EncryptAlpha1Request) SetPayload(payload *commonv1pb.StreamPayload) {
 	x.Payload = payload
 }
 
-func (x *EncryptAlpha1Request) SetOptions(opts proto.Message) {
+func (x *EncryptRequest) SetOptions(opts proto.Message) {
 	if x == nil {
 		return
 	}
 
-	x.Options = opts.(*EncryptAlpha1RequestOptions)
+	x.Options = opts.(*EncryptRequestOptions)
 }
 
-func (x *EncryptAlpha1Request) HasOptions() bool {
+func (x *EncryptRequest) HasOptions() bool {
 	return x != nil && x.Options != nil
 }
 
-func (x *DecryptAlpha1Request) SetPayload(payload *commonv1pb.StreamPayload) {
+func (x *DecryptRequest) SetPayload(payload *commonv1pb.StreamPayload) {
 	if x == nil {
 		return
 	}
@@ -112,19 +112,19 @@ func (x *DecryptAlpha1Request) SetPayload(payload *commonv1pb.StreamPayload) {
 	x.Payload = payload
 }
 
-func (x *DecryptAlpha1Request) SetOptions(opts proto.Message) {
+func (x *DecryptRequest) SetOptions(opts proto.Message) {
 	if x == nil {
 		return
 	}
 
-	x.Options = opts.(*DecryptAlpha1RequestOptions)
+	x.Options = opts.(*DecryptRequestOptions)
 }
 
-func (x *DecryptAlpha1Request) HasOptions() bool {
+func (x *DecryptRequest) HasOptions() bool {
 	return x != nil && x.Options != nil
 }
 
-// CryptoResponses is an interface for EncryptAlpha1Response and DecryptAlpha1Response.
+// CryptoResponses is an interface for EncryptResponse and DecryptResponse.
 type CryptoResponses interface {
 	proto.Message
 
@@ -136,7 +136,7 @@ type CryptoResponses interface {
 	Reset()
 }
 
-func (x *EncryptAlpha1Response) SetPayload(payload *commonv1pb.StreamPayload) {
+func (x *EncryptResponse) SetPayload(payload *commonv1pb.StreamPayload) {
 	if x == nil {
 		return
 	}
@@ -144,7 +144,7 @@ func (x *EncryptAlpha1Response) SetPayload(payload *commonv1pb.StreamPayload) {
 	x.Payload = payload
 }
 
-func (x *DecryptAlpha1Response) SetPayload(payload *commonv1pb.StreamPayload) {
+func (x *DecryptResponse) SetPayload(payload *commonv1pb.StreamPayload) {
 	if x == nil {
 		return
 	}
