@@ -23,8 +23,8 @@ import (
 func init() {
 	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
 		return servicebusqueues.NewAzureServiceBusQueues(l)
-	}, "azure.servicebus.queues", "azure.servicebusqueues")
+	}, "azure.servicebus.queues", "azure.servicebus.queues", "azure.servicebusqueues")
 	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
 		return servicebusqueues.NewAzureServiceBusQueues(l)
-	}, "azure.servicebus.queues", "azure.servicebusqueues")
+	}, "azure.servicebus.queues", "azure.servicebus.queues", "azure.servicebusqueues")
 }
