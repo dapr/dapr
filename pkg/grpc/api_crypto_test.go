@@ -60,6 +60,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -81,6 +82,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("decrypt", func(t *testing.T) {
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
@@ -103,6 +105,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -126,6 +129,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("decrypt", func(t *testing.T) {
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
@@ -150,6 +154,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -179,6 +184,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("decrypt - whole header in first chunk", func(t *testing.T) {
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
@@ -187,7 +193,8 @@ func TestCryptoAlpha1(t *testing.T) {
 				},
 				&runtimev1pb.DecryptAlpha1Request{
 					Payload: &commonv1pb.StreamPayload{
-						Seq:  0,
+						Seq: 0,
+						// 180 is an arbitrary number that should fall in the middle of the first chunk, after the header (which is of variable length but in this test should not be more than 150-160 bytes)
 						Data: enc[0:180],
 					},
 				},
@@ -206,19 +213,23 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("decrypt - header split in multiple chunks", func(t *testing.T) {
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
 						ComponentName: "myvault",
 					},
 					Payload: &commonv1pb.StreamPayload{
-						Seq:  0,
+						Seq: 0,
+						// This is an arbitrary number that should fall within the header. The header is usually (but not guaranteed to be) around 150 bytes
 						Data: enc[0:50],
 					},
 				},
 				&runtimev1pb.DecryptAlpha1Request{
 					Payload: &commonv1pb.StreamPayload{
-						Seq:  1,
+						Seq: 1,
+						// 180 is an arbitrary number that should fall somewhere in the middle of the first chunk
 						Data: enc[50:180],
 					},
 				},
@@ -244,6 +255,7 @@ func TestCryptoAlpha1(t *testing.T) {
 
 		stream, err := client.EncryptAlpha1(context.Background())
 		require.NoError(t, err)
+		defer stream.CloseSend()
 		send := []runtimev1pb.CryptoRequests{
 			&runtimev1pb.EncryptAlpha1Request{
 				Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -266,6 +278,7 @@ func TestCryptoAlpha1(t *testing.T) {
 	t.Run("decrypt without header", func(t *testing.T) {
 		stream, err := client.DecryptAlpha1(context.Background())
 		require.NoError(t, err)
+		defer stream.CloseSend()
 		send := []runtimev1pb.CryptoRequests{
 			&runtimev1pb.DecryptAlpha1Request{
 				Options: &runtimev1pb.DecryptAlpha1RequestOptions{
@@ -286,6 +299,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -307,6 +321,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("decrypt", func(t *testing.T) {
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
@@ -328,6 +343,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -356,6 +372,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("decrypt", func(t *testing.T) {
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
@@ -382,6 +399,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("missing options", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: nil,
@@ -395,6 +413,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("missing component name", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -412,6 +431,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("missing key name", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -429,6 +449,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("missing algorithm", func(t *testing.T) {
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptAlpha1Request{
 					Options: &runtimev1pb.EncryptAlpha1RequestOptions{
@@ -448,6 +469,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("missing options", func(t *testing.T) {
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: nil,
@@ -461,6 +483,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		t.Run("missing component name", func(t *testing.T) {
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.DecryptAlpha1Request{
 					Options: &runtimev1pb.DecryptAlpha1RequestOptions{
@@ -479,6 +502,7 @@ func TestCryptoAlpha1(t *testing.T) {
 			start := time.Now()
 			stream, err := client.EncryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 
 			_, err = stream.Recv()
 			require.Error(t, err)
@@ -490,6 +514,7 @@ func TestCryptoAlpha1(t *testing.T) {
 			start := time.Now()
 			stream, err := client.DecryptAlpha1(context.Background())
 			require.NoError(t, err)
+			defer stream.CloseSend()
 
 			_, err = stream.Recv()
 			require.Error(t, err)
