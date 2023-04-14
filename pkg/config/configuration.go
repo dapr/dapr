@@ -367,7 +367,10 @@ func SetTracingSpecFromEnv(conf *Configuration) {
 		endpoint = strings.TrimPrefix(endpoint, "https://")
 
 		conf.Spec.TracingSpec.Otel.EndpointAddress = endpoint
-		conf.Spec.TracingSpec.SamplingRate = "1"
+
+		if conf.Spec.TracingSpec.SamplingRate == "" {
+			conf.Spec.TracingSpec.SamplingRate = "1"
+		}
 
 		// The OTLP attribute allows 'grpc', 'http/protobuf', or 'http/json'.
 		// Dapr setting can only be 'grpc' or 'http'.
