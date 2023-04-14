@@ -565,7 +565,7 @@ func (c ConfigurationSpec) ToYAML() (string, error) {
 func (c ConfigurationSpec) String() string {
 	enc, err := c.ToYAML()
 	if err != nil {
-		return "Failed to marshal ConfigurationSpec object to YAML: " + err.Error()
+		return fmt.Sprintf("Failed to marshal ConfigurationSpec object to YAML: %v", err)
 	}
 	return enc
 }
