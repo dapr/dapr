@@ -17,7 +17,7 @@ injectorImage:
 
 nameOverride: ""
 fullnameOverride: ""
-webhookFailurePolicy: Ignore
+webhookFailurePolicy: Fail
 sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 sidecarRunAsNonRoot: true
