@@ -337,8 +337,8 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 	parameterFinder, _ := regexp.Compile("/{.*}")
 
 	// Build the API allowlist and denylist
-	allowedAPIs := s.apiSpec.Allowed.ForProtocol("http")
-	deniedAPIs := s.apiSpec.Denied.ForProtocol("http")
+	allowedAPIs := s.apiSpec.Allowed.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+	deniedAPIs := s.apiSpec.Denied.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 	for _, e := range endpoints {
 		if !e.IsAllowed(allowedAPIs, deniedAPIs) {

@@ -42,7 +42,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0-alpha1",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		eps := a.constructStateEndpoints()
@@ -86,7 +86,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0-alpha1",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		eps := a.constructStateEndpoints()
@@ -124,7 +124,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0-alpha1",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		eps := a.constructPubSubEndpoints()
@@ -163,7 +163,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		eps := a.constructDirectMessagingEndpoints()
@@ -201,7 +201,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		eps := a.constructBindingsEndpoints()
@@ -240,7 +240,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		eps := a.constructMetadataEndpoints()
@@ -279,7 +279,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		eps := a.constructSecretEndpoints()
@@ -318,7 +318,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		eps := a.constructShutdownEndpoints()
@@ -357,7 +357,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		denied := config.APIAccessRules{
 			{
@@ -370,7 +370,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0-alpha1",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		allEndpoints := []Endpoint{}
@@ -410,7 +410,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0-alpha1",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		denied := config.APIAccessRules{
 			{
@@ -418,7 +418,7 @@ func TestAPIAllowlist(t *testing.T) {
 				Version:  "v1.0",
 				Protocol: "http",
 			},
-		}.ForProtocol("http")
+		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
 		allEndpoints := []Endpoint{}

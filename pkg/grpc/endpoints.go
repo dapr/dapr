@@ -152,7 +152,8 @@ func setAPIEndpointsMiddlewares(allowedRules config.APIAccessRules, deniedRules 
 		}
 }
 
-// Converts a slice of config.APIAccessRule into a map where the key is the gRPC full endpoint
+// Converts a slice of config.APIAccessRule into a map where the key is the gRPC full endpoint.
+// The keys in the returned map follow the pattern "<rule-name>.<rule-version>"
 func apiAccessRuleToMap(rules config.APIAccessRules) map[string]struct{} {
 	res := map[string]struct{}{}
 
