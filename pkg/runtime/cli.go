@@ -390,6 +390,7 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Info("loading default configuration")
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
+	daprGlobalConfig.SetTracingSpecFromEnv(globalConfig)
 
 	globalConfig.LoadFeatures()
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
