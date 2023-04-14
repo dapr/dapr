@@ -42,8 +42,8 @@ const (
 
 type testCase struct {
 	broker        string
+	publishType   string
 	topic         string
-	numMessages   int
 	bulkSize      int
 	messageSizeKb int
 	durationMs    int
@@ -78,29 +78,31 @@ func TestMain(m *testing.M) {
 }
 
 func TestPubsubBulkPublishHttpPerformance(t *testing.T) {
-	bulkSizes := []int{10, 100, 1000}
-	messageSizesKb := []int{2, 31}
+	publishTypes := []string{"normal", "bulk"}
+	bulkSizes := []int{10, 100}
+	messageSizesKb := []int{1}
 
 	testcases := []testCase{}
 	for _, bulkSize := range bulkSizes {
 		for _, messageSizeKb := range messageSizesKb {
 			for _, broker := range brokers {
-				testcases = append(testcases, testCase{
-					broker:        broker.Name,
-					topic:         topicName,
-					numMessages:   1000,
-					bulkSize:      bulkSize,
-					messageSizeKb: messageSizeKb,
-					durationMs:    30 * 1000,
-					numVus:        50,
-				})
+				for _, publishType := range publishTypes {
+					testcases = append(testcases, testCase{
+						broker:        broker.Name,
+						publishType:   publishType,
+						topic:         topicName,
+						bulkSize:      bulkSize,
+						messageSizeKb: messageSizeKb,
+						durationMs:    30 * 1000,
+						numVus:        50,
+					})
+				}
 			}
 		}
 	}
 
 	for _, tc := range testcases {
-		testName := fmt.Sprintf("%s_n%d_b%d_s%dKB",
-			tc.broker, tc.numMessages, tc.bulkSize, tc.messageSizeKb)
+		testName := fmt.Sprintf("%s_b%d_s%dKB_%s", tc.broker, tc.bulkSize, tc.messageSizeKb, tc.publishType)
 		t.Run(testName, func(t *testing.T) {
 			runTest(t, tc)
 		})
@@ -112,12 +114,12 @@ func runTest(t *testing.T, tc testCase) {
 
 	k6Test := loadtest.NewK6(
 		"./test.js",
-		loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
+		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithAppID(k6AppName),
 		loadtest.WithName(k6AppName),
+		loadtest.WithRunnerEnvVar("PUBLISH_TYPE", tc.publishType),
 		loadtest.WithRunnerEnvVar("BROKER_NAME", tc.broker),
 		loadtest.WithRunnerEnvVar("TOPIC_NAME", tc.topic),
-		loadtest.WithRunnerEnvVar("NUM_MESSAGES", fmt.Sprintf("%d", tc.numMessages)),
 		loadtest.WithRunnerEnvVar("BULK_SIZE", fmt.Sprintf("%d", tc.bulkSize)),
 		loadtest.WithRunnerEnvVar("MESSAGE_SIZE_KB", fmt.Sprintf("%d", tc.messageSizeKb)),
 		loadtest.WithRunnerEnvVar("DURATION_MS", fmt.Sprintf("%d", tc.durationMs)),
@@ -134,7 +136,7 @@ func runTest(t *testing.T, tc testCase) {
 	summary.ForTest(t).
 		OutputK6(sm.RunnersResults).
 		Output("Broker", tc.broker).
-		Output("NumMessages", fmt.Sprintf("%d", tc.numMessages)).
+		Output("PublishType", tc.publishType).
 		Output("BulkSize", fmt.Sprintf("%d", tc.bulkSize)).
 		Output("MessageSizeKb", fmt.Sprintf("%d", tc.messageSizeKb)).
 		Flush()

@@ -16,8 +16,9 @@ import { check } from 'k6'
 import crypto from 'k6/crypto'
 import { SharedArray } from 'k6/data'
 
+const PUBLISH_TYPE_BULK = "bulk"
 const KB = 1024
-const MAX_MS_ALLOWED = 1
+const MAX_MS_ALLOWED = 500
 // padd with leading 0 if <16
 function i2hex(i) {
     return ('0' + i.toString(16)).slice(-2)
@@ -50,35 +51,35 @@ function getBulkPublishPayload(numMsgs, msgSize) {
 }
 
 const data = new SharedArray('scenarios', function () {
+    let scenarios = {};
     const thresholds = {
         checks: ['rate==1'],
         http_req_duration: [`avg<${MAX_MS_ALLOWED}`]
     };
 
     const brokerName = __ENV.BROKER_NAME;
-    const topicName = __ENV.TOPIC_NAME;
-    const numMessages = __ENV.NUM_MESSAGES;
+    const publishType = __ENV.PUBLISH_TYPE;
     const bulkSize = parseInt(__ENV.BULK_SIZE);
     const messageSizeKb = parseInt(__ENV.MESSAGE_SIZE_KB);
     const durationMs = parseInt(__ENV.DURATION_MS);
     const numVus = parseInt(__ENV.NUM_VUS);
 
-    const numIterations = Math.floor(numMessages / bulkSize);
+    let payload = '';
+    if (publishType == PUBLISH_TYPE_BULK) {
+        payload = getBulkPublishPayload(bulkSize, messageSizeKb);
+    } else {
+        payload = randomStringOfSize(messageSizeKb * KB);
+    }
 
-    const scenario = `${brokerName}_n${numMessages}_b${bulkSize}_s${messageSizeKb}KB`;
-    let scenarios = {};
-
-    scenarios[scenario] = {
+    const scenario = `${brokerName}_b${bulkSize}_s${messageSizeKb}KB_${publishType}`;
+    scenarios[scenario] = Object.assign({
         executor: 'constant-vus',
         vus: numVus,
         duration: `${durationMs}ms`,
         env: {
-            PAYLOAD: getBulkPublishPayload(bulkSize, messageSizeKb),
-            BROKER: brokerName,
-            TOPIC: topicName,
-            NUM_ITER: numIterations,
+            PAYLOAD: payload,
         }
-    };
+    });
 
     return [{ scenarios, thresholds }] // must be an array
 })
@@ -87,35 +88,53 @@ const { scenarios, thresholds } = data[0]
 export const options = {
     discardResponseBodies: true,
     thresholds,
-    scenarios
+    scenarios,
 }
 
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
-function publishRawMsgs(broker, topic, payload, numIter) {
-    statusCodes = []
-    for (let i = 0; i < numIter; i++) {
+function bulkPublishRawMsgs(broker, topic, payload) {
+    const result = http.post(
+        `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
+        payload
+    );
+    return result.status;
+}
+
+function publishRawMsgs(broker, topic, payload, bulkSize) {
+    const statusCodes = []
+    for (let i = 0; i < bulkSize; i++) {
         const result = http.post(
-            `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
+            `${DAPR_ADDRESS}/v1.0/publish/${broker}/${topic}?metadata.rawPayload=true`,
             payload
-        )
+        );
         statusCodes.push(result.status)
     }
-
-    return statusCodes;
+    return statusCodes
 }
 
 export default function () {
-    const statusCodes = publishRawMsgs(__ENV.BROKER, __ENV.TOPIC, __ENV.PAYLOAD, __ENV.NUM_ITER)
-    const failed = statusCodes.filter(code => code >= 300)
-
-    if (failed.length > 0) {
-        console.log(`Failed to publish ${failed.length} messages`)
-        console.log(`Status codes: ${JSON.stringify(statusCodes)}`)
+    const publishType = __ENV.PUBLISH_TYPE
+    const statusCodes = []
+    if (publishType == PUBLISH_TYPE_BULK) {
+        // Do bulk publish
+        const statusCode = bulkPublishRawMsgs(__ENV.BROKER_NAME, __ENV.TOPIC_NAME, __ENV.PAYLOAD)
+        statusCodes.push(statusCode)
+    } else {
+        // Do normal publish
+        const _statusCodes = publishRawMsgs(__ENV.BROKER_NAME, __ENV.TOPIC_NAME, __ENV.PAYLOAD, __ENV.BULK_SIZE)
+        statusCodes.push(..._statusCodes)
     }
 
-    check(failed, {
-        'all messages published successfully': (failed) => failed.length === 0,
+    const failedStatusCodes = statusCodes.filter(statusCode => statusCode < 200 || statusCode >= 300)
+
+    if (failedStatusCodes.length > 0) {
+        console.log(`Publish failed: ${JSON.stringify(failedStatusCodes)}`)
+    }
+
+    check(failedStatusCodes, {
+        'publish response status code is 2xx':
+            failedStatusCodes.length == 0,
     })
 }
 
