@@ -42,6 +42,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/ptr"
 )
@@ -351,8 +352,10 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		clock = mc
 	}
 
+	compStore := compstore.New()
+	compStore.AddStateStore(storeName, store)
 	a := newActorsWithClock(ActorsOpts{
-		StateStore:     store,
+		CompStore:      compStore,
 		AppChannel:     b.appChannel,
 		Config:         *b.config,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -372,8 +375,10 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 
 	clock := clocktesting.NewFakeClock(startOfTime)
 
+	compStore := compstore.New()
+	compStore.AddStateStore("actorStore", fakeStore())
 	a := newActorsWithClock(ActorsOpts{
-		StateStore:     fakeStore(),
+		CompStore:      compStore,
 		AppChannel:     appChannel,
 		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -394,6 +399,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 	clock := clocktesting.NewFakeClock(startOfTime)
 
 	a := newActorsWithClock(ActorsOpts{
+		CompStore:      compstore.New(),
 		AppChannel:     appChannel,
 		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -414,7 +420,7 @@ func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *acto
 	clock := clocktesting.NewFakeClock(startOfTime)
 
 	a := newActorsWithClock(ActorsOpts{
-		StateStore:     nil,
+		CompStore:      compstore.New(),
 		AppChannel:     appChannel,
 		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -444,8 +450,10 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 
 	clock := clocktesting.NewFakeClock(startOfTime)
 
+	compStore := compstore.New()
+	compStore.AddStateStore("actorStore", fakeStore())
 	a := newActorsWithClock(ActorsOpts{
-		StateStore:     fakeStore(),
+		CompStore:      compStore,
 		AppChannel:     appChannel,
 		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -661,7 +669,9 @@ func TestDeactivationTicker(t *testing.T) {
 func TestStoreIsNotInitialized(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
-	testActorsRuntime.store = nil
+	for name := range testActorsRuntime.compStore.ListStateStores() {
+		testActorsRuntime.compStore.DeleteStateStore(name)
+	}
 
 	t.Run("getReminderTrack", func(t *testing.T) {
 		r, e := testActorsRuntime.getReminderTrack(context.Background(), "foo||bar")
@@ -792,7 +802,8 @@ func TestGetReminderTrack(t *testing.T) {
 		defer testActorsRuntime.Stop()
 
 		actorType, actorID := getTestActorTypeAndID()
-		r, _ := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
+		r, err := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
+		require.NoError(t, err)
 		assert.Empty(t, r.LastFiredTime)
 	})
 
@@ -804,7 +815,8 @@ func TestGetReminderTrack(t *testing.T) {
 		repetition := 10
 		now := testActorsRuntime.clock.Now()
 		testActorsRuntime.updateReminderTrack(context.Background(), constructCompositeKey(actorType, actorID), repetition, now, nil)
-		r, _ := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
+		r, err := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
+		require.NoError(t, err)
 		assert.NotEmpty(t, r.LastFiredTime)
 		assert.Equal(t, repetition, r.RepetitionLeft)
 		assert.Equal(t, now, r.LastFiredTime)
@@ -846,7 +858,7 @@ func TestCreateReminder(t *testing.T) {
 	testActorsRuntimeWithPartition := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
 	defer testActorsRuntimeWithPartition.Stop()
 
-	testActorsRuntimeWithPartition.store = testActorsRuntime.store
+	testActorsRuntimeWithPartition.compStore = testActorsRuntime.compStore
 	for i := 1; i < numReminders; i++ {
 		for _, reminderActorType := range []string{actorType, secondActorType} {
 			err = testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
@@ -893,9 +905,15 @@ func TestCreateReminder(t *testing.T) {
 	assert.Equal(t, numReminders, len(reminders))
 
 	// For the rest of the test, we're disabling bulk get in the fake state store
-	testActorsRuntime.store.(*fakeStateStore).noBulkGet = true
+	store, ok := testActorsRuntime.compStore.GetStateStore("actorStore")
+	require.True(t, ok)
+	store.(*fakeStateStore).noBulkGet = true
+	testActorsRuntime.compStore.AddStateStore("actorStore", store)
 	defer func() {
-		testActorsRuntime.store.(*fakeStateStore).noBulkGet = false
+		store, ok := testActorsRuntime.compStore.GetStateStore("actorStore")
+		require.True(t, ok)
+		store.(*fakeStateStore).noBulkGet = false
+		testActorsRuntime.compStore.AddStateStore("actorStore", store)
 	}()
 
 	// Check for 2nd type.
@@ -1000,7 +1018,7 @@ func TestOverrideReminder(t *testing.T) {
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "2s", "", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(context.Background(), actorType, false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, testActorsRuntime.clock.Now().Add(2*time.Second), reminders[0].reminder.RegisteredTime)
 	})
 
@@ -1016,7 +1034,7 @@ func TestOverrideReminder(t *testing.T) {
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(context.Background(), actorType, false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "2s", reminders[0].reminder.Period.String())
 	})
 
@@ -1035,7 +1053,7 @@ func TestOverrideReminder(t *testing.T) {
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", ttl, "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(context.Background(), actorType, false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotEmpty(t, reminders)
 		assert.LessOrEqual(t, reminders[0].reminder.ExpirationTime.Sub(origTime), 2*time.Second)
 	})
@@ -1062,7 +1080,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(context.Background(), actorType, false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		// Check reminder is updated
 		assert.Equal(t, "9s", reminders[0].reminder.Period.String())
 		assert.Equal(t, testActorsRuntime.clock.Now().Add(time.Second), reminders[0].reminder.RegisteredTime)
@@ -3071,6 +3089,6 @@ func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
-		assert.Nil(t, testActorsRuntime.store)
+		assert.Empty(t, testActorsRuntime.compStore.ListStateStores())
 	})
 }

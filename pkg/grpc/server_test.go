@@ -17,6 +17,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -108,7 +110,7 @@ func TestClose(t *testing.T) {
 			ReadBufferSizeKB:     4,
 			EnableAPILogging:     true,
 		}
-		a := &api{}
+		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
@@ -129,7 +131,7 @@ func TestClose(t *testing.T) {
 			ReadBufferSizeKB:     4,
 			EnableAPILogging:     false,
 		}
-		a := &api{}
+		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
