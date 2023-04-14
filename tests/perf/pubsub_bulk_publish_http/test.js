@@ -50,59 +50,36 @@ function getBulkPublishPayload(numMsgs, msgSize) {
 }
 
 const data = new SharedArray('scenarios', function () {
-    const scenarioBase = {
-        executor: 'constant-arrival-rate',
-        rate: 1,
-        preAllocatedVUs: 2,
-        maxVUs: 50,
-    }
-    const delaysMs = [5, 50, 100, 1000]
-    const numMessages = [10, 100]
-    const messageSizeKb = [2, 31]
-    const brokers = __ENV.BROKERS.split(',')
-    const samples = [200]
-
-    let scenarios = {}
-    let thresholds = {
+    const thresholds = {
         checks: ['rate==1'],
-    }
+        http_req_duration: [`avg<${MAX_MS_ALLOWED}`]
+    };
 
-    let startTime = 0
-    for (const numMessagesIdx in numMessages) {
-        const numMsgs = numMessages[numMessagesIdx]
-        for (const messageSizeKbIdx in messageSizeKb) {
-            const msgSize = messageSizeKb[messageSizeKbIdx]
-            for (const delayMsIdx in delaysMs) {
-                const delay = delaysMs[delayMsIdx]
-                for (const brokerIdx in brokers) {
-                    const broker = brokers[brokerIdx]
-                    for (const sampleIdx in samples) {
-                        const sample = samples[sampleIdx]
-                        const scenario = `${delay}ms_n${numMsgs}_${msgSize}kb_${broker}_${sample}`
-                        thresholds[`http_req_duration{scenario:${scenario}}`] = [
-                            `avg<${MAX_MS_ALLOWED}`,
-                        ]
-                        const duration = delay * sample
-                        scenarios[scenario] = Object.assign(
-                            {
-                                timeUnit: `${delay}ms`,
-                                duration: `${duration}ms`,
-                                env: {
-                                    PAYLOAD: getBulkPublishPayload(numMsgs, msgSize),
-                                    BROKER: broker,
-                                    TOPIC: 'my-topic',
-                                },
-                                startTime: `${startTime}ms`,
-                            },
-                            scenarioBase
-                        )
-                        startTime += duration
-                    }
-                }
-            }
+    const brokerName = __ENV.BROKER_NAME;
+    const topicName = __ENV.TOPIC_NAME;
+    const numMessages = __ENV.NUM_MESSAGES;
+    const bulkSize = parseInt(__ENV.BULK_SIZE);
+    const messageSizeKb = parseInt(__ENV.MESSAGE_SIZE_KB);
+    const durationMs = parseInt(__ENV.DURATION_MS);
+    const numVus = parseInt(__ENV.NUM_VUS);
+
+    const numIterations = Math.floor(numMessages / bulkSize);
+
+    const scenario = `${brokerName}_n${numMessages}_b${bulkSize}_s${messageSizeKb}KB`;
+    let scenarios = {};
+
+    scenarios[scenario] = {
+        executor: 'constant-vus',
+        vus: numVus,
+        duration: `${durationMs}ms`,
+        env: {
+            PAYLOAD: getBulkPublishPayload(bulkSize, messageSizeKb),
+            BROKER: brokerName,
+            TOPIC: topicName,
+            NUM_ITER: numIterations,
         }
-    }
-    // more operations
+    };
+
     return [{ scenarios, thresholds }] // must be an array
 })
 
@@ -110,26 +87,35 @@ const { scenarios, thresholds } = data[0]
 export const options = {
     discardResponseBodies: true,
     thresholds,
-    scenarios,
+    scenarios
 }
 
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
-function publishRawMsgs(broker, topic, payload) {
-    return http.post(
-        `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
-        payload
-    )
-}
-export default function () {
-    const result = publishRawMsgs(__ENV.BROKER, __ENV.TOPIC, __ENV.PAYLOAD)
-    if (result.status >= 300) {
-        console.log(`Publish failed: ${result.status}`)
+function publishRawMsgs(broker, topic, payload, numIter) {
+    statusCodes = []
+    for (let i = 0; i < numIter; i++) {
+        const result = http.post(
+            `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
+            payload
+        )
+        statusCodes.push(result.status)
     }
 
-    check(result, {
-        'response code was 2xx': (result) =>
-            result.status >= 200 && result.status < 300,
+    return statusCodes;
+}
+
+export default function () {
+    const statusCodes = publishRawMsgs(__ENV.BROKER, __ENV.TOPIC, __ENV.PAYLOAD, __ENV.NUM_ITER)
+    const failed = statusCodes.filter(code => code >= 300)
+
+    if (failed.length > 0) {
+        console.log(`Failed to publish ${failed.length} messages`)
+        console.log(`Status codes: ${JSON.stringify(statusCodes)}`)
+    }
+
+    check(failed, {
+        'all messages published successfully': (failed) => failed.length === 0,
     })
 }
 

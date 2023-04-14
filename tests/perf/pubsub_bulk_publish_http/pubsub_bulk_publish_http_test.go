@@ -36,9 +36,19 @@ var (
 )
 
 const (
-	k6AppName     = "k6-test-app"
-	brokersEnvVar = "BROKERS"
+	k6AppName = "k6-test-app"
+	topicName = "bulkpublishperftopic"
 )
+
+type testCase struct {
+	broker        string
+	topic         string
+	numMessages   int
+	bulkSize      int
+	messageSizeKb int
+	durationMs    int
+	numVus        int
+}
 
 var brokers = []kube.ComponentDescription{
 	{
@@ -68,22 +78,67 @@ func TestMain(m *testing.M) {
 }
 
 func TestPubsubBulkPublishHttpPerformance(t *testing.T) {
+	bulkSizes := []int{10, 100, 1000}
+	messageSizesKb := []int{2, 31}
+
+	testcases := []testCase{}
+	for _, bulkSize := range bulkSizes {
+		for _, messageSizeKb := range messageSizesKb {
+			for _, broker := range brokers {
+				testcases = append(testcases, testCase{
+					broker:        broker.Name,
+					topic:         topicName,
+					numMessages:   1000,
+					bulkSize:      bulkSize,
+					messageSizeKb: messageSizeKb,
+					durationMs:    30 * 1000,
+					numVus:        50,
+				})
+			}
+		}
+	}
+
+	for _, tc := range testcases {
+		testName := fmt.Sprintf("%s_n%d_b%d_s%dKB",
+			tc.broker, tc.numMessages, tc.bulkSize, tc.messageSizeKb)
+		t.Run(testName, func(t *testing.T) {
+			runTest(t, tc)
+		})
+	}
+}
+
+func runTest(t *testing.T, tc testCase) {
+	t.Logf("Starting test: %s", t.Name())
+
 	k6Test := loadtest.NewK6(
 		"./test.js",
-		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
+		loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithAppID(k6AppName),
 		loadtest.WithName(k6AppName),
-		loadtest.WithRunnerEnvVar(brokersEnvVar, brokersNames),
+		loadtest.WithRunnerEnvVar("BROKER_NAME", tc.broker),
+		loadtest.WithRunnerEnvVar("TOPIC_NAME", tc.topic),
+		loadtest.WithRunnerEnvVar("NUM_MESSAGES", fmt.Sprintf("%d", tc.numMessages)),
+		loadtest.WithRunnerEnvVar("BULK_SIZE", fmt.Sprintf("%d", tc.bulkSize)),
+		loadtest.WithRunnerEnvVar("MESSAGE_SIZE_KB", fmt.Sprintf("%d", tc.messageSizeKb)),
+		loadtest.WithRunnerEnvVar("DURATION_MS", fmt.Sprintf("%d", tc.durationMs)),
+		loadtest.WithRunnerEnvVar("NUM_VUS", fmt.Sprintf("%d", tc.numVus)),
 	)
 	defer k6Test.Dispose()
+
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
 	sm, err := loadtest.K6ResultDefault(k6Test)
 	require.NoError(t, err)
 	require.NotNil(t, sm)
+
 	summary.ForTest(t).
 		OutputK6(sm.RunnersResults).
+		Output("Broker", tc.broker).
+		Output("NumMessages", fmt.Sprintf("%d", tc.numMessages)).
+		Output("BulkSize", fmt.Sprintf("%d", tc.bulkSize)).
+		Output("MessageSizeKb", fmt.Sprintf("%d", tc.messageSizeKb)).
 		Flush()
+
 	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
 	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
