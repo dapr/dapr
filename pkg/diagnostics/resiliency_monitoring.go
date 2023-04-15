@@ -15,18 +15,11 @@ var (
 	RetryPolicy          PolicyType = "retry"
 	TimeoutPolicy        PolicyType = "timeout"
 
-	AppPolicyTarget       PolicyTarget = "app"
-	ComponentPolicyTarget PolicyTarget = "component"
-	PubSubPolicyTarget    PolicyTarget = "pubsub"
-	ActorsPolicyTarget    PolicyTarget = "actors"
-
 	OutboundPolicyFlowDirection PolicyFlowDirection = "outbound"
 	InboundPolicyFlowDirection  PolicyFlowDirection = "inbound"
 )
 
 type PolicyType string
-
-type PolicyTarget string
 
 type PolicyFlowDirection string
 
@@ -79,32 +72,44 @@ func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
 	}
 }
 
-// PolicyWithStatusExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget, status string) {
+// PolicyWithStatusExecuted records metric when policy is executed with added status information (e.g., circuit breaker open).
+func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, string(target), statusKey, status),
+			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
 			m.executionCount.M(1),
 		)
 	}
 }
 
 // PolicyExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget) {
+func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string) {
 	m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, "")
 }
 
 // DefaultPolicyExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) DefaultPolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget) {
+func (m *resiliencyMetrics) DefaultPolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string) {
 	if m.defaultMetricsEnabled {
 		m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, "")
 	}
 }
 
 // DefaultPolicyWithStatusExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) DefaultPolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target PolicyTarget, status string) {
+func (m *resiliencyMetrics) DefaultPolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.defaultMetricsEnabled {
 		m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, status)
 	}
+}
+
+func ResiliencyActorTarget(actorType string) string {
+	return "actor_" + actorType
+}
+
+func ResiliencyAppTarget(actorType string) string {
+	return "app_" + actorType
+}
+
+func ResiliencyComponentTarget(name string, componentType string) string {
+	return componentType + "_" + name
 }
