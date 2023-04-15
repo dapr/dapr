@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,12 +24,16 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	// Import pprof that automatically registers itself in the default server mux.
+	// Putting "nolint:gosec" here because the linter points out this is automatically exposed on the default server mux, but we only use that in the profiling server.
+	//nolint:gosec
+	_ "net/http/pprof"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	routing "github.com/fasthttp/router"
-	"github.com/hashicorp/go-multierror"
 	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/pprofhandler"
 
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
@@ -60,7 +65,7 @@ type server struct {
 	pipeline           httpMiddleware.Pipeline
 	api                API
 	apiSpec            config.APISpec
-	servers            []*fasthttp.Server
+	servers            []any
 	profilingListeners []net.Listener
 }
 
@@ -179,10 +184,10 @@ func (s *server) StartNonBlocking() error {
 		for _, listener := range profilingListeners {
 			// profServer is created in a loop because each instance
 			// has a handle on the underlying listener.
-			profServer := &fasthttp.Server{
-				Handler:               pprofhandler.PprofHandler,
-				MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
-				NoDefaultServerHeader: true,
+			profServer := &http.Server{
+				// pprof is automatically registered in the DefaultServerMux
+				Handler:           http.DefaultServeMux,
+				ReadHeaderTimeout: 10 * time.Second,
 			}
 			s.servers = append(s.servers, profServer)
 
@@ -198,16 +203,21 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
-	var merr error
+	var err error
 
-	for _, ln := range s.servers {
+	for _, lnAny := range s.servers {
 		// This calls `Close()` on the underlying listener.
-		if err := ln.Shutdown(); err != nil {
-			merr = multierror.Append(merr, err)
+		switch ln := lnAny.(type) {
+		case *fasthttp.Server:
+			err = errors.Join(err, ln.Shutdown())
+		case *http.Server:
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			err = errors.Join(err, ln.Shutdown(ctx))
+			cancel()
 		}
 	}
 
-	return merr
+	return err
 }
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
