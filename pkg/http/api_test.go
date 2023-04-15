@@ -3600,8 +3600,9 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 func (f *fakeHTTPServer) StartServerWithAPIToken(endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
+	h := nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler)
 	go func() {
-		if err := fasthttp.Serve(f.ln, useAPIAuthentication(router.Handler)); err != nil {
+		if err := gohttp.Serve(f.ln, useAPIAuthentication(h)); err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
 	}()

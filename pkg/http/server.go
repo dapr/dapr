@@ -31,8 +31,8 @@ import (
 	//nolint:gosec
 	_ "net/http/pprof"
 
-	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	routing "github.com/fasthttp/router"
+	"github.com/go-chi/cors"
 	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -95,9 +95,14 @@ func NewServer(opts NewServerOpts) Server {
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
 	handler := s.useRouter()
-	handler = s.useComponents(handler)
-	handler = s.useCors(handler)
-	handler = useAPIAuthentication(handler)
+
+	// These middlewares use net/http handlers
+	netHttpHandler := s.useComponents(handler)
+	netHttpHandler = s.useCors(netHttpHandler)
+	netHttpHandler = useAPIAuthentication(netHttpHandler)
+
+	// These middlewares use fasthttp
+	handler = fasthttpadaptor.NewFastHTTPHandler(netHttpHandler)
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
 
@@ -269,47 +274,42 @@ func (s *server) usePublicRouter() fasthttp.RequestHandler {
 	return router.Handler
 }
 
-func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return fasthttpadaptor.NewFastHTTPHandler(
-		s.pipeline.Apply(
-			nethttpadaptor.NewNetHTTPHandlerFunc(next),
-		),
+func (s *server) useComponents(next fasthttp.RequestHandler) http.Handler {
+	return s.pipeline.Apply(
+		nethttpadaptor.NewNetHTTPHandlerFunc(next),
 	)
 }
 
-func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (s *server) useCors(next http.Handler) http.Handler {
+	// TODO: Technically, if "AllowedOrigins" is "*", all origins should be allowed
+	// This behavior is not quite correct as in this case we are disallowing all origins
 	if s.config.AllowedOrigins == corsDapr.DefaultAllowedOrigins {
 		return next
 	}
 
 	log.Infof("enabled cors http middleware")
-	origins := strings.Split(s.config.AllowedOrigins, ",")
-	corsHandler := s.getCorsHandler(origins)
-	return corsHandler.CorsMiddleware(next)
+	return cors.New(cors.Options{
+		AllowedOrigins: strings.Split(s.config.AllowedOrigins, ","),
+		Debug:          false,
+	}).Handler(next)
 }
 
-func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func useAPIAuthentication(next http.Handler) http.Handler {
 	token := auth.GetAPIToken()
 	if token == "" {
 		return next
 	}
-	log.Info("enabled token authentication on http server")
+	log.Info("Enabled token authentication on HTTP server")
 
-	return func(ctx *fasthttp.RequestCtx) {
-		v := ctx.Request.Header.Peek(authConsts.APITokenHeader)
-		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || string(v) == token {
-			ctx.Request.Header.Del(authConsts.APITokenHeader)
-			next(ctx)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		v := r.Header.Get(authConsts.APITokenHeader)
+		if auth.ExcludedRoute(r.URL.String()) || string(v) == token {
+			r.Header.Del(authConsts.APITokenHeader)
+			next.ServeHTTP(w, r)
 		} else {
-			ctx.Error("invalid api token", http.StatusUnauthorized)
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("invalid api token"))
 		}
-	}
-}
-
-func (s *server) getCorsHandler(allowedOrigins []string) *cors.CorsHandler {
-	return cors.NewCorsHandler(cors.Options{
-		AllowedOrigins: allowedOrigins,
-		Debug:          false,
 	})
 }
 

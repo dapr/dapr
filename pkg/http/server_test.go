@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"strings"
 	"testing"
@@ -45,9 +47,9 @@ const (
 	healthzOutboundEndpoint = "healthz/outbound"
 )
 
-func (m *mockHost) mockHandler() fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		b := ctx.Response.Header.Peek("Access-Control-Allow-Origin")
+func (m *mockHost) mockHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b := r.Header.Get("Access-Control-Allow-Origin")
 		m.hasCORS = len(b) > 0
 	}
 }
@@ -472,11 +474,12 @@ func TestCorsHandler(t *testing.T) {
 
 		mh := mockHost{}
 		h := srv.useCors(mh.mockHandler())
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
+		r := &http.Request{
+			Header: http.Header{
+				"Origin": []string{"*"},
+			},
 		}
-		r.Request.Header.Set("Origin", "*")
-		h(r)
+		h.ServeHTTP(nil, r)
 
 		assert.False(t, mh.hasCORS)
 	})
@@ -487,11 +490,12 @@ func TestCorsHandler(t *testing.T) {
 
 		mh := mockHost{}
 		h := srv.useCors(mh.mockHandler())
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
+		r := &http.Request{
+			Header: http.Header{
+				"Origin": []string{"http://test.com"},
+			},
 		}
-		r.Request.Header.Set("Origin", "http://test.com")
-		h(r)
+		h.ServeHTTP(httptest.NewRecorder(), r)
 		assert.True(t, mh.hasCORS)
 	})
 }
