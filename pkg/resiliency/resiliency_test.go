@@ -626,6 +626,11 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 						MaxRequests: 1,
 						Timeout:     "60s",
 					},
+					fmt.Sprintf(string(DefaultCircuitBreakerTemplate), "App"): {
+						Trip:        "consecutiveFailures > 15",
+						MaxRequests: 1,
+						Timeout:     "60s",
+					},
 				},
 			},
 			Targets: resiliencyV1alpha.Targets{
@@ -660,7 +665,7 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 		count.Add(1)
 		return nil, errors.New("Forced failure")
 	})
-	assert.Equal(t, int64(11), count.Load())
+	assert.Equal(t, int64(11), count.Load()) // this is an App so we don't get to trip CB (consecutiveFailures > 15)
 
 	// Not defined
 	policy = NewRunner[any](context.Background(),
@@ -671,7 +676,7 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 		count.Add(1)
 		return nil, errors.New("Forced failure")
 	})
-	assert.Equal(t, int64(4), count.Load())
+	assert.Equal(t, int64(2), count.Load()) // actorType is not a known target so we get retry + original call as circuit breaker trips (consecutiveFailures > 1)
 
 	// One last one for ActorPostLock which just includes timeouts.
 	policy = NewRunner[any](context.Background(),
