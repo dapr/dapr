@@ -191,11 +191,6 @@ func (a *UniversalAPI) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.
 	}, nil
 }
 
-type subtleWrapKeyRes struct {
-	wrappedKey []byte
-	tag        []byte
-}
-
 // SubtleWrapKeyAlpha1 wraps a key using a key stored in the vault.
 func (a *UniversalAPI) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRequest) (*runtimev1pb.SubtleWrapKeyResponse, error) {
 	component, err := a.CryptoValidateRequest(in.ComponentName)

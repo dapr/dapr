@@ -21,16 +21,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwk"
 	"google.golang.org/grpc"
 
-	contribCrypto "github.com/dapr/components-contrib/crypto"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/ptr"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
 )
@@ -77,7 +73,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 	encOpts := encv1.EncryptOptions{
 		KeyName:   reqProto.Options.KeyName,
 		Algorithm: encv1.KeyAlgorithm(strings.ToUpper(reqProto.Options.Algorithm)),
-		WrapKeyFn: a.cryptoGetWrapKeyFn(stream.Context(), reqProto.Options.ComponentName, component),
+		WrapKeyFn: a.CryptoGetWrapKeyFn(stream.Context(), reqProto.Options.ComponentName, component),
 
 		// The next values are optional and could be empty
 		OmitKeyName:       reqProto.Options.OmitDecryptionKeyName,
@@ -119,15 +115,15 @@ func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err er
 	}
 
 	// Options
-	encOpts := encv1.DecryptOptions{
-		UnwrapKeyFn: a.cryptoGetUnwrapKeyFn(stream.Context(), reqProto.Options.ComponentName, component),
+	decOpts := encv1.DecryptOptions{
+		UnwrapKeyFn: a.CryptoGetUnwrapKeyFn(stream.Context(), reqProto.Options.ComponentName, component),
 
 		// The next values are optional and could be empty
 		KeyName: reqProto.Options.KeyName,
 	}
 
 	// Process the request as a stream
-	return a.cryptoProcessStream(stream, reqProto, encOpts)
+	return a.cryptoProcessStream(stream, reqProto, decOpts)
 }
 
 // Processes the request as a stream, encrypting or decrypting data.
@@ -270,63 +266,6 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	}
 
 	return nil
-}
-
-type subtleWrapKeyRes struct {
-	wrappedKey []byte
-	tag        []byte
-}
-
-func (a *api) cryptoGetWrapKeyFn(ctx context.Context, componentName string, component contribCrypto.SubtleCrypto) encv1.WrapKeyFn {
-	return func(plaintextKeyBytes []byte, algorithm, keyName string, nonce []byte) (wrappedKey []byte, tag []byte, err error) {
-		plaintextKey, err := jwk.FromRaw(plaintextKeyBytes)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to import key: %w", err)
-		}
-
-		policyRunner := resiliency.NewRunner[subtleWrapKeyRes](ctx,
-			a.Resiliency.ComponentOutboundPolicy(componentName, resiliency.Crypto),
-		)
-		start := time.Now()
-		swkr, err := policyRunner(func(ctx context.Context) (r subtleWrapKeyRes, rErr error) {
-			r.wrappedKey, r.tag, rErr = component.WrapKey(ctx, plaintextKey, algorithm, keyName, nonce, nil)
-			return
-		})
-		elapsed := diag.ElapsedSince(start)
-
-		diag.DefaultComponentMonitoring.CryptoInvoked(ctx, componentName, diag.CryptoOp, err == nil, elapsed)
-
-		if err != nil {
-			return nil, nil, err
-		}
-		return swkr.wrappedKey, swkr.tag, nil
-	}
-}
-
-func (a *api) cryptoGetUnwrapKeyFn(ctx context.Context, componentName string, component contribCrypto.SubtleCrypto) encv1.UnwrapKeyFn {
-	return func(wrappedKey []byte, algorithm, keyName string, nonce, tag []byte) (plaintextKeyBytes []byte, err error) {
-		policyRunner := resiliency.NewRunner[jwk.Key](ctx,
-			a.Resiliency.ComponentOutboundPolicy(componentName, resiliency.Crypto),
-		)
-		start := time.Now()
-		plaintextKey, err := policyRunner(func(ctx context.Context) (jwk.Key, error) {
-			return component.UnwrapKey(ctx, wrappedKey, algorithm, keyName, nonce, tag, nil)
-		})
-		elapsed := diag.ElapsedSince(start)
-
-		diag.DefaultComponentMonitoring.CryptoInvoked(ctx, componentName, diag.CryptoOp, err == nil, elapsed)
-
-		if err != nil {
-			return nil, err
-		}
-
-		err = plaintextKey.Raw(&plaintextKeyBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract key: %w", err)
-		}
-
-		return plaintextKeyBytes, nil
-	}
 }
 
 func cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) error {
