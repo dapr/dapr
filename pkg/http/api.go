@@ -90,7 +90,6 @@ type api struct {
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
 	maxRequestBodySize         int64 // In bytes
-	isStreamingEnabled         bool
 }
 
 type registeredComponent struct {
@@ -163,7 +162,6 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsCapabilitiesFn func() map[string][]string
 	MaxRequestBodySize          int64 // In bytes
-	IsStreamingEnabled          bool
 }
 
 // NewAPI returns a new API.
@@ -180,7 +178,6 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		maxRequestBodySize:         opts.MaxRequestBodySize,
-		isStreamingEnabled:         opts.IsStreamingEnabled,
 		daprRunTimeVersion:         buildinfo.Version(),
 		universal: &universalapi.UniversalAPI{
 			AppID:      opts.AppID,
@@ -1271,15 +1268,10 @@ func (ie invokeError) Error() string {
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
-	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
-	// Because this can respond with `withStream()`, we can't defer a call to cancel() here
-	ctx, cancel := context.WithCancel(reqCtx)
-
 	targetID := a.findTargetID(reqCtx)
 	if targetID == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		cancel()
 		return
 	}
 
@@ -1289,7 +1281,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.directMessaging == nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		cancel()
 		return
 	}
 
@@ -1308,7 +1299,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	defer req.Close()
 
 	policyRunner := resiliency.NewRunnerWithOptions(
-		ctx, policyDef,
+		reqCtx, policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
@@ -1360,7 +1351,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
-		cancel()
 		return
 	}
 
@@ -1374,7 +1364,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	invokeErr := invokeError{}
 	if errors.As(err, &invokeErr) {
 		respond(reqCtx, withError(invokeErr.statusCode, invokeErr.msg))
-		cancel()
 		if resp != nil {
 			_ = resp.Close()
 		}
@@ -1383,32 +1372,20 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	if resp == nil {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, "response object is nil"))))
-		cancel()
 		return
 	}
+	defer resp.Close()
 
 	statusCode := int(resp.Status().Code)
-
-	// TODO @ItalyPaleAle: Make this the only path once streaming is finalized
-	if a.isStreamingEnabled {
-		// This will also close the response stream automatically; no need to invoke resp.Close()
-		// Likewise, it calls "cancel" to cancel the context at the end
-		respond(reqCtx, withStream(statusCode, resp.RawData(), cancel))
-		return
-	}
-
-	defer resp.Close()
 
 	body, err := resp.RawDataFull()
 	if err != nil {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, err))))
-		cancel()
 		return
 	}
 
 	reqCtx.Response.Header.SetContentType(resp.ContentType())
 	respond(reqCtx, with(statusCode, body))
-	cancel()
 }
 
 // findTargetID tries to find ID of the target service from the following three places:
