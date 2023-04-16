@@ -100,10 +100,10 @@ func (s *server) StartNonBlocking() error {
 	netHttpHandler := s.useComponents(handler)
 	netHttpHandler = s.useCors(netHttpHandler)
 	netHttpHandler = useAPIAuthentication(netHttpHandler)
+	netHttpHandler = s.useMetrics(netHttpHandler)
 
 	// These middlewares use fasthttp
 	handler = fasthttpadaptor.NewFastHTTPHandler(netHttpHandler)
-	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
 
 	var listeners []net.Listener
@@ -233,11 +233,11 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 	return next
 }
 
-func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (s *server) useMetrics(next http.Handler) http.Handler {
 	if s.metricSpec.Enabled {
 		log.Infof("enabled metrics http middleware")
 
-		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
+		return diag.DefaultHTTPMonitoring.HTTPMiddleware(next.ServeHTTP)
 	}
 
 	return next
@@ -307,8 +307,7 @@ func useAPIAuthentication(next http.Handler) http.Handler {
 			r.Header.Del(authConsts.APITokenHeader)
 			next.ServeHTTP(w, r)
 		} else {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("invalid api token"))
+			http.Error(w, "invalid api token", http.StatusUnauthorized)
 		}
 	})
 }

@@ -15,16 +15,17 @@ package diagnostics
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/valyala/fasthttp"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/utils"
 )
 
 // To track the metrics for fasthttp using opencensus, this implementation is inspired by
@@ -209,27 +210,33 @@ func (h *httpMetrics) Init(appID string) error {
 	)
 }
 
-// FastHTTPMiddleware is the middleware to track http server-side requests.
-func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		reqContentSize := ctx.Request.Header.ContentLength()
-		if reqContentSize < 0 {
-			reqContentSize = 0
+// HTTPMiddleware is the middleware to track HTTP server-side requests.
+func (h *httpMetrics) HTTPMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var reqContentSize int64
+		if cl := r.Header.Get("content-length"); cl != "" {
+			reqContentSize, _ = strconv.ParseInt(cl, 10, 64)
+			if reqContentSize < 0 {
+				reqContentSize = 0
+			}
 		}
 
-		method := string(ctx.Method())
-		path := h.convertPathToMetricLabel(string(ctx.Path()))
+		method := string(r.Method)
+		path := h.convertPathToMetricLabel(r.URL.Path)
 
-		h.ServerRequestReceived(ctx, method, path, int64(reqContentSize))
+		h.ServerRequestReceived(r.Context(), method, path, reqContentSize)
+
+		// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
+		w = utils.NewResponseWriter(w)
 
 		start := time.Now()
 
-		next(ctx)
+		next(w, r)
 
-		status := strconv.Itoa(ctx.Response.StatusCode())
 		elapsed := float64(time.Since(start) / time.Millisecond)
-		respSize := int64(len(ctx.Response.Body()))
-		h.ServerRequestCompleted(ctx, method, path, status, respSize, elapsed)
+		status := strconv.Itoa(w.(utils.ResponseWriter).Status())
+		respSize := int64(w.(utils.ResponseWriter).Size())
+		h.ServerRequestCompleted(r.Context(), method, path, status, respSize, elapsed)
 	}
 }
 
