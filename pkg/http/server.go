@@ -287,7 +287,7 @@ func (s *server) useCors(next http.Handler) http.Handler {
 		return next
 	}
 
-	log.Infof("enabled cors http middleware")
+	log.Infof("Enabled cors http middleware")
 	return cors.New(cors.Options{
 		AllowedOrigins: strings.Split(s.config.AllowedOrigins, ","),
 		Debug:          false,

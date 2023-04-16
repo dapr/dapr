@@ -38,21 +38,10 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-type mockHost struct {
-	hasCORS bool
-}
-
 const (
 	healthzEndpoint         = "healthz"
 	healthzOutboundEndpoint = "healthz/outbound"
 )
-
-func (m *mockHost) mockHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		b := r.Header.Get("Access-Control-Allow-Origin")
-		m.hasCORS = len(b) > 0
-	}
-}
 
 func newServer() server {
 	return server{
@@ -468,35 +457,42 @@ func TestAllowedAPISpec(t *testing.T) {
 }
 
 func TestCorsHandler(t *testing.T) {
+	hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	t.Run("with default cors, middleware not enabled", func(t *testing.T) {
 		srv := newServer()
 		srv.config.AllowedOrigins = cors.DefaultAllowedOrigins
 
-		mh := mockHost{}
-		h := srv.useCors(mh.mockHandler())
+		h := srv.useCors(hf)
+		w := httptest.NewRecorder()
 		r := &http.Request{
+			Method: "OPTIONS",
 			Header: http.Header{
 				"Origin": []string{"*"},
 			},
 		}
-		h.ServeHTTP(nil, r)
+		h.ServeHTTP(w, r)
 
-		assert.False(t, mh.hasCORS)
+		assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
 	})
 
 	t.Run("with custom cors, middleware enabled", func(t *testing.T) {
 		srv := newServer()
 		srv.config.AllowedOrigins = "http://test.com"
 
-		mh := mockHost{}
-		h := srv.useCors(mh.mockHandler())
+		h := srv.useCors(hf)
+		w := httptest.NewRecorder()
 		r := &http.Request{
+			Method: "OPTIONS",
 			Header: http.Header{
 				"Origin": []string{"http://test.com"},
 			},
 		}
-		h.ServeHTTP(httptest.NewRecorder(), r)
-		assert.True(t, mh.hasCORS)
+		h.ServeHTTP(w, r)
+
+		assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Origin"))
 	})
 }
 
