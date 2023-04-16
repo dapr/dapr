@@ -42,8 +42,8 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/utils/fasthttpadaptor"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
+	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 )
 
@@ -65,7 +65,7 @@ type server struct {
 	pipeline           httpMiddleware.Pipeline
 	api                API
 	apiSpec            config.APISpec
-	servers            []any
+	servers            []*http.Server
 	profilingListeners []net.Listener
 }
 
@@ -102,9 +102,7 @@ func (s *server) StartNonBlocking() error {
 	netHTTPHandler = useAPIAuthentication(netHTTPHandler)
 	netHTTPHandler = s.useMetrics(netHTTPHandler)
 	netHTTPHandler = s.useTracing(netHTTPHandler)
-
-	// Convert back to fasthttp for the server to use
-	handler = fasthttpadaptor.NewFastHTTPHandler(netHTTPHandler)
+	netHTTPHandler = s.useMaxBodySize(netHTTPHandler)
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -133,18 +131,17 @@ func (s *server) StartNonBlocking() error {
 	}
 
 	for _, listener := range listeners {
-		// customServer is created in a loop because each instance
+		// srv is created in a loop because each instance
 		// has a handle on the underlying listener.
-		customServer := &fasthttp.Server{
-			Handler:               handler,
-			MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
-			ReadBufferSize:        s.config.ReadBufferSize * 1024,
-			NoDefaultServerHeader: true,
+		srv := &http.Server{
+			Handler:           netHTTPHandler,
+			ReadHeaderTimeout: 10 * time.Second,
+			MaxHeaderBytes:    s.config.ReadBufferSize << 10, // To KB
 		}
-		s.servers = append(s.servers, customServer)
+		s.servers = append(s.servers, srv)
 
 		go func(l net.Listener) {
-			if err := customServer.Serve(l); err != nil {
+			if err := srv.Serve(l); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
 		}(listener)
@@ -153,22 +150,20 @@ func (s *server) StartNonBlocking() error {
 	if s.config.PublicPort != nil {
 		publicHandler := s.usePublicRouter()
 
-		// These middlewares use net/http handlers
+		// Convert to net/http
 		netHTTPPublicHandler := s.useMetrics(nethttpadaptor.NewNetHTTPHandlerFunc(publicHandler))
 		netHTTPPublicHandler = s.useTracing(netHTTPPublicHandler)
 
-		// Convert back to fasthttp for the server to use
-		publicHandler = fasthttpadaptor.NewFastHTTPHandler(netHTTPPublicHandler)
-
-		healthServer := &fasthttp.Server{
-			Handler:               publicHandler,
-			MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
-			NoDefaultServerHeader: true,
+		healthServer := &http.Server{
+			Addr:              fmt.Sprintf(":%d", *s.config.PublicPort),
+			Handler:           netHTTPPublicHandler,
+			ReadHeaderTimeout: 10 * time.Second,
+			MaxHeaderBytes:    s.config.ReadBufferSize << 10, // To KB
 		}
 		s.servers = append(s.servers, healthServer)
 
 		go func() {
-			if err := healthServer.ListenAndServe(fmt.Sprintf(":%d", *s.config.PublicPort)); err != nil {
+			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
 		}()
@@ -198,11 +193,12 @@ func (s *server) StartNonBlocking() error {
 				// pprof is automatically registered in the DefaultServerMux
 				Handler:           http.DefaultServeMux,
 				ReadHeaderTimeout: 10 * time.Second,
+				MaxHeaderBytes:    s.config.ReadBufferSize << 10, // To KB
 			}
 			s.servers = append(s.servers, profServer)
 
 			go func(l net.Listener) {
-				if err := profServer.Serve(l); err != nil {
+				if err := profServer.Serve(l); err != http.ErrServerClosed {
 					log.Fatal(err)
 				}
 			}(listener)
@@ -215,16 +211,11 @@ func (s *server) StartNonBlocking() error {
 func (s *server) Close() error {
 	var err error
 
-	for _, lnAny := range s.servers {
+	for _, ln := range s.servers {
 		// This calls `Close()` on the underlying listener.
-		switch ln := lnAny.(type) {
-		case *fasthttp.Server:
-			err = errors.Join(err, ln.Shutdown())
-		case *http.Server:
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			err = errors.Join(err, ln.Shutdown(ctx))
-			cancel()
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		err = errors.Join(err, ln.Shutdown(ctx))
+		cancel()
 	}
 
 	return err
@@ -245,6 +236,15 @@ func (s *server) useMetrics(next http.Handler) http.Handler {
 		return diag.DefaultHTTPMonitoring.HTTPMiddleware(next.ServeHTTP)
 	}
 
+	return next
+}
+
+func (s *server) useMaxBodySize(next http.Handler) http.Handler {
+	if s.config.MaxRequestBodySize > 0 {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = streams.LimitReadCloser(r.Body, int64(s.config.MaxRequestBodySize)<<20) // To MB
+		})
+	}
 	return next
 }
 
