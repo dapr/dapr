@@ -101,10 +101,10 @@ func (s *server) StartNonBlocking() error {
 	netHttpHandler = s.useCors(netHttpHandler)
 	netHttpHandler = useAPIAuthentication(netHttpHandler)
 	netHttpHandler = s.useMetrics(netHttpHandler)
+	netHttpHandler = s.useTracing(netHttpHandler)
 
-	// These middlewares use fasthttp
+	// Convert back to fasthttp for the server to use
 	handler = fasthttpadaptor.NewFastHTTPHandler(netHttpHandler)
-	handler = s.useTracing(handler)
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -152,8 +152,13 @@ func (s *server) StartNonBlocking() error {
 
 	if s.config.PublicPort != nil {
 		publicHandler := s.usePublicRouter()
-		publicHandler = s.useMetrics(publicHandler)
-		publicHandler = s.useTracing(publicHandler)
+
+		// These middlewares use net/http handlers
+		netHttpPublicHandler := s.useMetrics(nethttpadaptor.NewNetHTTPHandlerFunc(handler))
+		netHttpPublicHandler = s.useTracing(netHttpPublicHandler)
+
+		// Convert back to fasthttp for the server to use
+		handler = fasthttpadaptor.NewFastHTTPHandler(netHttpPublicHandler)
 
 		healthServer := &fasthttp.Server{
 			Handler:               publicHandler,
@@ -225,7 +230,7 @@ func (s *server) Close() error {
 	return err
 }
 
-func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (s *server) useTracing(next http.Handler) http.Handler {
 	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		log.Infof("enabled tracing http middleware")
 		return diag.HTTPTraceMiddleware(next, s.config.AppID, s.tracingSpec)
