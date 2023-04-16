@@ -97,7 +97,7 @@ func (s *server) StartNonBlocking() error {
 	handler := s.useRouter()
 
 	// These middlewares use net/http handlers
-	netHttpHandler := s.useComponents(handler)
+	netHttpHandler := s.useComponents(nethttpadaptor.NewNetHTTPHandlerFunc(handler))
 	netHttpHandler = s.useCors(netHttpHandler)
 	netHttpHandler = useAPIAuthentication(netHttpHandler)
 	netHttpHandler = s.useMetrics(netHttpHandler)
@@ -274,10 +274,8 @@ func (s *server) usePublicRouter() fasthttp.RequestHandler {
 	return router.Handler
 }
 
-func (s *server) useComponents(next fasthttp.RequestHandler) http.Handler {
-	return s.pipeline.Apply(
-		nethttpadaptor.NewNetHTTPHandlerFunc(next),
-	)
+func (s *server) useComponents(next http.Handler) http.Handler {
+	return s.pipeline.Apply(next)
 }
 
 func (s *server) useCors(next http.Handler) http.Handler {

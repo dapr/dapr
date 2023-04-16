@@ -25,7 +25,7 @@ import (
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/utils/responsewriter"
 )
 
 // To track the metrics for fasthttp using opencensus, this implementation is inspired by
@@ -227,15 +227,15 @@ func (h *httpMetrics) HTTPMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		h.ServerRequestReceived(r.Context(), method, path, reqContentSize)
 
 		// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
-		w = utils.NewResponseWriter(w)
+		w = responsewriter.EnsureResponseWriter(w)
 
 		start := time.Now()
 
 		next(w, r)
 
 		elapsed := float64(time.Since(start) / time.Millisecond)
-		status := strconv.Itoa(w.(utils.ResponseWriter).Status())
-		respSize := int64(w.(utils.ResponseWriter).Size())
+		status := strconv.Itoa(w.(responsewriter.ResponseWriter).Status())
+		respSize := int64(w.(responsewriter.ResponseWriter).Size())
 		h.ServerRequestCompleted(r.Context(), method, path, status, respSize, elapsed)
 	}
 }

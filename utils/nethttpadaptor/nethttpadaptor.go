@@ -21,7 +21,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/dapr/dapr/utils/fasthttpadaptor"
+	"github.com/dapr/dapr/utils/responsewriter"
 	"github.com/dapr/kit/logger"
 )
 
@@ -78,7 +78,7 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 
 		h(&c)
 
-		if faw, ok := w.(*fasthttpadaptor.NetHTTPResponseWriter); ok {
+		if faw, ok := w.(responsewriter.ResponseWriter); ok {
 			c.VisitUserValuesAll(func(k any, v any) {
 				faw.SetUserValue(k, v)
 			})

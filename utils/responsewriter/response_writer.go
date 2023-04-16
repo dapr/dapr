@@ -11,19 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package utils
+package responsewriter
 
 import (
 	"io"
 	"net/http"
 )
-
-/*!
-Adapted from github.com/urfave/negroni
-Source: https://github.com/urfave/negroni/blob/b935227d493b8a257f6e0b3c8d98ae576c90cd4a/response_writer.go
-Copyright (c) 2014 Jeremy Saenz
-License: MIT (https://github.com/urfave/negroni/blob/b935227d493b8a257f6e0b3c8d98ae576c90cd4a/LICENSE)
-*/
 
 // ResponseWriter is a wrapper around http.ResponseWriter that provides extra information about
 // the response. It is recommended that middleware handlers use this construct to wrap a responsewriter
@@ -38,6 +31,18 @@ type ResponseWriter interface {
 	Written() bool
 	// Size returns the size of the response body.
 	Size() int
+	// Before allows for a function to be called before the ResponseWriter has been written to. This is
+	// useful for setting headers or any other operations that must happen before a response has been written.
+	Before(func(ResponseWriter))
+	// UserValue retrieves values from the object.
+	UserValue(key any) any
+	// UserValueString retrieves the user value and casts it as string.
+	// If the value is not a string, returns an empty string.
+	UserValueString(key any) string
+	// AllUserValues retrieves all user values.
+	AllUserValues() map[any]any
+	// SetUserValue sets arbitrary values in the object.
+	SetUserValue(key any, value any)
 }
 
 type beforeFunc func(ResponseWriter)
@@ -49,6 +54,16 @@ func NewResponseWriter(rw http.ResponseWriter) ResponseWriter {
 	}
 }
 
+// EnsureResponseWriter creates a ResponseWriter that wraps a http.ResponseWriter, unless it's already a ResponseWriter.
+func EnsureResponseWriter(rw http.ResponseWriter) ResponseWriter {
+	rwObj, ok := rw.(ResponseWriter)
+	if ok {
+		return rwObj
+	}
+
+	return NewResponseWriter(rw)
+}
+
 type responseWriter struct {
 	http.ResponseWriter
 	pendingStatus  int
@@ -56,6 +71,7 @@ type responseWriter struct {
 	size           int
 	beforeFuncs    []beforeFunc
 	callingBefores bool
+	userValues     map[any]any
 }
 
 func (rw *responseWriter) WriteHeader(s int) {
@@ -137,4 +153,27 @@ func (rw *responseWriter) callBefore() {
 	for i := len(rw.beforeFuncs) - 1; i >= 0; i-- {
 		rw.beforeFuncs[i](rw)
 	}
+}
+
+func (rw *responseWriter) SetUserValue(key any, value any) {
+	if rw.userValues == nil {
+		rw.userValues = map[any]any{}
+	}
+	rw.userValues[key] = value
+}
+
+func (rw *responseWriter) UserValue(key any) any {
+	if rw.userValues == nil {
+		return nil
+	}
+	return rw.userValues[key]
+}
+
+func (rw *responseWriter) UserValueString(key any) string {
+	v, _ := rw.UserValue(key).(string)
+	return v
+}
+
+func (rw *responseWriter) AllUserValues() map[any]any {
+	return rw.userValues
 }
