@@ -24,9 +24,8 @@ import (
 //+genclient:noStatus
 //+kubebuilder:object:root=true
 
-// HTTPEndpoint describes an Dapr HTTPEndpoint type to allow for external service invocation.
-// This can include being external to Dapr,
-// as well as being external to the environment.
+// HTTPEndpoint describes a Dapr HTTPEndpoint type for external service invocation.
+// This endpoint can be external to Dapr, or external to the environment.
 type HTTPEndpoint struct {
 	metav1.TypeMeta `json:",inline"`
 	//+optional
@@ -44,20 +43,19 @@ func (HTTPEndpoint) Kind() string {
 	return "HTTPEndpoint"
 }
 
-// HTTPEndpointSpec describes an access specification for allowing potentially external service invocations.
+// HTTPEndpointSpec describes an access specification for allowing external service invocations.
 type HTTPEndpointSpec struct {
 	Allowed  []APISpec      `json:"allowed,omitempty"`
 	Metadata []MetadataItem `json:"metadata"`
 }
 
-// APISpec describes the configuration for Dapr API communication with potentially external services.
+// APISpec describes the configuration for Dapr API communication with external services.
 type APISpec struct {
 	BaseURL string `json:"baseUrl" validate:"required"`
 	//+optional
-	Headers map[string]string `json:"headers"`
-	Name    string            `json:"name" validate:"required"`
-	//+optional
-	Protocol string `json:"protocol"`
+	Headers  map[string]string `json:"headers"`
+	Name     string            `json:"name" validate:"required"`
+	Protocol string            `json:"protocol"  validate:"required"`
 }
 
 // MetadataItem is a name/value pair for a metadata.

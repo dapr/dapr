@@ -122,7 +122,7 @@ message ListHTTPEndpointsResponse {
 }
 
 message ListHTTPEndpointsRequest {
-  string namespace = 2;
+  string namespace = 1;
 }
 
 // HTTPEndpointsUpdateRequest is the request to get updates about new http endpoints for a given namespace.

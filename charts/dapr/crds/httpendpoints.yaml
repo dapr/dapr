@@ -19,7 +19,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: HTTPEndpoint describes an Dapr HTTPEndpoint type to allow for external service invocation. This can include being external to Dapr, as well as being external to the environment.
+        description: HTTPEndpoint describes a Dapr HTTPEndpoint type for external service invocation. This endpoint can be external to Dapr, or external to the environment.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -42,11 +42,11 @@ spec:
               type: string
             type: array
           spec:
-            description: HTTPEndpointSpec describes an access specification for allowing potentially external service invocations.
+            description: HTTPEndpointSpec describes an access specification for allowing external service invocations.
             properties:
               allowed:
                 items:
-                  description: APISpec describes the configuration for Dapr API communication with potentially external services.
+                  description: APISpec describes the configuration for Dapr API communication with external services.
                   properties:
                     baseUrl:
                       type: string
@@ -61,6 +61,7 @@ spec:
                   required:
                   - baseUrl
                   - name
+                  - protocol
                   type: object
                 type: array
               metadata:
