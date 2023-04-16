@@ -92,7 +92,7 @@ func userDefinedHTTPHeaders(r *http.Request) map[string]string {
 		}
 
 		key = strings.ToLower(key)
-		if key[0:len(daprHeaderPrefix)] == daprHeaderPrefix {
+		if strings.HasPrefix(key, daprHeaderPrefix) {
 			// Get the last value for each key
 			m[key] = vSlice[len(vSlice)-1]
 		}

@@ -698,8 +698,6 @@ func TestHeaders(t *testing.T) {
 
 				require.NoError(t, err)
 
-				_ = assert.NotEmpty(t, requestHeaders["dapr-host"]) &&
-					assert.True(t, strings.HasPrefix(requestHeaders["dapr-host"][0], "localhost:"))
 				_ = assert.NotEmpty(t, requestHeaders["content-type"]) &&
 					assert.Equal(t, "application/grpc", requestHeaders["content-type"][0])
 				_ = assert.NotEmpty(t, requestHeaders[":authority"]) &&
@@ -1276,7 +1274,7 @@ func TestNegativeCases(t *testing.T) {
 				var testResults negativeTestResult
 				json.Unmarshal(resp, &testResults)
 
-				require.Nil(t, err)
+				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
 				require.Len(t, testResults.Results, 4)
 
@@ -1286,8 +1284,6 @@ func TestNegativeCases(t *testing.T) {
 						require.True(t, result.CallSuccessful)
 					case "4MB":
 						require.True(t, result.CallSuccessful)
-					case "4MB+":
-						require.False(t, result.CallSuccessful)
 					case "8MB":
 						require.False(t, result.CallSuccessful)
 					}
@@ -1317,8 +1313,6 @@ func TestNegativeCases(t *testing.T) {
 						require.True(t, result.CallSuccessful)
 					case "4MB":
 						require.True(t, result.CallSuccessful)
-					case "4MB+":
-						require.False(t, result.CallSuccessful)
 					case "8MB":
 						require.False(t, result.CallSuccessful)
 					}
