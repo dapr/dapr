@@ -51,29 +51,32 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 		// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
 		rw := responsewriter.EnsureResponseWriter(w)
 
-		next.ServeHTTP(rw, r)
+		// Before the response is written, we need to add the tracing headers
+		rw.Before(func(rw responsewriter.ResponseWriter) {
+			// Add span attributes only if it is sampled, which reduced the perf impact.
+			if span.SpanContext().IsSampled() {
+				AddAttributesToSpan(span, userDefinedHTTPHeaders(ctx))
+				spanAttr := spanAttributesMapFromHTTPContext(rw, r)
+				AddAttributesToSpan(span, spanAttr)
 
-		// Add span attributes only if it is sampled, which reduced the perf impact.
-		if span.SpanContext().IsSampled() {
-			AddAttributesToSpan(span, userDefinedHTTPHeaders(ctx))
-			spanAttr := spanAttributesMapFromHTTPContext(rw, r)
-			AddAttributesToSpan(span, spanAttr)
-
-			// Correct the span name based on API.
-			if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
-				span.SetName(sname)
+				// Correct the span name based on API.
+				if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
+					span.SetName(sname)
+				}
 			}
-		}
 
-		// Check if response has traceparent header and add if absent
-		if rw.Header().Get(TraceparentHeader) == "" {
-			span = diagUtils.SpanFromContext(r.Context())
-			// Using Header.Set here because we know the traceparent header isn't set
-			SpanContextToHTTPHeaders(span.SpanContext(), rw.Header().Set)
-		}
+			// Check if response has traceparent header and add if absent
+			if rw.Header().Get(TraceparentHeader) == "" {
+				span = diagUtils.SpanFromContext(r.Context())
+				// Using Header.Set here because we know the traceparent header isn't set
+				SpanContextToHTTPHeaders(span.SpanContext(), rw.Header().Set)
+			}
 
-		UpdateSpanStatusFromHTTPStatus(span, rw.Status())
-		span.End()
+			UpdateSpanStatusFromHTTPStatus(span, rw.Status())
+			span.End()
+		})
+
+		next.ServeHTTP(rw, r)
 	})
 }
 
