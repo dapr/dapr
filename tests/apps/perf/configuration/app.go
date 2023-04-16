@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -90,7 +90,9 @@ func init() {
 	if p != "" && p != "0" {
 		appPort, _ = strconv.Atoi(p)
 	}
-} // indexHandler is the handler for root path
+}
+
+// indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler is called")
 
