@@ -43,7 +43,6 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
-	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 )
 
@@ -241,8 +240,10 @@ func (s *server) useMetrics(next http.Handler) http.Handler {
 
 func (s *server) useMaxBodySize(next http.Handler) http.Handler {
 	if s.config.MaxRequestBodySize > 0 {
+		maxSize := int64(s.config.MaxRequestBodySize) << 20 // to MB
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = streams.LimitReadCloser(r.Body, int64(s.config.MaxRequestBodySize)<<20) // To MB
+			r.Body = http.MaxBytesReader(w, r.Body, maxSize)
+			next.ServeHTTP(w, r)
 		})
 	}
 	return next
