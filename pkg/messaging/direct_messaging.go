@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -55,23 +56,26 @@ type messageClientConnection func(ctx context.Context, address string, id string
 type DirectMessaging interface {
 	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	SetAppChannel(appChannel channel.AppChannel)
+	SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel)
 }
 
 type directMessaging struct {
-	appChannel           channel.AppChannel
-	connectionCreatorFn  messageClientConnection
-	appID                string
-	mode                 modes.DaprMode
-	grpcPort             int
-	namespace            string
-	resolver             nr.Resolver
-	hostAddress          string
-	hostName             string
-	maxRequestBodySizeMB int
-	proxy                Proxy
-	readBufferSize       int
-	resiliency           resiliency.Provider
-	isStreamingEnabled   bool
+	appChannel              channel.AppChannel
+	httpEndpointsAppChannel channel.HTTPEndpointAppChannel
+	connectionCreatorFn     messageClientConnection
+	appID                   string
+	mode                    modes.DaprMode
+	grpcPort                int
+	namespace               string
+	resolver                nr.Resolver
+	hostAddress             string
+	hostName                string
+	maxRequestBodySizeMB    int
+	proxy                   Proxy
+	readBufferSize          int
+	resiliency              resiliency.Provider
+	isStreamingEnabled      bool
+	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
 }
 
 type remoteApp struct {
@@ -82,18 +86,20 @@ type remoteApp struct {
 
 // NewDirectMessaging contains the options for NewDirectMessaging.
 type NewDirectMessagingOpts struct {
-	AppID              string
-	Namespace          string
-	Port               int
-	Mode               modes.DaprMode
-	AppChannel         channel.AppChannel
-	ClientConnFn       messageClientConnection
-	Resolver           nr.Resolver
-	MaxRequestBodySize int
-	Proxy              Proxy
-	ReadBufferSize     int
-	Resiliency         resiliency.Provider
-	IsStreamingEnabled bool
+	AppID                   string
+	Namespace               string
+	Port                    int
+	Mode                    modes.DaprMode
+	AppChannel              channel.AppChannel
+	HTTPEndpointsAppChannel channel.HTTPEndpointAppChannel
+	ClientConnFn            messageClientConnection
+	Resolver                nr.Resolver
+	MaxRequestBodySize      int
+	Proxy                   Proxy
+	ReadBufferSize          int
+	Resiliency              resiliency.Provider
+	IsStreamingEnabled      bool
+	HTTPEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
 }
 
 // NewDirectMessaging returns a new direct messaging api.
@@ -102,20 +108,22 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:                opts.AppID,
-		namespace:            opts.Namespace,
-		grpcPort:             opts.Port,
-		mode:                 opts.Mode,
-		appChannel:           opts.AppChannel,
-		connectionCreatorFn:  opts.ClientConnFn,
-		resolver:             opts.Resolver,
-		maxRequestBodySizeMB: opts.MaxRequestBodySize,
-		proxy:                opts.Proxy,
-		readBufferSize:       opts.ReadBufferSize,
-		resiliency:           opts.Resiliency,
-		isStreamingEnabled:   opts.IsStreamingEnabled,
-		hostAddress:          hAddr,
-		hostName:             hName,
+		appID:                   opts.AppID,
+		namespace:               opts.Namespace,
+		grpcPort:                opts.Port,
+		mode:                    opts.Mode,
+		appChannel:              opts.AppChannel,
+		httpEndpointsAppChannel: opts.HTTPEndpointsAppChannel,
+		connectionCreatorFn:     opts.ClientConnFn,
+		resolver:                opts.Resolver,
+		maxRequestBodySizeMB:    opts.MaxRequestBodySize,
+		proxy:                   opts.Proxy,
+		readBufferSize:          opts.ReadBufferSize,
+		resiliency:              opts.Resiliency,
+		isStreamingEnabled:      opts.IsStreamingEnabled,
+		hostAddress:             hAddr,
+		hostName:                hName,
+		httpEndpoints:           opts.HTTPEndpoints,
 	}
 
 	if dm.proxy != nil {
@@ -136,12 +144,22 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	if app.id == d.appID && app.namespace == d.namespace {
 		return d.invokeLocal(ctx, req)
 	}
+
+	if d.isHTTPEndpoint(app.id) {
+		return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeHTTPEndpoint, req)
+	}
+
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
 }
 
 // SetAppChannel sets the appChannel property in the object.
 func (d *directMessaging) SetAppChannel(appChannel channel.AppChannel) {
 	d.appChannel = appChannel
+}
+
+// SetHTTPEndpointsAppChannel sets the appChannel property in the object.
+func (d *directMessaging) SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel) {
+	d.httpEndpointsAppChannel = appChannel
 }
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
@@ -160,6 +178,19 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	}
 }
 
+// checkHTTPEndpoints takes an app id and checks if the app id is among the allowed list in the http endpoint CRDs,
+// and returns the baseURL from the HTTPEndpointSpec.Allowed field.
+func (d *directMessaging) checkHTTPEndpoints(targetAppID string) string {
+	for _, endpoint := range d.httpEndpoints {
+		for _, allowedList := range endpoint.Spec.Allowed {
+			if allowedList.Name == targetAppID {
+				return allowedList.BaseURL
+			}
+		}
+	}
+	return ""
+}
+
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures.
 // TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target server shuts down.
 func (d *directMessaging) invokeWithRetry(
@@ -170,6 +201,7 @@ func (d *directMessaging) invokeWithRetry(
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
+
 	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) {
 		// This policy has built-in retries so enable replay in the request
 		req.WithReplay(true)
@@ -220,6 +252,50 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 	return ctx
 }
 
+func (d *directMessaging) isHTTPEndpoint(appID string) bool {
+	for _, endpoint := range d.httpEndpoints {
+		for _, allowedList := range endpoint.Spec.Allowed {
+			if allowedList.Name == appID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
+	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctx = d.setContextSpan(ctx)
+
+	d.addForwardedHeadersToMetadata(req)
+	d.addDestinationAppIDHeaderToMetadata(appID, req)
+	d.addCallerAndCalleeAppIDHeaderToMetadata(d.appID, appID, req)
+
+	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
+
+	opts := []grpc.CallOption{
+		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB << 20),
+		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB << 20),
+	}
+
+	// Set up timers
+	start := time.Now()
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+
+	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, clientV1, req, opts, appID)
+
+	// Diagnostics
+	if imr != nil {
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+	}
+
+	return imr, teardown, err
+}
+
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
 	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
 	if err != nil {
@@ -256,6 +332,14 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	}
 
 	return imr, teardown, err
+}
+
+func (d *directMessaging) invokeRemoteUnaryForHTTPEndpoint(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, opts []grpc.CallOption, appID string) (*invokev1.InvokeMethodResponse, error) {
+	if d.httpEndpointsAppChannel == nil {
+		return nil, errors.New("cannot invoke http endpoint: http endpoints app channel not initialized")
+	}
+
+	return d.httpEndpointsAppChannel.InvokeMethod(ctx, req, appID)
 }
 
 func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {
@@ -488,10 +572,17 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 		return remoteApp{}, errors.New("name resolver not initialized")
 	}
 
-	request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
-	address, err := d.resolver.ResolveID(request)
-	if err != nil {
-		return remoteApp{}, err
+	// Note: check if current app id is associated with an http endpoint CRD,
+	// and set the address accordingly.
+	// If address is found through http endpoint CRD,
+	// then this will forgo the usage of service discovery.
+	address := d.checkHTTPEndpoints(id)
+	if address == "" {
+		request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
+		address, err = d.resolver.ResolveID(request)
+		if err != nil {
+			return remoteApp{}, err
+		}
 	}
 
 	return remoteApp{

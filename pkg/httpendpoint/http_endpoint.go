@@ -19,7 +19,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/HTTPEndpoint/v1alpha1"
+	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 

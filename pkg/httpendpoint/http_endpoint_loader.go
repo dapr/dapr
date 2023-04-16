@@ -13,7 +13,7 @@ limitations under the License.
 
 package httpendpoint
 
-import httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/HTTPEndpoint/v1alpha1"
+import httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 
 // EndpointsLoader is an interface for returning Dapr HTTP endpoints.
 type EndpointsLoader interface {

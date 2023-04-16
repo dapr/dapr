@@ -44,6 +44,7 @@ import (
 	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -71,6 +72,7 @@ type API interface {
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
+	SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
 }
@@ -81,7 +83,9 @@ type api struct {
 	publicEndpoints            []Endpoint
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
+	httpEndpointsAppChannel    channel.HTTPEndpointAppChannel
 	getComponentsFn            func() []componentsV1alpha1.Component
+	getHTTPEndpointsFn         func() []httpEndpointsV1alpha1.HTTPEndpoint
 	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
@@ -162,8 +166,10 @@ const (
 type APIOpts struct {
 	AppID                       string
 	AppChannel                  channel.AppChannel
+	HTTPEndpointsAppChannel     channel.HTTPEndpointAppChannel
 	DirectMessaging             messaging.DirectMessaging
 	GetComponentsFn             func() []componentsV1alpha1.Component
+	GetHTTPEndpointsFn          func() []httpEndpointsV1alpha1.HTTPEndpoint
 	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 	Resiliency                  resiliency.Provider
 	StateStores                 map[string]state.Store
@@ -188,8 +194,10 @@ func NewAPI(opts APIOpts) API {
 	api := &api{
 		id:                         opts.AppID,
 		appChannel:                 opts.AppChannel,
+		httpEndpointsAppChannel:    opts.HTTPEndpointsAppChannel,
 		directMessaging:            opts.DirectMessaging,
 		getComponentsFn:            opts.GetComponentsFn,
+		getHTTPEndpointsFn:         opts.GetHTTPEndpointsFn,
 		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
 		stateStores:                opts.StateStores,
@@ -1295,6 +1303,41 @@ func (ie invokeError) Error() string {
 	return fmt.Sprintf("invokeError (statusCode='%d') msg.errorCode='%s' msg.message='%s'", ie.statusCode, ie.msg.ErrorCode, ie.msg.Message)
 }
 
+func (a *api) isHTTPEndpoint(appID string) bool {
+	for _, endpoint := range a.getHTTPEndpointsFn() {
+		for _, allowedList := range endpoint.Spec.Allowed {
+			if allowedList.Name == appID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// getBaseURL takes an app id and checks if the app id is among the allowed list in the http endpoint CRDs,
+// and returns the baseURL from the HTTPEndpointSpec.Allowed field.
+func (a *api) getBaseURL(targetAppID string) string {
+	for _, endpoint := range a.getHTTPEndpointsFn() {
+		for _, allowedList := range endpoint.Spec.Allowed {
+			if allowedList.Name == targetAppID {
+				return allowedList.BaseURL
+			}
+		}
+	}
+	return ""
+}
+
+func (a *api) getAppIdFromBaseURL(baseURL string) string {
+	for _, endpoint := range a.getHTTPEndpointsFn() {
+		for _, allowedList := range endpoint.Spec.Allowed {
+			if allowedList.BaseURL == baseURL {
+				return allowedList.Name
+			}
+		}
+	}
+	return ""
+}
+
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
 	// Because this can respond with `withStream()`, we can't defer a call to cancel() here
@@ -1309,7 +1352,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	verb := strings.ToUpper(string(reqCtx.Method()))
-	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 
 	if a.directMessaging == nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
@@ -1318,19 +1360,37 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	policyDef := a.resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
+	var req *invokev1.InvokeMethodRequest
+	var policyDef *resiliency.PolicyDefinition
+	if a.isHTTPEndpoint(targetID) {
+		baseUrl := a.getBaseURL(targetID)
+		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+baseUrl)
 
-	// Construct internal invoke method request
-	req := invokev1.NewInvokeMethodRequest(invokeMethodName).
-		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
-		WithRawDataBytes(reqCtx.Request.Body()).
-		WithContentType(string(reqCtx.Request.Header.ContentType())).
-		// Save headers to internal metadata
-		WithFastHTTPHeaders(&reqCtx.Request.Header)
-	if policyDef != nil {
-		req.WithReplay(policyDef.HasRetries())
+		req = invokev1.NewInvokeMethodRequest("").
+			WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
+			WithRawDataBytes(reqCtx.Request.Body()).
+			WithContentType(string(reqCtx.Request.Header.ContentType())).
+			// Save headers to internal metadata
+			WithFastHTTPHeaders(&reqCtx.Request.Header)
+		if policyDef != nil {
+			req.WithReplay(policyDef.HasRetries())
+		}
+		defer req.Close()
+	} else {
+		invokeMethodName := reqCtx.UserValue(methodParam).(string)
+		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
+
+		req = invokev1.NewInvokeMethodRequest(invokeMethodName).
+			WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
+			WithRawDataBytes(reqCtx.Request.Body()).
+			WithContentType(string(reqCtx.Request.Header.ContentType())).
+			// Save headers to internal metadata
+			WithFastHTTPHeaders(&reqCtx.Request.Header)
+		if policyDef != nil {
+			req.WithReplay(policyDef.HasRetries())
+		}
+		defer req.Close()
 	}
-	defer req.Close()
 
 	policyRunner := resiliency.NewRunnerWithOptions(
 		ctx, policyDef,
@@ -1436,27 +1496,41 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	cancel()
 }
 
-// findTargetID tries to find ID of the target service from the following three places:
+// findTargetID tries to find ID of the target service from the following four places:
 // 1. {id} in the URL's path.
 // 2. Basic authentication, http://dapr-app-id:<service-id>@localhost:3500/path.
 // 3. HTTP header: 'dapr-app-id'.
+// 4. HTTP Endpoint baseURL override, http://localhost:3500/v1.0/invoke/<overwritten baseURL so targetID here>/method/<method>
 func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
-	if id := reqCtx.UserValue(idParam); id == nil {
-		if appID := reqCtx.Request.Header.Peek(daprAppID); appID == nil {
-			if auth := reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization); auth != nil &&
-				strings.HasPrefix(string(auth), "Basic ") {
-				if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(auth), "Basic ")); err == nil {
-					pair := strings.Split(string(s), ":")
-					if len(pair) == 2 && pair[0] == daprAppID {
-						return pair[1]
-					}
-				}
-			}
-		} else {
-			return string(appID)
-		}
-	} else {
+	if id := reqCtx.UserValue(idParam); id != nil {
 		return id.(string)
+	}
+
+	if appID := reqCtx.Request.Header.Peek(daprAppID); appID != nil {
+		return string(appID)
+	}
+
+	if auth := reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization); auth != nil &&
+		strings.HasPrefix(string(auth), "Basic ") {
+		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(auth), "Basic ")); err == nil {
+			pair := strings.Split(string(s), ":")
+			if len(pair) == 2 && pair[0] == daprAppID {
+				return pair[1]
+			}
+		}
+	}
+
+	if strings.HasPrefix(string(reqCtx.URI().Path()), "/v1.0/invoke/") {
+		parts := strings.Split(string(reqCtx.URI().Path()), "/")
+		// Example: http://localhost:3500/v1.0/invoke/http://api.github.com/method/<method>
+		// parts[0]: v1.0
+		// parts[1]: invoke
+		// parts[2]: http:
+		// parts[3]: api.github.com
+		// parts[4]: method
+		targetURL := parts[3] + "//" + parts[4]
+		val := a.getAppIdFromBaseURL(targetURL)
+		return val
 	}
 
 	return ""
@@ -1862,12 +1936,26 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		})
 	}
 
+	// TODO(@Sam): fix and fill in here for dapr runtime metadata api to include http endpoint
+	// endpoints := a.getHTTPEndpointsFn()
+	// ps := []pubsubSubscription{}
+	// for _, s := range subscriptions {
+	// 	ps = append(ps, pubsubSubscription{
+	// 		PubsubName:      s.PubsubName,
+	// 		Topic:           s.Topic,
+	// 		Metadata:        s.Metadata,
+	// 		DeadLetterTopic: s.DeadLetterTopic,
+	// 		Rules:           convertPubsubSubscriptionRules(s.Rules),
+	// 	})
+	// }
+
 	mtd := metadata{
 		ID:                   a.id,
 		ActiveActorsCount:    activeActorsCount,
 		Extended:             temp,
 		RegisteredComponents: registeredComponents,
 		Subscriptions:        ps,
+		// TODO(@Sam): update here to include http endpoint
 	}
 
 	mtdBytes, err := json.Marshal(mtd)
@@ -2462,6 +2550,10 @@ func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 
 func (a *api) SetAppChannel(appChannel channel.AppChannel) {
 	a.appChannel = appChannel
+}
+
+func (a *api) SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel) {
+	a.httpEndpointsAppChannel = appChannel
 }
 
 func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {

@@ -58,10 +58,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/actors"
-	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/HTTPEndpoint/v1alpha1"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
+	httpEndpointChannel "github.com/dapr/dapr/pkg/channel/external"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
@@ -166,15 +167,18 @@ type ComponentAuthorizer func(component componentsV1alpha1.Component) bool
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
-	ctx                       context.Context
-	cancel                    context.CancelFunc
-	runtimeConfig             *Config
-	globalConfig              *config.Configuration
-	accessControlList         *config.AccessControlList
-	componentsLock            *sync.RWMutex
-	components                []componentsV1alpha1.Component
-	grpc                      *grpc.Manager
-	appChannel                channel.AppChannel
+	ctx               context.Context
+	cancel            context.CancelFunc
+	runtimeConfig     *Config
+	globalConfig      *config.Configuration
+	accessControlList *config.AccessControlList
+	componentsLock    *sync.RWMutex
+	components        []componentsV1alpha1.Component
+	grpc              *grpc.Manager
+	// 1:1 relationship between sidecar and app for communication.
+	appChannel channel.AppChannel
+	// extra app channel to allow for different URLs per call.
+	httpEndpointsAppChannel   channel.HTTPEndpointAppChannel
 	appConfig                 config.ApplicationConfig
 	directMessaging           messaging.DirectMessaging
 	stateStoreRegistry        *stateLoader.Registry
@@ -561,16 +565,24 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.daprHTTPAPI != nil {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
-	log.Infof("sanity check for sam for a.daprHTTPAPI %v and a.runtimeConfig.ApplicationPort %v", a.daprHTTPAPI, a.runtimeConfig.ApplicationPort)
 	a.blockUntilAppIsReady()
 
 	err = a.createAppChannel()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
+	err = a.createHTTPEndpointsAppChannel()
+	if err != nil {
+		log.Warnf("failed to open %s channel to app for external service invocation: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+	}
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 	a.directMessaging.SetAppChannel(a.appChannel)
+
+	// add another app channel dedicated to external service invocation
+	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
+	a.daprGRPCAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
+	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 
 	a.initDirectMessaging(a.nameResolver)
 
@@ -594,6 +606,25 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 		// Set the appHealth object in the channel so it's aware of the app's health status
 		a.appChannel.SetAppHealth(a.appHealth)
+
+		// Enqueue a probe right away
+		// This will also start the input components once the app is healthy
+		a.appHealth.Enqueue()
+	} else {
+		// If there's no health check, mark the app as healthy right away so subscriptions can start
+		a.appHealthChanged(apphealth.AppStatusHealthy)
+	}
+
+	if a.runtimeConfig.AppHealthCheck != nil && a.httpEndpointsAppChannel != nil {
+		// We can't just pass "a.httpEndpointsAppChannel.HealthProbe" because httpEndpointsAppChannel may be re-created
+		a.appHealth = apphealth.New(*a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
+			return a.httpEndpointsAppChannel.HealthProbe(ctx)
+		})
+		a.appHealth.OnHealthChange(a.appHealthChanged)
+		a.appHealth.StartProbes(a.ctx)
+
+		// Set the appHealth object in the channel so it's aware of the app's health status
+		a.httpEndpointsAppChannel.SetAppHealth(a.appHealth)
 
 		// Enqueue a probe right away
 		// This will also start the input components once the app is healthy
@@ -1043,18 +1074,20 @@ func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) 
 
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
-		AppID:              a.runtimeConfig.ID,
-		Namespace:          a.namespace,
-		Port:               a.runtimeConfig.InternalGRPCPort,
-		Mode:               a.runtimeConfig.Mode,
-		AppChannel:         a.appChannel,
-		ClientConnFn:       a.grpc.GetGRPCConnection,
-		Resolver:           resolver,
-		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
-		Proxy:              a.proxy,
-		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
-		Resiliency:         a.resiliency,
-		IsStreamingEnabled: a.globalConfig.IsFeatureEnabled(config.ServiceInvocationStreaming),
+		AppID:                   a.runtimeConfig.ID,
+		Namespace:               a.namespace,
+		Port:                    a.runtimeConfig.InternalGRPCPort,
+		Mode:                    a.runtimeConfig.Mode,
+		AppChannel:              a.appChannel,
+		HTTPEndpointsAppChannel: a.httpEndpointsAppChannel,
+		ClientConnFn:            a.grpc.GetGRPCConnection,
+		Resolver:                resolver,
+		MaxRequestBodySize:      a.runtimeConfig.MaxRequestBodySize,
+		Proxy:                   a.proxy,
+		ReadBufferSize:          a.runtimeConfig.ReadBufferSize,
+		Resiliency:              a.resiliency,
+		IsStreamingEnabled:      a.globalConfig.IsFeatureEnabled(config.ServiceInvocationStreaming),
+		HTTPEndpoints:           a.getHTTPEndpoints(),
 	})
 }
 
@@ -1454,8 +1487,10 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		AppID:                       a.runtimeConfig.ID,
 		AppChannel:                  a.appChannel,
+		HTTPEndpointsAppChannel:     a.httpEndpointsAppChannel,
 		DirectMessaging:             a.directMessaging,
 		GetComponentsFn:             a.getComponents,
+		GetHTTPEndpointsFn:          a.getHTTPEndpoints,
 		GetSubscriptionsFn:          a.getSubscriptionsCache,
 		Resiliency:                  a.resiliency,
 		StateStores:                 a.stateStores,
@@ -3013,11 +3048,13 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 
 	var ch channel.AppChannel
 	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
+		// create gRPC app channel
 		ch, err = a.grpc.GetAppChannel()
 		if err != nil {
 			return err
 		}
 	} else {
+		// create http app channel
 		pipeline, err := a.buildAppHTTPPipeline()
 		if err != nil {
 			return err
@@ -3031,6 +3068,30 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 	}
 
 	a.appChannel = ch
+
+	return nil
+}
+
+func (a *DaprRuntime) createHTTPEndpointsAppChannel() (err error) {
+	if a.runtimeConfig.ApplicationPort == 0 {
+		log.Warn("App channel is not initialized. Did you configure an app-port?")
+		return nil
+	}
+
+	var ch channel.HTTPEndpointAppChannel
+	// create http app channel
+	pipeline, err := a.buildAppHTTPPipeline()
+	if err != nil {
+		return err
+	}
+	config := a.getAppHTTPChannelForHTTPEndpointsConfig(pipeline)
+	ch, err = httpEndpointChannel.CreateNonLocalChannel(config, a.getHTTPEndpoints())
+	if err != nil {
+		return err
+	}
+	ch.(*httpEndpointChannel.HTTPEndpointAppChannel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
+
+	a.httpEndpointsAppChannel = ch
 
 	return nil
 }
@@ -3102,6 +3163,16 @@ func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) 
 	return httpChannel.ChannelConfiguration{
 		Client:               a.appHTTPClient,
 		Endpoint:             a.getAppHTTPEndpoint(),
+		MaxConcurrency:       a.runtimeConfig.MaxConcurrency,
+		Pipeline:             pipeline,
+		TracingSpec:          a.globalConfig.Spec.TracingSpec,
+		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
+	}
+}
+
+func (a *DaprRuntime) getAppHTTPChannelForHTTPEndpointsConfig(pipeline httpMiddleware.Pipeline) httpEndpointChannel.ChannelConfigurationForHTTPEndpoints {
+	return httpEndpointChannel.ChannelConfigurationForHTTPEndpoints{
+		Client:               a.appHTTPClient,
 		MaxConcurrency:       a.runtimeConfig.MaxConcurrency,
 		Pipeline:             pipeline,
 		TracingSpec:          a.globalConfig.Spec.TracingSpec,
@@ -3196,6 +3267,15 @@ func (a *DaprRuntime) toBaseMetadata(c componentsV1alpha1.Component) contribMeta
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 		Name:       c.Name,
 	}
+}
+
+func (a *DaprRuntime) getHTTPEndpoints() []httpEndpointV1alpha1.HTTPEndpoint {
+	a.endpointsLock.RLock()
+	defer a.endpointsLock.RUnlock()
+
+	endpoints := make([]httpEndpointV1alpha1.HTTPEndpoint, len(a.httpEndpoints))
+	copy(endpoints, a.httpEndpoints)
+	return endpoints
 }
 
 func (a *DaprRuntime) getComponent(componentType string, name string) (componentsV1alpha1.Component, bool) {
