@@ -3604,7 +3604,8 @@ func (f *fakeHTTPServer) StartServerWithAPIToken(endpoints []Endpoint) {
 	f.ln = fasthttputil.NewInmemoryListener()
 	h := nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler)
 	go func() {
-		if err := gohttp.Serve(f.ln, useAPIAuthentication(h)); err != nil {
+		err := gohttp.Serve(f.ln, useAPIAuthentication(h)) //nolint:gosec
+		if err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
 	}()

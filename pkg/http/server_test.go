@@ -468,7 +468,7 @@ func TestCorsHandler(t *testing.T) {
 		h := srv.useCors(hf)
 		w := httptest.NewRecorder()
 		r := &http.Request{
-			Method: "OPTIONS",
+			Method: http.MethodOptions,
 			Header: http.Header{
 				"Origin": []string{"*"},
 			},
@@ -485,7 +485,7 @@ func TestCorsHandler(t *testing.T) {
 		h := srv.useCors(hf)
 		w := httptest.NewRecorder()
 		r := &http.Request{
-			Method: "OPTIONS",
+			Method: http.MethodOptions,
 			Header: http.Header{
 				"Origin": []string{"http://test.com"},
 			},

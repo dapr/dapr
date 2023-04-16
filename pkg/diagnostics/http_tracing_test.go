@@ -127,7 +127,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run("SpanContextToHTTPHeaders", func(t *testing.T) {
-			req, _ := http.NewRequest("GET", "http://test.local/path", nil)
+			req, _ := http.NewRequest(http.MethodGet, "http://test.local/path", nil)
 			wantSc := trace.NewSpanContext(tt.sc)
 			SpanContextToHTTPHeaders(wantSc, req.Header.Set)
 
@@ -138,7 +138,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 	}
 
 	t.Run("empty span context", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "http://test.local/path", nil)
+		req, _ := http.NewRequest(http.MethodGet, "http://test.local/path", nil)
 		sc := trace.SpanContext{}
 		SpanContextToHTTPHeaders(sc, req.Header.Set)
 
@@ -255,7 +255,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			var err error
 			req := getTestHTTPRequest()
 			resp := responsewriter.EnsureResponseWriter(httptest.NewRecorder())
-			resp.WriteHeader(200)
+			resp.WriteHeader(http.StatusOK)
 			req.URL, err = url.Parse("http://test.local" + tt.path)
 			require.NoError(t, err)
 
@@ -303,7 +303,7 @@ func TestSpanContextToResponse(t *testing.T) {
 }
 
 func getTestHTTPRequest() *http.Request {
-	req, _ := http.NewRequest("GET", "http://test.local/v1.0/state/statestore/key", nil)
+	req, _ := http.NewRequest(http.MethodGet, "http://test.local/v1.0/state/statestore/key", nil)
 	req.Header.Set("dapr-testheaderkey", "dapr-testheadervalue")
 	req.Header.Set("x-testheaderkey1", "dapr-testheadervalue")
 	req.Header.Set("daprd-testheaderkey2", "dapr-testheadervalue")

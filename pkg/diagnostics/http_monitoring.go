@@ -221,10 +221,9 @@ func (h *httpMetrics) HTTPMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		method := string(r.Method)
 		path := h.convertPathToMetricLabel(r.URL.Path)
 
-		h.ServerRequestReceived(r.Context(), method, path, reqContentSize)
+		h.ServerRequestReceived(r.Context(), r.Method, path, reqContentSize)
 
 		// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
 		w = responsewriter.EnsureResponseWriter(w)
@@ -236,7 +235,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		status := strconv.Itoa(w.(responsewriter.ResponseWriter).Status())
 		respSize := int64(w.(responsewriter.ResponseWriter).Size())
-		h.ServerRequestCompleted(r.Context(), method, path, status, respSize, elapsed)
+		h.ServerRequestCompleted(r.Context(), r.Method, path, status, respSize, elapsed)
 	}
 }
 

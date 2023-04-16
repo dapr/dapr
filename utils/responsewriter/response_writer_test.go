@@ -165,7 +165,7 @@ func (r *mockReader) Read(p []byte) (n int, err error) {
 	if r.eof {
 		return 0, io.EOF
 	}
-	copy(p, []byte(r.readStr))
+	copy(p, r.readStr)
 	r.eof = true
 	return len(r.readStr), nil
 }

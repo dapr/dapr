@@ -84,7 +84,7 @@ func userDefinedHTTPHeaders(r *http.Request) map[string]string {
 	m := make(map[string]string, len(r.Header))
 
 	for key, vSlice := range r.Header {
-		if len(vSlice) < 0 || len(key) < (len(daprHeaderBinSuffix)+1) {
+		if len(vSlice) < 1 || len(key) < (len(daprHeaderBinSuffix)+1) {
 			continue
 		}
 

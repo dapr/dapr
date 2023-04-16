@@ -27,7 +27,7 @@ import (
 
 func TestSpanFromContext(t *testing.T) {
 	t.Run("not nil span", func(t *testing.T) {
-		r, _ := http.NewRequest("GET", "http://test.local/method", nil)
+		r, _ := http.NewRequest(http.MethodGet, "http://test.local/method", nil)
 		var sp trace.Span
 		AddSpanToRequest(r, sp)
 
@@ -35,7 +35,7 @@ func TestSpanFromContext(t *testing.T) {
 	})
 
 	t.Run("nil span", func(t *testing.T) {
-		r, _ := http.NewRequest("GET", "http://test.local/method", nil)
+		r, _ := http.NewRequest(http.MethodGet, "http://test.local/method", nil)
 		AddSpanToRequest(r, nil)
 		sp := SpanFromContext(r.Context())
 		expectedType := "trace.noopSpan"

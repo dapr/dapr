@@ -97,14 +97,14 @@ func (s *server) StartNonBlocking() error {
 	handler := s.useRouter()
 
 	// These middlewares use net/http handlers
-	netHttpHandler := s.useComponents(nethttpadaptor.NewNetHTTPHandlerFunc(handler))
-	netHttpHandler = s.useCors(netHttpHandler)
-	netHttpHandler = useAPIAuthentication(netHttpHandler)
-	netHttpHandler = s.useMetrics(netHttpHandler)
-	netHttpHandler = s.useTracing(netHttpHandler)
+	netHTTPHandler := s.useComponents(nethttpadaptor.NewNetHTTPHandlerFunc(handler))
+	netHTTPHandler = s.useCors(netHTTPHandler)
+	netHTTPHandler = useAPIAuthentication(netHTTPHandler)
+	netHTTPHandler = s.useMetrics(netHTTPHandler)
+	netHTTPHandler = s.useTracing(netHTTPHandler)
 
 	// Convert back to fasthttp for the server to use
-	handler = fasthttpadaptor.NewFastHTTPHandler(netHttpHandler)
+	handler = fasthttpadaptor.NewFastHTTPHandler(netHTTPHandler)
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -154,11 +154,11 @@ func (s *server) StartNonBlocking() error {
 		publicHandler := s.usePublicRouter()
 
 		// These middlewares use net/http handlers
-		netHttpPublicHandler := s.useMetrics(nethttpadaptor.NewNetHTTPHandlerFunc(handler))
-		netHttpPublicHandler = s.useTracing(netHttpPublicHandler)
+		netHTTPPublicHandler := s.useMetrics(nethttpadaptor.NewNetHTTPHandlerFunc(publicHandler))
+		netHTTPPublicHandler = s.useTracing(netHTTPPublicHandler)
 
 		// Convert back to fasthttp for the server to use
-		handler = fasthttpadaptor.NewFastHTTPHandler(netHttpPublicHandler)
+		publicHandler = fasthttpadaptor.NewFastHTTPHandler(netHTTPPublicHandler)
 
 		healthServer := &fasthttp.Server{
 			Handler:               publicHandler,
@@ -306,7 +306,7 @@ func useAPIAuthentication(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		v := r.Header.Get(authConsts.APITokenHeader)
-		if auth.ExcludedRoute(r.URL.String()) || string(v) == token {
+		if auth.ExcludedRoute(r.URL.String()) || v == token {
 			r.Header.Del(authConsts.APITokenHeader)
 			next.ServeHTTP(w, r)
 		} else {

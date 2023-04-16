@@ -6,8 +6,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/dapr/dapr/utils/responsewriter"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/utils/responsewriter"
 )
 
 // NewFastHTTPHandlerFunc wraps net/http handler func to fasthttp
