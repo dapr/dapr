@@ -155,6 +155,26 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				newTag(diag.StatusKey.Name(), "closed"),
 			},
 		},
+		{
+			name:          "ComponentOutboundDefaultPolicy",
+			enableDefault: true,
+			appID:         testAppID,
+			unitFn: func() {
+				r := createDefaultTestResiliency(testResiliencyName, testResiliencyNamespace)
+				_ = r.ComponentOutboundPolicy(testStateStoreName, resiliency.Statestore)
+			},
+			wantNumberOfRows: 2,
+			wantTags: []tag.Tag{
+				newTag("app_id", testAppID),
+				newTag("name", testResiliencyName),
+				newTag("namespace", testResiliencyNamespace),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				newTag(diag.StatusKey.Name(), "closed"),
+			},
+		},
 	}
 
 	for _, test := range tests {

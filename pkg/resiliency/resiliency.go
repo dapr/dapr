@@ -664,22 +664,22 @@ func (r *Resiliency) getActorCBCache(app string) (*lru.Cache[string, *breaker.Ci
 	return cache, nil
 }
 
-func (r *Resiliency) getCBFromCache(cache *lru.Cache[string, *breaker.CircuitBreaker], endpoint string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
+func (r *Resiliency) getCBFromCache(cache *lru.Cache[string, *breaker.CircuitBreaker], key string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
 	if cache == nil {
-		return newCB(endpoint, template, r.log)
+		return newCB(key, template, r.log)
 	}
-	cb, ok := cache.Get(endpoint)
+	cb, ok := cache.Get(key)
 	if !ok || cb == nil {
 		r.serviceCBsMu.Lock()
 		defer r.serviceCBsMu.Unlock()
 
-		cb, ok = cache.Get(endpoint)
+		cb, ok = cache.Get(key)
 		if ok {
 			return cb
 		}
 
-		cb = newCB(endpoint, template, r.log)
-		cache.Add(endpoint, cb)
+		cb = newCB(key, template, r.log)
+		cache.Add(key, cb)
 	}
 	return cb
 }
@@ -733,13 +733,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 					if err != nil {
 						r.log.Errorf("error getting default circuit breaker cache for actor type %s: %s", actorType, err)
 					}
-					var key string
-					if policyNames.CircuitBreakerScope == ActorCircuitBreakerScopeType {
-						key = actorType
-					} else {
-						key = actorType + "-" + id
-					}
-					policyDef.cb = r.getCBFromCache(actorCBCache, key, template)
+					policyDef.cb = r.getCBFromCache(actorCBCache, actorType, template)
 					diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
 						diag.ResiliencyActorTarget(actorType), policyDef.cb.State())
 				}
