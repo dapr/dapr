@@ -203,10 +203,24 @@ func (r *RedisUpdater) subscribeHandler(redisChannel string, subscribeID string,
 			return
 		case <-ctx.Done():
 			return
-		case <-p.Channel():
-			notifyCh <- struct{}{}
+		case msg := <-p.Channel():
+			r.handleSubscribedChange(ctx, msg, subscribeID)
 		}
 	}
+}
+
+func (r *RedisUpdater) handleSubscribedChange(ctx context.Context, msg *redis.Message, subscribeID string) {
+	key, err := parseRedisKeyFromChannel(msg.Channel)
+	if err != nil {
+		log.Printf("parse redis key failed: %s", err.Error())
+		return
+	}
+	_, err = getBaseline([]string{key})
+	if err != nil {
+		log.Printf("error getting values from configstore: %s", err.Error())
+		return
+	}
+	notifyCh <- struct{}{}
 }
 
 func getDaprHTTP(keys []string) (string, error) {
