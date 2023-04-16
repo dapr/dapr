@@ -1276,7 +1276,7 @@ func TestNegativeCases(t *testing.T) {
 
 				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
-				require.Len(t, testResults.Results, 4)
+				require.Len(t, testResults.Results, 3)
 
 				for _, result := range testResults.Results {
 					switch result.TestCase {
@@ -1303,9 +1303,9 @@ func TestNegativeCases(t *testing.T) {
 				var testResults negativeTestResult
 				json.Unmarshal(resp, &testResults)
 
-				require.Nil(t, err)
+				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
-				require.Len(t, testResults.Results, 4)
+				require.Len(t, testResults.Results, 3)
 
 				for _, result := range testResults.Results {
 					switch result.TestCase {
