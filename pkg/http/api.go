@@ -2207,7 +2207,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			}, entries[i].Metadata)
 			if envelopeErr != nil {
 				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, envelopeErr.Error()))
 				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)
 				log.Debug(msg)
 
