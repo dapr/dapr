@@ -43,6 +43,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
+	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 )
 
@@ -135,7 +136,7 @@ func (s *server) StartNonBlocking() error {
 		srv := &http.Server{
 			Handler:           netHTTPHandler,
 			ReadHeaderTimeout: 10 * time.Second,
-			MaxHeaderBytes:    s.config.ReadBufferSize << 10, // To KB
+			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 		}
 		s.servers = append(s.servers, srv)
 
@@ -157,7 +158,7 @@ func (s *server) StartNonBlocking() error {
 			Addr:              fmt.Sprintf(":%d", *s.config.PublicPort),
 			Handler:           netHTTPPublicHandler,
 			ReadHeaderTimeout: 10 * time.Second,
-			MaxHeaderBytes:    s.config.ReadBufferSize << 10, // To KB
+			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 		}
 		s.servers = append(s.servers, healthServer)
 
@@ -192,7 +193,7 @@ func (s *server) StartNonBlocking() error {
 				// pprof is automatically registered in the DefaultServerMux
 				Handler:           http.DefaultServeMux,
 				ReadHeaderTimeout: 10 * time.Second,
-				MaxHeaderBytes:    s.config.ReadBufferSize << 10, // To KB
+				MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 			}
 			s.servers = append(s.servers, profServer)
 
@@ -239,10 +240,10 @@ func (s *server) useMetrics(next http.Handler) http.Handler {
 }
 
 func (s *server) useMaxBodySize(next http.Handler) http.Handler {
-	if s.config.MaxRequestBodySize > 0 {
-		maxSize := int64(s.config.MaxRequestBodySize) << 20 // to MB
+	if s.config.MaxRequestBodySizeMB > 0 {
+		maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, maxSize)
+			r.Body = streams.LimitReadCloser(r.Body, maxSize)
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -1276,16 +1276,18 @@ func TestNegativeCases(t *testing.T) {
 
 				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
-				require.Len(t, testResults.Results, 3)
+				require.Len(t, testResults.Results, 4)
 
 				for _, result := range testResults.Results {
 					switch result.TestCase {
 					case "1MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
+					case "4MB+":
+						assert.False(t, result.CallSuccessful)
 					case "8MB":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					}
 				}
 			})
@@ -1305,16 +1307,18 @@ func TestNegativeCases(t *testing.T) {
 
 				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
-				require.Len(t, testResults.Results, 3)
+				require.Len(t, testResults.Results, 4)
 
 				for _, result := range testResults.Results {
 					switch result.TestCase {
 					case "1MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
+					case "4MB+":
+						assert.False(t, result.CallSuccessful)
 					case "8MB":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					}
 				}
 			})

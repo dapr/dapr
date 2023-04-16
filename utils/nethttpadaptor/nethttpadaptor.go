@@ -14,6 +14,7 @@ limitations under the License.
 package nethttpadaptor
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -40,7 +41,9 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 		if r.Body != nil {
 			reqBody, err := io.ReadAll(r.Body)
 			if err != nil {
-				log.Errorf("error reading request body, %+v", err)
+				msg := fmt.Sprintf("error reading request body: %v", err)
+				log.Errorf(msg)
+				http.Error(w, msg, http.StatusBadRequest)
 				return
 			}
 			c.Request.SetBody(reqBody)

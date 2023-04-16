@@ -1200,6 +1200,10 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 			name: "4MB",
 		},
 		{
+			size: 1024*1024*3 + 10,
+			name: "4MB+",
+		},
+		{
 			size: 1024 * 1024 * 8,
 			name: "8MB",
 		},
