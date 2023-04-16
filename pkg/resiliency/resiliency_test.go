@@ -660,12 +660,12 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	// Generic App
 	concurrentPolicyExec(t, func(idx int) *PolicyDefinition {
 		return r.EndpointPolicy(fmt.Sprintf("noMatchingTarget-%d", idx), "localhost")
-	}, 11)
+	}, 11) // App has a CB that trips after 15 failure, so we don't trip it but still do all the 10 default retries
 
 	// execute concurrent to get coverage
 	concurrentPolicyExec(t, func(idx int) *PolicyDefinition {
 		return r.ActorPreLockPolicy(fmt.Sprintf("actorType-%d", idx), "actorID")
-	}, 2)
+	}, 2) // actorType is not a known target, so we get 1 retry + original call as default circuit breaker trips (consecutiveFailures > 1)
 
 	// One last one for ActorPostLock which just includes timeouts.
 	policy = NewRunner[any](context.Background(),
@@ -698,7 +698,7 @@ func concurrentPolicyExec(t *testing.T, policyDefFn func(idx int) *PolicyDefinit
 				count.Add(1)
 				return nil, errors.New("Forced failure")
 			})
-			assert.Equal(t, wantCount, count.Load()) // actorType is not a known target, so we get 1 retry + original call as default circuit breaker trips (consecutiveFailures > 1)
+			assert.Equal(t, wantCount, count.Load())
 		}(i)
 	}
 	wg.Wait()
