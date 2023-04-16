@@ -56,7 +56,7 @@ tracingapp \
 configurationapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -79,6 +79,7 @@ pubsub_bulk_subscribe_http \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
+configuration \
 
 KUBECTL=kubectl
 
