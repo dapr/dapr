@@ -43,6 +43,22 @@ func (HTTPEndpoint) Kind() string {
 	return "HTTPEndpoint"
 }
 
+// IsAppScoped returns true if the appID is allowed in the scopes for the http endpoint.
+func (e HTTPEndpoint) IsAppScoped(appID string) bool {
+	if len(e.Scopes) == 0 {
+		// If there are no scopes, then every app is allowed
+		return true
+	}
+
+	for _, s := range e.Scopes {
+		if s == appID {
+			return true
+		}
+	}
+
+	return false
+}
+
 // HTTPEndpointSpec describes an access specification for allowing external service invocations.
 type HTTPEndpointSpec struct {
 	Allowed  []APISpec      `json:"allowed,omitempty"`
