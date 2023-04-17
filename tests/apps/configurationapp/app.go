@@ -110,6 +110,7 @@ func (r *RedisUpdater) Init() error {
 	}
 	return nil
 }
+
 func (r *RedisUpdater) AddKey(items map[string]*Item) error {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
