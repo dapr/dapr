@@ -149,7 +149,9 @@ func TestBulkSubscribe(t *testing.T) {
 			Data:       []byte(`{"orderId":"1"}`),
 		})
 		assert.NoError(t, err)
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
@@ -195,7 +197,9 @@ func TestBulkSubscribe(t *testing.T) {
 			Data:       []byte(order),
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
@@ -243,7 +247,9 @@ func TestBulkSubscribe(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
@@ -305,7 +311,9 @@ func TestBulkSubscribe(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
@@ -402,7 +410,9 @@ func TestBulkSubscribe(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
@@ -492,7 +502,9 @@ func TestBulkSubscribe(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
@@ -577,7 +589,9 @@ func TestBulkSubscribe(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
@@ -660,7 +674,9 @@ func TestBulkSubscribe(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
@@ -765,7 +781,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Entries:    msgArr,
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -876,7 +894,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Entries:    msgArr,
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -963,7 +983,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Entries:    msgArr,
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1052,7 +1074,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Entries:    msgArr,
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1136,7 +1160,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Entries:    msgArr,
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1206,7 +1232,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Entries:    msgArr,
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{

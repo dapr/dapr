@@ -35,15 +35,10 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
-	contribCrypto "github.com/dapr/components-contrib/crypto"
-	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -60,6 +55,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -81,14 +77,7 @@ type api struct {
 	publicEndpoints            []Endpoint
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
-	getComponentsFn            func() []componentsV1alpha1.Component
-	getSubscriptionsFn         func() []runtimePubsub.Subscription
 	resiliency                 resiliency.Provider
-	stateStores                map[string]state.Store
-	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]chan struct{}
-	secretStores               map[string]secretstores.SecretStore
-	secretsConfiguration       map[string]config.SecretsScope
 	actor                      actors.Actors
 	pubsubAdapter              runtimePubsub.Adapter
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -165,16 +154,8 @@ type APIOpts struct {
 	AppID                       string
 	AppChannel                  channel.AppChannel
 	DirectMessaging             messaging.DirectMessaging
-	GetComponentsFn             func() []componentsV1alpha1.Component
-	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 	Resiliency                  resiliency.Provider
-	StateStores                 map[string]state.Store
-	WorkflowsComponents         map[string]wfs.Workflow
-	LockStores                  map[string]lock.Store
-	SecretStores                map[string]secretstores.SecretStore
-	SecretsConfiguration        map[string]config.SecretsScope
-	ConfigurationStores         map[string]configuration.Store
-	CryptoProviders             map[string]contribCrypto.SubtleCrypto
+	CompStore                   *compstore.ComponentStore
 	PubsubAdapter               runtimePubsub.Adapter
 	Actor                       actors.Actors
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -191,13 +172,7 @@ func NewAPI(opts APIOpts) API {
 		id:                         opts.AppID,
 		appChannel:                 opts.AppChannel,
 		directMessaging:            opts.DirectMessaging,
-		getComponentsFn:            opts.GetComponentsFn,
-		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
-		stateStores:                opts.StateStores,
-		secretStores:               opts.SecretStores,
-		secretsConfiguration:       opts.SecretsConfiguration,
-		configurationStores:        opts.ConfigurationStores,
 		pubsubAdapter:              opts.PubsubAdapter,
 		actor:                      opts.Actor,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
@@ -205,19 +180,13 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		maxRequestBodySize:         opts.MaxRequestBodySize,
-		configurationSubscribe:     make(map[string]chan struct{}),
 		isStreamingEnabled:         opts.IsStreamingEnabled,
 		daprRunTimeVersion:         buildinfo.Version(),
 		universal: &universalapi.UniversalAPI{
-			AppID:                opts.AppID,
-			Logger:               log,
-			Resiliency:           opts.Resiliency,
-			CryptoProviders:      opts.CryptoProviders,
-			StateStores:          opts.StateStores,
-			SecretStores:         opts.SecretStores,
-			SecretsConfiguration: opts.SecretsConfiguration,
-			LockStores:           opts.LockStores,
-			WorkflowComponents:   opts.WorkflowsComponents,
+			AppID:      opts.AppID,
+			Logger:     log,
+			Resiliency: opts.Resiliency,
+			CompStore:  opts.CompStore,
 		},
 	}
 
@@ -233,6 +202,7 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSubtleCryptoEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
@@ -344,23 +314,6 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/{storeName}/query",
 			Version: apiVersionV1alpha1,
 			Handler: a.onQueryStateHandler(),
-		},
-	}
-}
-
-func (a *api) constructSecretEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "secrets/{secretStoreName}/bulk",
-			Version: apiVersionV1,
-			Handler: a.onBulkGetSecret,
-		},
-		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "secrets/{secretStoreName}/{key}",
-			Version: apiVersionV1,
-			Handler: a.onGetSecret,
 		},
 	}
 }
@@ -753,7 +706,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
+	if a.universal.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -762,13 +715,14 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	if a.stateStores[storeName] == nil {
+	state, ok := a.universal.CompStore.GetStateStore(storeName)
+	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
 	}
-	return a.stateStores[storeName], storeName, nil
+	return state, storeName, nil
 }
 
 // Route:   "workflows/{workflowComponent}/{workflowName}/{instanceId}",
@@ -896,7 +850,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
-	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+	if a.universal.CompStore.ConfigurationsLen() == 0 {
 		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_CONFIGURED", messages.ErrConfigurationStoresNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -905,13 +859,14 @@ func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.Reques
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	if a.configurationStores[storeName] == nil {
+	conf, ok := a.universal.CompStore.GetConfiguration(storeName)
+	if !ok {
 		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
 	}
-	return a.configurationStores[storeName], storeName, nil
+	return conf, storeName, nil
 }
 
 type subscribeConfigurationResponse struct {
@@ -1184,128 +1139,6 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 	respond(reqCtx, withEmpty())
-}
-
-func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
-	store, secretStoreName, err := a.getSecretStoreWithRequestValidation(reqCtx)
-	if err != nil {
-		log.Debug(err)
-		return
-	}
-
-	metadata := getMetadataFromRequest(reqCtx)
-
-	key := reqCtx.UserValue(secretNameParam).(string)
-
-	if !a.isSecretAllowed(secretStoreName, key) {
-		apiErr := messages.ErrSecretPermissionDenied.WithFormat(key, secretStoreName)
-		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
-		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
-		return
-	}
-
-	req := secretstores.GetSecretRequest{
-		Name:     key,
-		Metadata: metadata,
-	}
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*secretstores.GetSecretResponse](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*secretstores.GetSecretResponse, error) {
-		rResp, rErr := store.GetSecret(ctx, req)
-		return &rResp, rErr
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.SecretInvoked(context.Background(), secretStoreName, diag.Get, err == nil, elapsed)
-
-	if err != nil {
-		apiErr := messages.ErrSecretGet.WithFormat(req.Name, secretStoreName, err.Error())
-		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
-		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
-		log.Debug(msg)
-		return
-	}
-
-	if resp == nil || resp.Data == nil {
-		respond(reqCtx, withEmpty())
-		return
-	}
-
-	respBytes, _ := json.Marshal(resp.Data)
-	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
-}
-
-func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
-	store, secretStoreName, err := a.getSecretStoreWithRequestValidation(reqCtx)
-	if err != nil {
-		log.Debug(err)
-		return
-	}
-
-	metadata := getMetadataFromRequest(reqCtx)
-
-	req := secretstores.BulkGetSecretRequest{
-		Metadata: metadata,
-	}
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*secretstores.BulkGetSecretResponse](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(secretStoreName, resiliency.Secretstore),
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*secretstores.BulkGetSecretResponse, error) {
-		rResp, rErr := store.BulkGetSecret(ctx, req)
-		return &rResp, rErr
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.SecretInvoked(context.Background(), secretStoreName, diag.BulkGet, err == nil, elapsed)
-
-	if err != nil {
-		apiErr := messages.ErrBulkSecretGet.WithFormat(secretStoreName, err.Error())
-		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
-		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
-		log.Debug(msg)
-		return
-	}
-
-	if resp == nil || resp.Data == nil {
-		respond(reqCtx, withEmpty())
-		return
-	}
-
-	filteredSecrets := map[string]map[string]string{}
-	for key, v := range resp.Data {
-		if a.isSecretAllowed(secretStoreName, key) {
-			filteredSecrets[key] = v
-		} else {
-			log.Debugf(messages.ErrSecretPermissionDenied.WithFormat(key, secretStoreName).String())
-		}
-	}
-
-	respBytes, _ := json.Marshal(filteredSecrets)
-	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
-}
-
-func (a *api) getSecretStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (secretstores.SecretStore, string, error) {
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		apiErr := messages.ErrSecretStoreNotConfigured
-		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
-		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
-		return nil, "", errors.New(msg.Message)
-	}
-
-	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
-
-	if a.secretStores[secretStoreName] == nil {
-		apiErr := messages.ErrSecretStoreNotFound.WithFormat(secretStoreName)
-		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
-		respond(reqCtx, withError(apiErr.HTTPCode(), msg))
-		return nil, "", errors.New(msg.Message)
-	}
-	return a.secretStores[secretStoreName], secretStoreName, nil
 }
 
 func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
@@ -1980,7 +1813,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
 	componentsCapabilties := a.getComponentsCapabilitesFn()
-	components := a.getComponentsFn()
+	components := a.universal.CompStore.ListComponents()
 	registeredComponents := make([]registeredComponent, 0, len(components))
 	for _, comp := range components {
 		registeredComp := registeredComponent{
@@ -1992,7 +1825,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions := a.getSubscriptionsFn()
+	subscriptions := a.universal.CompStore.ListSubscriptions()
 	ps := []pubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, pubsubSubscription{
@@ -2261,7 +2094,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			}, entries[i].Metadata)
 			if envelopeErr != nil {
 				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, envelopeErr.Error()))
 				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg), closeChildSpans)
 				log.Debug(msg)
 
@@ -2422,7 +2255,7 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if len(a.stateStores) == 0 {
+	if a.universal.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -2430,7 +2263,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
-	store, ok := a.stateStores[storeName]
+	store, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
 		log.Debug(err)
@@ -2600,14 +2433,6 @@ func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 			},
 		},
 	)
-}
-
-func (a *api) isSecretAllowed(storeName, key string) bool {
-	if config, ok := a.secretsConfiguration[storeName]; ok {
-		return config.IsSecretAllowed(key)
-	}
-	// By default, if a configuration is not defined for a secret store, return true.
-	return true
 }
 
 func (a *api) SetAppChannel(appChannel channel.AppChannel) {
