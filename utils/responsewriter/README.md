@@ -1,8 +1,8 @@
 # responsewriter
 
-This package contains code from [`github.com/urfave/negroni`](https://github.com/urfave/negroni).
+This package contains code forked from [`github.com/urfave/negroni`](https://github.com/urfave/negroni). It includes extensive changes, including the removal of features that depend on the rest of the framework, and additions of things we need to support integrations with the rest of Dapr, such as support for user values.
 
-Commit: [b935227](https://github.com/urfave/negroni/tree/b935227d493b8a257f6e0b3c8d98ae576c90cd4a/)
+Source commit: [b935227](https://github.com/urfave/negroni/tree/b935227d493b8a257f6e0b3c8d98ae576c90cd4a/)
 
 ## License
 
