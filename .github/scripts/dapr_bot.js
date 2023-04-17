@@ -20,6 +20,7 @@ const owners = [
     'skyao',
     'tanvigour',
     'yaron2',
+    'robertojrojas',
 ]
 
 const SDKs = [
