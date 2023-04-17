@@ -347,7 +347,7 @@ async function cmdOkToPerfComponents(github, issue, isFromPulls, args) {
         await github.repos.createDispatchEvent({
             owner: issue.owner,
             repo: issue.repo,
-            event_type: 'perf-test-components',
+            event_type: 'components-perf-test',
             client_payload: perfPayload,
         })
 
