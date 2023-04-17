@@ -128,7 +128,7 @@ message ListHTTPEndpointsRequest {
 // HTTPEndpointsUpdateRequest is the request to get updates about new http endpoints for a given namespace.
 message HTTPEndpointUpdateRequest {
   string namespace = 1;
-  string podName = 2;
+  string pod_name = 2;
 }
 
 // HTTPEndpointsUpdateEvent includes the updated http endpoint event.
