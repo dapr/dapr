@@ -160,7 +160,6 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 		SidecarMemory(sidecarUsage.MemoryMb).
 		Restarts(restarts).
 		OutputK6(sm.RunnersResults).
-		Output("TARGET_URL", testAppURL).
 		Output("PUBLISH_TYPE", publishType).
 		Output("SUBSCRIBE_TYPE", subscribeType).
 		Output("HTTP_REQ_DURATION_THRESHOLD", httpReqDurationThresholdMs).
