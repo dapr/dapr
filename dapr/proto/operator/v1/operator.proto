@@ -37,7 +37,7 @@ service Operator {
   // Returns a list of http endpoints
   rpc ListHTTPEndpoints (ListHTTPEndpointsRequest) returns (ListHTTPEndpointsResponse) {}
   // Sends events to Dapr sidecars upon http endpoint changes.
-  rpc HTTPEndpointsUpdate (HTTPEndpointsUpdateRequest) returns (stream HTTPEndpointsUpdateEvent) {}
+  rpc HTTPEndpointUpdate (HTTPEndpointUpdateRequest) returns (stream HTTPEndpointUpdateEvent) {}
 }
 
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
@@ -126,12 +126,12 @@ message ListHTTPEndpointsRequest {
 }
 
 // HTTPEndpointsUpdateRequest is the request to get updates about new http endpoints for a given namespace.
-message HTTPEndpointsUpdateRequest {
+message HTTPEndpointUpdateRequest {
   string namespace = 1;
   string podName = 2;
 }
 
 // HTTPEndpointsUpdateEvent includes the updated http endpoint event.
-message HTTPEndpointsUpdateEvent {
+message HTTPEndpointUpdateEvent {
   bytes http_endpoints = 1;
 }
