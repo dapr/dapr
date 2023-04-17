@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,6 +51,18 @@ const (
 	DefaultIssuerKeyFilename = "issuer.key"
 )
 
+// ValidatorName is the name of a supported validator.
+type ValidatorName string
+
+const (
+	// Kubernetes validator (default on Kubernetes).
+	ValidatorKubernetes ValidatorName = "kubernetes"
+	// Insecure validator (default on self-hosted).
+	ValidatorInsecure ValidatorName = "insecure"
+	// JWKS validator
+	ValidatorJWKS ValidatorName = "jwks"
+)
+
 // Config holds the configuration for the Certificate Authority.
 type Config struct {
 	Port             int
@@ -60,26 +73,20 @@ type Config struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
+	Validators       map[ValidatorName]map[string]string
+	DefaultValidator ValidatorName
 	Features         []daprGlobalConfig.FeatureSpec
-}
-
-var configGetters = map[string]func(string) (Config, error){
-	selfHostedConfig: getSelfhostedConfig,
-	kubernetesConfig: getKubernetesConfig,
 }
 
 // FromConfigName returns a Sentry configuration based on a configuration spec.
 // A default configuration is loaded in case of an error.
-func FromConfigName(configName string) (Config, error) {
-	var confGetterFn func(string) (Config, error)
-
+func FromConfigName(configName string) (conf Config, err error) {
 	if IsKubernetesHosted() {
-		confGetterFn = configGetters[kubernetesConfig]
+		conf, err = getKubernetesConfig(configName)
 	} else {
-		confGetterFn = configGetters[selfHostedConfig]
+		conf, err = getSelfhostedConfig(configName)
 	}
 
-	conf, err := confGetterFn(configName)
 	if err != nil {
 		err = fmt.Errorf("loading default config. couldn't find config name %q: %w", configName, err)
 		conf = getDefaultConfig()
@@ -173,6 +180,36 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 	}
 
 	conf.Features = daprConfig.Spec.Features
+
+	// Get token validators
+	// In Kubernetes mode, we always allow the built-in "kubernetes" validator
+	// In self-hosted mode, the built-in "insecure" validator is enabled only if no other validator is configured
+	conf.Validators = map[ValidatorName]map[string]string{}
+	tokenValidatorSpec := daprConfig.Spec.MTLSSpec.TokenValidators
+	if IsKubernetesHosted() {
+		conf.DefaultValidator = ValidatorKubernetes
+		conf.Validators[ValidatorKubernetes] = map[string]string{}
+	}
+	if len(tokenValidatorSpec) > 0 {
+		for _, v := range tokenValidatorSpec {
+			// Check if the name is a valid one
+			// We do not allow re-configuring the built-in validators
+			name := ValidatorName(strings.ToLower(v.Name))
+			switch name {
+			case ValidatorJWKS:
+				// All good - nop
+			case ValidatorKubernetes, ValidatorInsecure:
+				return conf, fmt.Errorf("invalid token validator: the built-in 'kubernetes' and 'insecure' validators cannot be configured manually")
+			default:
+				return conf, fmt.Errorf("invalid token validator name: '%s'; supported values: 'jwks'", v.Name)
+			}
+
+			conf.Validators[name] = v.OptionsMap()
+		}
+	} else if !IsKubernetesHosted() {
+		conf.DefaultValidator = ValidatorInsecure
+		conf.Validators[ValidatorInsecure] = map[string]string{}
+	}
 
 	return conf, nil
 }

@@ -15,10 +15,17 @@ package consts
 
 /* #nosec. */
 const (
-	// Env var for the API token.
-	APITokenEnvVar    = "DAPR_API_TOKEN"
+	// APITokenEnvVar is the environment variable for the API token.
+	APITokenEnvVar = "DAPR_API_TOKEN"
+	// AppAPITokenEnvVar is the environment variable for the app API token.
 	AppAPITokenEnvVar = "APP_API_TOKEN"
-	// Header name for HTTP/gRPC calls to hold the token.
+	// SentryLocalIdentityEnvVar is the environment variable for the local identity sent to Sentry.
+	SentryLocalIdentityEnvVar = "SENTRY_LOCAL_IDENTITY"
+	// SentryTokenEnvVar is the environment variable for the Sentry token.
+	SentryTokenEnvVar = "DAPR_SENTRY_TOKEN"
+	// SentryTokenEnvVar is the environment variable for the Sentry token file.
+	SentryTokenFileEnvVar = "DAPR_SENTRY_TOKEN_FILE"
+	// APITokenHeader is header name for HTTP/gRPC calls to hold the token.
 	APITokenHeader = "dapr-api-token"
 	// Name of the variable injected in the daprd container with the list of injected env vars.
 	EnvKeysEnvVar = "DAPR_ENV_KEYS"

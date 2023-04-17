@@ -34,6 +34,8 @@ message SignCertificateRequest {
   string namespace = 4;
   // A PEM-encoded x509 CSR.
   bytes certificate_signing_request = 5;
+  // Name of the validator to use, if not the default for the environemtn. 
+  string token_validator = 6;
 }
 
 message SignCertificateResponse {

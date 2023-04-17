@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package insecure
 
 import (
 	"context"
@@ -23,17 +23,19 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/validator/internal"
 )
 
-type selfhosted struct{}
+// insecure implements the validator.Interface. It doesn't perform any authentication on requests.
+// It is meant to be used in self-hosted scenarios where Dapr is running on a trusted environment.
+type insecure struct{}
 
 func New() validator.Validator {
-	return &selfhosted{}
+	return &insecure{}
 }
 
-func (s *selfhosted) Start(ctx context.Context) error {
+func (s *insecure) Start(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
 }
 
-func (s *selfhosted) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
+func (s *insecure) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
 	return internal.Validate(ctx, req)
 }

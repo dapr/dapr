@@ -28,6 +28,7 @@ import (
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
+	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
@@ -44,8 +45,11 @@ type Options struct {
 	// Security is the security handler for the server.
 	Security security.Handler
 
-	// Validator is the client authentication validator.
-	Validator validator.Validator
+	// Validator are the client authentication validator.
+	Validators map[config.ValidatorName]validator.Validator
+
+	// Name of the default validator to use if the request doesn't specify one.
+	DefaultValidator config.ValidatorName
 
 	// CA is the certificate authority which signs client certificates.
 	CA ca.Signer
@@ -53,8 +57,9 @@ type Options struct {
 
 // server is the gRPC server for the Sentry service.
 type server struct {
-	val validator.Validator
-	ca  ca.Signer
+	vals             map[config.ValidatorName]validator.Validator
+	defaultValidator config.ValidatorName
+	ca               ca.Signer
 }
 
 // Start starts the server. Blocks until the context is cancelled.
@@ -68,8 +73,9 @@ func Start(ctx context.Context, opts Options) error {
 	srv := grpc.NewServer(opts.Security.GRPCServerOptionNoClientAuth())
 
 	s := &server{
-		val: opts.Validator,
-		ca:  opts.CA,
+		vals:             opts.Validators,
+		defaultValidator: opts.DefaultValidator,
+		ca:               opts.CA,
 	}
 	sentryv1pb.RegisterCAServer(srv, s)
 
@@ -102,18 +108,29 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 }
 
 func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
-	trustDomain, err := s.val.Validate(ctx, req)
+	validator := s.defaultValidator
+	if req.TokenValidator != "" {
+		validator = config.ValidatorName(req.TokenValidator)
+	}
+	if validator == "" {
+		return nil, status.Error(codes.InvalidArgument, "a validator name must be specified in this environment")
+	}
+	if _, ok := s.vals[validator]; !ok {
+		return nil, status.Error(codes.InvalidArgument, "the requested validator is not enabled")
+	}
+
+	trustDomain, err := s.vals[validator].Validate(ctx, req)
 	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
 	der, _ := pem.Decode(req.GetCertificateSigningRequest())
-	if der == nil {
+	if der == nil || der.Type != "CERTIFICATE REQUEST" {
 		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
 	}
 	csr, err := x509.ParseCertificateRequest(der.Bytes)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse certificate signing request: %v", err)
 	}
 
 	if csr.CheckSignature() != nil {
@@ -125,15 +142,17 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	// daprd->daprd connections would fail. This is no longer the case since we
 	// now match with SPIFFE URI SAN, but we need to keep this here for backwards
 	// compatibility. Remove after v1.12.
-	var dns []string
+	var dns string
 	switch {
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
-		dns = []string{fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.Namespace)}
+		dns = fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.Namespace)
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-operator":
-		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)}
+		dns = fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)
 	default:
-		dns = []string{fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)}
+		dns = fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)
 	}
+
+	log.Infof("Processing SignCertificate requests for %s (validator: %s)", dns, string(validator))
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
 		PublicKey:          csr.PublicKey,
@@ -141,7 +160,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		TrustDomain:        trustDomain.String(),
 		Namespace:          req.Namespace,
 		AppID:              req.Id,
-		DNS:                dns,
+		DNS:                []string{dns},
 	})
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)

@@ -1,3 +1,6 @@
+//go:build unit
+// +build unit
+
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +24,7 @@ import (
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
+// Fake implements the validator.Interface. It is used in tests.
 type Fake struct {
 	validateFn func(context.Context, *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error)
 	startFn    func(context.Context) error

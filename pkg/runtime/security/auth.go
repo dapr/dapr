@@ -17,15 +17,18 @@ import (
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 const (
 	TLSServerName     = "cluster.local"
 	sentrySignTimeout = time.Second * 5
-	certType          = "CERTIFICATE"
 	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
 	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	sentryMaxRetries  = 100
+
+	jwksValidator       = "jwks"
+	kubernetesValidator = "kubernetes"
 )
 
 type Authenticator interface {
@@ -81,7 +84,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	if err != nil {
 		return nil, err
 	}
-	certPem := pem.EncodeToMemory(&pem.Block{Type: certType, Bytes: csrb})
+	certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrb})
 
 	config, err := daprCredentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
@@ -109,11 +112,13 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	c := sentryv1pb.NewCAClient(conn)
 
+	token, validatorName := getToken()
 	resp, err := c.SignCertificate(context.Background(),
 		&sentryv1pb.SignCertificateRequest{
 			CertificateSigningRequest: certPem,
 			Id:                        getSentryIdentifier(id),
-			Token:                     getToken(),
+			Token:                     token,
+			TokenValidator:            validatorName,
 			TrustDomain:               trustDomain,
 			Namespace:                 namespace,
 		}, grpcRetry.WithMax(sentryMaxRetries), grpcRetry.WithPerRetryTimeout(sentrySignTimeout))
@@ -153,8 +158,28 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	return signedCert, nil
 }
 
-// currently we support Kubernetes identities.
-func getToken() string {
+// Returns the token for authenticating with Sentry.
+func getToken() (token string, validator string) {
+	// Check if we have a token in the DAPR_SENTRY_TOKEN env var (for the JWKS validator)
+	if v := os.Getenv(consts.SentryTokenEnvVar); v != "" {
+		log.Debug("Loaded token from DAPR_SENTRY_TOKEN environment variable")
+		return v, jwksValidator
+	}
+
+	// Check if we have a token file in the DAPR_SENTRY_TOKEN_FILE env var (for the JWKS validator)
+	if path := os.Getenv(consts.SentryTokenFileEnvVar); path != "" {
+		// Attempt to read the file
+		// Errors are logged but we still return the value even if empty
+		b, err := os.ReadFile(path)
+		if err != nil {
+			log.Warnf("Failed to read token at path '%s': %v", path, err)
+		} else {
+			log.Debugf("Loaded token from path '%s' environment variable", path)
+		}
+		return string(b), jwksValidator
+	}
+
+	// Try to read a token from Kubernetes (for the default validator)
 	b, err := os.ReadFile(kubeTknPath)
 	if err != nil && os.IsNotExist(err) {
 		// Attempt to use the legacy token if that exists
@@ -163,12 +188,16 @@ func getToken() string {
 			log.Warn("⚠️ daprd is initializing using the legacy service account token with access to Kubernetes APIs, which is discouraged. This usually happens when daprd is running against an older version of the Dapr control plane.")
 		}
 	}
-	return string(b)
+	if len(b) > 0 {
+		return string(b), kubernetesValidator
+	}
+
+	return "", ""
 }
 
 func getSentryIdentifier(appID string) string {
 	// return injected identity, default id if not present
-	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")
+	localID := os.Getenv(consts.SentryLocalIdentityEnvVar)
 	if localID != "" {
 		return localID
 	}

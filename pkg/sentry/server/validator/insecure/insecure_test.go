@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package insecure
 
 import (
 	"testing"
@@ -19,6 +19,6 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 )
 
-func TestSelfhosted(t *testing.T) {
+func TestInsecure(t *testing.T) {
 	var _ validator.Validator = New()
 }

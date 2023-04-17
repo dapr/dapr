@@ -332,7 +332,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 			Value: cfg.CertKey,
 		},
 		corev1.EnvVar{
-			Name:  "SENTRY_LOCAL_IDENTITY",
+			Name:  authConsts.SentryLocalIdentityEnvVar,
 			Value: cfg.Identity,
 		},
 	)

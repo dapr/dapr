@@ -41,7 +41,6 @@ import (
 )
 
 const (
-	errPrefix = "csr validation failed"
 	// TODO: @joshvanl: Before 1.11, dapr would use this generic audience. After
 	// 1.11, clients use the sentry SPIFFE ID as the audience. Remove legacy
 	// audience in v1.12
@@ -136,19 +135,18 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 
 	if len(prts) != 4 || prts[0] != "system" {
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: provided token is not a properly structured service account token", errPrefix)
+		return spiffeid.TrustDomain{}, errors.New("provided token is not a properly structured service account token")
 	}
 
 	if prts[2] != req.Namespace {
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: namespace mismatch. received namespace: %s",
-			errPrefix, req.Namespace)
+		return spiffeid.TrustDomain{}, fmt.Errorf("namespace mismatch; received namespace: %s", req.Namespace)
 	}
 
 	// We have already validated to the token against Kubernetes API server, so
 	// we do not need to supply a key.
 	ptoken, err := jwt.ParseInsecure([]byte(req.GetToken()), jwt.WithTypedClaim("kubernetes.io", new(k8sClaims)))
 	if err != nil {
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: failed to parse Kubernetes token: %s", errPrefix, err)
+		return spiffeid.TrustDomain{}, fmt.Errorf("failed to parse Kubernetes token: %s", err)
 	}
 	claimsT, ok := ptoken.Get("kubernetes.io")
 	if !ok {
@@ -162,8 +160,8 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	var pod corev1.Pod
 	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: claims.Pod.Name}, &pod)
 	if err != nil {
-		log.Errorf("failed to get pod %s/%s for requested identity: %s", req.Namespace, claims.Pod.Name, err)
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: failed to get pod of identity", errPrefix)
+		log.Errorf("Failed to get pod %s/%s for requested identity: %s", req.Namespace, claims.Pod.Name, err)
+		return spiffeid.TrustDomain{}, errors.New("failed to get pod of identity")
 	}
 	expID, ok := pod.GetAnnotations()[annotations.KeyAppID]
 	if !ok {
@@ -171,8 +169,8 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 
 	if pod.Spec.ServiceAccountName != prts[3] {
-		log.Errorf("service account on pod %s/%s does not match token", req.Namespace, claims.Pod.Name)
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: pod service account mismatch", errPrefix)
+		log.Errorf("Service account on pod %s/%s does not match token", req.Namespace, claims.Pod.Name)
+		return spiffeid.TrustDomain{}, errors.New("pod service account mismatch")
 	}
 
 	// TODO: @joshvanl: Before v1.11, the injector instructed daprd to request
@@ -184,13 +182,12 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 
 	if expID != req.Id {
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: app-id mismatch. expected: %s, received: %s",
-			errPrefix, expID, req.Id)
+		return spiffeid.TrustDomain{}, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.Id)
 	}
 
 	configName, ok := pod.GetAnnotations()[annotations.KeyConfig]
 	if !ok {
-		if k.isControlPlaneComponent(req.Namespace, req.Id) {
+		if req.Namespace == k.controlPlaneNS && internal.IsControlPlaneComponent(req.Id) {
 			return k.controlPlaneTD, nil
 		}
 
@@ -202,7 +199,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: configName}, &config)
 	if err != nil {
 		log.Errorf("Failed to get configuration %q: %v", configName, err)
-		return spiffeid.TrustDomain{}, fmt.Errorf("%s: failed to get configuration", errPrefix)
+		return spiffeid.TrustDomain{}, errors.New("failed to get configuration")
 	}
 
 	if len(config.Spec.AccessControlSpec.TrustDomain) == 0 {
@@ -221,15 +218,15 @@ func (k *kubernetes) executeTokenReview(ctx context.Context, token string, audie
 		Spec: kauthapi.TokenReviewSpec{Token: token, Audiences: audiences},
 	}, metav1.CreateOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("%s: token review failed: %w", errPrefix, err)
+		return nil, fmt.Errorf("token review failed: %w", err)
 	}
 
 	if len(review.Status.Error) > 0 {
-		return nil, fmt.Errorf("%s: invalid token: %s", errPrefix, review.Status.Error)
+		return nil, fmt.Errorf("invalid token: %s", review.Status.Error)
 	}
 
 	if !review.Status.Authenticated {
-		return nil, fmt.Errorf("%s: authentication failed", errPrefix)
+		return nil, errors.New("authentication failed")
 	}
 
 	return strings.Split(review.Status.User.Username, ":"), nil
@@ -241,22 +238,4 @@ type k8sClaims struct {
 	Pod struct {
 		Name string `json:"name"`
 	} `json:"pod"`
-}
-
-func (k *kubernetes) isControlPlaneComponent(ns string, appID string) bool {
-	if ns != k.controlPlaneNS {
-		return false
-	}
-
-	for _, ctrl := range []string{
-		"dapr-operator",
-		"dapr-placement",
-		"dapr-injector",
-		"dapr-sentry",
-	} {
-		if appID == ctrl {
-			return true
-		}
-	}
-	return false
 }

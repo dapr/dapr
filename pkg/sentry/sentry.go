@@ -29,8 +29,9 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
-	valkube "github.com/dapr/dapr/pkg/sentry/server/validator/kubernetes"
-	"github.com/dapr/dapr/pkg/sentry/server/validator/selfhosted"
+	validatorInsecure "github.com/dapr/dapr/pkg/sentry/server/validator/insecure"
+	validatorJWKS "github.com/dapr/dapr/pkg/sentry/server/validator/jwks"
+	validatorKube "github.com/dapr/dapr/pkg/sentry/server/validator/kubernetes"
 	"github.com/dapr/kit/logger"
 )
 
@@ -55,7 +56,10 @@ func New(conf config.Config) CertificateAuthority {
 }
 
 // Start the server in background.
-func (s *sentry) Start(ctx context.Context) error {
+func (s *sentry) Start(parentCtx context.Context) error {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	// If the server is already running, return an error
 	if !s.running.CompareAndSwap(false, true) {
 		return errors.New("CertificateAuthority server is already running")
@@ -67,7 +71,7 @@ func (s *sentry) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error creating CA: %w", err)
 	}
-	log.Info("ca certificate key pair ready")
+	log.Info("CA certificate key pair ready")
 
 	provider, err := security.New(ctx, security.Options{
 		ControlPlaneTrustDomain: s.conf.TrustDomain,
@@ -104,60 +108,96 @@ func (s *sentry) Start(ctx context.Context) error {
 		return fmt.Errorf("error creating security: %s", err)
 	}
 
-	val, err := s.validator(ctx)
+	vals, err := s.getValidators(ctx)
 	if err != nil {
 		return err
 	}
 
-	validatorErr := make(chan error, 1)
+	errCh := make(chan error, 2+len(vals))
+	for name, val := range vals {
+		go func(name config.ValidatorName, val validator.Validator) {
+			log.Infof("Starting validator %s", name)
+			errCh <- val.Start(ctx)
+		}(name, val)
+	}
 	go func() {
-		log.Info("Starting validator")
-		validatorErr <- val.Start(ctx)
-	}()
-
-	log.Info("Validator created, starting sentry server")
-
-	providerErr := make(chan error, 1)
-	go func() {
-		log.Info("starting security provider")
-		providerErr <- provider.Start(ctx)
+		log.Info("Starting security provider")
+		errCh <- provider.Start(ctx)
 	}()
 
 	sec, err := provider.Handler(ctx)
 	if err != nil {
-		return errors.Join(err, <-providerErr, <-validatorErr)
+		return err
 	}
 
-	log.Info("Security ready")
+	go func() {
+		log.Info("Starting Sentry server")
+		errCh <- server.Start(ctx, server.Options{
+			Port:             s.conf.Port,
+			Security:         sec,
+			Validators:       vals,
+			DefaultValidator: s.conf.DefaultValidator,
+			CA:               camngr,
+		})
+	}()
 
-	err = server.Start(ctx, server.Options{
-		Port:      s.conf.Port,
-		Security:  sec,
-		Validator: val,
-		CA:        camngr,
-	})
-	return errors.Join(err, <-providerErr, <-validatorErr)
+	// On the first error, cancel the context and return
+	return <-errCh
 }
 
-func (s *sentry) validator(ctx context.Context) (validator.Validator, error) {
-	if config.IsKubernetesHosted() {
-		// We're in Kubernetes, create client and init a new serviceaccount token
-		// validator
-		config, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
-		sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
-		if err != nil {
-			return nil, err
-		}
+func (s *sentry) getValidators(ctx context.Context) (map[config.ValidatorName]validator.Validator, error) {
+	vals := make(map[config.ValidatorName]validator.Validator, len(s.conf.Validators))
+	for name, opts := range s.conf.Validators {
+		switch name {
+		case config.ValidatorKubernetes:
+			config, err := rest.InClusterConfig()
+			if err != nil {
+				return nil, err
+			}
+			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			if err != nil {
+				return nil, err
+			}
+			val, err := validatorKube.New(ctx, validatorKube.Options{
+				RestConfig:     config,
+				SentryID:       sentryID,
+				ControlPlaneNS: security.CurrentNamespace(),
+			})
+			if err != nil {
+				return nil, err
+			}
+			log.Info("Adding validator 'kubernetes' with Sentry ID: " + sentryID.String())
+			vals[name] = val
 
-		return valkube.New(ctx, valkube.Options{
-			RestConfig:     config,
-			SentryID:       sentryID,
-			ControlPlaneNS: security.CurrentNamespace(),
-		})
+		case config.ValidatorInsecure:
+			log.Info("Adding validator 'insecure'")
+			vals[name] = validatorInsecure.New()
+
+		case config.ValidatorJWKS:
+			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			if err != nil {
+				return nil, err
+			}
+			obj := validatorJWKS.Options{
+				SentryID: sentryID,
+			}
+			err = decodeOptions(&obj, opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode validator options: %w", err)
+			}
+			val, err := validatorJWKS.New(ctx, obj)
+			if err != nil {
+				return nil, err
+			}
+			log.Info("Adding validator 'jwks' with Sentry ID: " + sentryID.String())
+			vals[name] = val
+		}
 	}
 
-	return selfhosted.New(), nil
+	if len(vals) == 0 {
+		// Should never hit this, as the config is already sanitized
+		return nil, errors.New("invalid validators")
+	}
+
+	return vals, nil
 }
