@@ -674,7 +674,7 @@ func (r *Resiliency) getCBFromCache(cache *lru.Cache[string, *breaker.CircuitBre
 		defer r.serviceCBsMu.Unlock()
 
 		cb, ok = cache.Get(key)
-		if ok {
+		if ok && cb != nil {
 			return cb
 		}
 
