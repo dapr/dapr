@@ -696,7 +696,7 @@ func concurrentPolicyExec(t *testing.T, policyDefFn func(idx int) *PolicyDefinit
 			count.Store(0)
 			policy(func(ctx context.Context) (any, error) {
 				count.Add(1)
-				return nil, errors.New("Forced failure")
+				return nil, errors.New("forced failure")
 			})
 			assert.Equal(t, wantCount, count.Load())
 		}(i)
