@@ -674,7 +674,7 @@ func (r *Resiliency) getCBFromCache(cache *lru.Cache[string, *breaker.CircuitBre
 		defer r.serviceCBsMu.Unlock()
 
 		cb, ok = cache.Get(key)
-		if ok {
+		if ok && cb != nil {
 			return cb
 		}
 
@@ -731,7 +731,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 				if ok {
 					actorCBCache, err := r.getActorCBCache(actorType)
 					if err != nil {
-						r.log.Errorf("error getting default circuit breaker cache for actor type %s: %s", actorType, err)
+						r.log.Errorf("error getting default circuit breaker cache for actor type %s: %v", actorType, err)
 					}
 					policyDef.cb = r.getCBFromCache(actorCBCache, actorType, template)
 					diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
