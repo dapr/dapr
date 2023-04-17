@@ -1,5 +1,5 @@
 #
-# Copyright 2021 The Dapr Authors
+# Copyright 2023 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -20,25 +20,16 @@
 # - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
 # - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
 
-name: dapr-perf
+name: dapr-perf-components
 
 on:
-  # Run at minute 44 past hour 6, 14, and 22 on every day-of-week from Monday through Friday.
-  # Run at 23:44 on Sunday and Saturday.
+  # Run every Saturday at 4.34am UTC
   schedule:
-    - cron: "44 6,14,22 * * 1-5"
-    - cron: "44 23 * * 0,6"
-  # Manual trigger
+    - cron: "34 4 * * 6"  # Manual trigger
   workflow_dispatch:
-    inputs:
-      tests:
-        description: "Space-separated list of perf tests to run only"
-        required: false
-        type: string
   # Dispatch on external events
   repository_dispatch:
-    types: [perf-test]
-
+    types: [components-perf-test]
 env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
@@ -73,7 +64,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if (testPayload && testPayload.command == "ok-to-perf") {
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
@@ -174,7 +165,6 @@ jobs:
 
             - Resource group name: `Dapr-Perf-${{ env.TEST_PREFIX }}`
             - Azure region: ${{ env.AZURE_REGION }}
-
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
@@ -213,7 +203,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if (testPayload && testPayload.command == "ok-to-perf") {
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
@@ -354,9 +344,6 @@ jobs:
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
-          if [ "${{ inputs.tests }}" != "" ] ; then
-            echo "DAPR_PERF_TEST=${{ inputs.tests }}" >> $GITHUB_ENV
-          fi
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
@@ -365,7 +352,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if (testPayload && testPayload.command == "ok-to-perf") {
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
               let selectedTestsEnvVar = ""
               if (testPayload?.args) {
                 selectedTestsEnvVar = `DAPR_PERF_TEST=${testPayload.args}\n`
@@ -440,6 +427,7 @@ jobs:
         run: |
           make setup-helm-init
           make setup-test-env
+          make setup-pubsub-subs-perf-test-components
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
@@ -448,10 +436,12 @@ jobs:
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
-        run: make setup-test-components
-      - name: Run all performance tests
+        run: |
+          make setup-test-components
+          make setup-components-perf-test
+      - name: Run pub-sub subscribe http components performance tests
         if: env.TEST_PREFIX != ''
-        run: make test-perf-all
+        run: make test-perf-pubsub-subscribe-http-components
       - name: Save control plane logs
         if: always() && env.TEST_PREFIX != ''
         run: |
