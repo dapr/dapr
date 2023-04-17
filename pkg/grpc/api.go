@@ -1405,6 +1405,7 @@ func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	}
 	return conf, nil
 }
+
 func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
 	response := &runtimev1pb.GetConfigurationResponse{}
 
