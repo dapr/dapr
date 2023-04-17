@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ghodss/yaml"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
