@@ -77,7 +77,8 @@ func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace s
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy), namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
+			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
+				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
 			m.executionCount.M(1),
 		)
 	}

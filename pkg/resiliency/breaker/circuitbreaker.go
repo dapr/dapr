@@ -57,6 +57,15 @@ var (
 	ErrTooManyRequests = gobreaker.ErrTooManyRequests
 )
 
+type CircuitBreakerState string
+
+const (
+	StateClosed   CircuitBreakerState = "closed"
+	StateOpen     CircuitBreakerState = "open"
+	StateHalfOpen CircuitBreakerState = "half-open"
+	StateUnknown  CircuitBreakerState = "unknown"
+)
+
 // IsErrorPermanent returns true if `err` should be treated as a
 // permanent error that cannot be retried.
 func IsErrorPermanent(err error) bool {
@@ -136,18 +145,18 @@ func (c CircuitBreaker) String() string {
 }
 
 // State returns the current state of the circuit breaker.
-func (c CircuitBreaker) State() string {
+func (c CircuitBreaker) State() CircuitBreakerState {
 	if c.breaker == nil {
-		return "unknown"
+		return StateUnknown
 	}
 	switch c.breaker.State() {
 	case gobreaker.StateClosed:
-		return "closed"
+		return StateClosed
 	case gobreaker.StateOpen:
-		return "open"
+		return StateOpen
 	case gobreaker.StateHalfOpen:
-		return "half-open"
+		return StateHalfOpen
 	default:
-		return "unknown"
+		return StateUnknown
 	}
 }
