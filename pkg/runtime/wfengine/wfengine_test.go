@@ -31,6 +31,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/state"
@@ -782,7 +783,7 @@ func getEngine(t *testing.T) *WorkflowEngine {
 	})
 
 	if err := actors.Init(); err != nil {
-		assert.FailNow(t, "failed to init actors: %s", err)
+		require.NoError(t, err)
 	}
 	engine.SetActorRuntime(actors)
 	return engine
