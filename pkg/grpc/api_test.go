@@ -3429,14 +3429,20 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	failingConfigStore := daprt.FailingConfigurationStore{
 		Failure: daprt.NewFailure(
 			map[string]int{
-				"failingGetKey":         1,
-				"failingSubscribeKey":   1,
-				"failingUnsubscribeKey": 1,
+				"failingGetKey":                1,
+				"failingSubscribeKey":          1,
+				"failingUnsubscribeKey":        1,
+				"failingGetKey-alpha1":         1,
+				"failingSubscribeKey-alpha1":   1,
+				"failingUnsubscribeKey-alpha1": 1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":         time.Second * 10,
-				"timeoutSubscribeKey":   time.Second * 10,
-				"timeoutUnsubscribeKey": time.Second * 10,
+				"timeoutGetKey":                time.Second * 10,
+				"timeoutSubscribeKey":          time.Second * 10,
+				"timeoutUnsubscribeKey":        time.Second * 10,
+				"timeoutGetKey-alpha1":         time.Second * 10,
+				"timeoutSubscribeKey-alpha1":   time.Second * 10,
+				"timeoutUnsubscribeKey-alpha1": time.Second * 10,
 			},
 			map[string]int{},
 		),
@@ -3464,11 +3470,11 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		_, err := client.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
-			Metadata:  map[string]string{"key": "failingGetKey"},
+			Metadata:  map[string]string{"key": "failingGetKey-alpha1"},
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingGetKey"))
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingGetKey-alpha1"))
 	})
 	t.Run("test get configuration retries with resiliency", func(t *testing.T) {
 		_, err := client.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
@@ -3484,11 +3490,11 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		_, err := client.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
-			Metadata:  map[string]string{"key": "timeoutGetKey"},
+			Metadata:  map[string]string{"key": "timeoutGetKey-alpha1"},
 		})
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutGetKey"))
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutGetKey-alpha1"))
 	})
 	t.Run("test get configuration fails due to timeout with resiliency", func(t *testing.T) {
 		_, err := client.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
@@ -3505,14 +3511,14 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		resp, err := client.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
-			Metadata:  map[string]string{"key": "failingSubscribeKey"},
+			Metadata:  map[string]string{"key": "failingSubscribeKey-alpha1"},
 		})
 		assert.NoError(t, err)
 
 		_, err = resp.Recv()
 		assert.NoError(t, err)
 
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey-alpha1"))
 	})
 	t.Run("test subscribe configuration retries with resiliency", func(t *testing.T) {
 		resp, err := client.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
@@ -3532,13 +3538,13 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		resp, err := client.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
-			Metadata:  map[string]string{"key": "timeoutSubscribeKey"},
+			Metadata:  map[string]string{"key": "timeoutSubscribeKey-alpha1"},
 		})
 		assert.NoError(t, err)
 
 		_, err = resp.Recv()
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey"))
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey-alpha1"))
 	})
 	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
 		resp, err := client.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
@@ -3554,15 +3560,15 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("test unsubscribe configuration retries with resiliency - alpha1", func(t *testing.T) {
-		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey", make(chan struct{}))
+		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey-alpha1", make(chan struct{}))
 
 		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
-			Id:        "failingUnsubscribeKey",
+			Id:        "failingUnsubscribeKey-alpha1",
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey"))
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey-alpha1"))
 	})
 	t.Run("test unsubscribe configuration retries with resiliency", func(t *testing.T) {
 		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey", make(chan struct{}))
@@ -3577,15 +3583,15 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("test unsubscribe configuration fails due to timeout with resiliency - alpha1", func(t *testing.T) {
-		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey", make(chan struct{}))
+		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey-alpha1", make(chan struct{}))
 
 		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
-			Id:        "timeoutUnsubscribeKey",
+			Id:        "timeoutUnsubscribeKey-alpha1",
 		})
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutUnsubscribeKey"))
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutUnsubscribeKey-alpha1"))
 	})
 	t.Run("test unsubscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
 		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey", make(chan struct{}))
