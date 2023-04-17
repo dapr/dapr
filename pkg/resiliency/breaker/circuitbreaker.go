@@ -137,7 +137,7 @@ func (c *CircuitBreaker) Execute(oper func() (any, error)) (any, error) {
 }
 
 // String implements fmt.Stringer and is used for debugging.
-func (c CircuitBreaker) String() string {
+func (c *CircuitBreaker) String() string {
 	return fmt.Sprintf(
 		"name='%s' namRequests='%d' interval='%v' timeout='%v' trip='%v'",
 		c.Name, c.MaxRequests, c.Interval, c.Timeout, c.Trip,
@@ -145,7 +145,7 @@ func (c CircuitBreaker) String() string {
 }
 
 // State returns the current state of the circuit breaker.
-func (c CircuitBreaker) State() CircuitBreakerState {
+func (c *CircuitBreaker) State() CircuitBreakerState {
 	if c.breaker == nil {
 		return StateUnknown
 	}
