@@ -98,14 +98,11 @@ func (s *workflowState) ClearInbox() {
 }
 
 func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalRequest, error) {
-	var actorType string
-	if s.config != nil || s.config.WorkflowActorType == "" {
-		actorType = s.config.WorkflowActorType
-	} else {
+	if s.config == nil || s.config.WorkflowActorType == "" {
 		return nil, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	req := &actors.TransactionalRequest{
-		ActorType:  actorType,
+		ActorType:  s.config.WorkflowActorType,
 		ActorID:    actorID,
 		Operations: make([]actors.TransactionalOperation, 0, 100),
 	}
@@ -164,14 +161,11 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
-	var actorType string
-	if config != nil || config.WorkflowActorType == "" {
-		actorType = config.WorkflowActorType
-	} else {
+	if config == nil || config.WorkflowActorType == "" {
 		return workflowState{}, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	req := actors.GetStateRequest{
-		ActorType: actorType,
+		ActorType: config.WorkflowActorType,
 		ActorID:   actorID,
 		Key:       metadataKey,
 	}

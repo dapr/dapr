@@ -358,15 +358,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				return err
 			}
 			targetActorID := getActivityActorID(actorID, e.EventId)
-			var actorType string
-			if wf.config != nil || wf.config.ActivityActorType == "" {
-				actorType = wf.config.ActivityActorType
-			} else {
+
+			if wf.config == nil || wf.config.ActivityActorType == "" {
 				return errors.New(messages.ErrActivityActorTypeNotConfigured)
 			}
 			req := invokev1.
 				NewInvokeMethodRequest("Execute").
-				WithActor(actorType, targetActorID).
+				WithActor(wf.config.ActivityActorType, targetActorID).
 				WithRawDataBytes(activityRequestBytes).
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
@@ -392,15 +390,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return err
 			}
-			var actorType string
-			if wf.config != nil || wf.config.WorkflowActorType == "" {
-				actorType = wf.config.WorkflowActorType
-			} else {
+
+			if wf.config == nil || wf.config.WorkflowActorType == "" {
 				return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 			}
 			req := invokev1.
 				NewInvokeMethodRequest(method).
-				WithActor(actorType, msg.TargetInstanceID).
+				WithActor(wf.config.WorkflowActorType, msg.TargetInstanceID).
 				WithRawDataBytes(eventData).
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
@@ -468,14 +464,12 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 	if err != nil {
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
-	var actorType string
-	if wf.config != nil || wf.config.WorkflowActorType == "" {
-		actorType = wf.config.WorkflowActorType
-	} else {
+
+	if wf.config == nil || wf.config.WorkflowActorType == "" {
 		return reminderName, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: actorType,
+		ActorType: wf.config.WorkflowActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,
 		DueTime:   delay.String(),

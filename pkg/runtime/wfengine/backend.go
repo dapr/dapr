@@ -98,17 +98,14 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		return err
 	}
 
-	var actorType string
-	if be.config != nil || be.config.WorkflowActorType == "" {
-		actorType = be.config.WorkflowActorType
-	} else {
+	if be.config == nil || be.config.WorkflowActorType == "" {
 		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	// Invoke the well-known workflow actor directly, which will be created by this invocation
 	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
 	req := invokev1.
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
-		WithActor(actorType, workflowInstanceID).
+		WithActor(be.config.WorkflowActorType, workflowInstanceID).
 		WithRawDataBytes(eventData).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -123,16 +120,13 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 
 // GetOrchestrationMetadata implements backend.Backend
 func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
-	var actorType string
-	if be.config != nil || be.config.WorkflowActorType == "" {
-		actorType = be.config.WorkflowActorType
-	} else {
+	if be.config == nil || be.config.WorkflowActorType == "" {
 		return nil, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
 	req := invokev1.
 		NewInvokeMethodRequest(GetWorkflowMetadataMethod).
-		WithActor(actorType, string(id)).
+		WithActor(be.config.WorkflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
@@ -187,16 +181,13 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 		return err
 	}
 
-	var actorType string
-	if be.config != nil || be.config.WorkflowActorType == "" {
-		actorType = be.config.WorkflowActorType
-	} else {
+	if be.config == nil || be.config.WorkflowActorType == "" {
 		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(actorType, string(id)).
+		WithActor(be.config.WorkflowActorType, string(id)).
 		WithRawDataBytes(data).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()

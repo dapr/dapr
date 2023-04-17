@@ -198,15 +198,12 @@ loop:
 	if err != nil {
 		return err
 	}
-	var actorType string
-	if a.config != nil || a.config.WorkflowActorType == "" {
-		actorType = a.config.WorkflowActorType
-	} else {
+	if a.config == nil || a.config.WorkflowActorType == "" {
 		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(actorType, workflowID).
+		WithActor(a.config.WorkflowActorType, workflowID).
 		WithRawDataBytes(resultData).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -245,14 +242,12 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	wfLogger.Debugf("%s: loading activity state", actorID)
-	var actorType string
-	if a.config != nil || a.config.ActivityActorType == "" {
-		actorType = a.config.ActivityActorType
-	} else {
+
+	if a.config == nil || a.config.ActivityActorType == "" {
 		return activityState{}, errors.New(messages.ErrActivityActorTypeNotConfigured)
 	}
 	req := actors.GetStateRequest{
-		ActorType: actorType,
+		ActorType: a.config.ActivityActorType,
 		ActorID:   actorID,
 		Key:       getActivityInvocationKey(generation),
 	}
@@ -274,14 +269,11 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 }
 
 func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state activityState) error {
-	var actorType string
-	if a.config != nil || a.config.ActivityActorType == "" {
-		actorType = a.config.ActivityActorType
-	} else {
+	if a.config == nil || a.config.ActivityActorType == "" {
 		return errors.New(messages.ErrActivityActorTypeNotConfigured)
 	}
 	req := actors.TransactionalRequest{
-		ActorType: actorType,
+		ActorType: a.config.ActivityActorType,
 		ActorID:   actorID,
 		Operations: []actors.TransactionalOperation{{
 			Operation: actors.Upsert,
@@ -312,14 +304,11 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
-	var actorType string
-	if a.config != nil || a.config.ActivityActorType == "" {
-		actorType = a.config.ActivityActorType
-	} else {
+	if a.config == nil || a.config.ActivityActorType == "" {
 		return errors.New(messages.ErrActivityActorTypeNotConfigured)
 	}
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: actorType,
+		ActorType: a.config.ActivityActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,
 		DueTime:   "0s",
