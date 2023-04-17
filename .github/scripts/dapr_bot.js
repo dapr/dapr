@@ -15,12 +15,12 @@ const owners = [
     'mukundansundar',
     'pkedy',
     'pruthvidhodda',
+    'robertojrojas',
     'ryanlettieri',
     'shubham1172',
     'skyao',
     'tanvigour',
     'yaron2',
-    'robertojrojas',
 ]
 
 const SDKs = [
