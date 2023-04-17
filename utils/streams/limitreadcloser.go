@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -42,16 +42,28 @@ type limitReadCloser struct {
 }
 
 func (l *limitReadCloser) Read(p []byte) (n int, err error) {
-	if l.N <= 0 || l.R == nil {
+	if l.N < 0 || l.R == nil {
 		return 0, ErrStreamTooLarge
 	}
-	if int64(len(p)) > l.N {
-		p = p[0:l.N]
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if l.closed {
+		return 0, io.EOF
+	}
+	if int64(len(p)) > (l.N + 1) {
+		p = p[0:(l.N + 1)]
 	}
 	n, err = l.R.Read(p)
 	l.N -= int64(n)
-	if l.N <= 0 {
-		err = ErrStreamTooLarge
+	if l.N < 0 {
+		// Special case if we just read the "l.N+1" byte
+		if l.N == -1 {
+			n--
+		}
+		if err == nil {
+			err = ErrStreamTooLarge
+		}
 		if !l.closed {
 			l.closed = true
 			l.R.Close()
