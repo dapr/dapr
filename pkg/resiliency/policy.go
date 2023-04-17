@@ -44,11 +44,14 @@ type doneCh[T any] struct {
 
 // PolicyDefinition contains a definition for a policy, used to create a Runner.
 type PolicyDefinition struct {
-	log  logger.Logger
-	name string
-	t    time.Duration
-	r    *retry.Config
-	cb   *breaker.CircuitBreaker
+	log              logger.Logger
+	name             string
+	t                time.Duration
+	r                *retry.Config
+	cb               *breaker.CircuitBreaker
+	onTimeout        func()
+	onRetry          func()
+	onCBStateChanged func()
 }
 
 // NewPolicyDefinition returns a PolicyDefinition object with the given parameters.
@@ -131,6 +134,9 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 					return v.res, v.err
 				case <-ctx.Done():
 					timedOut.Store(true)
+					if def.onTimeout != nil {
+						def.onTimeout()
+					}
 					return zero, ctx.Err()
 				}
 			}
@@ -150,9 +156,13 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 		if def.cb != nil {
 			operCopy := operation
 			operation = func(ctx context.Context) (T, error) {
+				prevState := def.cb.State()
 				resAny, err := def.cb.Execute(func() (any, error) {
 					return operCopy(ctx)
 				})
+				if def.onCBStateChanged != nil && prevState != def.cb.State() {
+					def.onCBStateChanged()
+				}
 				if def.r != nil && breaker.IsErrorPermanent(err) {
 					// Break out of retry
 					err = backoff.Permanent(err)
@@ -187,6 +197,9 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 			},
 			b,
 			func(opErr error, d time.Duration) {
+				if def.onRetry != nil {
+					def.onRetry()
+				}
 				def.log.Infof("Error processing operation %s. Retrying in %v…", def.name, d)
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
 			},

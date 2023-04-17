@@ -736,7 +736,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 						r.log.Errorf("error getting default circuit breaker cache for actor type %s: %v", actorType, err)
 					}
 					policyDef.cb = r.getCBFromCache(actorCBCache, actorType, template)
-					diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
+					diag.DefaultResiliencyMonitoring.DefaultPolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
 						diag.ResiliencyActorTarget(actorType), string(policyDef.cb.State()))
 				}
 			}
