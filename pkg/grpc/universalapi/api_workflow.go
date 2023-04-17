@@ -232,9 +232,11 @@ func (a *UniversalAPI) getComponent(componentName string) (workflows.Workflow, e
 		return nil, messages.ErrNoOrMissingWorkflowComponent
 	}
 
-	workflowComponent := a.WorkflowComponents[componentName]
-	if workflowComponent == nil {
-		return nil, messages.ErrWorkflowComponentDoesNotExist.WithFormat(componentName)
+	workflowComponent, ok := a.CompStore.GetWorkflow(componentName)
+	if !ok {
+		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(componentName)
+		a.Logger.Debug(err)
+		return nil, err
 	}
 	return workflowComponent, nil
 }

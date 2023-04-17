@@ -41,7 +41,6 @@ func TestNewConfig(t *testing.T) {
 		MaxConcurrency:               1,
 		MTLSEnabled:                  true,
 		SentryAddress:                "localhost:5052",
-		AppSSL:                       true,
 		MaxRequestBodySize:           4,
 		UnixDomainSocket:             "",
 		ReadBufferSize:               4,
@@ -69,7 +68,6 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, 1, c.MaxConcurrency)
 	assert.Equal(t, true, c.mtlsEnabled)
 	assert.Equal(t, "localhost:5052", c.SentryServiceAddress)
-	assert.Equal(t, true, c.AppSSL)
 	assert.Equal(t, 4, c.MaxRequestBodySize)
 	assert.Equal(t, "", c.UnixDomainSocket)
 	assert.Equal(t, 4, c.ReadBufferSize)

@@ -411,8 +411,9 @@ func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvoca
 		WithHTTPHeaders(map[string][]string{"foo": {"bar"}})
 	defer resp.Close()
 
+	chunksLen := uint64(len(m.chunks))
 	var payload *commonv1pb.StreamPayload
-	if len(m.chunks) > 0 {
+	if chunksLen > 0 {
 		payload = &commonv1pb.StreamPayload{
 			Data: []byte(m.chunks[0]),
 			Seq:  0,
@@ -425,11 +426,11 @@ func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvoca
 
 	// Send the next chunks if needed
 	// Note this starts from index 1 on purpose
-	for i := 1; i < len(m.chunks); i++ {
+	for i := uint64(1); i < chunksLen; i++ {
 		stream.Send(&internalv1pb.InternalInvokeResponseStream{
 			Payload: &commonv1pb.StreamPayload{
 				Data: []byte(m.chunks[i]),
-				Seq:  uint32(i),
+				Seq:  i,
 			},
 		})
 	}

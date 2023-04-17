@@ -37,7 +37,6 @@ spec:
         dapr.io/enabled: "true"
         dapr.io/app-id: "reentrantactor"
         dapr.io/app-port: "3000"
-        dapr.io/config: "reentrantconfig"
     spec:
       containers:
       - name: actorreentrancy

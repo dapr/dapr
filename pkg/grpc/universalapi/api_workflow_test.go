@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -100,11 +101,16 @@ func TestStartWorkflowAPI(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, wf := range fakeWorkflows {
+		compStore.AddWorkflow(name, wf)
+	}
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:             logger.NewLogger("test"),
-		Resiliency:         resiliency.New(nil),
-		WorkflowComponents: fakeWorkflows,
+		Logger:     logger.NewLogger("test"),
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	for _, tt := range testCases {
@@ -170,11 +176,16 @@ func TestGetWorkflowAPI(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, wf := range fakeWorkflows {
+		compStore.AddWorkflow(name, wf)
+	}
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:             logger.NewLogger("test"),
-		Resiliency:         resiliency.New(nil),
-		WorkflowComponents: fakeWorkflows,
+		Logger:     logger.NewLogger("test"),
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	for _, tt := range testCases {
@@ -239,11 +250,16 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, wf := range fakeWorkflows {
+		compStore.AddWorkflow(name, wf)
+	}
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:             logger.NewLogger("test"),
-		Resiliency:         resiliency.New(nil),
-		WorkflowComponents: fakeWorkflows,
+		Logger:     logger.NewLogger("test"),
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	for _, tt := range testCases {
@@ -322,11 +338,16 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, wf := range fakeWorkflows {
+		compStore.AddWorkflow(name, wf)
+	}
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:             logger.NewLogger("test"),
-		Resiliency:         resiliency.New(nil),
-		WorkflowComponents: fakeWorkflows,
+		Logger:     logger.NewLogger("test"),
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	for _, tt := range testCases {
@@ -393,11 +414,16 @@ func TestPauseWorkflowApi(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, wf := range fakeWorkflows {
+		compStore.AddWorkflow(name, wf)
+	}
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:             logger.NewLogger("test"),
-		Resiliency:         resiliency.New(nil),
-		WorkflowComponents: fakeWorkflows,
+		Logger:     logger.NewLogger("test"),
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	for _, tt := range testCases {
@@ -462,11 +488,16 @@ func TestResumeWorkflowApi(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, wf := range fakeWorkflows {
+		compStore.AddWorkflow(name, wf)
+	}
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:             logger.NewLogger("test"),
-		Resiliency:         resiliency.New(nil),
-		WorkflowComponents: fakeWorkflows,
+		Logger:     logger.NewLogger("test"),
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	for _, tt := range testCases {

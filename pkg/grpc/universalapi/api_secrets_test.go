@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -80,7 +81,8 @@ var testResiliency = &v1alpha1.Resiliency{
 func TestSecretStoreNotConfigured(t *testing.T) {
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
-		Logger: testLogger,
+		Logger:    testLogger,
+		CompStore: compstore.New(),
 	}
 
 	// act
@@ -197,12 +199,19 @@ func TestGetSecret(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, store := range fakeStores {
+		compStore.AddSecretStore(name, store)
+	}
+	for name, conf := range secretsConfiguration {
+		compStore.AddSecretsConfiguration(name, conf)
+	}
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:               testLogger,
-		Resiliency:           resiliency.New(nil),
-		SecretStores:         fakeStores,
-		SecretsConfiguration: secretsConfiguration,
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	// act
@@ -255,12 +264,19 @@ func TestGetBulkSecret(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, store := range fakeStores {
+		compStore.AddSecretStore(name, store)
+	}
+	for name, conf := range secretsConfiguration {
+		compStore.AddSecretsConfiguration(name, conf)
+	}
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:               testLogger,
-		Resiliency:           resiliency.New(nil),
-		SecretStores:         fakeStores,
-		SecretsConfiguration: secretsConfiguration,
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	// act
@@ -291,11 +307,14 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		),
 	}
 
+	compStore := compstore.New()
+	compStore.AddSecretStore("failSecret", failingStore)
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:       testLogger,
-		Resiliency:   resiliency.FromConfigurations(testLogger, testResiliency),
-		SecretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
+		Logger:     testLogger,
+		Resiliency: resiliency.FromConfigurations(testLogger, testResiliency),
+		CompStore:  compStore,
 	}
 
 	// act
