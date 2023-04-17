@@ -1405,8 +1405,7 @@ func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	}
 	return conf, nil
 }
-
-func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
 	response := &runtimev1pb.GetConfigurationResponse{}
 
 	store, err := a.getConfigurationStore(in.StoreName)
@@ -1452,6 +1451,10 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 	return response, nil
 }
 
+func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+	return a.GetConfiguration(ctx, in)
+}
+
 type configurationEventHandler struct {
 	api          *api
 	storeName    string
@@ -1478,7 +1481,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	return nil
 }
 
-func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
+func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error { //nolint:nosnakecase
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1538,7 +1541,11 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	return nil
 }
 
-func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
+func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
+	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
+}
+
+func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
 	store, err := a.getConfigurationStore(request.GetStoreName())
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1582,6 +1589,10 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
+}
+
+func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
+	return a.UnsubscribeConfiguration(ctx, request)
 }
 
 func (a *api) Close() error {
