@@ -91,6 +91,10 @@ const (
 	ErrConfigurationGet                 = "failed to get %s from Configuration store %s: %s"
 	ErrConfigurationSubscribe           = "failed to subscribe %s from Configuration store %s: %s"
 	ErrConfigurationUnsubscribe         = "failed to unsubscribe to configuration request %s: %s"
+
+	// Workflow
+	ErrWorkflowActorTypeNotConfigured = "workflow actor type is not yet configured"
+	ErrActivityActorTypeNotConfigured = "activity actor type is not yet configured"
 )
 
 var (

@@ -17,12 +17,14 @@ package wfengine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/messages"
 )
 
 const (
@@ -97,8 +99,10 @@ func (s *workflowState) ClearInbox() {
 
 func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalRequest, error) {
 	var actorType string
-	if s.config != nil {
+	if s.config != nil || s.config.WorkflowActorType == "" {
 		actorType = s.config.WorkflowActorType
+	} else {
+		return nil, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	req := &actors.TransactionalRequest{
 		ActorType:  actorType,
@@ -161,8 +165,10 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	loadedRecords := 0
 
 	var actorType string
-	if config != nil {
+	if config != nil || config.WorkflowActorType == "" {
 		actorType = config.WorkflowActorType
+	} else {
+		return workflowState{}, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	req := actors.GetStateRequest{
 		ActorType: actorType,

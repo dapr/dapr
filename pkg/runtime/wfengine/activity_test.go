@@ -20,6 +20,7 @@ import (
 
 	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/actors"
 )
@@ -32,8 +33,10 @@ func TestDedupeActivityInvocation(t *testing.T) {
 	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
 	engine.config = getConfig()
 
+	internalActors, err := engine.InternalActors()
+	require.NoError(t, err)
 	// Get a reference to the activity actor so we can invoke it directly, without going through a workflow.
-	activityActor := engine.InternalActors()[engine.config.ActivityActorType]
+	activityActor := internalActors[engine.config.ActivityActorType]
 
 	generation := uint64(0)
 

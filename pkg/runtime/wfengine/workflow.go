@@ -28,6 +28,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -358,8 +359,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			}
 			targetActorID := getActivityActorID(actorID, e.EventId)
 			var actorType string
-			if wf.config != nil {
+			if wf.config != nil || wf.config.ActivityActorType == "" {
 				actorType = wf.config.ActivityActorType
+			} else {
+				return errors.New(messages.ErrActivityActorTypeNotConfigured)
 			}
 			req := invokev1.
 				NewInvokeMethodRequest("Execute").
@@ -390,8 +393,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				return err
 			}
 			var actorType string
-			if wf.config != nil {
+			if wf.config != nil || wf.config.WorkflowActorType == "" {
 				actorType = wf.config.WorkflowActorType
+			} else {
+				return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 			}
 			req := invokev1.
 				NewInvokeMethodRequest(method).
@@ -464,8 +469,10 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 	var actorType string
-	if wf.config != nil {
+	if wf.config != nil || wf.config.WorkflowActorType == "" {
 		actorType = wf.config.WorkflowActorType
+	} else {
+		return reminderName, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: actorType,

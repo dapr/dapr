@@ -80,13 +80,15 @@ func NewWorkflowEngine(config *WFConfig) *WorkflowEngine {
 }
 
 // InternalActors returns a map of internal actors that are used to implement workflows
-func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
+func (wfe *WorkflowEngine) InternalActors() (map[string]actors.InternalActor, error) {
 	internalActors := make(map[string]actors.InternalActor)
 	if wfe.config != nil {
 		internalActors[wfe.config.WorkflowActorType] = wfe.workflowActor
 		internalActors[wfe.config.ActivityActorType] = wfe.activityActor
+	} else {
+		return nil, errors.New("workflow engine not initiated with required configured")
 	}
-	return internalActors
+	return internalActors, nil
 }
 
 func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
@@ -171,8 +173,11 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 	if wfe.executor == nil {
 		return errors.New("grpc executor is not yet configured")
 	}
-
-	for actorType, actor := range wfe.InternalActors() {
+	internalActors, err := wfe.InternalActors()
+	if err != nil {
+		return fmt.Errorf("failed to fetch internal actors: %s", err)
+	}
+	for actorType, actor := range internalActors {
 		if err := wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor); err != nil {
 			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
 		}

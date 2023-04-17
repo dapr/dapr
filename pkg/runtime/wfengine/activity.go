@@ -27,6 +27,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -198,8 +199,10 @@ loop:
 		return err
 	}
 	var actorType string
-	if a.config != nil {
+	if a.config != nil || a.config.WorkflowActorType == "" {
 		actorType = a.config.WorkflowActorType
+	} else {
+		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
@@ -243,8 +246,10 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	wfLogger.Debugf("%s: loading activity state", actorID)
 	var actorType string
-	if a.config != nil {
+	if a.config != nil || a.config.ActivityActorType == "" {
 		actorType = a.config.ActivityActorType
+	} else {
+		return activityState{}, errors.New(messages.ErrActivityActorTypeNotConfigured)
 	}
 	req := actors.GetStateRequest{
 		ActorType: actorType,
@@ -270,8 +275,10 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 
 func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state activityState) error {
 	var actorType string
-	if a.config != nil {
+	if a.config != nil || a.config.ActivityActorType == "" {
 		actorType = a.config.ActivityActorType
+	} else {
+		return errors.New(messages.ErrActivityActorTypeNotConfigured)
 	}
 	req := actors.TransactionalRequest{
 		ActorType: actorType,
@@ -306,8 +313,10 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 	var actorType string
-	if a.config != nil {
+	if a.config != nil || a.config.ActivityActorType == "" {
 		actorType = a.config.ActivityActorType
+	} else {
+		return errors.New(messages.ErrActivityActorTypeNotConfigured)
 	}
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: actorType,

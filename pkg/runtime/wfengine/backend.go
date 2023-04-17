@@ -24,6 +24,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -98,8 +99,10 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 	}
 
 	var actorType string
-	if be.config != nil {
+	if be.config != nil || be.config.WorkflowActorType == "" {
 		actorType = be.config.WorkflowActorType
+	} else {
+		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	// Invoke the well-known workflow actor directly, which will be created by this invocation
 	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
@@ -121,8 +124,10 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 // GetOrchestrationMetadata implements backend.Backend
 func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
 	var actorType string
-	if be.config != nil {
+	if be.config != nil || be.config.WorkflowActorType == "" {
 		actorType = be.config.WorkflowActorType
+	} else {
+		return nil, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
 	req := invokev1.
@@ -183,8 +188,10 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	}
 
 	var actorType string
-	if be.config != nil {
+	if be.config != nil || be.config.WorkflowActorType == "" {
 		actorType = be.config.WorkflowActorType
+	} else {
+		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
 	}
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := invokev1.
