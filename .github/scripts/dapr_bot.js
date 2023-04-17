@@ -109,6 +109,14 @@ async function handleIssueCommentCreate({ github, context }) {
                 commandParts.join(' ')
             )
             break
+        case '/ok-to-perf-components':
+            await cmdOkToPerfComponents(
+                github,
+                issue,
+                isFromPulls,
+                commandParts.join(' ')
+            )
+            break
         default:
             console.log(
                 `[handleIssueCommentCreate] command ${command} not found, exiting.`
@@ -298,6 +306,53 @@ async function cmdOkToPerf(github, issue, isFromPulls, args) {
 
         console.log(
             `[cmdOkToPerf] triggered perf test for ${JSON.stringify(
+                perfPayload
+            )}`
+        )
+    }
+}
+
+/**
+ * Trigger components performance test for the pull request.
+ * @param {*} github GitHub object reference
+ * @param {*} issue GitHub issue object
+ * @param {boolean} isFromPulls is the workflow triggered by a pull request?
+ */
+async function cmdOkToPerfComponents(github, issue, isFromPulls, args) {
+    if (!isFromPulls) {
+        console.log(
+            '[cmdOkToPerfComponents] only pull requests supported, skipping command execution.'
+        )
+        return
+    }
+
+    // Get pull request
+    const pull = await github.pulls.get({
+        owner: issue.owner,
+        repo: issue.repo,
+        pull_number: issue.number,
+    })
+
+    if (pull && pull.data) {
+        // Get commit id and repo from pull head
+        const perfPayload = {
+            pull_head_ref: pull.data.head.sha,
+            pull_head_repo: pull.data.head.repo.full_name,
+            command: 'ok-to-perf-components',
+            args,
+            issue: issue,
+        }
+
+        // Fire repository_dispatch event to trigger e2e test
+        await github.repos.createDispatchEvent({
+            owner: issue.owner,
+            repo: issue.repo,
+            event_type: 'components-perf-test',
+            client_payload: perfPayload,
+        })
+
+        console.log(
+            `[cmdOkToPerfComponents] triggered perf test for ${JSON.stringify(
                 perfPayload
             )}`
         )
