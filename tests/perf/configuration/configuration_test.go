@@ -91,9 +91,6 @@ func runk6test(t *testing.T, targetURL string, payload []byte, threshold int) *l
 	sm, err := loadtest.K6ResultDefault(k6Test)
 	require.NoError(t, err)
 	require.NotNil(t, sm)
-	summary.ForTest(t).
-		OutputK6(sm.RunnersResults).
-		Flush()
 	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
 	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
@@ -131,7 +128,7 @@ func subscribeTest(t *testing.T, externalURL string, test string, protocol strin
 	return testResult
 }
 
-func printLatency(t *testing.T, baselineResult, daprResult *loadtest.K6RunnerMetricsSummary) {
+func printLatency(t *testing.T, testName string, baselineResult, daprResult *loadtest.K6RunnerMetricsSummary) {
 	dapr95latency := daprResult.HTTPReqDuration.Values.P95
 	baseline95latency := baselineResult.HTTPReqDuration.Values.P95
 	percentageIncrease := (dapr95latency - baseline95latency) / baseline95latency * 100
@@ -143,6 +140,28 @@ func printLatency(t *testing.T, baselineResult, daprResult *loadtest.K6RunnerMet
 	percentageIncrease = (dapravglatency - baselineavglatency) / baselineavglatency * 100
 	t.Logf("dapr avg latency: %.2fms, baseline avg latency: %.2fms", dapravglatency, baselineavglatency)
 	t.Logf("added avg latency: %.2fms(%.2f%%)", dapravglatency-baselineavglatency, percentageIncrease)
+
+	appUsage, err := tr.Platform.GetAppUsage(testAppName)
+	require.NoError(t, err)
+
+	sidecarUsage, err := tr.Platform.GetSidecarUsage(testAppName)
+	require.NoError(t, err)
+
+	restarts, err := tr.Platform.GetTotalRestarts(testAppName)
+	require.NoError(t, err)
+
+	summary.ForTest(t).
+		Service(testName).
+		CPU(appUsage.CPUm).
+		Memory(appUsage.MemoryMb).
+		SidecarCPU(sidecarUsage.CPUm).
+		SidecarMemory(sidecarUsage.MemoryMb).
+		Restarts(restarts).
+		BaselineLatency(baselineavglatency).
+		DaprLatency(dapravglatency).
+		AddedLatency(dapravglatency - baselineavglatency).
+		OutputK6([]*loadtest.K6RunnerMetricsSummary{daprResult}).
+		Flush()
 }
 
 func TestConfigurationGetHTTPPerformance(t *testing.T) {
@@ -180,7 +199,7 @@ func TestConfigurationGetHTTPPerformance(t *testing.T) {
 	targetURL = fmt.Sprintf("http://%s/get/dapr/http", externalURL)
 	daprResult := runk6test(t, targetURL, payload, defaultConfigGetThresholdMs)
 
-	printLatency(t, baselineResult, daprResult)
+	printLatency(t, "perf-configuration-get-http", baselineResult, daprResult)
 }
 
 func TestConfigurationGetGRPCPerformance(t *testing.T) {
@@ -218,7 +237,7 @@ func TestConfigurationGetGRPCPerformance(t *testing.T) {
 	targetURL = fmt.Sprintf("http://%s/get/dapr/grpc", externalURL)
 	daprResult := runk6test(t, targetURL, payload, defaultConfigGetThresholdMs)
 
-	printLatency(t, baselineResult, daprResult)
+	printLatency(t, "perf-configuration-get-grpc", baselineResult, daprResult)
 }
 
 func TestConfigurationSubscribeHTTPPerformance(t *testing.T) {
@@ -241,7 +260,7 @@ func TestConfigurationSubscribeHTTPPerformance(t *testing.T) {
 	t.Logf("running dapr test")
 	daprResult := subscribeTest(t, externalURL, "dapr", "http")
 
-	printLatency(t, baselineResult, daprResult)
+	printLatency(t, "perf-configuration-subscribe-http", baselineResult, daprResult)
 }
 
 func TestConfigurationSubscribeGRPCPerformance(t *testing.T) {
@@ -264,5 +283,5 @@ func TestConfigurationSubscribeGRPCPerformance(t *testing.T) {
 	t.Logf("running dapr test")
 	daprResult := subscribeTest(t, externalURL, "dapr", "grpc")
 
-	printLatency(t, baselineResult, daprResult)
+	printLatency(t, "perf-configuration-subscribe-grpc", baselineResult, daprResult)
 }
