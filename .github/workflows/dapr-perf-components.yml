@@ -1,5 +1,5 @@
 #
-# Copyright 2021 The Dapr Authors
+# Copyright 2023 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -203,7 +203,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if (testPayload && testPayload.command == "ok-to-perf") {
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
@@ -352,7 +352,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if (testPayload && testPayload.command == "ok-to-perf") {
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
               let selectedTestsEnvVar = ""
               if (testPayload?.args) {
                 selectedTestsEnvVar = `DAPR_PERF_TEST=${testPayload.args}\n`
