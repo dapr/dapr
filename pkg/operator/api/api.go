@@ -418,7 +418,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 }
 
 // HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
-func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointsUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointsUpdateServer) error { //nolint:nosnakecase
+func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
 	log.Info("sidecar connected for http endpoint updates")
 	keyObj, err := uuid.NewRandom()
 	if err != nil {
@@ -450,7 +450,7 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointsUpdateReque
 			return
 		}
 
-		err = srv.Send(&operatorv1pb.HTTPEndpointsUpdateEvent{
+		err = srv.Send(&operatorv1pb.HTTPEndpointUpdateEvent{
 			HttpEndpoints: b,
 		})
 		if err != nil {
