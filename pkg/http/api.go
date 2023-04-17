@@ -35,15 +35,10 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
-	contribCrypto "github.com/dapr/components-contrib/crypto"
-	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
@@ -61,6 +56,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -84,13 +80,8 @@ type api struct {
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
 	httpEndpointsAppChannel    channel.HTTPEndpointAppChannel
-	getComponentsFn            func() []componentsV1alpha1.Component
-	getHTTPEndpointsFn         func() []httpEndpointsV1alpha1.HTTPEndpoint
-	getSubscriptionsFn         func() []runtimePubsub.Subscription
+	listHttpEndpointsFn        func() []httpEndpointsV1alpha1.HTTPEndpoint
 	resiliency                 resiliency.Provider
-	stateStores                map[string]state.Store
-	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]chan struct{}
 	actor                      actors.Actors
 	pubsubAdapter              runtimePubsub.Adapter
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -168,17 +159,8 @@ type APIOpts struct {
 	AppChannel                  channel.AppChannel
 	HTTPEndpointsAppChannel     channel.HTTPEndpointAppChannel
 	DirectMessaging             messaging.DirectMessaging
-	GetComponentsFn             func() []componentsV1alpha1.Component
-	GetHTTPEndpointsFn          func() []httpEndpointsV1alpha1.HTTPEndpoint
-	GetSubscriptionsFn          func() []runtimePubsub.Subscription
 	Resiliency                  resiliency.Provider
-	StateStores                 map[string]state.Store
-	WorkflowsComponents         map[string]wfs.Workflow
-	LockStores                  map[string]lock.Store
-	SecretStores                map[string]secretstores.SecretStore
-	SecretsConfiguration        map[string]config.SecretsScope
-	ConfigurationStores         map[string]configuration.Store
-	CryptoProviders             map[string]contribCrypto.SubtleCrypto
+	CompStore                   *compstore.ComponentStore
 	PubsubAdapter               runtimePubsub.Adapter
 	Actor                       actors.Actors
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -196,12 +178,7 @@ func NewAPI(opts APIOpts) API {
 		appChannel:                 opts.AppChannel,
 		httpEndpointsAppChannel:    opts.HTTPEndpointsAppChannel,
 		directMessaging:            opts.DirectMessaging,
-		getComponentsFn:            opts.GetComponentsFn,
-		getHTTPEndpointsFn:         opts.GetHTTPEndpointsFn,
-		getSubscriptionsFn:         opts.GetSubscriptionsFn,
 		resiliency:                 opts.Resiliency,
-		stateStores:                opts.StateStores,
-		configurationStores:        opts.ConfigurationStores,
 		pubsubAdapter:              opts.PubsubAdapter,
 		actor:                      opts.Actor,
 		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
@@ -209,19 +186,13 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		maxRequestBodySize:         opts.MaxRequestBodySize,
-		configurationSubscribe:     make(map[string]chan struct{}),
 		isStreamingEnabled:         opts.IsStreamingEnabled,
 		daprRunTimeVersion:         buildinfo.Version(),
 		universal: &universalapi.UniversalAPI{
-			AppID:                opts.AppID,
-			Logger:               log,
-			Resiliency:           opts.Resiliency,
-			CryptoProviders:      opts.CryptoProviders,
-			StateStores:          opts.StateStores,
-			SecretStores:         opts.SecretStores,
-			SecretsConfiguration: opts.SecretsConfiguration,
-			LockStores:           opts.LockStores,
-			WorkflowComponents:   opts.WorkflowsComponents,
+			AppID:      opts.AppID,
+			Logger:     log,
+			Resiliency: opts.Resiliency,
+			CompStore:  opts.CompStore,
 		},
 	}
 
@@ -741,7 +712,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
+	if a.universal.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -750,13 +721,14 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	if a.stateStores[storeName] == nil {
+	state, ok := a.universal.CompStore.GetStateStore(storeName)
+	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
 	}
-	return a.stateStores[storeName], storeName, nil
+	return state, storeName, nil
 }
 
 // Route:   "workflows/{workflowComponent}/{workflowName}/{instanceId}",
@@ -884,7 +856,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
-	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+	if a.universal.CompStore.ConfigurationsLen() == 0 {
 		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_CONFIGURED", messages.ErrConfigurationStoresNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -893,13 +865,14 @@ func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.Reques
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	if a.configurationStores[storeName] == nil {
+	conf, ok := a.universal.CompStore.GetConfiguration(storeName)
+	if !ok {
 		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
 	}
-	return a.configurationStores[storeName], storeName, nil
+	return conf, storeName, nil
 }
 
 type subscribeConfigurationResponse struct {
@@ -1304,7 +1277,7 @@ func (ie invokeError) Error() string {
 }
 
 func (a *api) isHTTPEndpoint(appID string) bool {
-	for _, endpoint := range a.getHTTPEndpointsFn() {
+	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
 		for _, allowedList := range endpoint.Spec.Allowed {
 			if allowedList.Name == appID {
 				return true
@@ -1317,7 +1290,7 @@ func (a *api) isHTTPEndpoint(appID string) bool {
 // getBaseURL takes an app id and checks if the app id is among the allowed list in the http endpoint CRDs,
 // and returns the baseURL from the HTTPEndpointSpec.Allowed field.
 func (a *api) getBaseURL(targetAppID string) string {
-	for _, endpoint := range a.getHTTPEndpointsFn() {
+	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
 		for _, allowedList := range endpoint.Spec.Allowed {
 			if allowedList.Name == targetAppID {
 				return allowedList.BaseURL
@@ -1328,7 +1301,7 @@ func (a *api) getBaseURL(targetAppID string) string {
 }
 
 func (a *api) getAppIdFromBaseURL(baseURL string) string {
-	for _, endpoint := range a.getHTTPEndpointsFn() {
+	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
 		for _, allowedList := range endpoint.Spec.Allowed {
 			if allowedList.BaseURL == baseURL {
 				return allowedList.Name
@@ -1912,7 +1885,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
 	componentsCapabilties := a.getComponentsCapabilitesFn()
-	components := a.getComponentsFn()
+	components := a.universal.CompStore.ListComponents()
 	registeredComponents := make([]registeredComponent, 0, len(components))
 	for _, comp := range components {
 		registeredComp := registeredComponent{
@@ -1924,7 +1897,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 
-	subscriptions := a.getSubscriptionsFn()
+	subscriptions := a.universal.CompStore.ListSubscriptions()
 	ps := []pubsubSubscription{}
 	for _, s := range subscriptions {
 		ps = append(ps, pubsubSubscription{
@@ -1936,18 +1909,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		})
 	}
 
-	// TODO(@Sam): fix and fill in here for dapr runtime metadata api to include http endpoint
-	// endpoints := a.getHTTPEndpointsFn()
-	// ps := []pubsubSubscription{}
-	// for _, s := range subscriptions {
-	// 	ps = append(ps, pubsubSubscription{
-	// 		PubsubName:      s.PubsubName,
-	// 		Topic:           s.Topic,
-	// 		Metadata:        s.Metadata,
-	// 		DeadLetterTopic: s.DeadLetterTopic,
-	// 		Rules:           convertPubsubSubscriptionRules(s.Rules),
-	// 	})
-	// }
+	// TODO(@Sam): fix and fill in here for dapr runtime metadata api to include http endpoints
 
 	mtd := metadata{
 		ID:                   a.id,
@@ -1955,7 +1917,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		Extended:             temp,
 		RegisteredComponents: registeredComponents,
 		Subscriptions:        ps,
-		// TODO(@Sam): update here to include http endpoint
+		// TODO(@Sam): update here to include http endpoints
 	}
 
 	mtdBytes, err := json.Marshal(mtd)
@@ -2368,7 +2330,7 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if len(a.stateStores) == 0 {
+	if a.universal.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -2376,7 +2338,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
-	store, ok := a.stateStores[storeName]
+	store, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
 		log.Debug(err)

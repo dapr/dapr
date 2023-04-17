@@ -123,25 +123,25 @@ func (a *UniversalAPI) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBul
 }
 
 // Internal method that checks if the request is for a valid secret store component.
-func (a *UniversalAPI) secretsValidateRequest(componentName string) (component secretstores.SecretStore, err error) {
-	if len(a.SecretStores) == 0 {
-		err = messages.ErrSecretStoreNotConfigured
+func (a *UniversalAPI) secretsValidateRequest(componentName string) (secretstores.SecretStore, error) {
+	if a.CompStore.SecretStoresLen() == 0 {
+		err := messages.ErrSecretStoreNotConfigured
 		a.Logger.Debug(err)
-		return
+		return nil, err
 	}
 
-	component = a.SecretStores[componentName]
-	if component == nil {
-		err = messages.ErrSecretStoreNotFound.WithFormat(componentName)
+	component, ok := a.CompStore.GetSecretStore(componentName)
+	if !ok {
+		err := messages.ErrSecretStoreNotFound.WithFormat(componentName)
 		a.Logger.Debug(err)
-		return
+		return nil, err
 	}
 
-	return
+	return component, nil
 }
 
 func (a *UniversalAPI) isSecretAllowed(storeName, key string) bool {
-	if config, ok := a.SecretsConfiguration[storeName]; ok {
+	if config, ok := a.CompStore.GetSecretsConfiguration(storeName); ok {
 		return config.IsSecretAllowed(key)
 	}
 	// By default, if a configuration is not defined for a secret store, return true.
