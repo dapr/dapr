@@ -54,7 +54,6 @@ func NewKubernetesHTTPEndpoints(configuration config.KubernetesConfig, namespace
 
 // LoadHTTPEndpoints returns HTTP endpoints from a given control plane address.
 func (k *KubernetesHTTPEndpoints) LoadHTTPEndpoints() ([]httpEndpointsV1alpha1.HTTPEndpoint, error) {
-	log.Info("in LoadHTTPEndpoints()")
 	resp, err := k.client.ListHTTPEndpoints(context.Background(), &operatorv1pb.ListHTTPEndpointsRequest{
 		Namespace: k.namespace,
 	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
@@ -64,7 +63,7 @@ func (k *KubernetesHTTPEndpoints) LoadHTTPEndpoints() ([]httpEndpointsV1alpha1.H
 	}
 
 	if resp.GetHttpEndpoints() == nil {
-		log.Debug("No  http endpoints found")
+		log.Debug("No http endpoints found")
 		return nil, nil
 	}
 
