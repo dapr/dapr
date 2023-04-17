@@ -519,6 +519,14 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 	}
 }
 
+func TestInternalActorsSetupForWF(t *testing.T) {
+	ctx := context.Background()
+	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
+	internalActors, err := engine.InternalActors()
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(internalActors))
+}
+
 // TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
 func TestRecreateRunningWorkflowFails(t *testing.T) {
 	r := task.NewTaskRegistry()

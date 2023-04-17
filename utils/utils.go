@@ -26,7 +26,14 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const defaultNamespace = "default"
+const (
+	defaultNamespace = "default"
+	DotDelimiter     = "."
+
+	// Workflow
+	WorkflowNameLabelKey = "workflow"
+	ActivityNameLabelKey = "activity"
+)
 
 var (
 	clientSet     *kubernetes.Clientset
@@ -201,7 +208,7 @@ func ComponentLogName(name, typ, version string) string {
 	return fmt.Sprintf(logNameVersionFmt, name, typ, version)
 }
 
-// GetNamespace returns the namespace for Dapr, or the default namespace if it is not set.
+// GetNamespaceOrDefault returns the namespace for Dapr, or the default namespace if it is not set.
 func GetNamespaceOrDefault() string {
 	namespace := os.Getenv("NAMESPACE")
 	if namespace == "" {
