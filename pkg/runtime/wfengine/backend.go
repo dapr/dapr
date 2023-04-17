@@ -34,6 +34,7 @@ type workflowScheduler interface {
 }
 
 type actorBackend struct {
+	config                    *WFConfig
 	actors                    actors.Actors
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -44,6 +45,7 @@ func NewActorBackend(engine *WorkflowEngine) *actorBackend {
 	return &actorBackend{
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem),
+		config:                    engine.config,
 	}
 }
 
@@ -95,11 +97,15 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		return err
 	}
 
+	var actorType string
+	if be.config != nil {
+		actorType = be.config.WorkflowActorType
+	}
 	// Invoke the well-known workflow actor directly, which will be created by this invocation
 	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
 	req := invokev1.
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
-		WithActor(WorkflowActorType, workflowInstanceID).
+		WithActor(actorType, workflowInstanceID).
 		WithRawDataBytes(eventData).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -114,10 +120,14 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 
 // GetOrchestrationMetadata implements backend.Backend
 func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
+	var actorType string
+	if be.config != nil {
+		actorType = be.config.WorkflowActorType
+	}
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
 	req := invokev1.
 		NewInvokeMethodRequest(GetWorkflowMetadataMethod).
-		WithActor(WorkflowActorType, string(id)).
+		WithActor(actorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
@@ -172,10 +182,14 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 		return err
 	}
 
+	var actorType string
+	if be.config != nil {
+		actorType = be.config.WorkflowActorType
+	}
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(WorkflowActorType, string(id)).
+		WithActor(actorType, string(id)).
 		WithRawDataBytes(data).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()

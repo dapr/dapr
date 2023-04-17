@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -26,10 +25,9 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
-
-const defaultNamespace = "default"
 
 type WorkflowEngine struct {
 	IsRunning bool
@@ -44,26 +42,19 @@ type WorkflowEngine struct {
 	actorRuntime   actors.Actors
 	startMutex     sync.Mutex
 	disconnectChan chan any
+	config         *WFConfig
 }
 
 var (
-	WorkflowActorType   = ""
-	ActivityActorType   = ""
 	wfLogger            = logger.NewLogger("dapr.runtime.wfengine")
 	errExecutionAborted = errors.New("execution aborted")
 )
 
 // WFConfig is the configuration for the workflow engine
 type WFConfig struct {
-	AppID string
-}
-
-func getNamespace() string {
-	namespace := os.Getenv("NAMESPACE")
-	if namespace == "" {
-		namespace = defaultNamespace
-	}
-	return namespace
+	AppID             string
+	WorkflowActorType string
+	ActivityActorType string
 }
 
 func IsWorkflowRequest(path string) bool {
@@ -71,18 +62,19 @@ func IsWorkflowRequest(path string) bool {
 }
 
 func NewWorkflowEngine(config *WFConfig) *WorkflowEngine {
-	WorkflowActorType = actors.InternalActorTypePrefix + "wfengine.workflow" + "." + getNamespace() + "." + config.AppID
-	ActivityActorType = actors.InternalActorTypePrefix + "wfengine.activity" + "." + getNamespace() + "." + config.AppID
+	config.WorkflowActorType = actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + "." + config.AppID + ".workflow"
+	config.ActivityActorType = actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + "." + config.AppID + ".activity"
 	// In order to lazily start the engine (i.e. when it is invoked
 	// by the application when it registers workflows / activities or by
 	// an API call to interact with the engine) we need to inject the engine
 	// into the backend because the backend is what is registered with the gRPC
 	// service and needs to have a reference in order to start it.
 	engine := &WorkflowEngine{}
+	engine.config = config
 	be := NewActorBackend(engine)
 	engine.backend = be
-	engine.activityActor = NewActivityActor(be)
-	engine.workflowActor = NewWorkflowActor(be)
+	engine.activityActor = NewActivityActor(be, config)
+	engine.workflowActor = NewWorkflowActor(be, config)
 
 	return engine
 }
@@ -90,8 +82,10 @@ func NewWorkflowEngine(config *WFConfig) *WorkflowEngine {
 // InternalActors returns a map of internal actors that are used to implement workflows
 func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
 	internalActors := make(map[string]actors.InternalActor)
-	internalActors[WorkflowActorType] = wfe.workflowActor
-	internalActors[ActivityActorType] = wfe.activityActor
+	if wfe.config != nil {
+		internalActors[wfe.config.WorkflowActorType] = wfe.workflowActor
+		internalActors[wfe.config.ActivityActorType] = wfe.activityActor
+	}
 	return internalActors
 }
 

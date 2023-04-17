@@ -39,6 +39,7 @@ type activityActor struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
+	config           *WFConfig
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
@@ -53,11 +54,12 @@ type activityState struct {
 }
 
 // NewActivityActor creates an internal activity actor for executing workflow activity logic.
-func NewActivityActor(scheduler workflowScheduler) *activityActor {
+func NewActivityActor(scheduler workflowScheduler, config *WFConfig) *activityActor {
 	return &activityActor{
 		scheduler:        scheduler,
 		defaultTimeout:   1 * time.Hour,
 		reminderInterval: 1 * time.Minute,
+		config:           config,
 	}
 }
 
@@ -195,9 +197,13 @@ loop:
 	if err != nil {
 		return err
 	}
+	var actorType string
+	if a.config != nil {
+		actorType = a.config.WorkflowActorType
+	}
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(WorkflowActorType, workflowID).
+		WithActor(actorType, workflowID).
 		WithRawDataBytes(resultData).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -236,8 +242,12 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	wfLogger.Debugf("%s: loading activity state", actorID)
+	var actorType string
+	if a.config != nil {
+		actorType = a.config.ActivityActorType
+	}
 	req := actors.GetStateRequest{
-		ActorType: ActivityActorType,
+		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       getActivityInvocationKey(generation),
 	}
@@ -259,8 +269,12 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 }
 
 func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state activityState) error {
+	var actorType string
+	if a.config != nil {
+		actorType = a.config.ActivityActorType
+	}
 	req := actors.TransactionalRequest{
-		ActorType: ActivityActorType,
+		ActorType: actorType,
 		ActorID:   actorID,
 		Operations: []actors.TransactionalOperation{{
 			Operation: actors.Upsert,
@@ -291,8 +305,12 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
+	var actorType string
+	if a.config != nil {
+		actorType = a.config.ActivityActorType
+	}
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: ActivityActorType,
+		ActorType: actorType,
 		ActorID:   actorID,
 		Data:      dataEnc,
 		DueTime:   "0s",

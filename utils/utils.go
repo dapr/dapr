@@ -26,6 +26,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+const defaultNamespace = "default"
+
 var (
 	clientSet     *kubernetes.Clientset
 	kubeConfig    *rest.Config
@@ -197,4 +199,13 @@ func ComponentLogName(name, typ, version string) string {
 	}
 
 	return fmt.Sprintf(logNameVersionFmt, name, typ, version)
+}
+
+// GetNamespace returns the namespace for Dapr, or the default namespace if it is not set.
+func GetNamespaceOrDefault() string {
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		namespace = defaultNamespace
+	}
+	return namespace
 }

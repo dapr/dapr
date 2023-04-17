@@ -15,7 +15,7 @@ limitations under the License.
 
 // wfengine_test is a suite of integration tests that verify workflow
 // engine behavior using only exported APIs.
-package wfengine_test
+package wfengine
 
 import (
 	"context"
@@ -38,7 +38,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
@@ -236,20 +235,20 @@ func TestStartWorkflowEngine(t *testing.T) {
 	grpcServer := grpc.NewServer()
 	engine.ConfigureGrpc(grpcServer)
 	err := engine.Start(ctx)
-	assert.Equal(t, "dapr.internal.wfengine.workflow.default."+testAppID, wfengine.WorkflowActorType)
-	assert.Equal(t, "dapr.internal.wfengine.activity.default."+testAppID, wfengine.ActivityActorType)
+	assert.Equal(t, "dapr.internal.default."+testAppID+".workflow", engine.config.WorkflowActorType)
+	assert.Equal(t, "dapr.internal.default."+testAppID+".activity", engine.config.ActivityActorType)
 	assert.NoError(t, err)
 }
 
 // GetTestOptions returns an array of functions for configuring the workflow engine. Each
 // string returned by each function can be used as the name of the test configuration.
-func GetTestOptions() []func(wfe *wfengine.WorkflowEngine) string {
-	return []func(wfe *wfengine.WorkflowEngine) string{
-		func(wfe *wfengine.WorkflowEngine) string {
+func GetTestOptions() []func(wfe *WorkflowEngine) string {
+	return []func(wfe *WorkflowEngine) string{
+		func(wfe *WorkflowEngine) string {
 			// caching enabled, etc.
 			return "default options"
 		},
-		func(wfe *wfengine.WorkflowEngine) string {
+		func(wfe *WorkflowEngine) string {
 			// disable caching to test recovery from failure
 			wfe.DisableActorCaching(true)
 			return "caching disabled"
@@ -749,7 +748,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 	}
 }
 
-func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
+func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, *WorkflowEngine) {
 	var client backend.TaskHubClient
 	engine := getEngine(t)
 	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
@@ -762,8 +761,8 @@ func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backe
 	return client, engine
 }
 
-func getEngine(t *testing.T) *wfengine.WorkflowEngine {
-	engine := wfengine.NewWorkflowEngine(&wfengine.WFConfig{
+func getEngine(t *testing.T) *WorkflowEngine {
+	engine := NewWorkflowEngine(&WFConfig{
 		AppID: testAppID,
 	})
 	store := fakeStore()

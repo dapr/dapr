@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package wfengine_test
+package wfengine
 
 import (
 	"context"
@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
 )
 
 // TestDedupeActivityInvocation executes the activity actor invocation path for the same (simulated) workflow
@@ -31,9 +30,10 @@ func TestDedupeActivityInvocation(t *testing.T) {
 	// We do just enough to get the activity actor properly initialized
 	ctx := context.Background()
 	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
+	engine.config = getConfig()
 
 	// Get a reference to the activity actor so we can invoke it directly, without going through a workflow.
-	activityActor := engine.InternalActors()[wfengine.ActivityActorType]
+	activityActor := engine.InternalActors()[engine.config.ActivityActorType]
 
 	generation := uint64(0)
 
@@ -42,7 +42,7 @@ func TestDedupeActivityInvocation(t *testing.T) {
 			generation++
 
 			// Generate the same invocation payload that a workflow would generate for a real activity call.
-			data, err := actors.EncodeInternalActorData(wfengine.ActivityRequest{
+			data, err := actors.EncodeInternalActorData(ActivityRequest{
 				HistoryEvent: nil,
 				Generation:   generation,
 			})
@@ -54,11 +54,11 @@ func TestDedupeActivityInvocation(t *testing.T) {
 
 			// The second call should fail with a duplicate invocation error
 			_, err = activityActor.InvokeMethod(ctx, "test123", "Execute", data)
-			assert.ErrorIs(t, err, wfengine.ErrDuplicateInvocation)
+			assert.ErrorIs(t, err, ErrDuplicateInvocation)
 
 			// The third call, with an updated generation ID, should succeed
 			generation++
-			data, err = actors.EncodeInternalActorData(wfengine.ActivityRequest{
+			data, err = actors.EncodeInternalActorData(ActivityRequest{
 				HistoryEvent: nil,
 				Generation:   generation,
 			})

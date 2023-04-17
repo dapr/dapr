@@ -46,6 +46,7 @@ type workflowActor struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
+	config           *WFConfig
 }
 
 type durableTimer struct {
@@ -69,11 +70,12 @@ func (err recoverableError) Error() string {
 	return err.cause.Error()
 }
 
-func NewWorkflowActor(scheduler workflowScheduler) *workflowActor {
+func NewWorkflowActor(scheduler workflowScheduler, config *WFConfig) *workflowActor {
 	return &workflowActor{
 		scheduler:        scheduler,
 		defaultTimeout:   30 * time.Second,
 		reminderInterval: 1 * time.Minute,
+		config:           config,
 	}
 }
 
@@ -152,7 +154,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	if err != nil {
 		return err
 	} else if !exists {
-		state = NewWorkflowState()
+		state = NewWorkflowState(wf.config)
 	}
 
 	startEvent, err := backend.UnmarshalHistoryEvent(startEventBytes)
@@ -355,9 +357,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				return err
 			}
 			targetActorID := getActivityActorID(actorID, e.EventId)
+			var actorType string
+			if wf.config != nil {
+				actorType = wf.config.ActivityActorType
+			}
 			req := invokev1.
 				NewInvokeMethodRequest("Execute").
-				WithActor(ActivityActorType, targetActorID).
+				WithActor(actorType, targetActorID).
 				WithRawDataBytes(activityRequestBytes).
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
@@ -383,9 +389,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return err
 			}
+			var actorType string
+			if wf.config != nil {
+				actorType = wf.config.WorkflowActorType
+			}
 			req := invokev1.
 				NewInvokeMethodRequest(method).
-				WithActor(WorkflowActorType, msg.TargetInstanceID).
+				WithActor(actorType, msg.TargetInstanceID).
 				WithRawDataBytes(eventData).
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
@@ -415,7 +425,7 @@ func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) 
 
 	// state is not cached, so try to load it from the state store
 	wfLogger.Debugf("%s: loading workflow state", actorID)
-	state, err := LoadWorkflowState(ctx, wf.actors, actorID)
+	state, err := LoadWorkflowState(ctx, wf.actors, actorID, wf.config)
 	if err != nil {
 		return workflowState{}, false, err
 	}
@@ -453,8 +463,12 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 	if err != nil {
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
+	var actorType string
+	if wf.config != nil {
+		actorType = wf.config.WorkflowActorType
+	}
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: WorkflowActorType,
+		ActorType: actorType,
 		ActorID:   actorID,
 		Data:      dataEnc,
 		DueTime:   delay.String(),

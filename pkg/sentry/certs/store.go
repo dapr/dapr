@@ -12,10 +12,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/dapr/pkg/sentry/kubernetes"
-)
-
-const (
-	defaultSecretNamespace = "default"
+	"github.com/dapr/dapr/utils"
 )
 
 // StoreCredentials saves the trust bundle in a Kubernetes secret store or locally on disk, depending on the hosting platform.
@@ -32,7 +29,7 @@ func storeKubernetes(ctx context.Context, rootCertPem, issuerCertPem, issuerCert
 		return err
 	}
 
-	namespace := getNamespace()
+	namespace := utils.GetNamespaceOrDefault()
 	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), consts.TrustBundleK8sSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return fmt.Errorf("failed to get secret %w", err)
@@ -52,18 +49,10 @@ func storeKubernetes(ctx context.Context, rootCertPem, issuerCertPem, issuerCert
 	return nil
 }
 
-func getNamespace() string {
-	namespace := os.Getenv("NAMESPACE")
-	if namespace == "" {
-		namespace = defaultSecretNamespace
-	}
-	return namespace
-}
-
 // CredentialsExist checks root and issuer credentials exist on a hosting platform.
 func CredentialsExist(ctx context.Context, conf config.SentryConfig) (bool, error) {
 	if config.IsKubernetesHosted() {
-		namespace := getNamespace()
+		namespace := utils.GetNamespaceOrDefault()
 
 		kubeClient, err := kubernetes.GetClient()
 		if err != nil {

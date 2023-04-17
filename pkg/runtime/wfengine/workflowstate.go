@@ -43,6 +43,7 @@ type workflowState struct {
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
+	config              *WFConfig
 }
 
 type workflowStateMetadata struct {
@@ -51,9 +52,10 @@ type workflowStateMetadata struct {
 	Generation    uint64
 }
 
-func NewWorkflowState() workflowState {
+func NewWorkflowState(config *WFConfig) workflowState {
 	return workflowState{
 		Generation: 1,
+		config:     config,
 	}
 }
 
@@ -94,8 +96,12 @@ func (s *workflowState) ClearInbox() {
 }
 
 func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalRequest, error) {
+	var actorType string
+	if s.config != nil {
+		actorType = s.config.WorkflowActorType
+	}
 	req := &actors.TransactionalRequest{
-		ActorType:  WorkflowActorType,
+		ActorType:  actorType,
 		ActorID:    actorID,
 		Operations: make([]actors.TransactionalOperation, 0, 100),
 	}
@@ -150,12 +156,16 @@ func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, even
 	return nil
 }
 
-func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string) (workflowState, error) {
+func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config *WFConfig) (workflowState, error) {
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
+	var actorType string
+	if config != nil {
+		actorType = config.WorkflowActorType
+	}
 	req := actors.GetStateRequest{
-		ActorType: WorkflowActorType,
+		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       metadataKey,
 	}
@@ -172,7 +182,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
 		return workflowState{}, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
-	state := NewWorkflowState()
+	state := NewWorkflowState(config)
 	state.Generation = metadata.Generation
 	// CONSIDER: Do some of these loads in parallel
 	for i := 0; i < metadata.InboxLength; i++ {
