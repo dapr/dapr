@@ -45,8 +45,6 @@ const (
 	HTTPStatusCode = "http.status_code"
 	httpScheme     = "http"
 	httpsScheme    = "https"
-
-	appConfigEndpoint = "dapr/config"
 )
 
 // HTTPEndpointAppChannel is an HTTP implementation of an AppChannel.

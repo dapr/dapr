@@ -39,7 +39,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -80,7 +79,6 @@ type api struct {
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
 	httpEndpointsAppChannel    channel.HTTPEndpointAppChannel
-	listHttpEndpointsFn        func() []httpEndpointsV1alpha1.HTTPEndpoint
 	resiliency                 resiliency.Provider
 	actor                      actors.Actors
 	pubsubAdapter              runtimePubsub.Adapter
