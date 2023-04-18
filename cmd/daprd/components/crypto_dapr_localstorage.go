@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/crypto/jwks"
+	"github.com/dapr/components-contrib/crypto/localstorage"
 	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 )
 
 func init() {
-	cryptoLoader.DefaultRegistry.RegisterComponent(jwks.NewJWKSCrypto, "jwks")
+	cryptoLoader.DefaultRegistry.RegisterComponent(localstorage.NewLocalStorageCrypto, "dapr.localstorage")
 }

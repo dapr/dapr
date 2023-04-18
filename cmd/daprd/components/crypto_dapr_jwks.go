@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/crypto/kubernetes/secrets"
+	"github.com/dapr/components-contrib/crypto/jwks"
 	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 )
 
 func init() {
-	cryptoLoader.DefaultRegistry.RegisterComponent(secrets.NewKubeSecretsCrypto, "kubernetes.secrets")
+	cryptoLoader.DefaultRegistry.RegisterComponent(jwks.NewJWKSCrypto, "dapr.jwks")
 }

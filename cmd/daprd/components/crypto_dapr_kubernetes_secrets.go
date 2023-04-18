@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/crypto/localstorage"
+	"github.com/dapr/components-contrib/crypto/kubernetes/secrets"
 	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 )
 
 func init() {
-	cryptoLoader.DefaultRegistry.RegisterComponent(localstorage.NewLocalStorageCrypto, "localstorage")
+	cryptoLoader.DefaultRegistry.RegisterComponent(secrets.NewKubeSecretsCrypto, "dapr.kubernetes.secrets")
 }
