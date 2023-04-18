@@ -19,14 +19,11 @@ package wfengine_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/task"
@@ -40,164 +37,14 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
 
 const testAppID = "wf-app"
 
-// The fake state store code was copied from actors_test.go.
-// TODO: Find a way to share the code instead of copying it, if it makes sense to do so.
-
-type fakeStateStoreItem struct {
-	data []byte
-	etag *string
-}
-
-type fakeStateStore struct {
-	items map[string]*fakeStateStoreItem
-	lock  *sync.RWMutex
-}
-
 func fakeStore() state.Store {
-	return &fakeStateStore{
-		items: map[string]*fakeStateStoreItem{},
-		lock:  &sync.RWMutex{},
-	}
-}
-
-func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
-	etag, _ := uuid.NewRandom()
-	etagString := etag.String()
-	return &fakeStateStoreItem{
-		data: data,
-		etag: &etagString,
-	}
-}
-
-func (f *fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
-	return nil
-}
-
-func (f *fakeStateStore) Ping() error {
-	return nil
-}
-
-func (f *fakeStateStore) Features() []state.Feature {
-	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
-}
-
-func (f *fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	delete(f.items, req.Key)
-
-	return nil
-}
-
-func (f *fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
-	return nil
-}
-
-func (f *fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
-	f.lock.RLock()
-	defer f.lock.RUnlock()
-	item := f.items[req.Key]
-
-	if item == nil {
-		return &state.GetResponse{Data: nil, ETag: nil}, nil
-	}
-
-	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
-}
-
-func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	res := []state.BulkGetResponse{}
-	for _, oneRequest := range req {
-		oneResponse, err := f.Get(ctx, &state.GetRequest{
-			Key:      oneRequest.Key,
-			Metadata: oneRequest.Metadata,
-			Options:  oneRequest.Options,
-		})
-		if err != nil {
-			return false, nil, err
-		}
-
-		res = append(res, state.BulkGetResponse{
-			Key:  oneRequest.Key,
-			Data: oneResponse.Data,
-			ETag: oneResponse.ETag,
-		})
-	}
-
-	return true, res, nil
-}
-
-func (f *fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
-	b, _ := marshal(&req.Value, json.Marshal)
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	f.items[req.Key] = f.newItem(b)
-
-	return nil
-}
-
-func (f *fakeStateStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
-func (f *fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	return nil
-}
-
-func (f *fakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	// First we check all eTags
-	for _, o := range request.Operations {
-		var eTag *string
-		key := ""
-		if o.Operation == state.Upsert {
-			key = o.Request.(state.SetRequest).Key
-			eTag = o.Request.(state.SetRequest).ETag
-		} else if o.Operation == state.Delete {
-			key = o.Request.(state.DeleteRequest).Key
-			eTag = o.Request.(state.DeleteRequest).ETag
-		}
-		item := f.items[key]
-		if eTag != nil && item != nil {
-			if *eTag != *item.etag {
-				return fmt.Errorf("etag does not match for key %v", key)
-			}
-		}
-		if eTag != nil && item == nil {
-			return fmt.Errorf("etag does not match for key not found %v", key)
-		}
-	}
-
-	// Now we can perform the operation.
-	for _, o := range request.Operations {
-		if o.Operation == state.Upsert {
-			req := o.Request.(state.SetRequest)
-			b, _ := marshal(req.Value, json.Marshal)
-			f.items[req.Key] = f.newItem(b)
-		} else if o.Operation == state.Delete {
-			req := o.Request.(state.DeleteRequest)
-			delete(f.items, req.Key)
-		}
-	}
-
-	return nil
-}
-
-// Copied from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16
-func marshal(val interface{}, marshaler func(interface{}) ([]byte, error)) ([]byte, error) {
-	var err error = nil
-	bt, ok := val.([]byte)
-	if !ok {
-		bt, err = marshaler(val)
-	}
-
-	return bt, err
+	return daprt.NewFakeStateStore()
 }
 
 type mockPlacement struct{}
@@ -269,19 +116,19 @@ func TestEmptyWorkflow(t *testing.T) {
 		t.Run(opt(engine), func(t *testing.T) {
 			preStartTime := time.Now().UTC()
 			id, err := client.ScheduleNewOrchestration(ctx, "EmptyWorkflow")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.Equal(t, id, metadata.InstanceID)
-					assert.True(t, metadata.IsComplete())
-					assert.GreaterOrEqual(t, metadata.CreatedAt, preStartTime)
-					assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
-					assert.Empty(t, metadata.SerializedInput)
-					assert.Empty(t, metadata.SerializedOutput)
-					assert.Empty(t, metadata.SerializedCustomStatus)
-					assert.Nil(t, metadata.FailureDetails)
-				}
-			}
+			require.NoError(t, err)
+
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+
+			assert.Equal(t, id, metadata.InstanceID)
+			assert.True(t, metadata.IsComplete())
+			assert.GreaterOrEqual(t, metadata.CreatedAt, preStartTime)
+			assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
+			assert.Empty(t, metadata.SerializedInput)
+			assert.Empty(t, metadata.SerializedOutput)
+			assert.Empty(t, metadata.SerializedCustomStatus)
+			assert.Nil(t, metadata.FailureDetails)
 		})
 	}
 }
@@ -300,13 +147,12 @@ func TestSingleTimerWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "SingleTimer")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.GreaterOrEqual(t, metadata.LastUpdatedAt, metadata.CreatedAt)
 		})
 	}
 }
@@ -338,14 +184,13 @@ func TestSingleActivityWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"))
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `"世界"`, metadata.SerializedInput)
-					assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
-				}
-			}
+			require.NoError(t, err)
+
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `"世界"`, metadata.SerializedInput)
+			assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
 		})
 	}
 }
@@ -470,13 +315,12 @@ func TestContinueAsNewWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `10`, metadata.SerializedOutput)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
 		})
 	}
 }
@@ -550,10 +394,9 @@ func TestRecreateRunningWorkflowFails(t *testing.T) {
 
 			// Attempting to start a second workflow with the same ID should fail
 			_, err = client.ScheduleNewOrchestration(ctx, "SleepyWorkflow", api.WithInstanceID(id))
-			if assert.Error(t, err) {
-				// We expect that the workflow instance ID is included in the error message
-				assert.Contains(t, err.Error(), id)
-			}
+			require.Error(t, err)
+			// We expect that the workflow instance ID is included in the error message
+			assert.Contains(t, err.Error(), id)
 		})
 	}
 }
@@ -589,17 +432,15 @@ func TestRetryWorkflowOnTimeout(t *testing.T) {
 			actualCallCount = 0
 
 			id, err := client.ScheduleNewOrchestration(ctx, "FlakyWorkflow")
-			if assert.NoError(t, err) {
-				// Add a 5 second timeout so that the test doesn't take forever if something isn't working
-				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				defer cancel()
+			require.NoError(t, err)
+			// Add a 5 second timeout so that the test doesn't take forever if something isn't working
+			timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
 
-				metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
-				}
-			}
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
 		})
 	}
 }
@@ -641,17 +482,15 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 			actualCallCount = 0
 
 			id, err := client.ScheduleNewOrchestration(ctx, "FlakyWorkflow")
-			if assert.NoError(t, err) {
-				// Add a 5 second timeout so that the test doesn't take forever if something isn't working
-				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				defer cancel()
+			require.NoError(t, err)
+			// Add a 5 second timeout so that the test doesn't take forever if something isn't working
+			timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
 
-				metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
-				}
-			}
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
 		})
 	}
 }
