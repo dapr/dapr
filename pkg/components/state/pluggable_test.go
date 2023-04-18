@@ -24,6 +24,11 @@ import (
 	"testing"
 
 	guuid "github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/state"
@@ -31,15 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
-
 	"github.com/dapr/kit/logger"
-
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type server struct {
@@ -634,10 +631,9 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		got, resp, err := stStore.BulkGet(context.Background(), requests)
+		resp, err := stStore.BulkGet(context.Background(), requests, state.BulkGetOpts{})
 
 		assert.NotNil(t, err)
-		assert.False(t, got)
 		assert.Nil(t, resp)
 		assert.Equal(t, int64(1), svc.bulkGetCalled.Load())
 	})
@@ -656,24 +652,21 @@ func TestComponentCalls(t *testing.T) {
 			Key: fakeKey,
 		}, {Key: otherFakeKey}}
 
-		const gotValue = false
 		svc := &server{
 			onBulkGetCalled: func(bsr *proto.BulkGetRequest) {
 				assert.Len(t, bsr.Items, len(requests))
 			},
 			bulkGetResponse: &proto.BulkGetResponse{
 				Items: respItems,
-				Got:   gotValue,
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
 		require.NoError(t, err)
 		defer cleanup()
 
-		got, resp, err := stStore.BulkGet(context.Background(), requests)
+		resp, err := stStore.BulkGet(context.Background(), requests, state.BulkGetOpts{})
 
 		require.NoError(t, err)
-		assert.Equal(t, got, gotValue)
 		assert.NotNil(t, resp)
 		assert.Len(t, resp, len(requests))
 		assert.Equal(t, int64(1), svc.bulkGetCalled.Load())
@@ -719,12 +712,8 @@ func TestComponentCalls(t *testing.T) {
 
 		err = stStore.Multi(context.Background(), &state.TransactionalStateRequest{
 			Operations: []state.TransactionalStateOperation{
-				{
-					Request: operations[0],
-				},
-				{
-					Request: operations[1],
-				},
+				operations[0],
+				operations[1],
 			},
 		})
 
@@ -928,20 +917,16 @@ func TestMappers(t *testing.T) {
 		}
 
 		t.Run("toTransact should return err when type is unrecognized", func(t *testing.T) {
-			req, err := toTransactOperation(state.TransactionalStateOperation{
-				Request: make(map[struct{}]struct{}),
-			})
+			req, err := toTransactOperation(failingTransactOperation{})
 			assert.Nil(t, req)
 			assert.ErrorIs(t, err, ErrTransactOperationNotSupported)
 		})
 
 		t.Run("toTransact should return set operation when type is SetOperation", func(t *testing.T) {
 			const fakeData = "fakeData"
-			req, err := toTransactOperation(state.TransactionalStateOperation{
-				Request: state.SetRequest{
-					Key:   fakeKey,
-					Value: fakeData,
-				},
+			req, err := toTransactOperation(state.SetRequest{
+				Key:   fakeKey,
+				Value: fakeData,
 			})
 			require.NoError(t, err)
 			assert.NotNil(t, req)
@@ -949,14 +934,26 @@ func TestMappers(t *testing.T) {
 		})
 
 		t.Run("toTransact should return delete operation when type is SetOperation", func(t *testing.T) {
-			req, err := toTransactOperation(state.TransactionalStateOperation{
-				Request: state.DeleteRequest{
-					Key: fakeKey,
-				},
+			req, err := toTransactOperation(state.DeleteRequest{
+				Key: fakeKey,
 			})
 			require.NoError(t, err)
 			assert.NotNil(t, req)
 			assert.IsType(t, &proto.TransactionalStateOperation_Delete{}, req.Request)
 		})
 	})
+}
+
+type failingTransactOperation struct{}
+
+func (failingTransactOperation) Operation() state.OperationType {
+	return "unknown"
+}
+
+func (failingTransactOperation) GetKey() string {
+	return "unknown"
+}
+
+func (failingTransactOperation) GetMetadata() map[string]string {
+	return nil
 }
