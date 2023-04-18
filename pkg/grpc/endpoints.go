@@ -115,15 +115,15 @@ func setAPIEndpointsMiddlewares(allowedRules config.APIAccessRules, deniedRules 
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			// Apply the allowlist only on methods that are part of the Dapr runtime, or it will interfere with gRPC proxying
 			if strings.HasPrefix(info.FullMethod, daprRuntimePrefix) {
-				if len(allowed) > 0 {
-					_, ok := allowed[info.FullMethod]
-					if !ok {
-						return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
-					}
-				}
 				if len(denied) > 0 {
 					_, ok := denied[info.FullMethod]
 					if ok {
+						return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+					}
+				}
+				if len(allowed) > 0 {
+					_, ok := allowed[info.FullMethod]
+					if !ok {
 						return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
 					}
 				}
@@ -134,15 +134,15 @@ func setAPIEndpointsMiddlewares(allowedRules config.APIAccessRules, deniedRules 
 		func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 			// Apply the allowlist only on methods that are part of the Dapr runtime, or it will interfere with gRPC proxying
 			if strings.HasPrefix(info.FullMethod, daprRuntimePrefix) {
-				if len(allowed) > 0 {
-					_, ok := allowed[info.FullMethod]
-					if !ok {
-						return invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
-					}
-				}
 				if len(denied) > 0 {
 					_, ok := denied[info.FullMethod]
 					if ok {
+						return invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+					}
+				}
+				if len(allowed) > 0 {
+					_, ok := allowed[info.FullMethod]
+					if !ok {
 						return invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
 					}
 				}

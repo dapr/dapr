@@ -158,7 +158,8 @@ func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) []API
 	res := make([]APIAccessRule, len(r))
 	n := 0
 	for _, v := range r {
-		if v.Protocol == protocol {
+		//nolint:gocritic
+		if strings.ToLower(string(v.Protocol)) == string(protocol) {
 			res[n] = v
 			n++
 		}
