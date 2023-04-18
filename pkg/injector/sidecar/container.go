@@ -35,7 +35,7 @@ import (
 // ContainerConfig contains the configuration for the sidecar container.
 type ContainerConfig struct {
 	AppID                        string
-	Annotations                  Annotations
+	Annotations                  annotations.Map
 	CertChain                    string
 	CertKey                      string
 	ControlPlaneAddress          string
@@ -412,7 +412,7 @@ func podContainsTolerations(ts []corev1.Toleration, podTolerations []corev1.Tole
 	return false
 }
 
-func getResourceRequirements(an Annotations) (*corev1.ResourceRequirements, error) {
+func getResourceRequirements(an annotations.Map) (*corev1.ResourceRequirements, error) {
 	r := corev1.ResourceRequirements{
 		Limits:   corev1.ResourceList{},
 		Requests: corev1.ResourceList{},

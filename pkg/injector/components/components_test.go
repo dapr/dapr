@@ -14,11 +14,12 @@ limitations under the License.
 package components
 
 import (
+	"fmt"
 	"testing"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/sidecar"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 
 	"github.com/stretchr/testify/assert"
 
@@ -27,6 +28,7 @@ import (
 )
 
 func TestComponentsPatch(t *testing.T) {
+	const appName, componentImage, componentName = "my-app", "my-image", "my-component"
 	socketSharedVolumeMount := sharedComponentsUnixSocketVolumeMount("/tmp/dapr-components-sockets")
 	appContainer := corev1.Container{
 		Name: "app",
@@ -36,7 +38,7 @@ func TestComponentsPatch(t *testing.T) {
 		appID          string
 		componentsList []componentsapi.Component
 		pod            *corev1.Pod
-		expPatch       []sidecar.PatchOperation
+		expPatch       []patcher.PatchOperation
 		expMount       *corev1.VolumeMount
 	}{
 		{
@@ -51,7 +53,7 @@ func TestComponentsPatch(t *testing.T) {
 					Containers: []corev1.Container{appContainer},
 				},
 			},
-			[]sidecar.PatchOperation{},
+			[]patcher.PatchOperation{},
 			nil,
 		},
 		{
@@ -70,10 +72,10 @@ func TestComponentsPatch(t *testing.T) {
 					}},
 				},
 			},
-			[]sidecar.PatchOperation{
+			[]patcher.PatchOperation{
 				{
 					Op:    "add",
-					Path:  sidecar.PatchPathVolumes,
+					Path:  patcher.PatchPathVolumes,
 					Value: []corev1.Volume{sharedComponentsSocketVolume()},
 				},
 				{
@@ -88,6 +90,147 @@ func TestComponentsPatch(t *testing.T) {
 					Op:    "add",
 					Path:  "/spec/containers/1/volumeMounts",
 					Value: []corev1.VolumeMount{socketSharedVolumeMount},
+				},
+			},
+			&socketSharedVolumeMount,
+		},
+		{
+			"patch should not create injectable containers operations when app is scopped but has no annotations",
+			appName,
+			[]componentsapi.Component{{
+				Scopes: []string{appName},
+			}},
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotations.KeyPluggableComponents: "component",
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{appContainer, {
+						Name: "component",
+					}},
+				},
+			},
+			[]patcher.PatchOperation{
+				{
+					Op:    "add",
+					Path:  patcher.PatchPathVolumes,
+					Value: []corev1.Volume{sharedComponentsSocketVolume()},
+				},
+				{
+					Op:   "add",
+					Path: "/spec/containers/1/env",
+					Value: []corev1.EnvVar{{
+						Name:  componentsUnixDomainSocketMountPathEnvVar,
+						Value: socketSharedVolumeMount.MountPath,
+					}},
+				},
+				{
+					Op:    "add",
+					Path:  "/spec/containers/1/volumeMounts",
+					Value: []corev1.VolumeMount{socketSharedVolumeMount},
+				},
+			},
+			&socketSharedVolumeMount,
+		},
+		{
+			"patch should create injectable containers operations when app is scopped but and has annotations",
+			appName,
+			[]componentsapi.Component{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: componentName,
+					Annotations: map[string]string{
+						annotations.KeyPluggableComponentContainer: fmt.Sprintf(`{
+							"image": "%s",
+							"env": [{"name": "A", "value": "B"}],
+							"volumeMounts": [{"mountPath": "/read-only", "name": "readonly", "readOnly": true}, {"mountPath": "/read-write", "name": "readwrite", "readOnly": false}]
+						}`, componentImage),
+					},
+				},
+				Scopes: []string{appName},
+			}},
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotations.KeyPluggableComponents: "component",
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{appContainer, {
+						Name: "component",
+					}},
+				},
+			},
+			[]patcher.PatchOperation{
+				{
+					Op:    "add",
+					Path:  patcher.PatchPathVolumes,
+					Value: []corev1.Volume{sharedComponentsSocketVolume()},
+				},
+				{
+					Op:   "add",
+					Path: "/spec/containers/1/env",
+					Value: []corev1.EnvVar{{
+						Name:  componentsUnixDomainSocketMountPathEnvVar,
+						Value: socketSharedVolumeMount.MountPath,
+					}},
+				},
+				{
+					Op:    "add",
+					Path:  "/spec/containers/1/volumeMounts",
+					Value: []corev1.VolumeMount{socketSharedVolumeMount},
+				},
+				{
+					Op:   "add",
+					Path: patcher.PatchPathVolumes + "/-",
+					Value: corev1.Volume{
+						Name: "readonly",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+				},
+				{
+					Op:   "add",
+					Path: patcher.PatchPathVolumes + "/-",
+					Value: corev1.Volume{
+						Name: "readwrite",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+				},
+				{
+					Op:   "add",
+					Path: "/spec/containers/-",
+					Value: corev1.Container{
+						Name:  componentName,
+						Image: componentImage,
+						Env: []corev1.EnvVar{
+							{
+								Name:  "A",
+								Value: "B",
+							},
+							{
+								Name:  componentsUnixDomainSocketMountPathEnvVar,
+								Value: socketSharedVolumeMount.MountPath,
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "readonly",
+								ReadOnly:  true,
+								MountPath: "/read-only",
+							},
+							{
+								Name:      "readwrite",
+								ReadOnly:  false,
+								MountPath: "/read-write",
+							},
+							socketSharedVolumeMount,
+						},
+					},
 				},
 			},
 			&socketSharedVolumeMount,
@@ -109,10 +252,10 @@ func TestComponentsPatch(t *testing.T) {
 					}},
 				},
 			},
-			[]sidecar.PatchOperation{
+			[]patcher.PatchOperation{
 				{
 					Op:    "add",
-					Path:  sidecar.PatchPathVolumes + "/-",
+					Path:  patcher.PatchPathVolumes + "/-",
 					Value: sharedComponentsSocketVolume(),
 				},
 				{
@@ -136,7 +279,7 @@ func TestComponentsPatch(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			_, componentContainers := SplitContainers(*test.pod)
-			patch, volumeMount := PatchOps(componentContainers, test.pod)
+			patch, volumeMount := PatchOps(componentContainers, Injectable(test.appID, test.componentsList), test.pod)
 			assert.Equal(t, patch, test.expPatch)
 			assert.Equal(t, volumeMount, test.expMount)
 		})
