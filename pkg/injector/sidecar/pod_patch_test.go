@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
@@ -31,7 +32,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		testName      string
 		mockContainer coreV1.Container
 		expOpsLen     int
-		expOps        []PatchOperation
+		expOps        []patcher.PatchOperation
 	}{
 		{
 			testName: "empty environment vars",
@@ -39,7 +40,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				Name: "MockContainer",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env",
@@ -68,7 +69,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 2,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
@@ -103,7 +104,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
@@ -130,7 +131,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
 		},
 	}
 
@@ -180,7 +181,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
-			newPodJSON := patchObject(t, tc.mockPod, []PatchOperation{AddDaprSideCarInjectedLabel(tc.mockPod.Labels)})
+			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarInjectedLabel(tc.mockPod.Labels)})
 			newPod := coreV1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
 			assert.Equal(t, tc.expLabels, newPod.Labels)
@@ -189,7 +190,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 }
 
 // patchObject executes a jsonpatch action against the object passed
-func patchObject(t *testing.T, origObj interface{}, patchOperations []PatchOperation) []byte {
+func patchObject(t *testing.T, origObj interface{}, patchOperations []patcher.PatchOperation) []byte {
 	marshal := func(o interface{}) []byte {
 		objBytes, err := json.Marshal(o)
 		assert.NoError(t, err)
@@ -211,7 +212,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		mockContainer coreV1.Container
 		socketMount   *coreV1.VolumeMount
 		expOpsLen     int
-		expOps        []PatchOperation
+		expOps        []patcher.PatchOperation
 	}{
 		{
 			testName: "empty var, empty volume",
@@ -220,7 +221,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			},
 			socketMount: nil,
 			expOpsLen:   0,
-			expOps:      []PatchOperation{},
+			expOps:      []patcher.PatchOperation{},
 		},
 		{
 			testName: "existing var, empty volume",
@@ -232,7 +233,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts",
@@ -256,7 +257,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
@@ -281,7 +282,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
@@ -305,7 +306,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
 		},
 		{
 			testName: "existing var, conflict volume mount path",
@@ -320,7 +321,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
 		},
 	}
 

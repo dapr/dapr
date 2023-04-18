@@ -65,4 +65,16 @@ func TestDaprComponentSpec(t *testing.T) {
 		assert.Equal(t, metadata[0].SecretKeyRef.Name, fromSecretName)
 		assert.Equal(t, metadata[0].SecretKeyRef.Key, fromSecretKey)
 	})
+
+	t.Run("should add component annotations when container image is specified", func(t *testing.T) {
+		const testContainer = `{ "image":"test-image" }`
+		daprComponent := DaprComponent{component: ComponentDescription{
+			ContainerAsJSON: testContainer,
+		}}
+
+		annotations := daprComponent.toComponentSpec().ObjectMeta.Annotations
+
+		assert.Len(t, annotations, 1)
+		assert.Equal(t, annotations["dapr.io/component-container"], testContainer)
+	})
 }

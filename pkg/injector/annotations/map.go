@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sidecar
+package annotations
 
 import (
 	"fmt"
@@ -20,10 +20,10 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-// Annotations contains the annotations for the container.
-type Annotations map[string]string
+// Map contains the annotations for the pod.
+type Map map[string]string
 
-func (a Annotations) GetBoolOrDefault(key string, defaultValue bool) bool {
+func (a Map) GetBoolOrDefault(key string, defaultValue bool) bool {
 	enabled, ok := a[key]
 	if !ok {
 		return defaultValue
@@ -31,23 +31,23 @@ func (a Annotations) GetBoolOrDefault(key string, defaultValue bool) bool {
 	return utils.IsTruthy(enabled)
 }
 
-func (a Annotations) GetStringOrDefault(key, defaultValue string) string {
+func (a Map) GetStringOrDefault(key, defaultValue string) string {
 	if val, ok := a[key]; ok && val != "" {
 		return val
 	}
 	return defaultValue
 }
 
-func (a Annotations) GetString(key string) string {
+func (a Map) GetString(key string) string {
 	return a[key]
 }
 
-func (a Annotations) Exist(key string) bool {
+func (a Map) Exist(key string) bool {
 	_, exist := a[key]
 	return exist
 }
 
-func (a Annotations) GetInt32OrDefault(key string, defaultValue int32) int32 {
+func (a Map) GetInt32OrDefault(key string, defaultValue int32) int32 {
 	s, ok := a[key]
 	if !ok {
 		return defaultValue
@@ -59,7 +59,7 @@ func (a Annotations) GetInt32OrDefault(key string, defaultValue int32) int32 {
 	return int32(value)
 }
 
-func (a Annotations) GetInt32(key string) (int32, error) {
+func (a Map) GetInt32(key string) (int32, error) {
 	s, ok := a[key]
 	if !ok {
 		return -1, nil
@@ -69,4 +69,8 @@ func (a Annotations) GetInt32(key string) (int32, error) {
 		return -1, fmt.Errorf("error parsing %s int value %s: %w", key, s, err)
 	}
 	return int32(value), nil
+}
+
+func New(an map[string]string) Map {
+	return Map(an)
 }
