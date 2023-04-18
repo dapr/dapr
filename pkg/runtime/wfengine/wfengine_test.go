@@ -521,9 +521,9 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 func TestInternalActorsSetupForWF(t *testing.T) {
 	ctx := context.Background()
 	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
-	internalActors, err := engine.InternalActors()
-	require.NoError(t, err)
-	assert.Equal(t, 2, len(internalActors))
+	assert.Equal(t, 2, len(engine.InternalActors()))
+	assert.Contains(t, engine.InternalActors(), workflowActorType)
+	assert.Contains(t, engine.InternalActors(), activityActorType)
 }
 
 // TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
@@ -536,6 +536,7 @@ func TestRecreateRunningWorkflowFails(t *testing.T) {
 
 	ctx := context.Background()
 	client, engine := startEngine(ctx, t, r)
+
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			// Start the first workflow, which will not complete
