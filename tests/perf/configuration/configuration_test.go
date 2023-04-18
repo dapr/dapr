@@ -37,8 +37,8 @@ var (
 
 const (
 	numHealthChecks                   = 60 // Number of times to check for endpoint health per app.
-	defaultConfigGetThresholdMs       = 500
-	defaultConfigSubscribeThresholdMs = 1000
+	defaultConfigGetThresholdMs       = 60
+	defaultConfigSubscribeThresholdMs = 350
 	testAppName                       = "testapp"
 )
 
