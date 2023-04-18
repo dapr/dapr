@@ -28,7 +28,6 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -47,7 +46,7 @@ type workflowActor struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
-	config           *WFConfig
+	config           *wfConfig
 }
 
 type durableTimer struct {
@@ -71,7 +70,7 @@ func (err recoverableError) Error() string {
 	return err.cause.Error()
 }
 
-func NewWorkflowActor(scheduler workflowScheduler, config *WFConfig) *workflowActor {
+func NewWorkflowActor(scheduler workflowScheduler, config *wfConfig) *workflowActor {
 	return &workflowActor{
 		scheduler:        scheduler,
 		defaultTimeout:   30 * time.Second,
@@ -359,12 +358,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			}
 			targetActorID := getActivityActorID(actorID, e.EventId)
 
-			if wf.config == nil || wf.config.ActivityActorType == "" {
-				return errors.New(messages.ErrActivityActorTypeNotConfigured)
-			}
 			req := invokev1.
 				NewInvokeMethodRequest("Execute").
-				WithActor(wf.config.ActivityActorType, targetActorID).
+				WithActor(wf.config.activityActorType, targetActorID).
 				WithRawDataBytes(activityRequestBytes).
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
@@ -391,12 +387,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				return err
 			}
 
-			if wf.config == nil || wf.config.WorkflowActorType == "" {
-				return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
-			}
 			req := invokev1.
 				NewInvokeMethodRequest(method).
-				WithActor(wf.config.WorkflowActorType, msg.TargetInstanceID).
+				WithActor(wf.config.workflowActorType, msg.TargetInstanceID).
 				WithRawDataBytes(eventData).
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
@@ -465,11 +458,8 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
-	if wf.config == nil || wf.config.WorkflowActorType == "" {
-		return reminderName, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
-	}
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: wf.config.WorkflowActorType,
+		ActorType: wf.config.workflowActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,
 		DueTime:   delay.String(),

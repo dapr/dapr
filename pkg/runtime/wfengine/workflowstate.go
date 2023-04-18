@@ -17,14 +17,12 @@ package wfengine
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/messages"
 )
 
 const (
@@ -45,7 +43,7 @@ type workflowState struct {
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
-	config              *WFConfig
+	config              *wfConfig
 }
 
 type workflowStateMetadata struct {
@@ -54,7 +52,7 @@ type workflowStateMetadata struct {
 	Generation    uint64
 }
 
-func NewWorkflowState(config *WFConfig) workflowState {
+func NewWorkflowState(config *wfConfig) workflowState {
 	return workflowState{
 		Generation: 1,
 		config:     config,
@@ -98,11 +96,8 @@ func (s *workflowState) ClearInbox() {
 }
 
 func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalRequest, error) {
-	if s.config == nil || s.config.WorkflowActorType == "" {
-		return nil, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
-	}
 	req := &actors.TransactionalRequest{
-		ActorType:  s.config.WorkflowActorType,
+		ActorType:  s.config.workflowActorType,
 		ActorID:    actorID,
 		Operations: make([]actors.TransactionalOperation, 0, 100),
 	}
@@ -157,15 +152,12 @@ func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, even
 	return nil
 }
 
-func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config *WFConfig) (workflowState, error) {
+func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config *wfConfig) (workflowState, error) {
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
-	if config == nil || config.WorkflowActorType == "" {
-		return workflowState{}, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
-	}
 	req := actors.GetStateRequest{
-		ActorType: config.WorkflowActorType,
+		ActorType: config.workflowActorType,
 		ActorID:   actorID,
 		Key:       metadataKey,
 	}

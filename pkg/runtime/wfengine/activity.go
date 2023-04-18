@@ -27,7 +27,6 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -40,7 +39,7 @@ type activityActor struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
-	config           *WFConfig
+	config           *wfConfig
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
@@ -55,7 +54,7 @@ type activityState struct {
 }
 
 // NewActivityActor creates an internal activity actor for executing workflow activity logic.
-func NewActivityActor(scheduler workflowScheduler, config *WFConfig) *activityActor {
+func NewActivityActor(scheduler workflowScheduler, config *wfConfig) *activityActor {
 	return &activityActor{
 		scheduler:        scheduler,
 		defaultTimeout:   1 * time.Hour,
@@ -198,12 +197,9 @@ loop:
 	if err != nil {
 		return err
 	}
-	if a.config == nil || a.config.WorkflowActorType == "" {
-		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
-	}
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(a.config.WorkflowActorType, workflowID).
+		WithActor(a.config.workflowActorType, workflowID).
 		WithRawDataBytes(resultData).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -243,11 +239,8 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	wfLogger.Debugf("%s: loading activity state", actorID)
 
-	if a.config == nil || a.config.ActivityActorType == "" {
-		return activityState{}, errors.New(messages.ErrActivityActorTypeNotConfigured)
-	}
 	req := actors.GetStateRequest{
-		ActorType: a.config.ActivityActorType,
+		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Key:       getActivityInvocationKey(generation),
 	}
@@ -269,11 +262,8 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 }
 
 func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state activityState) error {
-	if a.config == nil || a.config.ActivityActorType == "" {
-		return errors.New(messages.ErrActivityActorTypeNotConfigured)
-	}
 	req := actors.TransactionalRequest{
-		ActorType: a.config.ActivityActorType,
+		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Operations: []actors.TransactionalOperation{{
 			Operation: actors.Upsert,
@@ -304,11 +294,8 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
-	if a.config == nil || a.config.ActivityActorType == "" {
-		return errors.New(messages.ErrActivityActorTypeNotConfigured)
-	}
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: a.config.ActivityActorType,
+		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,
 		DueTime:   "0s",

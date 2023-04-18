@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -43,7 +42,7 @@ type WorkflowEngine struct {
 	actorRuntime   actors.Actors
 	startMutex     sync.Mutex
 	disconnectChan chan any
-	config         *WFConfig
+	config         *wfConfig
 }
 
 var (
@@ -51,35 +50,35 @@ var (
 	errExecutionAborted = errors.New("execution aborted")
 )
 
-// WFConfig is the configuration for the workflow engine
-type WFConfig struct {
+// wfConfig is the configuration for the workflow engine
+type wfConfig struct {
 	AppID             string
-	WorkflowActorType string
-	ActivityActorType string
+	workflowActorType string
+	activityActorType string
+}
+
+// NewWorkflowConfig creates a new workflow engine configuration
+func NewWorkflowConfig(appID string) *wfConfig {
+	return &wfConfig{
+		AppID:             appID,
+		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + utils.DotDelimiter + appID + utils.DotDelimiter + utils.WorkflowNameLabelKey,
+		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + utils.DotDelimiter + appID + utils.DotDelimiter + utils.ActivityNameLabelKey,
+	}
 }
 
 func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine(config *WFConfig) *WorkflowEngine {
-	actorTypePerAppPrefix := strings.Builder{}
-	actorTypePerAppPrefix.WriteString(actors.InternalActorTypePrefix)
-	actorTypePerAppPrefix.WriteString(utils.GetNamespaceOrDefault())
-	actorTypePerAppPrefix.WriteString(utils.DotDelimiter)
-	actorTypePerAppPrefix.WriteString(config.AppID)
-	actorTypePerAppPrefix.WriteString(utils.DotDelimiter)
-	actorTypePerAppPrefixStr := actorTypePerAppPrefix.String()
-
-	config.WorkflowActorType = actorTypePerAppPrefixStr + utils.WorkflowNameLabelKey
-	config.ActivityActorType = actorTypePerAppPrefixStr + utils.ActivityNameLabelKey
+func NewWorkflowEngine(config *wfConfig) *WorkflowEngine {
 	// In order to lazily start the engine (i.e. when it is invoked
 	// by the application when it registers workflows / activities or by
 	// an API call to interact with the engine) we need to inject the engine
 	// into the backend because the backend is what is registered with the gRPC
 	// service and needs to have a reference in order to start it.
-	engine := &WorkflowEngine{}
-	engine.config = config
+	engine := &WorkflowEngine{
+		config: config,
+	}
 	be := NewActorBackend(engine)
 	engine.backend = be
 	engine.activityActor = NewActivityActor(be, config)
@@ -91,12 +90,8 @@ func NewWorkflowEngine(config *WFConfig) *WorkflowEngine {
 // InternalActors returns a map of internal actors that are used to implement workflows
 func (wfe *WorkflowEngine) InternalActors() (map[string]actors.InternalActor, error) {
 	internalActors := make(map[string]actors.InternalActor)
-	if wfe.config != nil {
-		internalActors[wfe.config.WorkflowActorType] = wfe.workflowActor
-		internalActors[wfe.config.ActivityActorType] = wfe.activityActor
-	} else {
-		return nil, errors.New("workflow engine not initiated with required configured")
-	}
+	internalActors[wfe.config.workflowActorType] = wfe.workflowActor
+	internalActors[wfe.config.activityActorType] = wfe.activityActor
 	return internalActors, nil
 }
 

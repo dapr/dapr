@@ -24,7 +24,6 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -35,11 +34,11 @@ type workflowScheduler interface {
 }
 
 type actorBackend struct {
-	config                    *WFConfig
 	actors                    actors.Actors
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 	startedOnce               sync.Once
+	config                    *wfConfig
 }
 
 func NewActorBackend(engine *WorkflowEngine) *actorBackend {
@@ -98,14 +97,11 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		return err
 	}
 
-	if be.config == nil || be.config.WorkflowActorType == "" {
-		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
-	}
 	// Invoke the well-known workflow actor directly, which will be created by this invocation
 	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
 	req := invokev1.
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
-		WithActor(be.config.WorkflowActorType, workflowInstanceID).
+		WithActor(be.config.workflowActorType, workflowInstanceID).
 		WithRawDataBytes(eventData).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -120,13 +116,10 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 
 // GetOrchestrationMetadata implements backend.Backend
 func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
-	if be.config == nil || be.config.WorkflowActorType == "" {
-		return nil, errors.New(messages.ErrWorkflowActorTypeNotConfigured)
-	}
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
 	req := invokev1.
 		NewInvokeMethodRequest(GetWorkflowMetadataMethod).
-		WithActor(be.config.WorkflowActorType, string(id)).
+		WithActor(be.config.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
@@ -181,13 +174,10 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 		return err
 	}
 
-	if be.config == nil || be.config.WorkflowActorType == "" {
-		return errors.New(messages.ErrWorkflowActorTypeNotConfigured)
-	}
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(be.config.WorkflowActorType, string(id)).
+		WithActor(be.config.workflowActorType, string(id)).
 		WithRawDataBytes(data).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
