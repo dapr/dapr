@@ -647,10 +647,17 @@ func TestMain(m *testing.M) {
 	}
 
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+		redisPubsubPluggableComponent := apiv1.Container{
+			Name:  "redis-pubsub-pluggable",
+			Image: runner.BuildTestImageName(redisPubSubPluggableApp),
+		}
+		container, _ := json.Marshal(redisPubsubPluggableComponent)
+
 		components = append(components, kube.ComponentDescription{
-			Name:      PubSubPluggableName,
-			Namespace: &kube.DaprTestNamespace,
-			TypeName:  "pubsub.redis-pluggable",
+			Name:            PubSubPluggableName,
+			Namespace:       &kube.DaprTestNamespace,
+			TypeName:        "pubsub.redis-pluggable",
+			ContainerAsJSON: string(container),
 			MetaData: map[string]kube.MetadataValue{
 				"redisHost": {
 					FromSecretRef: &kube.SecretRef{
@@ -666,37 +673,32 @@ func TestMain(m *testing.M) {
 			},
 			Scopes: []string{publisherPluggableAppName, subscriberPluggableAppName},
 		})
-		redisPubsubPluggableComponent := []apiv1.Container{
-			{
-				Name:  "redis-pubsub-pluggable",
-				Image: runner.BuildTestImageName(redisPubSubPluggableApp),
-			},
-		}
+
 		pluggableTestApps := []kube.AppDescription{
 			{
-				AppName:             publisherPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           "e2e-pubsub-publisher",
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				AppMemoryLimit:      "200Mi",
-				AppMemoryRequest:    "100Mi",
-				PluggableComponents: redisPubsubPluggableComponent,
+				AppName:                   publisherPluggableAppName,
+				DaprEnabled:               true,
+				ImageName:                 "e2e-pubsub-publisher",
+				Replicas:                  1,
+				IngressEnabled:            true,
+				MetricsEnabled:            true,
+				AppMemoryLimit:            "200Mi",
+				AppMemoryRequest:          "100Mi",
+				InjectPluggableComponents: true,
 				AppEnv: map[string]string{
 					PubSubEnvVar: PubSubPluggableName,
 				},
 			},
 			{
-				AppName:             subscriberPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           "e2e-pubsub-subscriber",
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				AppMemoryLimit:      "200Mi",
-				AppMemoryRequest:    "100Mi",
-				PluggableComponents: redisPubsubPluggableComponent,
+				AppName:                   subscriberPluggableAppName,
+				DaprEnabled:               true,
+				ImageName:                 "e2e-pubsub-subscriber",
+				Replicas:                  1,
+				IngressEnabled:            true,
+				MetricsEnabled:            true,
+				AppMemoryLimit:            "200Mi",
+				AppMemoryRequest:          "100Mi",
+				InjectPluggableComponents: true,
 				AppEnv: map[string]string{
 					PubSubEnvVar: PubSubPluggableName,
 				},
