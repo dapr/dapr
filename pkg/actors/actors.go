@@ -1554,7 +1554,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 	if resp == nil {
 		resp = &state.GetResponse{}
 	}
-	log.Debugf("read reminders from %s without partition: %s", key, string(resp.Data))
+	log.Debugf("read reminders from %s without partition", key)
 
 	var reminders []reminders.Reminder
 	if len(resp.Data) > 0 {
