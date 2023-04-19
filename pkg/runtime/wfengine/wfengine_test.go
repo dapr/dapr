@@ -604,7 +604,7 @@ func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backe
 		return task.NewTaskExecutor(r)
 	})
 	if err := engine.Start(ctx); err != nil {
-		panic(err)
+		require.NoError(t, err)
 	}
 	return client, engine
 }
