@@ -480,14 +480,32 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}",
+			Version: apiVersionV1,
+			Handler: a.onGetConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "configuration/{storeName}/subscribe",
 			Version: apiVersionV1alpha1,
 			Handler: a.onSubscribeConfiguration,
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}/subscribe",
+			Version: apiVersionV1,
+			Handler: a.onSubscribeConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
 			Version: apiVersionV1alpha1,
+			Handler: a.onUnsubscribeConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
+			Version: apiVersionV1,
 			Handler: a.onUnsubscribeConfiguration,
 		},
 	}
