@@ -27,10 +27,9 @@ type resiliencyMetrics struct {
 	policiesLoadCount *stats.Int64Measure
 	executionCount    *stats.Int64Measure
 
-	appID                 string
-	ctx                   context.Context
-	enabled               bool
-	defaultMetricsEnabled bool
+	appID   string
+	ctx     context.Context
+	enabled bool
 }
 
 func newResiliencyMetrics() *resiliencyMetrics {
@@ -51,10 +50,9 @@ func newResiliencyMetrics() *resiliencyMetrics {
 }
 
 // Init registers the resiliency metrics views.
-func (m *resiliencyMetrics) Init(id string, defaultMetricsEnabled bool) error {
+func (m *resiliencyMetrics) Init(id string) error {
 	m.enabled = true
 	m.appID = id
-	m.defaultMetricsEnabled = defaultMetricsEnabled
 	return view.Register(
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
@@ -87,20 +85,6 @@ func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace s
 // PolicyExecuted records metric when policy is executed.
 func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string) {
 	m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, "")
-}
-
-// DefaultPolicyExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) DefaultPolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string) {
-	if m.defaultMetricsEnabled {
-		m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, "")
-	}
-}
-
-// DefaultPolicyWithStatusExecuted records metric when policy is executed.
-func (m *resiliencyMetrics) DefaultPolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
-	if m.defaultMetricsEnabled {
-		m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, status)
-	}
 }
 
 func ResiliencyActorTarget(actorType string) string {

@@ -158,8 +158,6 @@ type ZipkinSpec struct {
 type MetricSpec struct {
 	Enabled bool `json:"enabled"`
 	// +optional
-	EnableDefaultResiliencyMetrics bool `json:"enableDefaultResiliencyMetrics"`
-	// +optional
 	Rules []MetricsRule `json:"rules"`
 }
 

@@ -181,9 +181,8 @@ type OtelSpec struct {
 
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
-	Enabled                        bool          `json:"enabled" yaml:"enabled"`
-	EnableDefaultResiliencyMetrics bool          `json:"enableDefaultResiliencyMetrics" yaml:"enableDefaultResiliencyMetrics"`
-	Rules                          []MetricsRule `json:"rules" yaml:"rules"`
+	Enabled bool          `json:"enabled" yaml:"enabled"`
+	Rules   []MetricsRule `json:"rules" yaml:"rules"`
 }
 
 // MetricsRule defines configuration options for a metric.

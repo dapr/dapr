@@ -36,7 +36,6 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 		wantNumberOfRows int
 		wantErr          bool
 		appID            string
-		enableDefault    bool
 	}{
 		{
 			name:  "EndpointPolicy",
@@ -135,9 +134,8 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			wantNumberOfRows: 3,
 		},
 		{
-			name:          "ComponentInboundDefaultPolicy",
-			enableDefault: true,
-			appID:         testAppID,
+			name:  "ComponentInboundDefaultPolicy",
+			appID: testAppID,
 			unitFn: func() {
 				r := createDefaultTestResiliency(testResiliencyName, testResiliencyNamespace)
 				_ = r.ComponentInboundPolicy(testStateStoreName, resiliency.Statestore)
@@ -156,9 +154,8 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			},
 		},
 		{
-			name:          "ComponentOutboundDefaultPolicy",
-			enableDefault: true,
-			appID:         testAppID,
+			name:  "ComponentOutboundDefaultPolicy",
+			appID: testAppID,
 			unitFn: func() {
 				r := createDefaultTestResiliency(testResiliencyName, testResiliencyNamespace)
 				_ = r.ComponentOutboundPolicy(testStateStoreName, resiliency.Statestore)
@@ -182,7 +179,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			t.Cleanup(func() {
 				view.Unregister(view.Find(resiliencyCountViewName))
 			})
-			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil, test.enableDefault)
+			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil)
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -271,7 +268,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			t.Cleanup(func() {
 				view.Unregister(view.Find(resiliencyCountViewName))
 			})
-			_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false)
+			_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil)
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -324,7 +321,7 @@ func TestResiliencyLoadedMonitoring(t *testing.T) {
 		t.Cleanup(func() {
 			view.Unregister(view.Find(resiliencyCountViewName))
 		})
-		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false)
+		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil)
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)

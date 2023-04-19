@@ -577,11 +577,11 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 			r.log.Debugf("Found Default Policy for Endpoint %s: %+v", app, defaultNames)
 			if defaultNames.Retry != "" {
 				policyDef.r = r.retries[defaultNames.Retry]
-				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection, diag.ResiliencyAppTarget(app))
+				diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection, diag.ResiliencyAppTarget(app))
 			}
 			if defaultNames.Timeout != "" {
 				policyDef.t = r.timeouts[defaultNames.Timeout]
-				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.ResiliencyAppTarget(app))
+				diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.ResiliencyAppTarget(app))
 			}
 
 			if defaultNames.CircuitBreaker != "" {
@@ -592,7 +592,7 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 						r.log.Errorf("error getting default circuit breaker cache for app %s: %s", app, err)
 					}
 					policyDef.cb = r.getCBFromCache(serviceCBCache, endpoint, template)
-					diag.DefaultResiliencyMonitoring.DefaultPolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
+					diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
 						diag.ResiliencyAppTarget(app), string(policyDef.cb.State()))
 				}
 			}
@@ -724,7 +724,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultNames)
 			if defaultNames.Retry != "" {
 				policyDef.r = r.retries[defaultNames.Retry]
-				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection,
+				diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection,
 					diag.ResiliencyActorTarget(actorType))
 			}
 
@@ -736,7 +736,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 						r.log.Errorf("error getting default circuit breaker cache for actor type %s: %v", actorType, err)
 					}
 					policyDef.cb = r.getCBFromCache(actorCBCache, actorType, template)
-					diag.DefaultResiliencyMonitoring.DefaultPolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
+					diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
 						diag.ResiliencyActorTarget(actorType), string(policyDef.cb.State()))
 				}
 			}
@@ -764,7 +764,7 @@ func (r *Resiliency) ActorPostLockPolicy(actorType string, id string) *PolicyDef
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
-				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.ResiliencyActorTarget(actorType))
+				diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection, diag.ResiliencyActorTarget(actorType))
 			}
 		}
 	}
@@ -802,18 +802,18 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
-				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection,
+				diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.OutboundPolicyFlowDirection,
 					diag.ResiliencyComponentTarget(name, string(componentType)))
 			}
 			if defaultPolicies.Retry != "" {
 				policyDef.r = r.retries[defaultPolicies.Retry]
-				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection,
+				diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.OutboundPolicyFlowDirection,
 					diag.ResiliencyComponentTarget(name, string(componentType)))
 			}
 			if defaultPolicies.CircuitBreaker != "" {
 				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
 				policyDef.cb = r.componentCBs.Get(r.log, name, template)
-				diag.DefaultResiliencyMonitoring.DefaultPolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
+				diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.OutboundPolicyFlowDirection,
 					diag.ResiliencyComponentTarget(name, string(componentType)), string(policyDef.cb.State()))
 			}
 		}
@@ -852,18 +852,18 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
-				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.InboundPolicyFlowDirection,
+				diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, diag.InboundPolicyFlowDirection,
 					diag.ResiliencyComponentTarget(name, string(componentType)))
 			}
 			if defaultPolicies.Retry != "" {
 				policyDef.r = r.retries[defaultPolicies.Retry]
-				diag.DefaultResiliencyMonitoring.DefaultPolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.InboundPolicyFlowDirection,
+				diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, diag.InboundPolicyFlowDirection,
 					diag.ResiliencyComponentTarget(name, string(componentType)))
 			}
 			if defaultPolicies.CircuitBreaker != "" {
 				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
 				policyDef.cb = r.componentCBs.Get(r.log, name, template)
-				diag.DefaultResiliencyMonitoring.DefaultPolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.InboundPolicyFlowDirection,
+				diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, diag.InboundPolicyFlowDirection,
 					diag.ResiliencyComponentTarget(name, string(componentType)), string(policyDef.cb.State()))
 			}
 		}
