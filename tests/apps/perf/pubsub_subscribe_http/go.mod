@@ -1,4 +1,5 @@
 module github.com/dapr/dapr/tests/apps/perf/pubsub_subscribe_http
+
 go 1.20
 
 require (
