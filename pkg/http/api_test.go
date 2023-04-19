@@ -2195,7 +2195,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Direct Message - Forwards downstream status", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
 		mockActors := new(actors.MockActors)
-		fakeData := []byte("fakeData")
 
 		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
 		defer response.Close()
