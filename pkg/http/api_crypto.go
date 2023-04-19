@@ -28,11 +28,11 @@ import (
 )
 
 const (
-	cryptoQSArgKeyName               = "keyName"
-	cryptoQSArgKeyWrapAlgorithm      = "keyWrapAlgorithm"
-	cryptoQSArgOmitDecryptionKeyName = "omitDecryptionKeyName"
-	cryptoQSArgDecryptionKeyName     = "decryptionKeyName"
-	cryptoQSArgDataEncryptionCipher  = "dataEncryptionCipher"
+	cryptoHeaderKeyName               = "dapr-key-name"
+	cryptoHeaderKeyWrapAlgorithm      = "dapr-key-wrap-algorithm"
+	cryptoHeaderOmitDecryptionKeyName = "dapr-omit-decryption-key-name"
+	cryptoHeaderDecryptionKeyName     = "dapr-decryption-key-name"
+	cryptoHeaderDataEncryptionCipher  = "dapr-data-encryption-cipher"
 )
 
 func (a *api) constructCryptoEndpoints() []Endpoint {
@@ -54,12 +54,12 @@ func (a *api) constructCryptoEndpoints() []Endpoint {
 }
 
 // Handler for crypto/<component-name>/encrypt
-// Query-string args:
-// - keyName (required)
-// - keyWrapAlgorithm (required)
-// - omitDecryptionKeyName
-// - decryptionKeyName
-// - dataEncryptionCipher
+// Supported headers:
+// - dapr-key-name (required)
+// - dapr-key-wrap-algorithm (required)
+// - dapr-omit-decryption-key-name
+// - dapr-decryption-key-name
+// - dapr-data-encryption-cipher
 func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 	// Get the component
 	componentName := reqCtx.UserValue(nameParam).(string)
@@ -70,35 +70,35 @@ func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Get the required properties from the query string
-	keyName := string(reqCtx.QueryArgs().Peek(cryptoQSArgKeyName))
+	// Get the required properties from the headers
+	keyName := string(reqCtx.Request.Header.Peek(cryptoHeaderKeyName))
 	if keyName == "" {
-		err = messages.ErrBadRequest.WithFormat("missing query string parameter '" + cryptoQSArgKeyName + "'")
+		err = messages.ErrBadRequest.WithFormat("missing header '" + cryptoHeaderKeyName + "'")
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
-	algorithm := string(reqCtx.QueryArgs().Peek(cryptoQSArgKeyWrapAlgorithm))
+	algorithm := string(reqCtx.Request.Header.Peek(cryptoHeaderKeyWrapAlgorithm))
 	if algorithm == "" {
-		err = messages.ErrBadRequest.WithFormat("missing query string parameter '" + cryptoQSArgKeyWrapAlgorithm + "'")
+		err = messages.ErrBadRequest.WithFormat("missing header '" + cryptoHeaderKeyWrapAlgorithm + "'")
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
 
-	// Ensure we have the required query string args
+	// Ensure we have the required headerss
 	encOpts := encv1.EncryptOptions{
 		KeyName:   keyName,
 		Algorithm: encv1.KeyAlgorithm(strings.ToUpper(algorithm)),
 		WrapKeyFn: a.universal.CryptoGetWrapKeyFn(reqCtx, componentName, component),
 
 		// The next values are optional and could be empty
-		OmitKeyName:       utils.IsTruthy(string(reqCtx.QueryArgs().Peek(cryptoQSArgOmitDecryptionKeyName))),
-		DecryptionKeyName: string(reqCtx.QueryArgs().Peek(cryptoQSArgDecryptionKeyName)),
+		OmitKeyName:       utils.IsTruthy(string(reqCtx.Request.Header.Peek(cryptoHeaderOmitDecryptionKeyName))),
+		DecryptionKeyName: string(reqCtx.Request.Header.Peek(cryptoHeaderDecryptionKeyName)),
 	}
 
 	// Set the cipher if present
-	cipher := string(reqCtx.QueryArgs().Peek(cryptoQSArgDataEncryptionCipher))
+	cipher := string(reqCtx.Request.Header.Peek(cryptoHeaderDataEncryptionCipher))
 	if cipher != "" {
 		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(cipher)))
 	}
@@ -131,8 +131,8 @@ func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 }
 
 // Handler for crypto/<component-name>/decrypt
-// Query-string args:
-// - keyName
+// Headers:
+// - dapr-key-name
 func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 	// Get the component
 	componentName := reqCtx.UserValue(nameParam).(string)
@@ -143,12 +143,12 @@ func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Ensure we have the required query string args
+	// Build the options
 	decOpts := encv1.DecryptOptions{
 		UnwrapKeyFn: a.universal.CryptoGetUnwrapKeyFn(reqCtx, componentName, component),
 
 		// The next values are optional and could be empty
-		KeyName: string(reqCtx.QueryArgs().Peek(cryptoQSArgKeyName)),
+		KeyName: string(reqCtx.Request.Header.Peek(cryptoHeaderKeyName)),
 	}
 
 	// Get the body of the request

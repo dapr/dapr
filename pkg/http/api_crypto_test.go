@@ -50,11 +50,11 @@ func TestCryptoEndpoints(t *testing.T) {
 	var encMessage []byte
 	t.Run("Encrypt successfully - 200", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, cryptoComponentName)
-		qs := map[string]string{
-			cryptoQSArgKeyName:          "aes-passthrough",
-			cryptoQSArgKeyWrapAlgorithm: "AES",
+		headers := []string{
+			cryptoHeaderKeyName, "aes-passthrough",
+			cryptoHeaderKeyWrapAlgorithm, "AES",
 		}
-		resp := fakeServer.DoRequest(http.MethodPut, apiPath, []byte(testMessage), qs)
+		resp := fakeServer.DoRequest(http.MethodPut, apiPath, []byte(testMessage), nil, headers...)
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "application/octet-stream", resp.ContentType)
@@ -81,8 +81,8 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		resps := map[string]fakeHTTPResponse{
 			"encrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, cryptoComponentName), []byte(testMessage), map[string]string{
-				cryptoQSArgKeyName:          "aes-passthrough",
-				cryptoQSArgKeyWrapAlgorithm: "AES",
+				cryptoHeaderKeyName:          "aes-passthrough",
+				cryptoHeaderKeyWrapAlgorithm: "AES",
 			}),
 			"decrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/decrypt", apiVersionV1alpha1, cryptoComponentName), encMessage, nil),
 		}
@@ -99,8 +99,8 @@ func TestCryptoEndpoints(t *testing.T) {
 	t.Run("Missing component name - 400", func(t *testing.T) {
 		resps := map[string]fakeHTTPResponse{
 			"encrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, ""), []byte(testMessage), map[string]string{
-				cryptoQSArgKeyName:          "aes-passthrough",
-				cryptoQSArgKeyWrapAlgorithm: "AES",
+				cryptoHeaderKeyName:          "aes-passthrough",
+				cryptoHeaderKeyWrapAlgorithm: "AES",
 			}),
 			"decrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/decrypt", apiVersionV1alpha1, ""), encMessage, nil),
 		}
@@ -118,8 +118,8 @@ func TestCryptoEndpoints(t *testing.T) {
 	t.Run("Component not found - 400", func(t *testing.T) {
 		resps := map[string]fakeHTTPResponse{
 			"encrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, "not-found"), []byte(testMessage), map[string]string{
-				cryptoQSArgKeyName:          "aes-passthrough",
-				cryptoQSArgKeyWrapAlgorithm: "AES",
+				cryptoHeaderKeyName:          "aes-passthrough",
+				cryptoHeaderKeyWrapAlgorithm: "AES",
 			}),
 			"decrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/decrypt", apiVersionV1alpha1, "not-found"), encMessage, nil),
 		}
@@ -136,40 +136,40 @@ func TestCryptoEndpoints(t *testing.T) {
 
 	t.Run("Encrypt - missing keyName - 400", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, cryptoComponentName)
-		qs := map[string]string{
-			// cryptoQSArgKeyName:   "aes-passthrough",
-			cryptoQSArgKeyWrapAlgorithm: "AES",
+		headers := []string{
+			// cryptoHeaderKeyName,   "aes-passthrough",
+			cryptoHeaderKeyWrapAlgorithm, "AES",
 		}
-		resp := fakeServer.DoRequest(http.MethodPut, apiPath, []byte(testMessage), qs)
+		resp := fakeServer.DoRequest(http.MethodPut, apiPath, []byte(testMessage), nil, headers...)
 
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_BAD_REQUEST", resp.ErrorBody["errorCode"])
-		assert.Contains(t, resp.ErrorBody["message"], "missing query string parameter 'keyName'")
+		assert.Contains(t, resp.ErrorBody["message"], "missing header 'dapr-key-name'")
 	})
 
 	t.Run("Encrypt - missing algorithm - 400", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, cryptoComponentName)
-		qs := map[string]string{
-			cryptoQSArgKeyName: "aes-passthrough",
-			// cryptoQSArgKeyWrapAlgorithm: "AES",
+		headers := []string{
+			cryptoHeaderKeyName, "aes-passthrough",
+			// cryptoHeaderKeyWrapAlgorithm, "AES",
 		}
-		resp := fakeServer.DoRequest(http.MethodPut, apiPath, []byte(testMessage), qs)
+		resp := fakeServer.DoRequest(http.MethodPut, apiPath, []byte(testMessage), nil, headers...)
 
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_BAD_REQUEST", resp.ErrorBody["errorCode"])
-		assert.Contains(t, resp.ErrorBody["message"], "missing query string parameter 'keyWrapAlgorithm'")
+		assert.Contains(t, resp.ErrorBody["message"], "missing header 'dapr-key-wrap-algorithm'")
 	})
 
 	t.Run("Encryption fails - 500", func(t *testing.T) {
 		// Simulates an error in key wrapping
 		apiPath := fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, cryptoComponentName)
-		qs := map[string]string{
-			cryptoQSArgKeyName:          "error",
-			cryptoQSArgKeyWrapAlgorithm: "AES",
+		headers := []string{
+			cryptoHeaderKeyName, "error",
+			cryptoHeaderKeyWrapAlgorithm, "AES",
 		}
-		resp := fakeServer.DoRequest(http.MethodPut, apiPath, []byte(testMessage), qs)
+		resp := fakeServer.DoRequest(http.MethodPut, apiPath, []byte(testMessage), nil, headers...)
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
