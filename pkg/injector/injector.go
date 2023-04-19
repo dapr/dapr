@@ -35,6 +35,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -258,7 +259,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var patchOps []sidecar.PatchOperation
+	var patchOps []patcher.PatchOperation
 	patchedSuccessfully := false
 
 	ar := v1.AdmissionReview{}
