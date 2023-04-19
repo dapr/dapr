@@ -478,6 +478,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
 
+	a.flushOutstandingHTTPEndpoints()
+
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
 
@@ -2632,8 +2634,13 @@ func (a *DaprRuntime) processHTTPEndpoints() {
 	}
 }
 
-// TODO(@Sam): flushHTTPEndpoints()
-
+func (a *DaprRuntime) flushOutstandingHTTPEndpoints() {
+	log.Info("Waiting for all outstanding http endpoints to be processed")
+	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
+	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
+	a.pendingHTTPEndpoints <- httpEndpointV1alpha1.HTTPEndpoint{}
+	log.Info("All outstanding http endpoints processed")
+}
 func (a *DaprRuntime) flushOutstandingComponents() {
 	log.Info("Waiting for all outstanding components to be processed")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
