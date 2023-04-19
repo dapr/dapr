@@ -108,14 +108,14 @@ var configurationTests = []struct {
 		name:    "testGet",
 		handler: testGet,
 	},
-	// {
-	// 	name:    "testSubscribe",
-	// 	handler: testSubscribe,
-	// },
-	// {
-	// 	name:    "testUnsubscribe",
-	// 	handler: testUnsubscribe,
-	// },
+	{
+		name:    "testSubscribe",
+		handler: testSubscribe,
+	},
+	{
+		name:    "testUnsubscribe",
+		handler: testUnsubscribe,
+	},
 }
 
 // Generates key-value pairs
@@ -263,11 +263,11 @@ var apps []struct {
 
 var protocols []string = []string{
 	"http",
-	// "grpc",
+	"grpc",
 }
 
 var endpointTypes []string = []string{
-	// "stable",
+	"stable",
 	"alpha1",
 }
 
