@@ -682,7 +682,7 @@ func TestQueryStateStore(t *testing.T) {
 				url := fmt.Sprintf("%s/test/%s/query/%s?contentType=application/json&queryIndexName=orgIndx", externalURL, protocol, storename)
 				resp, status, err := utils.HTTPPostWithStatus(url, body)
 				require.NoError(t, err)
-				require.Equal(t, 200, status)
+				require.Equal(t, 200, status, "got response: "+string(resp))
 
 				var states requestResponse
 				err = json.Unmarshal(resp, &states)
