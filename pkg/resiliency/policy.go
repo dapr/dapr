@@ -107,6 +107,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 	}
 
 	var zero T
+	timeoutMetricsActivated := atomic.Bool{}
 	return func(oper Operation[T]) (T, error) {
 		operation := oper
 		if def.t > 0 {
@@ -134,7 +135,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 					return v.res, v.err
 				case <-ctx.Done():
 					timedOut.Store(true)
-					if def.onTimeout != nil {
+					if def.onTimeout != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 						def.onTimeout()
 					}
 					return zero, ctx.Err()

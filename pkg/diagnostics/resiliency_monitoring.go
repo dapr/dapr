@@ -26,6 +26,7 @@ type PolicyFlowDirection string
 type resiliencyMetrics struct {
 	policiesLoadCount *stats.Int64Measure
 	executionCount    *stats.Int64Measure
+	activationsCount  *stats.Int64Measure
 
 	appID   string
 	ctx     context.Context
@@ -40,7 +41,11 @@ func newResiliencyMetrics() *resiliencyMetrics {
 			stats.UnitDimensionless),
 		executionCount: stats.Int64(
 			"resiliency/count",
-			"Number of times a resiliency policyKey has been executed.",
+			"Number of times a resiliency policyKey has been applied to a building block.",
+			stats.UnitDimensionless),
+		activationsCount: stats.Int64(
+			"resiliency/activations_total",
+			"Number of times a resiliency policyKey has been activated in a building block after a failure or after a state change.",
 			stats.UnitDimensionless),
 
 		// TODO: how to use correct context
@@ -56,6 +61,7 @@ func (m *resiliencyMetrics) Init(id string) error {
 	return view.Register(
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(m.activationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
 	)
 }
 
@@ -85,6 +91,23 @@ func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace s
 // PolicyExecuted records metric when policy is executed.
 func (m *resiliencyMetrics) PolicyExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string) {
 	m.PolicyWithStatusExecuted(resiliencyName, namespace, policy, flowDirection, target, "")
+}
+
+// PolicyActivated records metric when policy is activated after a failure
+func (m *resiliencyMetrics) PolicyActivated(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string) {
+	m.PolicyWithStatusActivated(resiliencyName, namespace, policy, flowDirection, target, "")
+}
+
+// PolicyWithStatusActivated records metric when policy is activated after a failure or in the case of circuit breaker after a state change. with added state/status (e.g., circuit breaker open).
+func (m *resiliencyMetrics) PolicyWithStatusActivated(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
+	if m.enabled {
+		_ = stats.RecordWithTags(
+			m.ctx,
+			diagUtils.WithTags(m.activationsCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
+				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
+			m.activationsCount.M(1),
+		)
+	}
 }
 
 func ResiliencyActorTarget(actorType string) string {
