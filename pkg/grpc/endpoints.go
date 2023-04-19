@@ -73,6 +73,11 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/SubscribeConfigurationAlpha1",
 		daprRuntimePrefix + "v1.Dapr/UnsubscribeConfigurationAlpha1",
 	},
+	"configuration.v1": {
+		daprRuntimePrefix + "v1.Dapr/GetConfiguration",
+		daprRuntimePrefix + "v1.Dapr/SubscribeConfiguration",
+		daprRuntimePrefix + "v1.Dapr/UnsubscribeConfiguration",
+	},
 	"lock.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/TryLockAlpha1",
 	},
