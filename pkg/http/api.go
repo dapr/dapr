@@ -102,6 +102,10 @@ type registeredComponent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
+type registeredHTTPEndpoint struct {
+	Name string `json:"name"`
+}
+
 type pubsubSubscription struct {
 	PubsubName      string                    `json:"pubsubname"`
 	Topic           string                    `json:"topic"`
@@ -116,11 +120,12 @@ type pubsubSubscriptionRule struct {
 }
 
 type metadata struct {
-	ID                   string                     `json:"id"`
-	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
-	Extended             map[string]string          `json:"extended"`
-	RegisteredComponents []registeredComponent      `json:"components"`
-	Subscriptions        []pubsubSubscription       `json:"subscriptions"`
+	ID                      string                     `json:"id"`
+	ActiveActorsCount       []actors.ActiveActorsCount `json:"actors"`
+	Extended                map[string]string          `json:"extended"`
+	RegisteredComponents    []registeredComponent      `json:"components"`
+	RegisteredHTTPEndpoints []registeredHTTPEndpoint   `json:"http_endpoints"`
+	Subscriptions           []pubsubSubscription       `json:"subscriptions"`
 }
 
 const (
@@ -1923,15 +1928,22 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		})
 	}
 
-	// TODO(@Sam): fix and fill in here for dapr runtime metadata api to include http endpoints
+	endpoints := a.universal.CompStore.ListHTTPEndpoints()
+	registeredHTTPEndpoints := make([]registeredHTTPEndpoint, 0, len(endpoints))
+	for _, e := range endpoints {
+		registeredE := registeredHTTPEndpoint{
+			Name: e.Name,
+		}
+		registeredHTTPEndpoints = append(registeredHTTPEndpoints, registeredE)
+	}
 
 	mtd := metadata{
-		ID:                   a.id,
-		ActiveActorsCount:    activeActorsCount,
-		Extended:             temp,
-		RegisteredComponents: registeredComponents,
-		Subscriptions:        ps,
-		// TODO(@Sam): update here to include http endpoints
+		ID:                      a.id,
+		ActiveActorsCount:       activeActorsCount,
+		Extended:                temp,
+		RegisteredComponents:    registeredComponents,
+		Subscriptions:           ps,
+		RegisteredHTTPEndpoints: registeredHTTPEndpoints,
 	}
 
 	mtdBytes, err := json.Marshal(mtd)
