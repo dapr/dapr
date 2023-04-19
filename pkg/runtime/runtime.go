@@ -444,6 +444,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.initPluggableComponents()
 
 	go a.processComponents()
+	go a.processHTTPEndpoints()
 
 	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
 		log.Debug("starting to watch component updates")
@@ -1233,7 +1234,7 @@ func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEn
 		return false
 	}
 
-	a.compStore.AddHTTPEndpoint(endpoint)
+	a.pendingHTTPEndpoints <- endpoint
 
 	log.Infof("http endpoint updated for http endpoint named: %s", endpoint.Name)
 
@@ -2640,6 +2641,18 @@ func (a *DaprRuntime) processComponents() {
 	}
 }
 
+func (a *DaprRuntime) processHTTPEndpoints() {
+	for endpoint := range a.pendingHTTPEndpoints {
+		if endpoint.Name == "" {
+			continue
+		}
+		newEndpoint, _ := a.processHTTPEndpointSecrets(endpoint)
+		a.compStore.AddHTTPEndpoint(newEndpoint)
+	}
+}
+
+// TODO(@Sam): flushHTTPEndpoints()
+
 func (a *DaprRuntime) flushOutstandingComponents() {
 	log.Info("Waiting for all outstanding components to be processed")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
@@ -2751,11 +2764,10 @@ func (a *DaprRuntime) loadHTTPEndpoints(opts *runtimeOpts) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("here are my endpoints %v", endpoints)
 
 	for _, e := range endpoints {
 		log.Debug("Found http endpoint: %s", e.Name)
-		a.compStore.AddHTTPEndpoint(e)
+		a.pendingHTTPEndpoints <- e
 	}
 
 	return nil
@@ -2999,8 +3011,8 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.HTTPEndpoint) (httpEndpointV1alpha1.HTTPEndpoint, string) {
 	cache := map[string]secretstores.GetSecretResponse{}
 
-	for i, m := range endpoint.Spec.Metadata {
-		if m.SecretKeyRef.Name == "" {
+	for i, header := range endpoint.Spec.Headers {
+		if header.SecretKeyRef.Name == "" {
 			continue
 		}
 
@@ -3010,7 +3022,7 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.H
 		// Instead, base64 decode the secret values into their real self.
 		if a.operatorClient != nil && secretStoreName == secretstoresLoader.BuiltinKubernetesSecretStore {
 			var jsonVal string
-			err := json.Unmarshal(m.Value.Raw, &jsonVal)
+			err := json.Unmarshal(header.Value.Raw, &jsonVal)
 			if err != nil {
 				log.Errorf("Error decoding secret: %v", err)
 				continue
@@ -3022,13 +3034,13 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.H
 				continue
 			}
 
-			m.Value = httpEndpointV1alpha1.DynamicValue{
+			header.Value = httpEndpointV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: dec,
 				},
 			}
 
-			endpoint.Spec.Metadata[i] = m
+			endpoint.Spec.Headers[i] = header
 			continue
 		}
 
@@ -3038,11 +3050,11 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.H
 			return endpoint, secretStoreName
 		}
 
-		resp, ok := cache[m.SecretKeyRef.Name]
+		resp, ok := cache[header.SecretKeyRef.Name]
 		if !ok {
 			// TODO: cascade context.
 			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
-				Name: m.SecretKeyRef.Name,
+				Name: header.SecretKeyRef.Name,
 				Metadata: map[string]string{
 					"namespace": endpoint.ObjectMeta.Namespace,
 				},
@@ -3055,21 +3067,21 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.H
 		}
 
 		// Use the SecretKeyRef.Name key if SecretKeyRef.Key is not given
-		secretKeyName := m.SecretKeyRef.Key
+		secretKeyName := header.SecretKeyRef.Key
 		if secretKeyName == "" {
-			secretKeyName = m.SecretKeyRef.Name
+			secretKeyName = header.SecretKeyRef.Name
 		}
 
 		val, ok := resp.Data[secretKeyName]
 		if ok {
-			endpoint.Spec.Metadata[i].Value = httpEndpointV1alpha1.DynamicValue{
+			endpoint.Spec.Headers[i].Value = httpEndpointV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(val),
 				},
 			}
 		}
 
-		cache[m.SecretKeyRef.Name] = resp
+		cache[header.SecretKeyRef.Name] = resp
 	}
 	return endpoint, ""
 }
@@ -3188,7 +3200,7 @@ func (a *DaprRuntime) createHTTPEndpointsAppChannel() (err error) {
 		return err
 	}
 	config := a.getAppHTTPChannelForHTTPEndpointsConfig(pipeline)
-	ch, err = httpEndpointChannel.CreateNonLocalChannel(config, a.compStore.ListHTTPEndpoints())
+	ch, err = httpEndpointChannel.CreateNonLocalChannel(config)
 	if err != nil {
 		return err
 	}
@@ -3276,6 +3288,7 @@ func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) 
 func (a *DaprRuntime) getAppHTTPChannelForHTTPEndpointsConfig(pipeline httpMiddleware.Pipeline) httpEndpointChannel.ChannelConfigurationForHTTPEndpoints {
 	return httpEndpointChannel.ChannelConfigurationForHTTPEndpoints{
 		Client:               a.appHTTPClient,
+		CompStore:            a.compStore,
 		MaxConcurrency:       a.runtimeConfig.MaxConcurrency,
 		Pipeline:             pipeline,
 		TracingSpec:          a.globalConfig.Spec.TracingSpec,

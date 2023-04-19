@@ -1276,10 +1276,8 @@ func (ie invokeError) Error() string {
 
 func (a *api) isHTTPEndpoint(appID string) bool {
 	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
-		for _, allowedList := range endpoint.Spec.Allowed {
-			if allowedList.Name == appID {
-				return true
-			}
+		if endpoint.Name == appID {
+			return true
 		}
 	}
 	return false
@@ -1289,21 +1287,18 @@ func (a *api) isHTTPEndpoint(appID string) bool {
 // and returns the baseURL from the HTTPEndpointSpec.Allowed field.
 func (a *api) getBaseURL(targetAppID string) string {
 	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
-		for _, allowedList := range endpoint.Spec.Allowed {
-			if allowedList.Name == targetAppID {
-				return allowedList.BaseURL
-			}
+		if endpoint.Name == targetAppID {
+			return endpoint.Spec.BaseURL
 		}
+
 	}
 	return ""
 }
 
 func (a *api) getAppIdFromBaseURL(baseURL string) string {
 	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
-		for _, allowedList := range endpoint.Spec.Allowed {
-			if allowedList.BaseURL == baseURL {
-				return allowedList.Name
-			}
+		if endpoint.Spec.BaseURL == baseURL {
+			return endpoint.Name
 		}
 	}
 	return ""
@@ -1336,8 +1331,9 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.isHTTPEndpoint(targetID) {
 		baseUrl := a.getBaseURL(targetID)
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+baseUrl)
+		invokeMethodName := reqCtx.UserValue(methodParam).(string)
 
-		req = invokev1.NewInvokeMethodRequest("").
+		req = invokev1.NewInvokeMethodRequest(invokeMethodName).
 			WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
 			WithRawDataBytes(reqCtx.Request.Body()).
 			WithContentType(string(reqCtx.Request.Header.ContentType())).

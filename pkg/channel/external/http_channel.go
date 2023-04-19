@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
@@ -33,6 +32,7 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	streamutils "github.com/dapr/dapr/utils/streams"
@@ -51,7 +51,7 @@ const (
 type HTTPEndpointAppChannel struct {
 	client                *http.Client
 	ch                    chan struct{}
-	httpEndpoints         []httpEndpointV1alpha1.HTTPEndpoint
+	compStore             *compstore.ComponentStore
 	tracingSpec           config.TracingSpec
 	appHeaderToken        string
 	maxResponseBodySizeMB int
@@ -63,6 +63,7 @@ type HTTPEndpointAppChannel struct {
 // ChannelConfigurationForHTTPEndpoints is the configuration used to create an HTTP AppChannel for external service invocation.
 type ChannelConfigurationForHTTPEndpoints struct {
 	Client               *http.Client
+	CompStore            *compstore.ComponentStore
 	MaxConcurrency       int
 	Pipeline             httpMiddleware.Pipeline
 	TracingSpec          config.TracingSpec
@@ -70,11 +71,11 @@ type ChannelConfigurationForHTTPEndpoints struct {
 }
 
 // CreateNonLocalChannel creates an HTTP AppChannel for external service invocation.
-func CreateNonLocalChannel(config ChannelConfigurationForHTTPEndpoints, endpoints []httpEndpointV1alpha1.HTTPEndpoint) (channel.HTTPEndpointAppChannel, error) {
+func CreateNonLocalChannel(config ChannelConfigurationForHTTPEndpoints) (channel.HTTPEndpointAppChannel, error) {
 	c := &HTTPEndpointAppChannel{
 		pipeline:              config.Pipeline,
 		client:                config.Client,
-		httpEndpoints:         endpoints,
+		compStore:             config.CompStore,
 		tracingSpec:           config.TracingSpec,
 		appHeaderToken:        auth.GetAppToken(),
 		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
@@ -90,8 +91,6 @@ func CreateNonLocalChannel(config ChannelConfigurationForHTTPEndpoints, endpoint
 // InvokeMethod invokes user code via HTTP.
 // InvokeMethod for HTTPEndpointAppChannel will invoke the external application
 func (h *HTTPEndpointAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (rsp *invokev1.InvokeMethodResponse, err error) {
-	// TODO(@Sam): do I need to add in http endpoint status checks here?
-
 	// Check if HTTP Extension is given. Otherwise, it will return error.
 	httpExt := req.Message().GetHttpExtension()
 	if httpExt == nil {
@@ -189,11 +188,9 @@ func (h *HTTPEndpointAppChannel) invokeMethodV1(ctx context.Context, req *invoke
 }
 
 func (h *HTTPEndpointAppChannel) getBaseURL(appID string) string {
-	for _, endpoint := range h.httpEndpoints {
-		for _, allowed := range endpoint.Spec.Allowed {
-			if appID == allowed.Name {
-				return allowed.BaseURL
-			}
+	for _, endpoint := range h.compStore.ListHTTPEndpoints() {
+		if appID == endpoint.Name {
+			return endpoint.Spec.BaseURL
 		}
 	}
 	return ""
@@ -228,6 +225,16 @@ func (h *HTTPEndpointAppChannel) constructRequest(ctx context.Context, req *invo
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Add)
 	channelReq.Header.Set("content-type", req.ContentType())
+
+	// Configure headers from http endpoint CRD
+	// TODO(@Sam): use get here instead
+	for _, endpoint := range h.compStore.ListHTTPEndpoints() {
+		if endpoint.Name == appID {
+			for _, header := range endpoint.Spec.Headers {
+				channelReq.Header.Set(header.Name, header.Value.String())
+			}
+		}
+	}
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
@@ -268,7 +275,7 @@ func (h *HTTPEndpointAppChannel) parseChannelResponse(req *invokev1.InvokeMethod
 
 // HealthProbe performs a health probe.
 func (h *HTTPEndpointAppChannel) HealthProbe(ctx context.Context) (bool, error) {
-	// TODO(@Sam): do I need this for http endpoint checks?
+	// TODO(@Sam): delete this
 
 	return true, nil
 }
@@ -287,7 +294,7 @@ func (h *HTTPEndpointAppChannel) SetAppHealthCheckPath(path string) {
 }
 
 // SetAppHealth sets the apphealth.AppHealth object.
-// TODO(@Sam): can i delete this?
+// TODO(@Sam): delete this?
 func (h *HTTPEndpointAppChannel) SetAppHealth(ah *apphealth.AppHealth) {
 	h.appHealth = ah
 }

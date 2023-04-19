@@ -141,12 +141,13 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 		return nil, err
 	}
 
-	if app.id == d.appID && app.namespace == d.namespace {
-		return d.invokeLocal(ctx, req)
-	}
-
+	// invoke external calls first if appID matches an httpEndpoint.Name
 	if d.isHTTPEndpoint(app.id) {
 		return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeHTTPEndpoint, req)
+	}
+
+	if app.id == d.appID && app.namespace == d.namespace {
+		return d.invokeLocal(ctx, req)
 	}
 
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
@@ -182,10 +183,8 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 // and returns the baseURL from the HTTPEndpointSpec.Allowed field.
 func (d *directMessaging) checkHTTPEndpoints(targetAppID string) string {
 	for _, endpoint := range d.httpEndpoints {
-		for _, allowedList := range endpoint.Spec.Allowed {
-			if allowedList.Name == targetAppID {
-				return allowedList.BaseURL
-			}
+		if endpoint.Name == targetAppID {
+			return endpoint.Spec.BaseURL
 		}
 	}
 	return ""
@@ -254,10 +253,8 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 
 func (d *directMessaging) isHTTPEndpoint(appID string) bool {
 	for _, endpoint := range d.httpEndpoints {
-		for _, allowedList := range endpoint.Spec.Allowed {
-			if allowedList.Name == appID {
-				return true
-			}
+		if endpoint.Name == appID {
+			return true
 		}
 	}
 	return false

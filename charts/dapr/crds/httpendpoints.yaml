@@ -44,29 +44,11 @@ spec:
           spec:
             description: HTTPEndpointSpec describes an access specification for allowing external service invocations.
             properties:
-              allowed:
+              baseUrl:
+                type: string
+              headers:
                 items:
-                  description: APISpec describes the configuration for Dapr API communication with external services.
-                  properties:
-                    baseUrl:
-                      type: string
-                    headers:
-                      additionalProperties:
-                        type: string
-                      type: object
-                    name:
-                      type: string
-                    protocol:
-                      type: string
-                  required:
-                  - baseUrl
-                  - name
-                  - protocol
-                  type: object
-                type: array
-              metadata:
-                items:
-                  description: MetadataItem is a name/value pair for a metadata.
+                  description: Header is the name/value pair for a header specification.
                   properties:
                     name:
                       type: string
@@ -82,15 +64,13 @@ spec:
                       - name
                       type: object
                     value:
-                      description: DynamicValue is a dynamic value struct for the component.metadata pair value.
-                      type: object
                       x-kubernetes-preserve-unknown-fields: true
                   required:
                   - name
                   type: object
                 type: array
             required:
-            - metadata
+            - baseUrl
             type: object
         type: object
     served: true

@@ -62,12 +62,11 @@ func (k *KubernetesHTTPEndpoints) LoadHTTPEndpoints() ([]httpEndpointsV1alpha1.H
 		return nil, err
 	}
 
-	if resp.GetHttpEndpoints() == nil {
+	ends := resp.GetHttpEndpoints()
+	if ends == nil {
 		log.Debug("No http endpoints found")
 		return nil, nil
 	}
-
-	ends := resp.GetHttpEndpoints()
 
 	endpoints := []httpEndpointsV1alpha1.HTTPEndpoint{}
 	for _, e := range ends {

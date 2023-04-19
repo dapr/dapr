@@ -59,28 +59,20 @@ func (e HTTPEndpoint) IsAppScoped(appID string) bool {
 	return false
 }
 
-// HTTPEndpointSpec describes an access specification for allowing external service invocations.
-type HTTPEndpointSpec struct {
-	Allowed  []APISpec      `json:"allowed,omitempty"`
-	Metadata []MetadataItem `json:"metadata"`
-}
-
-// APISpec describes the configuration for Dapr API communication with external services.
-type APISpec struct {
-	BaseURL string `json:"baseUrl" validate:"required"`
-	//+optional
-	Headers  map[string]string `json:"headers"`
-	Name     string            `json:"name" validate:"required"`
-	Protocol string            `json:"protocol"  validate:"required"`
-}
-
-// MetadataItem is a name/value pair for a metadata.
-type MetadataItem struct {
+// Header is the name/value pair for a header specification.
+type Header struct {
 	Name string `json:"name"`
 	//+optional
-	Value DynamicValue `json:"value,omitempty"`
+	Value DynamicValue `json:"value"`
 	//+optional
 	SecretKeyRef SecretKeyRef `json:"secretKeyRef,omitempty"`
+}
+
+// HTTPEndpointSpec describes an access specification for allowing external service invocations.
+type HTTPEndpointSpec struct {
+	BaseURL string `json:"baseUrl" validate:"required"`
+	//+optional
+	Headers []Header `json:"headers"`
 }
 
 // SecretKeyRef is a reference to a secret holding the value for the metadata item. Name is the secret name, and key is the field in the secret.
@@ -104,7 +96,7 @@ type HTTPEndpointList struct {
 	Items []HTTPEndpoint `json:"items"`
 }
 
-// DynamicValue is a dynamic value struct for the component.metadata pair value.
+// DynamicValue is a dynamic value struct for the header.value.
 type DynamicValue struct {
 	v1.JSON `json:",inline"`
 }
@@ -117,5 +109,6 @@ func (d *DynamicValue) String() string {
 	if err == nil {
 		s = c
 	}
+
 	return s
 }

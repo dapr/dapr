@@ -234,6 +234,44 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 	return nil
 }
 
+func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint, namespace string, kubeClient client.Client) error {
+	for i, header := range endpoint.Spec.Headers {
+		if header.SecretKeyRef.Name != "" && (endpoint.Auth.SecretStore == kubernetesSecretStore || endpoint.Auth.SecretStore == "") {
+			var secret corev1.Secret
+
+			err := kubeClient.Get(ctx, types.NamespacedName{
+				Name:      header.SecretKeyRef.Name,
+				Namespace: namespace,
+			}, &secret)
+			if err != nil {
+				return err
+			}
+
+			key := header.SecretKeyRef.Key
+			if key == "" {
+				key = header.SecretKeyRef.Name
+			}
+
+			val, ok := secret.Data[key]
+			enc := b64.StdEncoding.EncodeToString(val)
+			jsonEnc, err := json.Marshal(enc)
+			if err != nil {
+				return err
+			}
+
+			if ok {
+				endpoint.Spec.Headers[i].Value = httpendpointsapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: jsonEnc,
+					},
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions.
 func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	return a.ListSubscriptionsV2(ctx, &operatorv1pb.ListSubscriptionsRequest{})
@@ -442,8 +480,11 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 			return
 		}
 
-		// TODO(@Sam): process endpoint secrets
-
+		err := processHTTPEndpointSecrets(ctx, e, in.Namespace, a.Client)
+		if err != nil {
+			log.Warnf("error processing http endpoint %s secrets from pod %s/%s: %s", e.Name, in.Namespace, in.PodName, err)
+			return
+		}
 		b, err := json.Marshal(&e)
 		if err != nil {
 			log.Warnf("error serializing  http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
