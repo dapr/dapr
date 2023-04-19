@@ -233,12 +233,10 @@ func (h *HTTPEndpointAppChannel) constructRequest(ctx context.Context, req *invo
 	channelReq.Header.Set("content-type", req.ContentType())
 
 	// Configure headers from http endpoint CRD
-	// TODO(@Sam): use get here instead
-	for _, endpoint := range h.compStore.ListHTTPEndpoints() {
-		if endpoint.Name == appID {
-			for _, header := range endpoint.Spec.Headers {
-				channelReq.Header.Set(header.Name, header.Value.String())
-			}
+	endpoint, ok := h.compStore.GetHTTPEndpoint(appID)
+	if ok {
+		for _, header := range endpoint.Spec.Headers {
+			channelReq.Header.Set(header.Name, header.Value.String())
 		}
 	}
 
@@ -279,13 +277,6 @@ func (h *HTTPEndpointAppChannel) parseChannelResponse(req *invokev1.InvokeMethod
 	return rsp, nil
 }
 
-// HealthProbe performs a health probe.
-func (h *HTTPEndpointAppChannel) HealthProbe(ctx context.Context) (bool, error) {
-	// TODO(@Sam): delete this
-
-	return true, nil
-}
-
 func copyHeader(dst http.Header, src http.Header) {
 	for k, vv := range src {
 		for _, v := range vv {
@@ -297,10 +288,4 @@ func copyHeader(dst http.Header, src http.Header) {
 // SetAppHealthCheckPath sets the path where to send requests for health probes.
 func (h *HTTPEndpointAppChannel) SetAppHealthCheckPath(path string) {
 	h.appHealthCheckPath = "/" + strings.TrimPrefix(path, "/")
-}
-
-// SetAppHealth sets the apphealth.AppHealth object.
-// TODO(@Sam): delete this?
-func (h *HTTPEndpointAppChannel) SetAppHealth(ah *apphealth.AppHealth) {
-	h.appHealth = ah
 }

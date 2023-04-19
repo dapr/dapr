@@ -569,25 +569,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.appHealthChanged(apphealth.AppStatusHealthy)
 	}
 
-	if a.runtimeConfig.AppHealthCheck != nil && a.httpEndpointsAppChannel != nil {
-		// We can't just pass "a.httpEndpointsAppChannel.HealthProbe" because httpEndpointsAppChannel may be re-created
-		a.appHealth = apphealth.New(*a.runtimeConfig.AppHealthCheck, func(ctx context.Context) (bool, error) {
-			return a.httpEndpointsAppChannel.HealthProbe(ctx)
-		})
-		a.appHealth.OnHealthChange(a.appHealthChanged)
-		a.appHealth.StartProbes(a.ctx)
-
-		// Set the appHealth object in the channel so it's aware of the app's health status
-		a.httpEndpointsAppChannel.SetAppHealth(a.appHealth)
-
-		// Enqueue a probe right away
-		// This will also start the input components once the app is healthy
-		a.appHealth.Enqueue()
-	} else {
-		// If there's no health check, mark the app as healthy right away so subscriptions can start
-		a.appHealthChanged(apphealth.AppStatusHealthy)
-	}
-
 	return nil
 }
 
