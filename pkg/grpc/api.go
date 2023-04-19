@@ -1413,6 +1413,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	return response, nil
 }
 
+// TODO: Remove this method when the alpha API is removed.
 func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
 	return a.GetConfiguration(ctx, in)
 }
@@ -1503,10 +1504,8 @@ func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfiguration
 	return nil
 }
 
+// TODO: Remove this method when the alpha API is removed.
 func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
-	// Currently, the alpha API has the same interface as the stable API, so we add `var _ ...` to guarantee this by the compiler.
-	// Once compile fails, `configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer)` should be changed then, and this line can be deleted.
-	var _ runtimev1pb.Dapr_SubscribeConfigurationServer = runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server(nil)
 	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
 }
 
@@ -1556,6 +1555,7 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 	}, nil
 }
 
+// TODO: Remove this method when the alpha API is removed.
 func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
 	return a.UnsubscribeConfiguration(ctx, request)
 }
