@@ -69,10 +69,16 @@ type DaprClient interface {
 	InvokeActor(ctx context.Context, in *InvokeActorRequest, opts ...grpc.CallOption) (*InvokeActorResponse, error)
 	// GetConfiguration gets configuration from configuration store.
 	GetConfigurationAlpha1(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
+	// GetConfiguration gets configuration from configuration store.
+	GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
 	SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error)
+	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
+	SubscribeConfiguration(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationClient, error)
 	// UnSubscribeConfiguration unsubscribe the subscription of configuration
 	UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error)
+	// UnSubscribeConfiguration unsubscribe the subscription of configuration
+	UnsubscribeConfiguration(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error)
 	// TryLockAlpha1 tries to get a lock with an expiry.
 	TryLockAlpha1(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error)
 	// UnlockAlpha1 unlocks a lock.
@@ -317,6 +323,15 @@ func (c *daprClient) GetConfigurationAlpha1(ctx context.Context, in *GetConfigur
 	return out, nil
 }
 
+func (c *daprClient) GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error) {
+	out := new(GetConfigurationResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetConfiguration", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error) {
 	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[0], "/dapr.proto.runtime.v1.Dapr/SubscribeConfigurationAlpha1", opts...)
 	if err != nil {
@@ -349,9 +364,50 @@ func (x *daprSubscribeConfigurationAlpha1Client) Recv() (*SubscribeConfiguration
 	return m, nil
 }
 
+func (c *daprClient) SubscribeConfiguration(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[1], "/dapr.proto.runtime.v1.Dapr/SubscribeConfiguration", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprSubscribeConfigurationClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Dapr_SubscribeConfigurationClient interface {
+	Recv() (*SubscribeConfigurationResponse, error)
+	grpc.ClientStream
+}
+
+type daprSubscribeConfigurationClient struct {
+	grpc.ClientStream
+}
+
+func (x *daprSubscribeConfigurationClient) Recv() (*SubscribeConfigurationResponse, error) {
+	m := new(SubscribeConfigurationResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *daprClient) UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error) {
 	out := new(UnsubscribeConfigurationResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfigurationAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) UnsubscribeConfiguration(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error) {
+	out := new(UnsubscribeConfigurationResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfiguration", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -569,10 +625,16 @@ type DaprServer interface {
 	InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error)
 	// GetConfiguration gets configuration from configuration store.
 	GetConfigurationAlpha1(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
+	// GetConfiguration gets configuration from configuration store.
+	GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
 	SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error
+	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
+	SubscribeConfiguration(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationServer) error
 	// UnSubscribeConfiguration unsubscribe the subscription of configuration
 	UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error)
+	// UnSubscribeConfiguration unsubscribe the subscription of configuration
+	UnsubscribeConfiguration(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error)
 	// TryLockAlpha1 tries to get a lock with an expiry.
 	TryLockAlpha1(context.Context, *TryLockRequest) (*TryLockResponse, error)
 	// UnlockAlpha1 unlocks a lock.
@@ -681,11 +743,20 @@ func (UnimplementedDaprServer) InvokeActor(context.Context, *InvokeActorRequest)
 func (UnimplementedDaprServer) GetConfigurationAlpha1(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfigurationAlpha1 not implemented")
 }
+func (UnimplementedDaprServer) GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetConfiguration not implemented")
+}
 func (UnimplementedDaprServer) SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeConfigurationAlpha1 not implemented")
 }
+func (UnimplementedDaprServer) SubscribeConfiguration(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeConfiguration not implemented")
+}
 func (UnimplementedDaprServer) UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeConfigurationAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) UnsubscribeConfiguration(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeConfiguration not implemented")
 }
 func (UnimplementedDaprServer) TryLockAlpha1(context.Context, *TryLockRequest) (*TryLockResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TryLockAlpha1 not implemented")
@@ -1149,6 +1220,24 @@ func _Dapr_GetConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_GetConfiguration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConfigurationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetConfiguration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetConfiguration",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetConfiguration(ctx, req.(*GetConfigurationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_SubscribeConfigurationAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SubscribeConfigurationRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1170,6 +1259,27 @@ func (x *daprSubscribeConfigurationAlpha1Server) Send(m *SubscribeConfigurationR
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Dapr_SubscribeConfiguration_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribeConfigurationRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaprServer).SubscribeConfiguration(m, &daprSubscribeConfigurationServer{stream})
+}
+
+type Dapr_SubscribeConfigurationServer interface {
+	Send(*SubscribeConfigurationResponse) error
+	grpc.ServerStream
+}
+
+type daprSubscribeConfigurationServer struct {
+	grpc.ServerStream
+}
+
+func (x *daprSubscribeConfigurationServer) Send(m *SubscribeConfigurationResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 func _Dapr_UnsubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UnsubscribeConfigurationRequest)
 	if err := dec(in); err != nil {
@@ -1184,6 +1294,24 @@ func _Dapr_UnsubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).UnsubscribeConfigurationAlpha1(ctx, req.(*UnsubscribeConfigurationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_UnsubscribeConfiguration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnsubscribeConfigurationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).UnsubscribeConfiguration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfiguration",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).UnsubscribeConfiguration(ctx, req.(*UnsubscribeConfigurationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1608,8 +1736,16 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_GetConfigurationAlpha1_Handler,
 		},
 		{
+			MethodName: "GetConfiguration",
+			Handler:    _Dapr_GetConfiguration_Handler,
+		},
+		{
 			MethodName: "UnsubscribeConfigurationAlpha1",
 			Handler:    _Dapr_UnsubscribeConfigurationAlpha1_Handler,
+		},
+		{
+			MethodName: "UnsubscribeConfiguration",
+			Handler:    _Dapr_UnsubscribeConfiguration_Handler,
 		},
 		{
 			MethodName: "TryLockAlpha1",
@@ -1688,6 +1824,11 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SubscribeConfigurationAlpha1",
 			Handler:       _Dapr_SubscribeConfigurationAlpha1_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SubscribeConfiguration",
+			Handler:       _Dapr_SubscribeConfiguration_Handler,
 			ServerStreams: true,
 		},
 	},
