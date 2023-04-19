@@ -129,14 +129,42 @@ type PipelineSpec struct {
 
 // APISpec describes the configuration for Dapr APIs.
 type APISpec struct {
-	Allowed []APIAccessRule `json:"allowed,omitempty"`
+	// List of allowed APIs. Can be used in conjunction with denied.
+	Allowed APIAccessRules `json:"allowed,omitempty"`
+	// List of denied APIs. Can be used in conjunction with allowed.
+	Denied APIAccessRules `json:"denied,omitempty"`
 }
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
 type APIAccessRule struct {
-	Name     string `json:"name"`
-	Version  string `json:"version"`
-	Protocol string `json:"protocol"`
+	Name     string                `json:"name"`
+	Version  string                `json:"version"`
+	Protocol APIAccessRuleProtocol `json:"protocol"`
+}
+
+// APIAccessRules is a list of API access rules (allowlist or denylist).
+type APIAccessRules []APIAccessRule
+
+// APIAccessRuleProtocol is the type for the protocol in APIAccessRules
+type APIAccessRuleProtocol string
+
+const (
+	APIAccessRuleProtocolHTTP APIAccessRuleProtocol = "http"
+	APIAccessRuleProtocolGRPC APIAccessRuleProtocol = "grpc"
+)
+
+// GetRulesByProtocol returns a list of APIAccessRule objects filtered by protocol
+func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) []APIAccessRule {
+	res := make([]APIAccessRule, len(r))
+	n := 0
+	for _, v := range r {
+		//nolint:gocritic
+		if strings.ToLower(string(v.Protocol)) == string(protocol) {
+			res[n] = v
+			n++
+		}
+	}
+	return res[:n]
 }
 
 type HandlerSpec struct {
