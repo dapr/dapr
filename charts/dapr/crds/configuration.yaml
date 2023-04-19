@@ -222,8 +222,6 @@ spec:
                   enabled: true
                 description: MetricSpec defines metrics configuration.
                 properties:
-                  enableDefaultResiliencyMetrics:
-                    type: boolean
                   enabled:
                     type: boolean
                   rules:
@@ -262,8 +260,6 @@ spec:
                   enabled: true
                 description: MetricSpec defines metrics configuration.
                 properties:
-                  enableDefaultResiliencyMetrics:
-                    type: boolean
                   enabled:
                     type: boolean
                   rules:
