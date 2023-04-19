@@ -46,6 +46,7 @@ type WorkflowEngine struct {
 }
 
 const (
+	defaultNamespace     = "default"
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
 )
@@ -66,8 +67,8 @@ type wfConfig struct {
 func NewWorkflowConfig(appID string) wfConfig {
 	return wfConfig{
 		AppID:             appID,
-		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
-		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
+		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
+		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
 	}
 }
 

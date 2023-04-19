@@ -27,8 +27,7 @@ import (
 )
 
 const (
-	defaultNamespace = "default"
-	DotDelimiter     = "."
+	DotDelimiter = "."
 )
 
 var (
@@ -205,7 +204,7 @@ func ComponentLogName(name, typ, version string) string {
 }
 
 // GetNamespaceOrDefault returns the namespace for Dapr, or the default namespace if it is not set.
-func GetNamespaceOrDefault() string {
+func GetNamespaceOrDefault(defaultNamespace string) string {
 	namespace := os.Getenv("NAMESPACE")
 	if namespace == "" {
 		namespace = defaultNamespace

@@ -273,13 +273,13 @@ func TestMapToSlice(t *testing.T) {
 
 func TestGetNamespaceOrDefault(t *testing.T) {
 	t.Run("namespace is empty", func(t *testing.T) {
-		ns := GetNamespaceOrDefault()
+		ns := GetNamespaceOrDefault("default")
 		assert.Equal(t, "default", ns)
 	})
 
 	t.Run("namespace is not empty", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "testNs")
-		ns := GetNamespaceOrDefault()
+		ns := GetNamespaceOrDefault("default")
 		assert.Equal(t, "testNs", ns)
 	})
 }
