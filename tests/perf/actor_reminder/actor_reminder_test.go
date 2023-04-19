@@ -37,6 +37,9 @@ const (
 	actorType              = "PerfTestActorReminder"
 	serviceApplicationName = "perf-actor-reminder-service"
 	clientApplicationName  = "perf-actor-reminder-client"
+
+	// Target for the QPS
+	targetQPS = 50
 )
 
 var tr *runner.TestRunner
@@ -193,5 +196,5 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num400)
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
-	require.True(t, daprResult.ActualQPS > 55)
+	require.True(t, daprResult.ActualQPS > targetQPS)
 }

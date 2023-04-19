@@ -358,10 +358,11 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 		queryURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(query), queryURL)
-	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query)) //nolint:bodyclose
+	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query))
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -374,7 +375,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 	var qres daprhttp.QueryResponse
 	err = json.Unmarshal(body, &qres)
 	if err != nil {
-		return nil, fmt.Errorf("could not unmarshal query response from Dapr: %s", err.Error())
+		return nil, fmt.Errorf("could not unmarshal query response from Dapr: %v. Raw response: '%s'", err, string(body))
 	}
 
 	log.Printf("Query returned %d results", len(qres.Results))
