@@ -1358,6 +1358,9 @@ func (a *actorsRuntime) getActorTypeMetadata(ctx context.Context, actorType stri
 	policyRunner := resiliency.NewRunner[*ActorMetadata](ctx, policyDef)
 	getReq := &state.GetRequest{
 		Key: constructCompositeKey("actors", actorType, "metadata"),
+		Metadata: map[string]string{
+			metadataPartitionKey: constructCompositeKey("actors", actorType),
+		},
 	}
 	return policyRunner(func(ctx context.Context) (*ActorMetadata, error) {
 		rResp, rErr := store.Get(ctx, getReq)
