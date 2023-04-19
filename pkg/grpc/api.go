@@ -1504,6 +1504,9 @@ func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfiguration
 }
 
 func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
+	// Currently, the alpha API has the same interface as the stable API, so we add `var _ ...` to guarantee this by the compiler.
+	// Once compile fails, `configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer)` should be changed then, and this line can be deleted.
+	var _ runtimev1pb.Dapr_SubscribeConfigurationServer = runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server(nil)
 	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
 }
 

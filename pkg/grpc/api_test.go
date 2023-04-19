@@ -2905,7 +2905,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
-func TestGetConfiguration2(t *testing.T) {
+func TestGetConfigurationAPI(t *testing.T) {
 	t.Run("get configuration item - alpha1", func(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddConfiguration("store1", &mockConfigStore{})
@@ -2966,7 +2966,7 @@ func TestGetConfiguration2(t *testing.T) {
 	})
 }
 
-func TestSubscribeConfiguration2(t *testing.T) {
+func TestSubscribeConfigurationAPI(t *testing.T) {
 	t.Run("get configuration item - alpha1", func(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddConfiguration("store1", &mockConfigStore{})
