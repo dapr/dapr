@@ -359,7 +359,7 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 }
 
 func (a *api) constructActorEndpoints() []Endpoint {
-	return []Endpoint{
+	endpoints := []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/state",
@@ -415,6 +415,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Handler: a.onRenameActorReminder,
 		},
 	}
+	for idx := range endpoints {
+		endpoints[idx].Handler = a.actorPrerequisiteWrapper(endpoints[idx].Handler)
+	}
+	return endpoints
 }
 
 func (a *api) constructMetadataEndpoints() []Endpoint {
@@ -1390,13 +1394,26 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 	return ""
 }
 
-func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		return
+// actorPrerequisiteWrapper warps the actor handler with the common actor prerequisite check.
+func (a *api) actorPrerequisiteWrapper(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		if a.appChannel == nil {
+			msg := NewErrorResponse("ERR_APP_CHANNEL_NIL", messages.ErrChannelNotFound)
+			respond(ctx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+		if a.actor == nil {
+			msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
+			respond(ctx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+		next(ctx)
 	}
+}
 
+func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
@@ -1425,12 +1442,6 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		return
-	}
-
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
@@ -1459,13 +1470,6 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
@@ -1494,13 +1498,6 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
@@ -1522,13 +1519,6 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	body := reqCtx.PostBody()
@@ -1571,13 +1561,6 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
@@ -1605,13 +1588,6 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
@@ -1632,13 +1608,6 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	verb := strings.ToUpper(string(reqCtx.Method()))
@@ -1708,13 +1677,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
