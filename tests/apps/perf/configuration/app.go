@@ -35,13 +35,12 @@ import (
 )
 
 const (
-	daprHost        = "localhost"
-	daprHTTPPort    = "3500"
-	daprGRPCPort    = 50001
-	configStoreName = "configstore"
-	separator       = "||"
-	redisHost       = "dapr-redis-master.dapr-tests.svc.cluster.local:6379"
-	writeTimeout    = 5 * time.Second
+	daprConfigurationURL = "http://localhost:3500/v1.0/configuration/"
+	daprGRPCPort         = 50001
+	configStoreName      = "configstore"
+	separator            = "||"
+	redisHost            = "dapr-redis-master.dapr-tests.svc.cluster.local:6379"
+	writeTimeout         = 5 * time.Second
 )
 
 var (
@@ -226,7 +225,7 @@ func (r *RedisUpdater) handleSubscribedChange(ctx context.Context, msg *redis.Me
 }
 
 func getDaprHTTP(keys []string) (string, error) {
-	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + buildQueryParams(keys)
+	url := daprConfigurationURL + configStoreName + buildQueryParams(keys)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("error getting key-values from config store. err: %w", err)
@@ -237,7 +236,7 @@ func getDaprHTTP(keys []string) (string, error) {
 }
 
 func getDaprGRPC(keys []string) (string, error) {
-	res, err := grpcClient.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
+	res, err := grpcClient.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
 		StoreName: configStoreName,
 		Keys:      keys,
 	})
@@ -303,7 +302,7 @@ func getKeyValues(w http.ResponseWriter, r *http.Request) {
 }
 
 func subscribeGRPC(keys []string) (string, error) {
-	client, err := grpcClient.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
+	client, err := grpcClient.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
 		StoreName: configStoreName,
 		Keys:      keys,
 	})
@@ -323,7 +322,7 @@ func subscribeGRPC(keys []string) (string, error) {
 	return subscriptionID, nil
 }
 
-func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationAlpha1Client) {
+func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationClient) {
 	for {
 		rsp, err := client.Recv()
 		if errors.Is(err, io.EOF) || rsp == nil {
@@ -339,7 +338,7 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationAlpha1Cl
 }
 
 func subscribeHTTP(keys []string) (string, error) {
-	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/subscribe" + buildQueryParams(keys)
+	url := daprConfigurationURL + configStoreName + "/subscribe" + buildQueryParams(keys)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("error subscribing config updates: %w", err)
@@ -403,7 +402,7 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func unsubscribeHTTP(subscriptionID string) (string, error) {
-	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/" + subscriptionID + "/unsubscribe"
+	url := daprConfigurationURL + configStoreName + "/" + subscriptionID + "/unsubscribe"
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
@@ -414,7 +413,7 @@ func unsubscribeHTTP(subscriptionID string) (string, error) {
 }
 
 func unsubscribeGRPC(subscriptionID string) (string, error) {
-	resp, err := grpcClient.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+	resp, err := grpcClient.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 		StoreName: configStoreName,
 		Id:        subscriptionID,
 	})
