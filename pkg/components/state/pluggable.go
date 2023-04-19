@@ -239,7 +239,7 @@ func (ss *grpcStateStore) BulkDelete(ctx context.Context, reqs []state.DeleteReq
 }
 
 // BulkGet performs a get operation for many keys at once.
-func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
 	protoRequests := make([]*proto.GetRequest, len(req))
 	for idx := range req {
 		protoRequests[idx] = toGetRequest(&req[idx])
@@ -247,11 +247,14 @@ func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (
 
 	bulkGetRequest := &proto.BulkGetRequest{
 		Items: protoRequests,
+		Options: &proto.BulkGetRequestOptions{
+			Parallelism: int64(opts.Parallelism),
+		},
 	}
 
 	bulkGetResponse, err := ss.Client.BulkGet(ctx, bulkGetRequest)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
 
 	items := make([]state.BulkGetResponse, len(bulkGetResponse.Items))
@@ -265,7 +268,7 @@ func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (
 			ContentType: strNilIfEmpty(resp.ContentType),
 		}
 	}
-	return bulkGetResponse.Got, items, nil
+	return items, nil
 }
 
 // BulkSet performs a set operation for many keys at once.
@@ -388,7 +391,7 @@ func fromQueryResponse(resp *proto.QueryResponse) *state.QueryResponse {
 }
 
 func toTransactOperation(req state.TransactionalStateOperation) (*proto.TransactionalStateOperation, error) {
-	switch request := req.Request.(type) {
+	switch request := req.(type) {
 	case state.SetRequest:
 		setReq, err := toSetRequest(&request)
 		if err != nil {
