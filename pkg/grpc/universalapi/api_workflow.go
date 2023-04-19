@@ -236,8 +236,8 @@ func (a *UniversalAPI) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 		return &runtimev1pb.WorkflowActivityResponse{}, err
 	}
 
-	workflowComponent := a.WorkflowComponents[in.WorkflowComponent]
-	if workflowComponent == nil {
+	workflowComponent, ok := a.CompStore.GetWorkflow(in.WorkflowComponent)
+	if !ok {
 		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(in.WorkflowComponent)
 		a.Logger.Debug(err)
 		return &runtimev1pb.WorkflowActivityResponse{}, err

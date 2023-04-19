@@ -22,26 +22,10 @@ import (
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/workflows"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
 	"github.com/dapr/kit/logger"
 )
-
-var ComponentDefinition = componentsV1alpha1.Component{
-	TypeMeta: metav1.TypeMeta{
-		Kind: "Component",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name: "dapr",
-	},
-	Spec: componentsV1alpha1.ComponentSpec{
-		Type:     "workflow.dapr",
-		Version:  "v1",
-		Metadata: []componentsV1alpha1.MetadataItem{},
-	},
-}
 
 // Status values are defined at: https://github.com/microsoft/durabletask-go/blob/119b361079c45e368f83b223888d56a436ac59b9/internal/protos/orchestrator_service.pb.go#L42-L64
 var statusMap = map[int32]string{
@@ -119,7 +103,7 @@ func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.Star
 
 func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.WorkflowReference) error {
 	if req.InstanceID == "" {
-		return fmt.Errorf("a workflow instance ID is required")
+		return errors.New("a workflow instance ID is required")
 	}
 
 	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
@@ -132,11 +116,11 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 
 func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
 	if req.InstanceID == "" {
-		return fmt.Errorf("a workflow instance ID is required")
+		return errors.New("a workflow instance ID is required")
 	}
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
-		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
+		return errors.New("failed to Purge workflow %s: %w", req.InstanceID, err)
 	}
 
 	return nil
@@ -161,7 +145,7 @@ func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows
 
 func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.WorkflowReference) (*workflows.StateResponse, error) {
 	if req.InstanceID == "" {
-		return nil, fmt.Errorf("a workflow instance ID is required")
+		return nil, errors.New("a workflow instance ID is required")
 	}
 
 	if metadata, err := c.client.FetchOrchestrationMetadata(ctx, api.InstanceID(req.InstanceID)); err != nil {

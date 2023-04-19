@@ -86,9 +86,7 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	}
 
 	if methodName == "PurgeWorkflowState" {
-		if err := a.purgeActivityState(ctx, actorID, state); err != nil {
-			return nil, err
-		}
+		return nil, a.purgeActivityState(ctx, actorID, state)
 	}
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
@@ -97,11 +95,8 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 		EventPayload: ar.HistoryEvent,
 	}
 
-	// This conditional block prevents the statestore from re-saving the purged item
-	if methodName != "PurgeWorkflowState" {
-		if err := a.saveActivityState(ctx, actorID, state); err != nil {
-			return nil, err
-		}
+	if err := a.saveActivityState(ctx, actorID, state); err != nil {
+		return nil, err
 	}
 
 	// The actual execution is triggered by a reminder
@@ -303,7 +298,7 @@ func (a *activityActor) purgeActivityState(ctx context.Context, actorID string, 
 		}},
 	}
 	if err := a.actorRuntime.TransactionalStateOperation(ctx, &req); err != nil {
-		return fmt.Errorf("failed to save activity state: %w", err)
+		return fmt.Errorf("failed to delete activity state with request key %w and error: %w", getActivityInvocationKey(state.Generation), err)
 	}
 
 	if !a.cachingDisabled {
