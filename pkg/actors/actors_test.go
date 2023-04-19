@@ -16,15 +16,12 @@ package actors
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -148,171 +145,6 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 	r.callLog = append(r.callLog, "Exiting "+req.Message().Method)
 
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
-}
-
-type fakeStateStoreItem struct {
-	data []byte
-	etag *string
-}
-
-func (i fakeStateStoreItem) String() string {
-	return "[etag=" + (*i.etag) + "] " + string(i.data)
-}
-
-type fakeStateStore struct {
-	items     map[string]*fakeStateStoreItem
-	lock      sync.RWMutex
-	noBulkGet bool
-}
-
-func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
-	return &fakeStateStoreItem{
-		data: data,
-		etag: ptr.Of(uuid.NewString()), // Panics if UUID generation fails - it's ok in a test
-	}
-}
-
-func (f *fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
-	return nil
-}
-
-func (f *fakeStateStore) Ping() error {
-	return nil
-}
-
-func (f *fakeStateStore) Features() []state.Feature {
-	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
-}
-
-func (f *fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-
-	currentItem := f.items[req.Key]
-	if req.ETag != nil {
-		if currentItem != nil {
-			if currentItem.etag == nil || *req.ETag != *currentItem.etag {
-				return errors.New("etag does not match")
-			}
-		} else {
-			return errors.New("etag does not match for key not found")
-		}
-	}
-
-	delete(f.items, req.Key)
-
-	return nil
-}
-
-func (f *fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
-	return nil
-}
-
-func (f *fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
-	f.lock.RLock()
-	defer f.lock.RUnlock()
-	item := f.items[req.Key]
-
-	if item == nil {
-		return &state.GetResponse{Data: nil, ETag: nil}, nil
-	}
-
-	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
-}
-
-func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	if f.noBulkGet {
-		return false, nil, nil
-	}
-
-	res := []state.BulkGetResponse{}
-	for _, oneRequest := range req {
-		oneResponse, err := f.Get(ctx, &state.GetRequest{
-			Key:      oneRequest.Key,
-			Metadata: oneRequest.Metadata,
-			Options:  oneRequest.Options,
-		})
-		if err != nil {
-			return false, nil, err
-		}
-
-		res = append(res, state.BulkGetResponse{
-			Key:  oneRequest.Key,
-			Data: oneResponse.Data,
-			ETag: oneResponse.ETag,
-		})
-	}
-
-	return true, res, nil
-}
-
-func (f *fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
-	b, _ := json.Marshal(&req.Value)
-	f.lock.Lock()
-	defer f.lock.Unlock()
-
-	currentItem := f.items[req.Key]
-	if req.ETag != nil {
-		if currentItem != nil {
-			if currentItem.etag == nil || *req.ETag != *currentItem.etag {
-				return errors.New("etag does not match")
-			}
-		} else {
-			return errors.New("etag does not match for key not found")
-		}
-	}
-
-	f.items[req.Key] = f.newItem(b)
-
-	return nil
-}
-
-func (f *fakeStateStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
-func (f *fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	return nil
-}
-
-func (f *fakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	// First we check all eTags
-	for _, o := range request.Operations {
-		var eTag *string
-		key := ""
-		if o.Operation == state.Upsert {
-			key = o.Request.(state.SetRequest).Key
-			eTag = o.Request.(state.SetRequest).ETag
-		} else if o.Operation == state.Delete {
-			key = o.Request.(state.DeleteRequest).Key
-			eTag = o.Request.(state.DeleteRequest).ETag
-		}
-		item := f.items[key]
-		if eTag != nil && item != nil {
-			if *eTag != *item.etag {
-				return fmt.Errorf("etag does not match for key %s", key)
-			}
-		}
-		if eTag != nil && item == nil {
-			return fmt.Errorf("etag does not match for key not found %s", key)
-		}
-	}
-
-	// Now we can perform the operation.
-	for _, o := range request.Operations {
-		if o.Operation == state.Upsert {
-			req := o.Request.(state.SetRequest)
-			b, _ := json.Marshal(req.Value)
-			f.items[req.Key] = f.newItem(b)
-		} else if o.Operation == state.Delete {
-			req := o.Request.(state.DeleteRequest)
-			delete(f.items, req.Key)
-		}
-	}
-
-	return nil
 }
 
 type runtimeBuilder struct {
@@ -488,9 +320,7 @@ func getTestActorTypeAndID() (string, string) {
 }
 
 func fakeStore() state.Store {
-	return &fakeStateStore{
-		items: map[string]*fakeStateStoreItem{},
-	}
+	return daprt.NewFakeStateStore()
 }
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorType, actorID string, clock kclock.WithTicker) {
@@ -904,18 +734,6 @@ func TestCreateReminder(t *testing.T) {
 	assert.Equal(t, TestActorMetadataPartitionCount, len(partitions))
 	assert.Equal(t, numReminders, len(reminderReferences))
 	assert.Equal(t, numReminders, len(reminders))
-
-	// For the rest of the test, we're disabling bulk get in the fake state store
-	store, ok := testActorsRuntime.compStore.GetStateStore("actorStore")
-	require.True(t, ok)
-	store.(*fakeStateStore).noBulkGet = true
-	testActorsRuntime.compStore.AddStateStore("actorStore", store)
-	defer func() {
-		store, ok := testActorsRuntime.compStore.GetStateStore("actorStore")
-		require.True(t, ok)
-		store.(*fakeStateStore).noBulkGet = false
-		testActorsRuntime.compStore.AddStateStore("actorStore", store)
-	}()
 
 	// Check for 2nd type.
 	secondReminderReferences, secondTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(context.Background(), secondActorType, true)
@@ -2263,7 +2081,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.Upsert, res.Operation)
+		require.Equal(t, state.OperationUpsert, res.Operation())
 
 		// Uses a pointer
 		op = TransactionalOperation{
@@ -2275,7 +2093,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err = op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.Upsert, res.Operation)
+		require.Equal(t, state.OperationUpsert, res.Operation())
 
 		// Missing key
 		op = TransactionalOperation{
@@ -2295,7 +2113,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.Delete, res.Operation)
+		require.Equal(t, state.OperationDelete, res.Operation())
 
 		// Uses a pointer
 		op = TransactionalOperation{
@@ -2306,7 +2124,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err = op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.Delete, res.Operation)
+		require.Equal(t, state.OperationDelete, res.Operation())
 
 		// Missing key
 		op = TransactionalOperation{
@@ -2347,7 +2165,7 @@ func TestTransactionalOperation(t *testing.T) {
 		resI, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
 
-		res, ok := resI.Request.(state.SetRequest)
+		res, ok := resI.(state.SetRequest)
 		require.True(t, ok)
 		assert.Equal(t, "base||"+TestKeyName, res.Key)
 	})

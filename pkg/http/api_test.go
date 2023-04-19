@@ -3707,7 +3707,7 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
-	var fakeStore state.Store = fakeStateStoreQuerier{}
+	var fakeStore state.Store = newFakeStateStoreQuerier()
 	failingStore := &daprt.FailingStatestore{
 		Failure: daprt.NewFailure(
 			map[string]int{
@@ -3734,17 +3734,20 @@ func TestV1StateEndpoints(t *testing.T) {
 			map[string]int{},
 		),
 	}
+	const storeName = "store1"
 	compStore := compstore.New()
-	compStore.AddStateStore("store1", fakeStore)
+	compStore.AddStateStore(storeName, fakeStore)
 	compStore.AddStateStore("failStore", failingStore)
-	testAPI := &api{resiliency: resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)}
-	testAPI.universal = &universalapi.UniversalAPI{
-		Logger:     logger.NewLogger("fakeLogger"),
-		CompStore:  compStore,
-		Resiliency: testAPI.resiliency,
+	rc := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
+	testAPI := &api{
+		resiliency: rc,
+		universal: &universalapi.UniversalAPI{
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: rc,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
-	storeName := "store1"
 
 	t.Run("Get state - 400 ERR_STATE_STORE_NOT_FOUND or NOT_CONFIGURED", func(t *testing.T) {
 		apisAndMethods := map[string][]string{
@@ -3853,11 +3856,10 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - State Error", func(t *testing.T) {
-		empty := ""
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "error-key",
-			ETag: &empty,
+			ETag: ptr.Of(""),
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -4104,8 +4106,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
-		// Adding this will make the bulk operation fail with a timeout, and Dapr should be able to recover nicely
+	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
+		// Adding this will make the bulk operation fail
 		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
 		t.Cleanup(func() {
 			failingStore.BulkFailKey = ""
@@ -4119,39 +4121,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
 
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkGetKey"))
-	})
-
-	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
-		request := BulkGetRequest{
-			Keys: []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey", "nilGetKey"},
-		}
-		body, _ := json.Marshal(request)
-
-		start := time.Now()
-		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
-		end := time.Now()
-
-		var bulkResponse []state.BulkGetResponse
-		json.Unmarshal(resp.RawBody, &bulkResponse)
-
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Len(t, bulkResponse, 3)
-		assert.Equal(t, "timeoutBulkGetKey", bulkResponse[0].Key)
-		assert.NotEmpty(t, bulkResponse[0].Error)
-		assert.Contains(t, bulkResponse[0].Error, "context deadline exceeded")
-		assert.Equal(t, "goodTimeoutBulkGetKey", bulkResponse[1].Key)
-		assert.Empty(t, bulkResponse[1].Error)
-		assert.Equal(t, "nilGetKey", bulkResponse[2].Key)
-		assert.Empty(t, bulkResponse[2].Error)
-		assert.Empty(t, bulkResponse[2].Data)
-		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("nilGetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Equal(t, gohttp.StatusInternalServerError, resp.StatusCode)
 	})
 
 	t.Run("bulk state set recovers from single key failure with resiliency", func(t *testing.T) {
@@ -4200,10 +4170,10 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("state transaction passes after retries with resiliency", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "failStore")
 
-		req := &state.TransactionalStateRequest{
-			Operations: []state.TransactionalStateOperation{
+		req := &stateTransactionRequestBody{
+			Operations: []stateTransactionRequestBodyOperation{
 				{
-					Operation: state.Delete,
+					Operation: string(state.OperationDelete),
 					Request: map[string]string{
 						"key": "failingMultiKey",
 					},
@@ -4221,10 +4191,10 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("state transaction times out with resiliency", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "failStore")
 
-		req := &state.TransactionalStateRequest{
-			Operations: []state.TransactionalStateOperation{
+		req := &stateTransactionRequestBody{
+			Operations: []stateTransactionRequestBodyOperation{
 				{
-					Operation: state.Delete,
+					Operation: string(state.OperationDelete),
 					Request: map[string]string{
 						"key": "timeoutMultiKey",
 					},
@@ -4267,7 +4237,7 @@ func TestV1StateEndpoints(t *testing.T) {
 func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	compStore := compstore.New()
-	compStore.AddStateStore("store1", fakeStateStore{})
+	compStore.AddStateStore("store1", newFakeStateStore())
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
@@ -4286,7 +4256,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	compStore := compstore.New()
-	compStore.AddStateStore("store1", fakeStateStore{})
+	compStore.AddStateStore("store1", newFakeStateStore())
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
@@ -4305,7 +4275,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	storeName := "encrypted-store1"
 	fakeServer := newFakeHTTPServer()
 	compStore := compstore.New()
-	compStore.AddStateStore(storeName, fakeStateStoreQuerier{})
+	compStore.AddStateStore(storeName, newFakeStateStoreQuerier())
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
@@ -4354,7 +4324,13 @@ const (
 )
 
 type fakeStateStore struct {
-	counter int
+	state.BulkStore
+}
+
+func newFakeStateStore() fakeStateStore {
+	s := fakeStateStore{}
+	s.BulkStore = state.NewDefaultBulkStore(s)
+	return s
 }
 
 func (c fakeStateStore) GetComponentMetadata() map[string]string {
@@ -4362,30 +4338,6 @@ func (c fakeStateStore) GetComponentMetadata() map[string]string {
 }
 
 func (c fakeStateStore) Ping() error {
-	return nil
-}
-
-func (c fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
-	for i := range req {
-		r := req[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := c.Delete(ctx, &r)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	for i := range req {
-		s := req[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := c.Set(ctx, &s)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -4412,13 +4364,7 @@ func (c fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.
 	return nil, nil
 }
 
-// BulkGet performs a bulks get operations.
-func (c fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	return false, nil, nil
-}
-
 func (c fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
-	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
@@ -4447,7 +4393,16 @@ func (c fakeStateStore) Multi(ctx context.Context, request *state.TransactionalS
 }
 
 type fakeStateStoreQuerier struct {
-	fakeStateStore
+	state.Store
+	state.TransactionalStore
+}
+
+func newFakeStateStoreQuerier() fakeStateStoreQuerier {
+	s := newFakeStateStore()
+	return fakeStateStoreQuerier{
+		Store:              s,
+		TransactionalStore: s,
+	}
 }
 
 func (c fakeStateStoreQuerier) Query(ctx context.Context, req *state.QueryRequest) (*state.QueryResponse, error) {
@@ -4914,7 +4869,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 func TestV1TransactionEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	var fakeStore state.Store = fakeStateStoreQuerier{}
+	var fakeStore state.Store = newFakeStateStoreQuerier()
 	fakeStoreNonTransactional := new(daprt.MockStateStore)
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", fakeStore)
@@ -4933,16 +4888,16 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Direct Transaction - 204 No Content", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
-				Operation: state.Upsert,
+				Operation: string(state.OperationUpsert),
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: state.Delete,
+				Operation: string(state.OperationDelete),
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -4950,7 +4905,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
 
@@ -4964,16 +4919,16 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Post non-existent state store - 400 No State Store Found", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "non-existent-store")
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
-				Operation: state.Upsert,
+				Operation: string(state.OperationUpsert),
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: state.Delete,
+				Operation: string(state.OperationDelete),
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -4981,7 +4936,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
 		assert.NoError(t, err)
@@ -4992,7 +4947,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Invalid opperation - 400 ERR_NOT_SUPPORTED_STATE_OPERATION", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
 				Operation: "foo",
 				Request: map[string]interface{}{
@@ -5003,7 +4958,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
 
@@ -5017,10 +4972,10 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Invalid request obj - 400 ERR_MALFORMED_REQUEST", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		for _, operation := range []state.OperationType{state.Upsert, state.Delete} {
-			testTransactionalOperations := []state.TransactionalStateOperation{
+		for _, operation := range []state.OperationType{state.OperationUpsert, state.OperationDelete} {
+			testTransactionalOperations := []stateTransactionRequestBodyOperation{
 				{
-					Operation: operation,
+					Operation: string(operation),
 					Request: map[string]interface{}{
 						// Should cause the decorder to fail
 						"key":   []string{"fakeKey1"},
@@ -5030,7 +4985,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			}
 
 			// act
-			inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+			inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 				Operations: testTransactionalOperations,
 			})
 
@@ -5045,9 +5000,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Non Transactional State Store - 500 ERR_STATE_STORE_NOT_SUPPORTED", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", nonTransactionalStoreName)
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
-				Operation: state.Upsert,
+				Operation: string(state.OperationUpsert),
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
@@ -5056,7 +5011,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
 
@@ -5070,16 +5025,16 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Direct Transaction upstream failure - 500 ERR_STATE_TRANSACTION", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		testTransactionalOperations := []state.TransactionalStateOperation{
+		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
-				Operation: state.Upsert,
+				Operation: string(state.OperationUpsert),
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: state.Delete,
+				Operation: string(state.OperationDelete),
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -5087,7 +5042,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 			Metadata: map[string]string{
 				"error": "true",

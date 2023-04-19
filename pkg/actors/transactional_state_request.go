@@ -134,15 +134,12 @@ func (t TransactionalUpsert) StateOperation(baseKey string, opts StateOperationO
 		maps.Copy(t.Metadata, opts.Metadata)
 	}
 
-	return state.TransactionalStateOperation{
-		Operation: state.Upsert,
-		Request: state.SetRequest{
-			Key:         baseKey + t.Key,
-			Value:       t.Value,
-			Metadata:    t.Metadata,
-			ETag:        t.ETag,
-			ContentType: opts.ContentType,
-		},
+	return state.SetRequest{
+		Key:         baseKey + t.Key,
+		Value:       t.Value,
+		Metadata:    t.Metadata,
+		ETag:        t.ETag,
+		ContentType: opts.ContentType,
 	}, nil
 }
 
@@ -158,12 +155,9 @@ func (t TransactionalDelete) StateOperation(baseKey string, opts StateOperationO
 		return op, errors.New("missing key")
 	}
 
-	return state.TransactionalStateOperation{
-		Operation: state.Delete,
-		Request: state.DeleteRequest{
-			Key:      baseKey + t.Key,
-			Metadata: opts.Metadata,
-			ETag:     t.ETag,
-		},
+	return state.DeleteRequest{
+		Key:      baseKey + t.Key,
+		Metadata: opts.Metadata,
+		ETag:     t.ETag,
 	}, nil
 }

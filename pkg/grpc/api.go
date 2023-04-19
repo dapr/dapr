@@ -38,7 +38,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -502,11 +501,6 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	return r, nil
 }
 
-type bulkGetRes struct {
-	bulkGet   bool
-	responses []state.BulkGetResponse
-}
-
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
 	bulkResp := &runtimev1pb.GetBulkStateResponse{}
 	store, err := a.getStateStore(in.StoreName)
@@ -536,74 +530,36 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 	start := time.Now()
 	policyDef := a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
-	bgrPolicyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
-	bgr, err := bgrPolicyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-		rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, reqs)
-		return &bulkGetRes{
-			bulkGet:   rBulkGet,
-			responses: rBulkResponse,
-		}, rErr
+	bgrPolicyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx, policyDef)
+	responses, err := bgrPolicyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+		return store.BulkGet(ctx, reqs, state.BulkGetOpts{
+			Parallelism: int(in.Parallelism),
+		})
 	})
-	elapsed := diag.ElapsedSince(start)
 
+	elapsed := diag.ElapsedSince(start)
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
-	if bgr == nil {
-		bgr = &bulkGetRes{}
+	if err != nil {
+		return bulkResp, err
 	}
 
-	// if store supports bulk get
-	if bgr.bulkGet {
-		if err != nil {
-			return bulkResp, err
+	bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(responses))
+	for i := 0; i < len(responses); i++ {
+		item := &runtimev1pb.BulkStateItem{
+			Key:      stateLoader.GetOriginalStateKey(responses[i].Key),
+			Data:     responses[i].Data,
+			Etag:     stringValueOrEmpty(responses[i].ETag),
+			Metadata: responses[i].Metadata,
+			Error:    responses[i].Error,
 		}
-		for i := 0; i < len(bgr.responses); i++ {
-			item := &runtimev1pb.BulkStateItem{
-				Key:      stateLoader.GetOriginalStateKey(bgr.responses[i].Key),
-				Data:     bgr.responses[i].Data,
-				Etag:     stringValueOrEmpty(bgr.responses[i].ETag),
-				Metadata: bgr.responses[i].Metadata,
-				Error:    bgr.responses[i].Error,
-			}
-			bulkResp.Items = append(bulkResp.Items, item)
-		}
-	} else {
-		// if store doesn't support bulk get, fallback to call get() method one by one
-		bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(reqs))
-		limiter := concurrency.NewLimiter(int(in.Parallelism))
-		for i := range reqs {
-			bulkResp.Items[i] = &runtimev1pb.BulkStateItem{
-				Key: reqs[i].Key,
-			}
-
-			fn := func(iAny any) {
-				rI := iAny.(int)
-				policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
-				res, rErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-					return store.Get(ctx, &reqs[rI])
-				})
-
-				item := &runtimev1pb.BulkStateItem{
-					Key: stateLoader.GetOriginalStateKey(reqs[rI].Key),
-				}
-
-				if rErr != nil {
-					item.Error = rErr.Error()
-				} else if res != nil {
-					item.Data = res.Data
-					item.Etag = stringValueOrEmpty(res.ETag)
-					item.Metadata = res.Metadata
-				}
-				bulkResp.Items[rI] = item
-			}
-			limiter.Execute(fn, i)
-		}
-		limiter.Wait()
+		bulkResp.Items[i] = item
 	}
 
 	if encryption.EncryptedStateStore(in.StoreName) {
 		for i := range bulkResp.Items {
 			if bulkResp.Items[i].Error != "" || len(bulkResp.Items[i].Data) == 0 {
+				bulkResp.Items[i].Data = nil
 				continue
 			}
 
@@ -705,20 +661,27 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		return empty, err
 	}
 
-	reqs := []state.SetRequest{}
-	for _, s := range in.States {
-		key, err1 := stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.UniversalAPI.AppID)
-		if err1 != nil {
-			return empty, err1
+	l := len(in.States)
+	if l == 0 {
+		return empty, nil
+	}
+
+	reqs := make([]state.SetRequest, l)
+	for i, s := range in.States {
+		var key string
+		key, err = stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.UniversalAPI.AppID)
+		if err != nil {
+			return empty, err
 		}
 		req := state.SetRequest{
 			Key:      key,
 			Metadata: s.Metadata,
 		}
 
-		if contentType, ok := req.Metadata[contribMetadata.ContentType]; ok && contentType == contenttype.JSONContentType {
-			if err1 = json.Unmarshal(s.Value, &req.Value); err1 != nil {
-				return empty, err1
+		if req.Metadata[contribMetadata.ContentType] == contenttype.JSONContentType {
+			err = json.Unmarshal(s.Value, &req.Value)
+			if err != nil {
+				return empty, err
 			}
 		} else {
 			req.Value = s.Value
@@ -743,15 +706,19 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			req.Value = val
 		}
 
-		reqs = append(reqs, req)
+		reqs[i] = req
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](ctx,
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkSet(ctx, reqs)
+	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+		// If there's a single request, perform it in non-bulk
+		if len(reqs) == 1 {
+			return struct{}{}, store.Set(ctx, &reqs[0])
+		}
+		return struct{}{}, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -907,7 +874,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			return &emptypb.Empty{}, err
 		}
 		switch state.OperationType(inputReq.OperationType) {
-		case state.Upsert:
+		case state.OperationUpsert:
 			setReq := state.SetRequest{
 				Key: key,
 				// Limitation:
@@ -927,12 +894,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = state.TransactionalStateOperation{
-				Operation: state.Upsert,
-				Request:   setReq,
-			}
+			operations[i] = setReq
 
-		case state.Delete:
+		case state.OperationDelete:
 			delReq := state.DeleteRequest{
 				Key:      key,
 				Metadata: req.Metadata,
@@ -948,10 +912,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = state.TransactionalStateOperation{
-				Operation: state.Delete,
-				Request:   delReq,
-			}
+			operations[i] = delReq
 
 		default:
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
@@ -962,8 +923,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	if encryption.EncryptedStateStore(in.StoreName) {
 		for i, op := range operations {
-			if op.Operation == state.Upsert {
-				req := op.Request.(*state.SetRequest)
+			switch req := op.(type) {
+			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(in.StoreName, data)
 				if err != nil {
@@ -973,7 +934,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 
 				req.Value = val
-				operations[i].Request = req
+				operations[i] = req
 			}
 		}
 	}
@@ -1153,8 +1114,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	for _, op := range in.Operations {
 		var actorOp actors.TransactionalOperation
-		switch state.OperationType(op.OperationType) {
-		case state.Upsert:
+		switch op.OperationType {
+		case string(state.OperationUpsert):
 			setReq := map[string]any{
 				"key":   op.Key,
 				"value": op.Value.Value,
@@ -1168,7 +1129,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				Operation: actors.Upsert,
 				Request:   setReq,
 			}
-		case state.Delete:
+		case string(state.OperationDelete):
 			delReq := map[string]interface{}{
 				"key": op.Key,
 				// Actor state do not user other attributes from state request.

@@ -999,18 +999,18 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
-		if len(reqs) == 0 {
-			return false
-		}
-		return reqs[0].Key == goodStoreKey
-	})).Return(nil)
-	fakeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
-		if len(reqs) == 0 {
-			return false
-		}
-		return reqs[0].Key == errorStoreKey
-	})).Return(errors.New("failed to save state with error-key"))
+	fakeStore.On("Set",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *state.SetRequest) bool {
+			return req.Key == goodStoreKey
+		}),
+	).Return(nil)
+	fakeStore.On("Set",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *state.SetRequest) bool {
+			return req.Key == errorStoreKey
+		}),
+	).Return(errors.New("failed to save state with error-key"))
 
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", fakeStore)
@@ -2301,7 +2301,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore := &daprt.TransactionalStoreMock{}
 	matchKeyFn := func(ctx context.Context, req *state.TransactionalStateRequest, key string) bool {
 		if len(req.Operations) == 1 {
-			if rr, ok := req.Operations[0].Request.(state.SetRequest); ok {
+			if rr, ok := req.Operations[0].(state.SetRequest); ok {
 				if rr.Key == "fakeAPI||"+key {
 					return true
 				}
@@ -2355,7 +2355,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "upsert operation",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           goodKey,
 			value:         []byte("1"),
 			errorExcepted: false,
@@ -2364,7 +2364,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "delete operation",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           goodKey,
 			errorExcepted: false,
 			expectedError: codes.OK,
@@ -2380,7 +2380,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "error occurs when multi execute",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           "error-key",
 			errorExcepted: true,
 			expectedError: codes.Internal,
@@ -2919,8 +2919,8 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
-		// Adding this will make the bulk operation fail with a timeout, and Dapr should be able to recover nicely
+	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
+		// Adding this will make the bulk operation fail
 		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
 		t.Cleanup(func() {
 			failingStore.BulkFailKey = ""
@@ -2931,39 +2931,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Keys:      []string{"failingBulkGetKey", "goodBulkGetKey"},
 		})
 
-		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkGetKey"))
-	})
-
-	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
-		start := time.Now()
-		resp, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
-			StoreName: "failStore",
-			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey", "nilGetKey"},
-		})
-		end := time.Now()
-
-		assert.NoError(t, err)
-		assert.Len(t, resp.Items, 3)
-		for _, item := range resp.Items {
-			switch item.Key {
-			case "timeoutBulkGetKey":
-				assert.NotEmpty(t, item.Error)
-				assert.Contains(t, item.Error, "context deadline exceeded")
-			case "goodTimeoutBulkGetKey":
-				assert.Empty(t, item.Error)
-			case "nilGetKey":
-				assert.Empty(t, item.Error)
-				assert.Empty(t, item.Data)
-			default:
-				t.Fatalf("unexpected key: %s", item.Key)
-			}
-		}
-		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("nilGetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Error(t, err)
 	})
 
 	t.Run("bulk state set recovers from single key failure with resiliency", func(t *testing.T) {
@@ -3014,7 +2982,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			StoreName: "failStore",
 			Operations: []*runtimev1pb.TransactionalStateOperation{
 				{
-					OperationType: string(state.Delete),
+					OperationType: string(state.OperationDelete),
 					Request: &commonv1pb.StateItem{
 						Key: "failingMultiKey",
 					},
@@ -3031,7 +2999,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			StoreName: "failStore",
 			Operations: []*runtimev1pb.TransactionalStateOperation{
 				{
-					OperationType: string(state.Delete),
+					OperationType: string(state.OperationDelete),
 					Request: &commonv1pb.StateItem{
 						Key: "timeoutMultiKey",
 					},
