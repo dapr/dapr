@@ -42,6 +42,7 @@ const (
 	separator                  = "||"
 	redisHost                  = "dapr-redis-master.dapr-tests.svc.cluster.local:6379"
 	writeTimeout               = 5 * time.Second
+	alpha1Endpoint             = "alpha1"
 )
 
 var (
@@ -141,7 +142,7 @@ func getRedisValuesFromItems(items map[string]*Item) []interface{} {
 
 func getHTTP(keys []string, endpointType string) (string, error) {
 	daprConfigurationURL := daprConfigurationURLStable
-	if endpointType == "alpha1" {
+	if endpointType == alpha1Endpoint {
 		daprConfigurationURL = daprConfigurationURLAlpha1
 	}
 	url := daprConfigurationURL + configStore + buildQueryParams(keys)
@@ -156,7 +157,7 @@ func getHTTP(keys []string, endpointType string) (string, error) {
 
 func getGRPC(keys []string, endpointType string) (string, error) {
 	getConfigGRPC := grpcClient.GetConfiguration
-	if endpointType == "alpha1" {
+	if endpointType == alpha1Endpoint {
 		getConfigGRPC = grpcClient.GetConfigurationAlpha1
 	}
 	res, err := getConfigGRPC(context.Background(), &runtimev1pb.GetConfigurationRequest{
@@ -211,7 +212,7 @@ func buildQueryParams(keys []string) string {
 func subscribeGRPC(keys []string, endpointType string) (string, error) {
 	var client runtimev1pb.Dapr_SubscribeConfigurationClient
 	var err error
-	if endpointType == "alpha1" {
+	if endpointType == alpha1Endpoint {
 		client, err = grpcClient.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: configStore,
 			Keys:      keys,
@@ -271,7 +272,7 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationClient) 
 
 func subscribeHTTP(keys []string, endpointType string) (string, error) {
 	daprConfigurationURL := daprConfigurationURLStable
-	if endpointType == "alpha1" {
+	if endpointType == alpha1Endpoint {
 		daprConfigurationURL = daprConfigurationURLAlpha1
 	}
 	url := daprConfigurationURL + configStore + "/subscribe" + buildQueryParams(keys)
@@ -325,7 +326,7 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 
 func unsubscribeHTTP(subscriptionID string, endpointType string) (string, error) {
 	daprConfigurationURL := daprConfigurationURLStable
-	if endpointType == "alpha1" {
+	if endpointType == alpha1Endpoint {
 		daprConfigurationURL = daprConfigurationURLAlpha1
 	}
 	url := daprConfigurationURL + configStore + "/" + subscriptionID + "/unsubscribe"
@@ -340,7 +341,7 @@ func unsubscribeHTTP(subscriptionID string, endpointType string) (string, error)
 
 func unsubscribeGRPC(subscriptionID string, endpointType string) (string, error) {
 	unsubscribeConfigGRPC := grpcClient.UnsubscribeConfiguration
-	if endpointType == "alpha1" {
+	if endpointType == alpha1Endpoint {
 		unsubscribeConfigGRPC = grpcClient.UnsubscribeConfigurationAlpha1
 	}
 	resp, err := unsubscribeConfigGRPC(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
