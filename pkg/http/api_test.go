@@ -55,6 +55,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
+	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -1546,6 +1547,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		appChannel: new(channelt.MockAppChannel),
 		actor:      nil,
 		resiliency: resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency),
 	}
@@ -2277,6 +2279,28 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 2, failingActors.Failure.CallCount("failingId"))
 	})
 
+	t.Run("App channel is not initialized", func(t *testing.T) {
+		apisAndMethods := map[string][]string{
+			"v1.0/actors/fakeActorType/fakeActorID/state/key1":          {"GET"},
+			"v1.0/actors/fakeActorType/fakeActorID/state":               {"POST", "PUT"},
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE", "PATCH"},
+			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
+		}
+		testAPI.appChannel = nil
+
+		for apiPath, testMethods := range apisAndMethods {
+			for _, method := range testMethods {
+				// act
+				resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+
+				// assert
+				assert.Equal(t, 500, resp.StatusCode, apiPath)
+				assert.Equal(t, "ERR_APP_CHANNEL_NIL", resp.ErrorBody["errorCode"])
+			}
+		}
+	})
+
 	fakeServer.Shutdown()
 }
 
@@ -2442,8 +2466,26 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
 	fakeData, _ := json.Marshal(fakeBodyObject)
 
+	t.Run("App channel is not initialized", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		testAPI.actor = nil
+
+		testMethods := []string{"GET"}
+
+		for _, method := range testMethods {
+			buffer = ""
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, apiPath)
+			assert.Equal(t, "ERR_APP_CHANNEL_NIL", resp.ErrorBody["errorCode"], apiPath)
+		}
+	})
+
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		testAPI.appChannel = new(channelt.MockAppChannel)
 		testAPI.actor = nil
 
 		testMethods := []string{"GET"}
