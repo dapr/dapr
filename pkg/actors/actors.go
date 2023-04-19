@@ -1379,6 +1379,9 @@ func (a *actorsRuntime) getActorTypeMetadata(ctx context.Context, actorType stri
 	policyRunner := resiliency.NewRunner[*ActorMetadata](ctx, policyDef)
 	getReq := &state.GetRequest{
 		Key: constructCompositeKey("actors", actorType, "metadata"),
+		Metadata: map[string]string{
+			metadataPartitionKey: constructCompositeKey("actors", actorType),
+		},
 	}
 	return policyRunner(func(ctx context.Context) (*ActorMetadata, error) {
 		rResp, rErr := store.Get(ctx, getReq)
@@ -1575,7 +1578,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 	if resp == nil {
 		resp = &state.GetResponse{}
 	}
-	log.Debugf("read reminders from %s without partition: %s", key, string(resp.Data))
+	log.Debugf("read reminders from %s without partition", key)
 
 	var reminders []reminders.Reminder
 	if len(resp.Data) > 0 {
