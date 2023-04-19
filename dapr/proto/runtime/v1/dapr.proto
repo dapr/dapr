@@ -907,9 +907,9 @@ message EncryptRequestOptions {
   string key_name = 2 [json_name="keyName"];
   // Key wrapping algorithm to use. Required.
   // Supported options include: A256KW (alias: AES), A128CBC, A192CBC, A256CBC, RSA-OAEP-256 (alias: RSA).
-  string algorithm = 3;
+  string key_wrap_algorithm = 3;
   // Cipher used to encrypt data (optional): "aes-gcm" (default) or "chacha20-poly1305"
-  string cipher = 10;
+  string data_encryption_cipher = 10;
   // If true, the encrypted document does not contain a key reference.
   // In that case, calls to the Decrypt method must provide a key reference (name or name/version).
   // Defaults to false.

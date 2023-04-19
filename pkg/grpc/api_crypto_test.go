@@ -64,9 +64,9 @@ func TestCryptoAlpha1(t *testing.T) {
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptRequest{
 					Options: &runtimev1pb.EncryptRequestOptions{
-						ComponentName: "myvault",
-						KeyName:       "aes-passthrough",
-						Algorithm:     "AES",
+						ComponentName:    "myvault",
+						KeyName:          "aes-passthrough",
+						KeyWrapAlgorithm: "AES",
 					},
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  0,
@@ -109,9 +109,9 @@ func TestCryptoAlpha1(t *testing.T) {
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptRequest{
 					Options: &runtimev1pb.EncryptRequestOptions{
-						ComponentName: "myvault",
-						KeyName:       "aes-passthrough",
-						Algorithm:     "AES",
+						ComponentName:    "myvault",
+						KeyName:          "aes-passthrough",
+						KeyWrapAlgorithm: "AES",
 					},
 				},
 				&runtimev1pb.EncryptRequest{
@@ -158,9 +158,9 @@ func TestCryptoAlpha1(t *testing.T) {
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptRequest{
 					Options: &runtimev1pb.EncryptRequestOptions{
-						ComponentName: "myvault",
-						KeyName:       "aes-passthrough",
-						Algorithm:     "AES",
+						ComponentName:    "myvault",
+						KeyName:          "aes-passthrough",
+						KeyWrapAlgorithm: "AES",
 					},
 				},
 				&runtimev1pb.EncryptRequest{
@@ -259,9 +259,9 @@ func TestCryptoAlpha1(t *testing.T) {
 		send := []runtimev1pb.CryptoRequests{
 			&runtimev1pb.EncryptRequest{
 				Options: &runtimev1pb.EncryptRequestOptions{
-					ComponentName: "myvault",
-					KeyName:       "aes-passthrough",
-					Algorithm:     "AES",
+					ComponentName:    "myvault",
+					KeyName:          "aes-passthrough",
+					KeyWrapAlgorithm: "AES",
 				},
 				Payload: &commonv1pb.StreamPayload{
 					Seq:  0,
@@ -303,9 +303,9 @@ func TestCryptoAlpha1(t *testing.T) {
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptRequest{
 					Options: &runtimev1pb.EncryptRequestOptions{
-						ComponentName: "myvault",
-						KeyName:       "aes-passthrough",
-						Algorithm:     "AES",
+						ComponentName:    "myvault",
+						KeyName:          "aes-passthrough",
+						KeyWrapAlgorithm: "AES",
 					},
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  1, // Skipped 0
@@ -347,9 +347,9 @@ func TestCryptoAlpha1(t *testing.T) {
 			send := []runtimev1pb.CryptoRequests{
 				&runtimev1pb.EncryptRequest{
 					Options: &runtimev1pb.EncryptRequestOptions{
-						ComponentName: "myvault",
-						KeyName:       "aes-passthrough",
-						Algorithm:     "AES",
+						ComponentName:    "myvault",
+						KeyName:          "aes-passthrough",
+						KeyWrapAlgorithm: "AES",
 					},
 					Payload: &commonv1pb.StreamPayload{
 						Seq:  0,
@@ -358,9 +358,9 @@ func TestCryptoAlpha1(t *testing.T) {
 				},
 				&runtimev1pb.EncryptRequest{
 					Options: &runtimev1pb.EncryptRequestOptions{
-						ComponentName: "myvault",
-						KeyName:       "aes-passthrough",
-						Algorithm:     "AES",
+						ComponentName:    "myvault",
+						KeyName:          "aes-passthrough",
+						KeyWrapAlgorithm: "AES",
 					},
 				},
 			}
@@ -418,8 +418,8 @@ func TestCryptoAlpha1(t *testing.T) {
 				&runtimev1pb.EncryptRequest{
 					Options: &runtimev1pb.EncryptRequestOptions{
 						// ComponentName: "myvault",
-						KeyName:   "aes-passthrough",
-						Algorithm: "AES",
+						KeyName:          "aes-passthrough",
+						KeyWrapAlgorithm: "AES",
 					},
 				},
 			}
@@ -437,7 +437,7 @@ func TestCryptoAlpha1(t *testing.T) {
 					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						// KeyName:       "aes-passthrough",
-						Algorithm: "AES",
+						KeyWrapAlgorithm: "AES",
 					},
 				},
 			}
@@ -455,13 +455,13 @@ func TestCryptoAlpha1(t *testing.T) {
 					Options: &runtimev1pb.EncryptRequestOptions{
 						ComponentName: "myvault",
 						KeyName:       "aes-passthrough",
-						// Algorithm:     "AES",
+						// KeyWrapAlgorithm:     "AES",
 					},
 				},
 			}
 			_, err = cryptoSendRequest(stream, send, &runtimev1pb.EncryptResponse{})
 			require.Error(t, err)
-			require.ErrorContains(t, err, "missing property 'algorithm' in the options message")
+			require.ErrorContains(t, err, "missing property 'keyWrapAlgorithm' in the options message")
 		})
 	})
 

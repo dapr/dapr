@@ -56,8 +56,8 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 		a.Logger.Debug(err)
 		return err
 	}
-	if reqProto.Options.Algorithm == "" {
-		err = messages.ErrBadRequest.WithFormat("missing property 'algorithm' in the options message")
+	if reqProto.Options.KeyWrapAlgorithm == "" {
+		err = messages.ErrBadRequest.WithFormat("missing property 'keyWrapAlgorithm' in the options message")
 		a.Logger.Debug(err)
 		return err
 	}
@@ -72,7 +72,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 	// Options
 	encOpts := encv1.EncryptOptions{
 		KeyName:   reqProto.Options.KeyName,
-		Algorithm: encv1.KeyAlgorithm(strings.ToUpper(reqProto.Options.Algorithm)),
+		Algorithm: encv1.KeyAlgorithm(strings.ToUpper(reqProto.Options.KeyWrapAlgorithm)),
 		WrapKeyFn: a.CryptoGetWrapKeyFn(stream.Context(), reqProto.Options.ComponentName, component),
 
 		// The next values are optional and could be empty
@@ -81,8 +81,8 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 	}
 
 	// Set the cipher if present
-	if reqProto.Options.Cipher != "" {
-		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(reqProto.Options.Cipher)))
+	if reqProto.Options.DataEncryptionCipher != "" {
+		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(reqProto.Options.DataEncryptionCipher)))
 	}
 
 	// Process the request as a stream

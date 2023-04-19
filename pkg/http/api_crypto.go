@@ -27,6 +27,14 @@ import (
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
 )
 
+const (
+	cryptoQSArgKeyName               = "keyName"
+	cryptoQSArgKeyWrapAlgorithm      = "keyWrapAlgorithm"
+	cryptoQSArgOmitDecryptionKeyName = "omitDecryptionKeyName"
+	cryptoQSArgDecryptionKeyName     = "decryptionKeyName"
+	cryptoQSArgDataEncryptionCipher  = "dataEncryptionCipher"
+)
+
 func (a *api) constructCryptoEndpoints() []Endpoint {
 	// These APIs are not implemented as Universal because the gRPC APIs are stream-based.
 	return []Endpoint{
@@ -48,10 +56,10 @@ func (a *api) constructCryptoEndpoints() []Endpoint {
 // Handler for crypto/<component-name>/encrypt
 // Query-string args:
 // - keyName (required)
-// - algorithm (required)
-// - omitKeyName
+// - keyWrapAlgorithm (required)
+// - omitDecryptionKeyName
 // - decryptionKeyName
-// - cipher
+// - dataEncryptionCipher
 func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 	// Get the component
 	componentName := reqCtx.UserValue(nameParam).(string)
@@ -63,16 +71,16 @@ func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// Get the required properties from the query string
-	keyName := string(reqCtx.QueryArgs().Peek("keyName"))
+	keyName := string(reqCtx.QueryArgs().Peek(cryptoQSArgKeyName))
 	if keyName == "" {
-		err = messages.ErrBadRequest.WithFormat("missing query string parameter 'keyName'")
+		err = messages.ErrBadRequest.WithFormat("missing query string parameter '" + cryptoQSArgKeyName + "'")
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
-	algorithm := string(reqCtx.QueryArgs().Peek("algorithm"))
+	algorithm := string(reqCtx.QueryArgs().Peek(cryptoQSArgKeyWrapAlgorithm))
 	if algorithm == "" {
-		err = messages.ErrBadRequest.WithFormat("missing query string parameter 'algorithm'")
+		err = messages.ErrBadRequest.WithFormat("missing query string parameter '" + cryptoQSArgKeyWrapAlgorithm + "'")
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
@@ -85,12 +93,12 @@ func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 		WrapKeyFn: a.universal.CryptoGetWrapKeyFn(reqCtx, componentName, component),
 
 		// The next values are optional and could be empty
-		OmitKeyName:       utils.IsTruthy(string(reqCtx.QueryArgs().Peek("omitKeyName"))),
-		DecryptionKeyName: string(reqCtx.QueryArgs().Peek("decryptionKeyName")),
+		OmitKeyName:       utils.IsTruthy(string(reqCtx.QueryArgs().Peek(cryptoQSArgOmitDecryptionKeyName))),
+		DecryptionKeyName: string(reqCtx.QueryArgs().Peek(cryptoQSArgDecryptionKeyName)),
 	}
 
 	// Set the cipher if present
-	cipher := string(reqCtx.QueryArgs().Peek("cipher"))
+	cipher := string(reqCtx.QueryArgs().Peek(cryptoQSArgDataEncryptionCipher))
 	if cipher != "" {
 		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(cipher)))
 	}
@@ -140,7 +148,7 @@ func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 		UnwrapKeyFn: a.universal.CryptoGetUnwrapKeyFn(reqCtx, componentName, component),
 
 		// The next values are optional and could be empty
-		KeyName: string(reqCtx.QueryArgs().Peek("keyName")),
+		KeyName: string(reqCtx.QueryArgs().Peek(cryptoQSArgKeyName)),
 	}
 
 	// Get the body of the request
