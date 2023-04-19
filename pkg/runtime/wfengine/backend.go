@@ -38,7 +38,7 @@ type actorBackend struct {
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 	startedOnce               sync.Once
-	config                    *wfConfig
+	config                    wfConfig
 }
 
 func NewActorBackend(engine *WorkflowEngine) *actorBackend {

@@ -42,8 +42,13 @@ type WorkflowEngine struct {
 	actorRuntime   actors.Actors
 	startMutex     sync.Mutex
 	disconnectChan chan any
-	config         *wfConfig
+	config         wfConfig
 }
+
+const (
+	WorkflowNameLabelKey = "workflow"
+	ActivityNameLabelKey = "activity"
+)
 
 var (
 	wfLogger            = logger.NewLogger("dapr.runtime.wfengine")
@@ -58,11 +63,11 @@ type wfConfig struct {
 }
 
 // NewWorkflowConfig creates a new workflow engine configuration
-func NewWorkflowConfig(appID string) *wfConfig {
-	return &wfConfig{
+func NewWorkflowConfig(appID string) wfConfig {
+	return wfConfig{
 		AppID:             appID,
-		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + utils.DotDelimiter + appID + utils.DotDelimiter + utils.WorkflowNameLabelKey,
-		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + utils.DotDelimiter + appID + utils.DotDelimiter + utils.ActivityNameLabelKey,
+		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
+		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault() + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
 	}
 }
 
@@ -70,7 +75,7 @@ func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine(config *wfConfig) *WorkflowEngine {
+func NewWorkflowEngine(config wfConfig) *WorkflowEngine {
 	// In order to lazily start the engine (i.e. when it is invoked
 	// by the application when it registers workflows / activities or by
 	// an API call to interact with the engine) we need to inject the engine

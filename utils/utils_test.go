@@ -278,7 +278,7 @@ func TestGetNamespaceOrDefault(t *testing.T) {
 	})
 
 	t.Run("namespace is not empty", func(t *testing.T) {
-		os.Setenv("NAMESPACE", "testNs")
+		t.Setenv("NAMESPACE", "testNs")
 		ns := GetNamespaceOrDefault()
 		assert.Equal(t, "testNs", ns)
 	})

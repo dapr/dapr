@@ -29,10 +29,6 @@ import (
 const (
 	defaultNamespace = "default"
 	DotDelimiter     = "."
-
-	// Workflow
-	WorkflowNameLabelKey = "workflow"
-	ActivityNameLabelKey = "activity"
 )
 
 var (

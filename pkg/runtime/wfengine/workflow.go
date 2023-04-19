@@ -46,7 +46,7 @@ type workflowActor struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
-	config           *wfConfig
+	config           wfConfig
 }
 
 type durableTimer struct {
@@ -70,7 +70,7 @@ func (err recoverableError) Error() string {
 	return err.cause.Error()
 }
 
-func NewWorkflowActor(scheduler workflowScheduler, config *wfConfig) *workflowActor {
+func NewWorkflowActor(scheduler workflowScheduler, config wfConfig) *workflowActor {
 	return &workflowActor{
 		scheduler:        scheduler,
 		defaultTimeout:   30 * time.Second,

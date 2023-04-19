@@ -39,7 +39,7 @@ type activityActor struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
-	config           *wfConfig
+	config           wfConfig
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
@@ -54,7 +54,7 @@ type activityState struct {
 }
 
 // NewActivityActor creates an internal activity actor for executing workflow activity logic.
-func NewActivityActor(scheduler workflowScheduler, config *wfConfig) *activityActor {
+func NewActivityActor(scheduler workflowScheduler, config wfConfig) *activityActor {
 	return &activityActor{
 		scheduler:        scheduler,
 		defaultTimeout:   1 * time.Hour,

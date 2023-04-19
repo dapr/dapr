@@ -43,7 +43,7 @@ type workflowState struct {
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
-	config              *wfConfig
+	config              wfConfig
 }
 
 type workflowStateMetadata struct {
@@ -52,7 +52,7 @@ type workflowStateMetadata struct {
 	Generation    uint64
 }
 
-func NewWorkflowState(config *wfConfig) workflowState {
+func NewWorkflowState(config wfConfig) workflowState {
 	return workflowState{
 		Generation: 1,
 		config:     config,
@@ -152,7 +152,7 @@ func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, even
 	return nil
 }
 
-func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config *wfConfig) (workflowState, error) {
+func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config wfConfig) (workflowState, error) {
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
