@@ -18,13 +18,30 @@ import (
 )
 
 const (
-	resiliencyCountViewName  = "resiliency/count"
-	resiliencyLoadedViewName = "resiliency/loaded"
-	testAppID                = "fakeID"
-	testResiliencyName       = "testResiliency"
-	testResiliencyNamespace  = "testNamespace"
-	testStateStoreName       = "testStateStore"
+	resiliencyCountViewName         = "resiliency/count"
+	resiliencyLoadedViewName        = "resiliency/loaded"
+	actorTimersLastValueViewName    = "runtime/actor/timers"
+	actorRemindersLastValueViewName = "runtime/actor/reminders"
+	testAppID                       = "fakeID"
+	testResiliencyName              = "testResiliency"
+	testResiliencyNamespace         = "testNamespace"
+	testStateStoreName              = "testStateStore"
 )
+
+func cleanupPrevRuns() {
+	var views []*view.View
+	for _, v := range []string{
+		resiliencyCountViewName,
+		resiliencyLoadedViewName,
+		actorTimersLastValueViewName,
+		actorRemindersLastValueViewName,
+	} {
+		if v := view.Find(v); v != nil {
+			views = append(views, v)
+		}
+	}
+	view.Unregister(views...)
+}
 
 func TestResiliencyCountMonitoring(t *testing.T) {
 	tests := []struct {
@@ -121,10 +138,11 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			cleanupPrevRuns()
+			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil))
 			t.Cleanup(func() {
-				view.Unregister(view.Find(resiliencyCountViewName))
+				cleanupPrevRuns()
 			})
-			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil)
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -152,10 +170,11 @@ func createTestResiliency(resiliencyName string, resiliencyNamespace string, sta
 
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
+		cleanupPrevRuns()
+		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
 		t.Cleanup(func() {
-			view.Unregister(view.Find(resiliencyCountViewName))
+			cleanupPrevRuns()
 		})
-		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil)
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)
