@@ -2669,7 +2669,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	})
 }
 
-func TestV1Alpha1ConfigurationGet(t *testing.T) {
+func TestConfigurationGet(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	var fakeConfigurationStore configuration.Store = &fakeConfigurationStore{}
@@ -2687,7 +2687,7 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
 
-	t.Run("Get configurations with a good key", func(t *testing.T) {
+	t.Run("Get configurations with a good key - alpha1", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s", storeName, "good-key1")
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good key should return 204")
@@ -2704,7 +2704,26 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		metadata := goodkeyVal["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
 	})
-	t.Run("Get Configurations with good keys", func(t *testing.T) {
+
+	t.Run("Get configurations with a good key", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/configuration/%s?key=%s", storeName, "good-key1")
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good key should return 204")
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		assert.Equal(t, 1, len(resp.JSONBody.(map[string]interface{})))
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Contains(t, rspMap, "good-key1")
+		goodkeyVal := rspMap["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal["version"].(string))
+		metadata := goodkeyVal["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+	})
+
+	t.Run("Get Configurations with good keys-alpha1", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s&key=%s", storeName, "good-key1", "good-key2")
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
@@ -2730,7 +2749,33 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
-	t.Run("Get All Configurations with empty key", func(t *testing.T) {
+	t.Run("Get Configurations with good keys", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/configuration/%s?key=%s&key=%s", storeName, "good-key1", "good-key2")
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
+		assert.NotNil(t, resp.JSONBody)
+		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		rspMap1 := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap1)
+		assert.Contains(t, rspMap1, "good-key1")
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
+		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
+
+		rspMap2 := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap2)
+		assert.Contains(t, rspMap2, "good-key2")
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
+		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
+		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
+	})
+
+	t.Run("Get All Configurations with empty key - alpha1", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s", storeName)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
@@ -2758,7 +2803,35 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
-	t.Run("Get Configurations with bad key", func(t *testing.T) {
+	t.Run("Get All Configurations with empty key", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/configuration/%s", storeName)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with empty key should return 200")
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		rspMap1 := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap1)
+		assert.Contains(t, rspMap1, "good-key1")
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
+		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
+
+		rspMap2 := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap2)
+		assert.Contains(t, rspMap2, "good-key2")
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
+		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
+		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
+	})
+
+	t.Run("Get Configurations with bad key - alpha1", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s", storeName, "bad-key")
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
@@ -2768,8 +2841,28 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, "failed to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
 	})
 
-	t.Run("Get with none exist configurations store", func(t *testing.T) {
+	t.Run("Get Configurations with bad key", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/configuration/%s?key=%s", storeName, "bad-key")
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 500, resp.StatusCode, "Accessing configuration store with bad key should return 500")
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_CONFIGURATION_GET", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "failed to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
+	})
+
+	t.Run("Get with none exist configurations store - alpha1", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s", badStoreName, "good-key1")
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 400, resp.StatusCode, "Accessing configuration store with none exist configurations store should return 400")
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "configuration store nonExistStore not found", resp.ErrorBody["message"])
+	})
+
+	t.Run("Get with none exist configurations store", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/configuration/%s?key=%s", badStoreName, "good-key1")
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 400, resp.StatusCode, "Accessing configuration store with none exist configurations store should return 400")
@@ -2796,7 +2889,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
 
-	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
+	t.Run("subscribe and unsubscribe configurations - alpha1", func(t *testing.T) {
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
 		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
 		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when app channel is empty")
@@ -2813,7 +2906,24 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		assert.NotNil(t, resp2.JSONBody, "Unsubscribe configuration should return a non nil response body")
 	})
 
-	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when app channel is empty")
+
+		rspMap1 := resp1.JSONBody
+		assert.Nil(t, rspMap1)
+
+		uuid, err := uuid.NewRandom()
+		assert.Nil(t, err, "unable to generate id")
+		apiPath2 := fmt.Sprintf("v1.0/configuration/%s/%s/unsubscribe", storeName, &uuid)
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 200, resp2.StatusCode, "unsubscribe configuration store,should return 200")
+		assert.NotNil(t, resp2.JSONBody, "Unsubscribe configuration should return a non nil response body")
+	})
+
+	t.Run("error in unsubscribe configurations - alpha1", func(t *testing.T) {
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
 		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
 		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when appchannel is not initialized")
@@ -2830,7 +2940,30 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	})
 
 	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when appchannel is not initialized")
+		rspMap1 := resp1.JSONBody
+		assert.Nil(t, rspMap1)
+
+		uuid, err := uuid.NewRandom()
+		assert.Nil(t, err, "unable to generate id")
+		apiPath2 := fmt.Sprintf("v1.0/configuration/%s/%s/unsubscribe", "", &uuid)
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+
+		assert.Equal(t, 400, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+	})
+
+	t.Run("error in unsubscribe configurations - alpha1", func(t *testing.T) {
 		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, "subscribe_id_err")
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 500, resp2.StatusCode, "Expected error during unsubscribe api")
+		assert.NotNil(t, resp2.ErrorBody, "Unsubscribe configuration should return a non nil response body")
+	})
+
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath2 := fmt.Sprintf("v1.0/configuration/%s/%s/unsubscribe", storeName, "subscribe_id_err")
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 		assert.Equal(t, 500, resp2.StatusCode, "Expected error during unsubscribe api")
 		assert.NotNil(t, resp2.ErrorBody, "Unsubscribe configuration should return a non nil response body")

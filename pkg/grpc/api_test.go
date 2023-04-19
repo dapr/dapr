@@ -1300,13 +1300,30 @@ func TestGetConfiguration(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		t.Run(tt.testName, func(t *testing.T) {
+		// Testing alpha1 endpoint
+		t.Run(tt.testName+"-alpha1", func(t *testing.T) {
 			req := &runtimev1pb.GetConfigurationRequest{
 				StoreName: tt.storeName,
 				Keys:      tt.keys,
 			}
 
 			resp, err := client.GetConfigurationAlpha1(context.Background(), req)
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, resp.Items, tt.expectedResponse.Items, "Expected response items to be same")
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+		// Testing stable endpoint
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, err := client.GetConfiguration(context.Background(), req)
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
 				assert.Equal(t, resp.Items, tt.expectedResponse.Items, "Expected response items to be same")
@@ -1440,13 +1457,45 @@ func TestSubscribeConfiguration(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		t.Run(tt.testName, func(t *testing.T) {
+		// Testing alpha1 endpoint
+		t.Run(tt.testName+"-alpha1", func(t *testing.T) {
 			req := &runtimev1pb.SubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Keys:      tt.keys,
 			}
 
 			resp, _ := client.SubscribeConfigurationAlpha1(context.Background(), req)
+			if !tt.errorExcepted {
+				rsp, err := resp.Recv()
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, rsp.Items, tt.expectedResponse, "Expected response items to be same")
+			} else {
+				retry := 3
+				count := 0
+				_, err := resp.Recv()
+				for {
+					if err != nil {
+						break
+					}
+					if count > retry {
+						break
+					}
+					count++
+					time.Sleep(time.Millisecond * 10)
+					_, err = resp.Recv()
+				}
+				assert.Equal(t, tt.expectedError, status.Code(err))
+				assert.Error(t, err, "Expected error")
+			}
+		})
+		// Testing stable endpoint
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.SubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, _ := client.SubscribeConfiguration(context.Background(), req)
 			if !tt.errorExcepted {
 				rsp, err := resp.Recv()
 				assert.NoError(t, err, "Expected no error")
@@ -1605,7 +1654,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		t.Run(tt.testName, func(t *testing.T) {
+		// Testing alpha1 endpoint
+		t.Run(tt.testName+"-alpha1", func(t *testing.T) {
 			req := &runtimev1pb.SubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Keys:      tt.keys,
@@ -1634,6 +1684,54 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			}
 			assert.Nil(t, err, "Error should be nil")
 			_, err = client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Id:        subscribeID,
+			})
+			assert.Nil(t, err, "Error should be nil")
+			count = 0
+			for {
+				if err != nil && err.Error() == "EOF" {
+					break
+				}
+				if count > retry {
+					break
+				}
+				count++
+				time.Sleep(time.Millisecond * 10)
+				_, err = resp.Recv()
+			}
+			assert.Error(t, err, "Unsubscribed channel should returns EOF")
+		})
+		// Testing stable endpoint
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.SubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, err := client.SubscribeConfiguration(context.Background(), req)
+			assert.Nil(t, err, "Error should be nil")
+			retry := 3
+			count := 0
+			var subscribeID string
+			for {
+				if count > retry {
+					break
+				}
+				count++
+				time.Sleep(time.Millisecond * 10)
+				rsp, recvErr := resp.Recv()
+				assert.NotNil(t, rsp)
+				assert.NoError(t, recvErr)
+				if rsp.Items != nil {
+					assert.Equal(t, tt.expectedResponse, rsp.Items)
+				} else {
+					assert.Equal(t, mockSubscribeID, rsp.Id)
+				}
+				subscribeID = rsp.Id
+			}
+			assert.Nil(t, err, "Error should be nil")
+			_, err = client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Id:        subscribeID,
 			})
@@ -1706,13 +1804,23 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		t.Run(tt.testName, func(t *testing.T) {
+		t.Run(tt.testName+"-alpha1", func(t *testing.T) {
 			req := &runtimev1pb.UnsubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Id:        tt.id,
 			}
 
 			resp, err := client.UnsubscribeConfigurationAlpha1(context.Background(), req)
+			assert.Equal(t, tt.expectedResponse, resp != nil)
+			assert.Equal(t, tt.expectedError, err != nil)
+		})
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.UnsubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Id:        tt.id,
+			}
+
+			resp, err := client.UnsubscribeConfiguration(context.Background(), req)
 			assert.Equal(t, tt.expectedResponse, resp != nil)
 			assert.Equal(t, tt.expectedError, err != nil)
 		})
@@ -2669,8 +2777,8 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
-func TestGetConfigurationAlpha1(t *testing.T) {
-	t.Run("get configuration item", func(t *testing.T) {
+func TestGetConfigurationAPI(t *testing.T) {
+	t.Run("get configuration item - alpha1", func(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddConfiguration("store1", &mockConfigStore{})
 		server, lis := startDaprAPIServer(&api{
@@ -2698,10 +2806,39 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 		assert.Len(t, r.Items, 1)
 		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
+	t.Run("get configuration item", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
+			},
+			resiliency: resiliency.New(nil),
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		r, err := client.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
+			StoreName: "store1",
+			Keys: []string{
+				"key1",
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, r.Items)
+		assert.Len(t, r.Items, 1)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+	})
 }
 
-func TestSubscribeConfigurationAlpha1(t *testing.T) {
-	t.Run("get configuration item", func(t *testing.T) {
+func TestSubscribeConfigurationAPI(t *testing.T) {
+	t.Run("get configuration item - alpha1", func(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddConfiguration("store1", &mockConfigStore{})
 
@@ -2747,7 +2884,54 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
 
-	t.Run("get all configuration item for empty list", func(t *testing.T) {
+	t.Run("get configuration item", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
+
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
+			},
+			resiliency: resiliency.New(nil),
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		ctx := context.Background()
+		client := runtimev1pb.NewDaprClient(clientConn)
+		s, err := client.SubscribeConfiguration(ctx, &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "store1",
+			Keys: []string{
+				"key1",
+			},
+		})
+
+		assert.NoError(t, err)
+
+		r := &runtimev1pb.SubscribeConfigurationResponse{}
+
+		for {
+			update, err := s.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if update != nil {
+				r = update
+				break
+			}
+		}
+
+		assert.NotNil(t, r)
+		assert.Len(t, r.Items, 1)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+	})
+
+	t.Run("get all configuration item for empty list - alpha1", func(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddConfiguration("store1", &mockConfigStore{})
 		server, lis := startDaprAPIServer(&api{
@@ -2765,6 +2949,50 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 		ctx := context.Background()
 		client := runtimev1pb.NewDaprClient(clientConn)
 		s, err := client.SubscribeConfigurationAlpha1(ctx, &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "store1",
+			Keys:      []string{},
+		})
+
+		require.NoError(t, err)
+
+		r := &runtimev1pb.SubscribeConfigurationResponse{}
+
+		for {
+			update, err := s.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if update != nil {
+				r = update
+				break
+			}
+		}
+
+		assert.NotNil(t, r)
+		assert.Len(t, r.Items, 2)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+		assert.Equal(t, "val2", r.Items["key2"].Value)
+	})
+	t.Run("get all configuration item for empty list", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
+			},
+			resiliency: resiliency.New(nil),
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		ctx := context.Background()
+		client := runtimev1pb.NewDaprClient(clientConn)
+		s, err := client.SubscribeConfiguration(ctx, &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "store1",
 			Keys:      []string{},
 		})
@@ -3038,14 +3266,20 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	failingConfigStore := daprt.FailingConfigurationStore{
 		Failure: daprt.NewFailure(
 			map[string]int{
-				"failingGetKey":         1,
-				"failingSubscribeKey":   1,
-				"failingUnsubscribeKey": 1,
+				"failingGetKey":                1,
+				"failingSubscribeKey":          1,
+				"failingUnsubscribeKey":        1,
+				"failingGetKey-alpha1":         1,
+				"failingSubscribeKey-alpha1":   1,
+				"failingUnsubscribeKey-alpha1": 1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":         time.Second * 10,
-				"timeoutSubscribeKey":   time.Second * 10,
-				"timeoutUnsubscribeKey": time.Second * 10,
+				"timeoutGetKey":                time.Second * 10,
+				"timeoutSubscribeKey":          time.Second * 10,
+				"timeoutUnsubscribeKey":        time.Second * 10,
+				"timeoutGetKey-alpha1":         time.Second * 10,
+				"timeoutSubscribeKey-alpha1":   time.Second * 10,
+				"timeoutUnsubscribeKey-alpha1": time.Second * 10,
 			},
 			map[string]int{},
 		),
@@ -3069,8 +3303,18 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
-	t.Run("test get configuration retries with resiliency", func(t *testing.T) {
+	t.Run("test get configuration retries with resiliency - alpha1", func(t *testing.T) {
 		_, err := client.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
+			StoreName: "failConfig",
+			Keys:      []string{},
+			Metadata:  map[string]string{"key": "failingGetKey-alpha1"},
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingGetKey-alpha1"))
+	})
+	t.Run("test get configuration retries with resiliency", func(t *testing.T) {
+		_, err := client.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "failingGetKey"},
@@ -3079,9 +3323,18 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingGetKey"))
 	})
-
-	t.Run("test get configuration fails due to timeout with resiliency", func(t *testing.T) {
+	t.Run("test get configuration fails due to timeout with resiliency - alpha1", func(t *testing.T) {
 		_, err := client.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
+			StoreName: "failConfig",
+			Keys:      []string{},
+			Metadata:  map[string]string{"key": "timeoutGetKey-alpha1"},
+		})
+
+		assert.Error(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutGetKey-alpha1"))
+	})
+	t.Run("test get configuration fails due to timeout with resiliency", func(t *testing.T) {
+		_, err := client.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "timeoutGetKey"},
@@ -3091,8 +3344,21 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutGetKey"))
 	})
 
-	t.Run("test subscribe configuration retries with resiliency", func(t *testing.T) {
+	t.Run("test subscribe configuration retries with resiliency - alpha1", func(t *testing.T) {
 		resp, err := client.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "failConfig",
+			Keys:      []string{},
+			Metadata:  map[string]string{"key": "failingSubscribeKey-alpha1"},
+		})
+		assert.NoError(t, err)
+
+		_, err = resp.Recv()
+		assert.NoError(t, err)
+
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey-alpha1"))
+	})
+	t.Run("test subscribe configuration retries with resiliency", func(t *testing.T) {
+		resp, err := client.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "failingSubscribeKey"},
@@ -3105,8 +3371,20 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
 	})
 
-	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
+	t.Run("test subscribe configuration fails due to timeout with resiliency - alpha1", func(t *testing.T) {
 		resp, err := client.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "failConfig",
+			Keys:      []string{},
+			Metadata:  map[string]string{"key": "timeoutSubscribeKey-alpha1"},
+		})
+		assert.NoError(t, err)
+
+		_, err = resp.Recv()
+		assert.Error(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey-alpha1"))
+	})
+	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
+		resp, err := client.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "timeoutSubscribeKey"},
@@ -3118,10 +3396,21 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey"))
 	})
 
+	t.Run("test unsubscribe configuration retries with resiliency - alpha1", func(t *testing.T) {
+		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey-alpha1", make(chan struct{}))
+
+		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+			StoreName: "failConfig",
+			Id:        "failingUnsubscribeKey-alpha1",
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey-alpha1"))
+	})
 	t.Run("test unsubscribe configuration retries with resiliency", func(t *testing.T) {
 		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey", make(chan struct{}))
 
-		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+		_, err := client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Id:        "failingUnsubscribeKey",
 		})
@@ -3130,10 +3419,21 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey"))
 	})
 
+	t.Run("test unsubscribe configuration fails due to timeout with resiliency - alpha1", func(t *testing.T) {
+		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey-alpha1", make(chan struct{}))
+
+		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+			StoreName: "failConfig",
+			Id:        "timeoutUnsubscribeKey-alpha1",
+		})
+
+		assert.Error(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutUnsubscribeKey-alpha1"))
+	})
 	t.Run("test unsubscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
 		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey", make(chan struct{}))
 
-		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+		_, err := client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Id:        "timeoutUnsubscribeKey",
 		})
