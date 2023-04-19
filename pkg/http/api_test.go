@@ -53,6 +53,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -981,10 +982,14 @@ func getFakeDirectMessageResponseWithStatusCode(code int) *invokev1.InvokeMethod
 func TestV1DirectMessagingEndpoints(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
+	compStore := compstore.New()
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		resiliency:      resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
@@ -1003,6 +1008,38 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(matchContextInterface),
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging without querystring for external invocation - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
+		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "http://api.github.com"
 				}),
 				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 					return true
@@ -1052,6 +1089,38 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
+	t.Run("Invoke direct messaging without querystring for external invocation - 201 Created", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponseWithStatusCode(fasthttp.StatusCreated)
+		defer fakeDirectMessageResponse.Close()
+
+		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "http://api.github.com"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 201, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
 	t.Run("Invoke direct messaging with dapr-app-id in header - 200 OK", func(t *testing.T) {
 		fakeDirectMessageResponse := getFakeDirectMessageResponse()
 		defer fakeDirectMessageResponse.Close()
@@ -1077,6 +1146,38 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "dapr-app-id", "fakeAppID")
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging with headers for external invocation - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
+		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "http://api.github.com"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "Authorization", "token sometoken", "Accept-Language", "en-US")
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
@@ -1158,6 +1259,48 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.True(t, comp1 || comp2)
 	})
 
+	t.Run("Invoke direct messaging with InvalidArgument Response for external invocation - 400 Bad request", func(t *testing.T) {
+		d := &epb.ErrorInfo{
+			Reason: "fakeReason",
+		}
+		details, _ := anypb.New(d)
+
+		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(
+			int32(codes.InvalidArgument),
+			"InvalidArgument",
+			[]*anypb.Any{details},
+		)
+		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
+		fakeData := []byte("fakeData")
+		defer fakeInternalErrorResponse.Close()
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				"http://api.github.com",
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
+			).
+			Return(fakeInternalErrorResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// protojson produces different indentation space based on OS
+		// For linux
+		comp1 := string(resp.RawBody) == `{"code":3,"message":"InvalidArgument","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"fakeReason"}]}`
+		// For mac and windows
+		comp2 := string(resp.RawBody) == `{"code":3, "message":"InvalidArgument", "details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo", "reason":"fakeReason"}]}`
+		assert.True(t, comp1 || comp2)
+	})
+
 	t.Run("Invoke direct messaging with malformed status response", func(t *testing.T) {
 		malformedDetails := &anypb.Any{TypeUrl: "malformed"}
 		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(int32(codes.Internal), "InternalError", []*anypb.Any{malformedDetails})
@@ -1172,6 +1315,34 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				"Invoke",
 				mock.MatchedBy(matchContextInterface),
 				"fakeAppID",
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
+			).
+			Return(fakeInternalErrorResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""))
+	})
+
+	t.Run("Invoke direct messaging with malformed status response for external invocation", func(t *testing.T) {
+		malformedDetails := &anypb.Any{TypeUrl: "malformed"}
+		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(int32(codes.Internal), "InternalError", []*anypb.Any{malformedDetails})
+		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
+		fakeData := []byte("fakeData")
+		defer fakeInternalErrorResponse.Close()
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				"http://api.github.com",
 				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeInternalErrorResponse, nil).
@@ -1201,6 +1372,38 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(matchContextInterface),
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging with querystring for external invocation - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
+		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod?param1=val1&param2=val2"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "http://api.github.com"
 				}),
 				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 					return true
@@ -1280,6 +1483,37 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
+	t.Run("Invoke direct messaging route '/' - 200 OK", func(t *testing.T) {
+		fakeDirectMessageResponse := getFakeDirectMessageResponse()
+		defer fakeDirectMessageResponse.Close()
+
+		apiPath := "v1.0/invoke/http://api.github.com/method/"
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "http://api.github.com"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(fakeDirectMessageResponse, nil).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
 	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE", func(t *testing.T) {
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
@@ -1292,6 +1526,35 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(matchContextInterface),
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(nil, errors.New("UPSTREAM_ERROR")).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE for external invocation", func(t *testing.T) {
+		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod?param1=val1&param2=val2"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "http://api.github.com"
 				}),
 				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 					return true
@@ -1338,6 +1601,35 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
 
+	t.Run("Invoke returns error - 403 ERR_DIRECT_INVOKE for external invocation", func(t *testing.T) {
+		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod?param1=val1&param2=val2"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "http://api.github.com"
+				}),
+				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+					return true
+				}),
+			).
+			Return(nil, status.Errorf(codes.PermissionDenied, "Permission Denied")).
+			Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+	})
+
 	fakeServer.Shutdown()
 }
 
@@ -1351,10 +1643,14 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	createExporters(&buffer)
 
+	compStore := compstore.New()
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		resiliency:      resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
@@ -1455,9 +1751,13 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	}
 
 	fakeServer := newFakeHTTPServer()
+	compStore := compstore.New()
 	testAPI := &api{
 		directMessaging: failingDirectMessaging,
 		resiliency:      resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
@@ -2332,6 +2632,22 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			},
 		},
 	})
+	compStore.AddHTTPEndpoint(httpEndpointsV1alpha1.HTTPEndpoint{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "MockHTTPEndpoint",
+		},
+		Spec: httpEndpointsV1alpha1.HTTPEndpointSpec{
+			BaseURL: "api.test.com",
+			Headers: []httpEndpointsV1alpha1.Header{
+				{
+					Name: "Accept-Language",
+					Value: httpEndpointsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("en-US")},
+					},
+				},
+			},
+		},
+	})
 
 	testAPI := &api{
 		actor: nil,
@@ -2380,6 +2696,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				Version:      "v1.0",
 				Capabilities: []string{"mock.feat.MockComponent2Name"},
 			},
+		},
+		RegisteredHTTPEndpoints: []registeredHTTPEndpoint{
+			{Name: "MockHTTPEndpoint"},
 		},
 		Subscriptions: []pubsubSubscription{
 			{
@@ -2549,10 +2868,14 @@ func TestAPIToken(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	fakeServer := newFakeHTTPServer()
+	compStore := compstore.New()
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		resiliency:      resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServerWithAPIToken(testAPI.constructDirectMessagingEndpoints())
 
@@ -2664,11 +2987,15 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	pipe := httpMiddleware.Pipeline{}
 
 	createExporters(&buffer)
+	compStore := compstore.New()
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		resiliency:      resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
 
@@ -3589,11 +3916,15 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	})
 
 	createExporters(&buffer)
+	compStore := compstore.New()
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		resiliency:      resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
@@ -3642,11 +3973,15 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	})
 
 	createExporters(&buffer)
+	compStore := compstore.New()
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		resiliency:      resiliency.New(nil),
+		universal: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 

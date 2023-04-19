@@ -1251,7 +1251,8 @@ func (ie invokeError) Error() string {
 }
 
 func (a *api) isHTTPEndpoint(appID string) bool {
-	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
+	endpoint, ok := a.universal.CompStore.GetHTTPEndpoint(appID)
+	if ok {
 		if endpoint.Name == appID {
 			return true
 		}
@@ -1262,11 +1263,11 @@ func (a *api) isHTTPEndpoint(appID string) bool {
 // getBaseURL takes an app id and checks if the app id a http endpoint CRD.
 // It returns the baseURL if found.
 func (a *api) getBaseURL(targetAppID string) string {
-	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
+	endpoint, ok := a.universal.CompStore.GetHTTPEndpoint(targetAppID)
+	if ok {
 		if endpoint.Name == targetAppID {
 			return endpoint.Spec.BaseURL
 		}
-
 	}
 	return ""
 }
