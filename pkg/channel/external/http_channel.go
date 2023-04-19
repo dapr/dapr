@@ -196,8 +196,6 @@ func (h *HTTPEndpointAppChannel) getBaseURL(appID string) string {
 	return ""
 }
 
-// normally this constructsRequest for app channel URL for internal invocation
-// I want this to invoke external
 func (h *HTTPEndpointAppChannel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {
 	// Construct app channel URI: VERB http://api.github.com/method?query1=value1
 
@@ -205,7 +203,15 @@ func (h *HTTPEndpointAppChannel) constructRequest(ctx context.Context, req *invo
 	verb := msg.HttpExtension.Verb.String()
 	method := msg.Method
 	uri := strings.Builder{}
-	uri.WriteString(h.getBaseURL(appID))
+
+	// check for overwritten baseURL set as appID.
+	// otherwise, get baseURL from http endpoint CRDs.
+	if strings.Contains(appID, "://") {
+		uri.WriteString(appID)
+	} else {
+		uri.WriteString(h.getBaseURL(appID))
+	}
+
 	if len(method) > 0 && method[0] != '/' {
 		uri.WriteRune('/')
 	}

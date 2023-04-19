@@ -1283,8 +1283,8 @@ func (a *api) isHTTPEndpoint(appID string) bool {
 	return false
 }
 
-// getBaseURL takes an app id and checks if the app id is among the allowed list in the http endpoint CRDs,
-// and returns the baseURL from the HTTPEndpointSpec.Allowed field.
+// getBaseURL takes an app id and checks if the app id a http endpoint CRD.
+// It returns the baseURL if found.
 func (a *api) getBaseURL(targetAppID string) string {
 	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
 		if endpoint.Name == targetAppID {
@@ -1328,7 +1328,26 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	var req *invokev1.InvokeMethodRequest
 	var policyDef *resiliency.PolicyDefinition
-	if a.isHTTPEndpoint(targetID) {
+	switch {
+	// overwritten URL, so targetID = baseURL
+	case strings.Contains(targetID, "://"):
+		baseUrl := targetID
+		policyDef = a.resiliency.EndpointPolicy(targetID, baseUrl)
+		invokeMethodName := reqCtx.UserValue(methodParam).(string)
+		prefix := fmt.Sprintf("v1.0/invoke%s/%s/", baseUrl, methodParam)
+		invokeActualMethodName := invokeMethodName[len(prefix):]
+		req = invokev1.NewInvokeMethodRequest(invokeActualMethodName).
+			WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
+			WithRawDataBytes(reqCtx.Request.Body()).
+			WithContentType(string(reqCtx.Request.Header.ContentType())).
+			// Save headers to internal metadata
+			WithFastHTTPHeaders(&reqCtx.Request.Header)
+		if policyDef != nil {
+			req.WithReplay(policyDef.HasRetries())
+		}
+		defer req.Close()
+	// http endpoint CRD resource is detected being used for service invocation
+	case a.isHTTPEndpoint(targetID):
 		baseUrl := a.getBaseURL(targetID)
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+baseUrl)
 		invokeMethodName := reqCtx.UserValue(methodParam).(string)
@@ -1342,8 +1361,10 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		if policyDef != nil {
 			req.WithReplay(policyDef.HasRetries())
 		}
+
 		defer req.Close()
-	} else {
+	// regular service to service invocation
+	default:
 		invokeMethodName := reqCtx.UserValue(methodParam).(string)
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
 
@@ -1496,8 +1517,7 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 		// parts[3]: api.github.com
 		// parts[4]: method
 		targetURL := parts[3] + "//" + parts[4]
-		val := a.getAppIdFromBaseURL(targetURL)
-		return val
+		return targetURL
 	}
 
 	return ""

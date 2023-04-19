@@ -136,13 +136,14 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 
 // Invoke takes a message requests and invokes an app, either local or remote.
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+
 	app, err := d.getRemoteApp(targetAppID)
 	if err != nil {
 		return nil, err
 	}
 
-	// invoke external calls first if appID matches an httpEndpoint.Name
-	if d.isHTTPEndpoint(app.id) {
+	// invoke external calls first if appID matches an httpEndpoint.Name or app.id == baseURL that is overwritten
+	if d.isHTTPEndpoint(app.id) || strings.Contains(app.id, "://") {
 		return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeHTTPEndpoint, req)
 	}
 
@@ -168,6 +169,10 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	if targetAppID == "" {
 		return "", "", errors.New("app id is empty")
 	}
+	// external invocation with targetAppID == baseURL
+	if strings.Contains(targetAppID, "://") {
+		return targetAppID, "", nil
+	}
 	items := strings.Split(targetAppID, ".")
 	switch len(items) {
 	case 1:
@@ -179,8 +184,8 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	}
 }
 
-// checkHTTPEndpoints takes an app id and checks if the app id is among the allowed list in the http endpoint CRDs,
-// and returns the baseURL from the HTTPEndpointSpec.Allowed field.
+// checkHTTPEndpoints takes an app id and checks if the app id is associated with the http endpoint CRDs,
+// and returns the baseURL if an http endpoint is found.
 func (d *directMessaging) checkHTTPEndpoints(targetAppID string) string {
 	for _, endpoint := range d.httpEndpoints {
 		if endpoint.Name == targetAppID {
@@ -569,12 +574,15 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 		return remoteApp{}, errors.New("name resolver not initialized")
 	}
 
-	// Note: check if current app id is associated with an http endpoint CRD,
-	// and set the address accordingly.
-	// If address is found through http endpoint CRD,
-	// then this will forgo the usage of service discovery.
-	address := d.checkHTTPEndpoints(id)
-	if address == "" {
+	var address string
+	// Note: check for case where URL is overwritten for external service invocation,
+	// or if current app id is associated with an http endpoint CRD.
+	// This will also forgo service discovery.
+	if strings.Contains(id, "://") {
+		address = id
+	} else if d.isHTTPEndpoint(id) {
+		address = d.checkHTTPEndpoints(id)
+	} else {
 		request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
 		address, err = d.resolver.ResolveID(request)
 		if err != nil {
