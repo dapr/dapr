@@ -14,6 +14,8 @@ limitations under the License.
 package actors
 
 import (
+	"encoding/json"
+
 	"github.com/dapr/dapr/pkg/actors/reminders"
 )
 
@@ -76,6 +78,24 @@ type ReminderResponse struct {
 	Period  string `json:"period"`
 }
 
+// MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
+func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
+	type responseAlias ReminderResponse
+	m := struct {
+		Data []byte `json:"data,omitempty"`
+		*responseAlias
+	}{
+		responseAlias: (*responseAlias)(r),
+	}
+
+	var err error
+	m.Data, err = json.Marshal(r.Data)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(m)
+}
+
 // RenameReminderRequest is the request object for rename a reminder.
 type RenameReminderRequest struct {
 	OldName   string
@@ -103,4 +123,22 @@ type TimerResponse struct {
 	Data     any    `json:"data"`
 	DueTime  string `json:"dueTime"`
 	Period   string `json:"period"`
+}
+
+// MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
+func (t *TimerResponse) MarshalJSON() ([]byte, error) {
+	type responseAlias TimerResponse
+	m := struct {
+		Data []byte `json:"data,omitempty"`
+		*responseAlias
+	}{
+		responseAlias: (*responseAlias)(t),
+	}
+
+	var err error
+	m.Data, err = json.Marshal(t.Data)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(m)
 }
