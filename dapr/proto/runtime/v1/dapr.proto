@@ -93,11 +93,20 @@ service Dapr {
   // GetConfiguration gets configuration from configuration store.
   rpc GetConfigurationAlpha1(GetConfigurationRequest) returns (GetConfigurationResponse) {}
 
+  // GetConfiguration gets configuration from configuration store.
+  rpc GetConfiguration(GetConfigurationRequest) returns (GetConfigurationResponse) {}
+
   // SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
   rpc SubscribeConfigurationAlpha1(SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
 
+  // SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
+  rpc SubscribeConfiguration(SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
+
   // UnSubscribeConfiguration unsubscribe the subscription of configuration
   rpc UnsubscribeConfigurationAlpha1(UnsubscribeConfigurationRequest) returns (UnsubscribeConfigurationResponse) {}
+
+  // UnSubscribeConfiguration unsubscribe the subscription of configuration
+  rpc UnsubscribeConfiguration(UnsubscribeConfigurationRequest) returns (UnsubscribeConfigurationResponse) {}
 
   // TryLockAlpha1 tries to get a lock with an expiry.
   rpc TryLockAlpha1(TryLockRequest)returns (TryLockResponse) {}
