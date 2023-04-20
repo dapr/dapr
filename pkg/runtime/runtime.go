@@ -2911,9 +2911,9 @@ func (a *DaprRuntime) getAppHTTPEndpoint() string {
 	port := strconv.Itoa(a.runtimeConfig.ApplicationPort)
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol, H2CProtocol:
-		return "http://" + channel.DefaultChannelAddress + ":" + port
+		return "http://" + channel.Address + ":" + port
 	case HTTPSProtocol:
-		return "https://" + channel.DefaultChannelAddress + ":" + port
+		return "https://" + channel.Address + ":" + port
 	default:
 		return ""
 	}
