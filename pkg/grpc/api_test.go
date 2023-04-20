@@ -2810,7 +2810,6 @@ func TestGetConfigurationAPI(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddConfiguration("store1", &mockConfigStore{})
 		server, lis := startDaprAPIServer(&api{
-			id: "fakeAPI",
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID:     "fakeAPI",
 				CompStore: compStore,
@@ -2889,7 +2888,6 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 		compStore.AddConfiguration("store1", &mockConfigStore{})
 
 		server, lis := startDaprAPIServer(&api{
-			id: "fakeAPI",
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID:     "fakeAPI",
 				CompStore: compStore,
@@ -2978,7 +2976,6 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddConfiguration("store1", &mockConfigStore{})
 		server, lis := startDaprAPIServer(&api{
-			id: "fakeAPI",
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID:     "fakeAPI",
 				CompStore: compStore,
