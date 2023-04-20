@@ -14,6 +14,8 @@ limitations under the License.
 package actors
 
 import (
+	"encoding/json"
+
 	"github.com/dapr/dapr/pkg/actors/reminders"
 )
 
@@ -76,6 +78,31 @@ type ReminderResponse struct {
 	Period  string `json:"period"`
 }
 
+// MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
+// Actor SDKs expect "data" to be a base64-encoded message with the JSON representation of the data, so this makes sure that happens.
+// This method implements the json.Marshaler interface.
+func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
+	type responseAlias ReminderResponse
+	m := struct {
+		Data []byte `json:"data,omitempty"`
+		*responseAlias
+	}{
+		responseAlias: (*responseAlias)(r),
+	}
+
+	// r.Data is usually a json.RawMessage, but because it's stored in a field of type any, we need to use json.Marshal as fallback
+	if raw, ok := r.Data.(json.RawMessage); ok {
+		m.Data = []byte(raw)
+	} else {
+		var err error
+		m.Data, err = json.Marshal(r.Data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(m)
+}
+
 // RenameReminderRequest is the request object for rename a reminder.
 type RenameReminderRequest struct {
 	OldName   string
@@ -103,4 +130,29 @@ type TimerResponse struct {
 	Data     any    `json:"data"`
 	DueTime  string `json:"dueTime"`
 	Period   string `json:"period"`
+}
+
+// MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
+// Actor SDKs expect "data" to be a base64-encoded message with the JSON representation of the data, so this makes sure that happens.
+// This method implements the json.Marshaler interface.
+func (t *TimerResponse) MarshalJSON() ([]byte, error) {
+	type responseAlias TimerResponse
+	m := struct {
+		Data []byte `json:"data,omitempty"`
+		*responseAlias
+	}{
+		responseAlias: (*responseAlias)(t),
+	}
+
+	// t.Data is usually a json.RawMessage, but because it's stored in a field of type any, we need to use json.Marshal as fallback
+	if raw, ok := t.Data.(json.RawMessage); ok {
+		m.Data = []byte(raw)
+	} else {
+		var err error
+		m.Data, err = json.Marshal(t.Data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(m)
 }
