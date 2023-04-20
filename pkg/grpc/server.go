@@ -216,9 +216,9 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 
 	intr = append(intr, metadata.SetMetadataInContextUnary)
 
-	if len(s.apiSpec.Allowed) > 0 {
+	if len(s.apiSpec.Allowed) > 0 || len(s.apiSpec.Denied) > 0 {
 		s.logger.Info("Enabled API access list on gRPC server")
-		unary, stream := setAPIEndpointsMiddlewares(s.apiSpec.Allowed)
+		unary, stream := setAPIEndpointsMiddlewares(s.apiSpec.Allowed, s.apiSpec.Denied)
 		if unary != nil && stream != nil {
 			intr = append(intr, unary)
 			intrStream = append(intrStream, stream)

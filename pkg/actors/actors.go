@@ -40,7 +40,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/concurrency"
 	configuration "github.com/dapr/dapr/pkg/config"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -1359,6 +1358,9 @@ func (a *actorsRuntime) getActorTypeMetadata(ctx context.Context, actorType stri
 	policyRunner := resiliency.NewRunner[*ActorMetadata](ctx, policyDef)
 	getReq := &state.GetRequest{
 		Key: constructCompositeKey("actors", actorType, "metadata"),
+		Metadata: map[string]string{
+			metadataPartitionKey: constructCompositeKey("actors", actorType),
+		},
 	}
 	return policyRunner(func(ctx context.Context) (*ActorMetadata, error) {
 		rResp, rErr := store.Get(ctx, getReq)
@@ -1445,17 +1447,11 @@ func (a *actorsRuntime) migrateRemindersForActorType(ctx context.Context, store 
 	}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(i+1))
-		stateOperations[i] = state.TransactionalStateOperation{
-			Operation: state.Upsert,
-			Request:   a.saveRemindersInPartitionRequest(stateKey, actorRemindersPartitions[i], nil, stateMetadata),
-		}
+		stateOperations[i] = a.saveRemindersInPartitionRequest(stateKey, actorRemindersPartitions[i], nil, stateMetadata)
 	}
 
 	// Also create a request to save the new metadata, so the new "metadataID" becomes the new de facto referenced list for reminders
-	stateOperations[len(stateOperations)-1] = state.TransactionalStateOperation{
-		Operation: state.Upsert,
-		Request:   a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata),
-	}
+	stateOperations[len(stateOperations)-1] = a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata)
 
 	// Perform all operations in a transaction
 	err = a.executeStateStoreTransaction(ctx, store, stateOperations, stateMetadata)
@@ -1469,20 +1465,15 @@ func (a *actorsRuntime) migrateRemindersForActorType(ctx context.Context, store 
 	return nil
 }
 
-type bulkGetRes struct {
-	bulkGet      bool
-	bulkResponse []state.BulkGetResponse
-}
-
 func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType string, migrate bool) ([]actorReminderReference, *ActorMetadata, error) {
 	store, err := a.stateStore()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	actorMetadata, merr := a.getActorTypeMetadata(ctx, actorType, migrate)
-	if merr != nil {
-		return nil, nil, fmt.Errorf("could not read actor type metadata: %w", merr)
+	actorMetadata, err := a.getActorTypeMetadata(ctx, actorType, migrate)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not read actor type metadata: %w", err)
 	}
 
 	policyDef := a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore)
@@ -1490,6 +1481,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 	log.Debugf(
 		"starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
 		actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount)
+
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
 		metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
 		actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
@@ -1505,61 +1497,17 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 			}
 		}
 
-		policyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
-		bgr, pErr := policyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-			rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, getRequests)
-			if rErr != nil {
-				return &bulkGetRes{}, rErr
-			}
-			return &bulkGetRes{
-				bulkGet:      rBulkGet,
-				bulkResponse: rBulkResponse,
-			}, nil
+		var bulkResponse []state.BulkGetResponse
+		policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx, policyDef)
+		bulkResponse, err = policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+			return store.BulkGet(ctx, getRequests, state.BulkGetOpts{})
 		})
-		if bgr == nil {
-			bgr = &bulkGetRes{}
-		}
-		if bgr.bulkGet {
-			if pErr != nil {
-				return nil, nil, pErr
-			}
-		} else {
-			// TODO(artursouza): refactor this fallback into default implementation in contrib.
-			// if store doesn't support bulk get, fallback to call get() method one by one
-			limiter := concurrency.NewLimiter(actorMetadata.RemindersMetadata.PartitionCount)
-			bgr.bulkResponse = make([]state.BulkGetResponse, len(getRequests))
-			for i := range getRequests {
-				getRequest := getRequests[i]
-				bgr.bulkResponse[i].Key = getRequest.Key
-
-				fn := func(param any) {
-					r := param.(*state.BulkGetResponse)
-					policyRunner := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
-					resp, ferr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-						return store.Get(ctx, &getRequest)
-					})
-					if ferr != nil {
-						r.Error = ferr.Error()
-						return
-					}
-
-					if resp == nil || len(resp.Data) == 0 {
-						r.Error = "data not found for reminder partition"
-						return
-					}
-
-					r.Data = json.RawMessage(resp.Data)
-					r.ETag = resp.ETag
-					r.Metadata = resp.Metadata
-				}
-
-				limiter.Execute(fn, &bgr.bulkResponse[i])
-			}
-			limiter.Wait()
+		if err != nil {
+			return nil, nil, err
 		}
 
 		list := []actorReminderReference{}
-		for _, resp := range bgr.bulkResponse {
+		for _, resp := range bulkResponse {
 			partition := keyPartitionMap[resp.Key]
 			actorMetadata.RemindersMetadata.partitionsEtag[partition] = resp.ETag
 			if resp.Error != "" {
@@ -1576,13 +1524,17 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 				return nil, nil, fmt.Errorf("no data found for reminder partition %v: %w", resp.Key, err)
 			}
 
+			// We can't pre-allocate "list" with the needed capacity because we don't know how many items are in each partition
+			// However, we can limit the number of times we call "append" on list in a way that could cause the slice to be re-allocated, by managing a separate list here with a fixed capacity and modify "list" just once at per iteration on "bulkResponse".
+			batchList := make([]actorReminderReference, len(batch))
 			for j := range batch {
-				list = append(list, actorReminderReference{
+				batchList[j] = actorReminderReference{
 					actorMetadataID:           actorMetadata.ID,
 					actorRemindersPartitionID: partition,
 					reminder:                  batch[j],
-				})
+				}
 			}
+			list = append(list, batchList...)
 		}
 
 		log.Debugf(
@@ -1592,7 +1544,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 	}
 
 	key := constructCompositeKey("actors", actorType)
-	policyRunner := resiliency.NewRunner[*state.GetResponse](context.TODO(), policyDef)
+	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(ctx, &state.GetRequest{
 			Key: key,
@@ -1605,7 +1557,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 	if resp == nil {
 		resp = &state.GetResponse{}
 	}
-	log.Debugf("read reminders from %s without partition: %s", key, string(resp.Data))
+	log.Debugf("read reminders from %s without partition", key)
 
 	var reminders []reminders.Reminder
 	if len(resp.Data) > 0 {
@@ -1716,14 +1668,8 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 			metadataPartitionKey: databasePartitionKey,
 		}
 		stateOperations := []state.TransactionalStateOperation{
-			{
-				Operation: state.Upsert,
-				Request:   a.saveRemindersInPartitionRequest(stateKey, remindersInPartition, etag, stateMetadata),
-			},
-			{
-				Operation: state.Upsert,
-				Request:   a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata),
-			},
+			a.saveRemindersInPartitionRequest(stateKey, remindersInPartition, etag, stateMetadata),
+			a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata),
 		}
 		rErr = a.executeStateStoreTransaction(ctx, store, stateOperations, stateMetadata)
 		if rErr != nil {
@@ -1843,14 +1789,8 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, store transactionalSt
 			metadataPartitionKey: databasePartitionKey,
 		}
 		stateOperations := []state.TransactionalStateOperation{
-			{
-				Operation: state.Upsert,
-				Request:   a.saveRemindersInPartitionRequest(stateKey, remindersInPartition, etag, stateMetadata),
-			},
-			{
-				Operation: state.Upsert,
-				Request:   a.saveActorTypeMetadataRequest(reminder.ActorType, actorMetadata, stateMetadata),
-			},
+			a.saveRemindersInPartitionRequest(stateKey, remindersInPartition, etag, stateMetadata),
+			a.saveActorTypeMetadataRequest(reminder.ActorType, actorMetadata, stateMetadata),
 		}
 		rErr = a.executeStateStoreTransaction(ctx, store, stateOperations, stateMetadata)
 		if rErr != nil {
