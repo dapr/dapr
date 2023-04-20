@@ -48,12 +48,12 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 	}
 
 	res := &runtimev1pb.GetWorkflowResponse{
-		InstanceId:      response.Workflow.InstanceID,
-		WorkflowName:    response.Workflow.WorkflowName,
-		StartTime:       timestamppb.New(response.Workflow.CreatedAt),
-		LastUpdatedTime: timestamppb.New(response.Workflow.LastUpdatedAt),
-		RuntimeStatus:   response.Workflow.RuntimeStatus,
-		Properties:      response.Workflow.Properties,
+		InstanceId:    response.Workflow.InstanceID,
+		WorkflowName:  response.Workflow.WorkflowName,
+		CreatedAt:     timestamppb.New(response.Workflow.CreatedAt),
+		LastUpdatedAt: timestamppb.New(response.Workflow.LastUpdatedAt),
+		RuntimeStatus: response.Workflow.RuntimeStatus,
+		Properties:    response.Workflow.Properties,
 	}
 	return res, nil
 }
