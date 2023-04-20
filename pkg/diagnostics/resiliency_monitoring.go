@@ -114,8 +114,8 @@ func ResiliencyActorTarget(actorType string) string {
 	return "actor_" + actorType
 }
 
-func ResiliencyAppTarget(actorType string) string {
-	return "app_" + actorType
+func ResiliencyAppTarget(app string) string {
+	return "app_" + app
 }
 
 func ResiliencyComponentTarget(name string, componentType string) string {
