@@ -50,6 +50,8 @@ const (
 	DefaultGracefulShutdownDuration = time.Second * 5
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
 	DefaultAppHealthCheckPath = "/health"
+	// DefaultChannelAddress is the default local network address that user application listen on.
+	DefaultChannelAddress = "127.0.0.1"
 )
 
 // Config holds the Dapr Runtime configuration.

@@ -2929,7 +2929,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		default:
 			// nop - continue execution
 		}
-		conn, _ := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(a.runtimeConfig.ApplicationPort), time.Millisecond*500)
+		conn, _ := net.DialTimeout("tcp", channel.Address+":"+strconv.Itoa(a.runtimeConfig.ApplicationPort), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()
 			break
@@ -2994,9 +2994,9 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 func (a *DaprRuntime) getAppHTTPEndpoint() string {
 	port := strconv.Itoa(a.runtimeConfig.ApplicationPort)
 	if a.runtimeConfig.AppSSL {
-		return "https://" + channel.DefaultChannelAddress + ":" + port
+		return "https://" + channel.Address + ":" + port
 	} else {
-		return "http://" + channel.DefaultChannelAddress + ":" + port
+		return "http://" + channel.Address + ":" + port
 	}
 }
 

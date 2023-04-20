@@ -55,7 +55,7 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	c := &Channel{
 		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
 		conn:                 conn,
-		baseAddress:          net.JoinHostPort(channel.DefaultChannelAddress, strconv.Itoa(port)),
+		baseAddress:          net.JoinHostPort(channel.Address, strconv.Itoa(port)),
 		tracingSpec:          spec,
 		appMetadataToken:     auth.GetAppToken(),
 		maxRequestBodySizeMB: maxRequestBodySize,

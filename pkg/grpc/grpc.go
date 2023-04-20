@@ -157,7 +157,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ssl
 	}
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
-	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	address := net.JoinHostPort(channel.Address, strconv.Itoa(port))
 
 	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
 	defer cancel()

@@ -68,6 +68,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	"github.com/dapr/dapr/pkg/channel"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
@@ -5249,6 +5250,19 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 		Match: e,
 		Path:  path,
 	}, nil
+}
+
+func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
+	channel.Address = "my.app"
+
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
+	defer stopRuntime(t, rt)
+
+	p, err := rt.buildAppHTTPPipeline()
+	assert.Nil(t, err)
+
+	c := rt.getAppHTTPChannelConfig(p)
+	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 
 func TestComponentsCallback(t *testing.T) {
