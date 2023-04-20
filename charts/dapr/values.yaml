@@ -22,6 +22,8 @@ global:
     enabled: true
     workloadCertTTL: 24h
     allowedClockSkew: 15m
+  actors:
+    enabled: true
   daprControlPlaneOs: linux
   labels: {}
   k8sLabels:
