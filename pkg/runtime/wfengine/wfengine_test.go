@@ -81,7 +81,7 @@ func (*mockPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error 
 // TestStartWorkflowEngine validates that starting the workflow engine returns no errors.
 func TestStartWorkflowEngine(t *testing.T) {
 	ctx := context.Background()
-	engine := getEngine()
+	engine := getEngine(t)
 	grpcServer := grpc.NewServer()
 	engine.ConfigureGrpc(grpcServer)
 	err := engine.Start(ctx)
@@ -112,7 +112,7 @@ func TestEmptyWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			preStartTime := time.Now().UTC()
@@ -144,7 +144,7 @@ func TestSingleTimerWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "SingleTimer")
@@ -181,7 +181,7 @@ func TestSingleActivityWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"))
@@ -218,7 +218,7 @@ func TestActivityChainingWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
@@ -264,7 +264,7 @@ func TestConcurrentActivityExecution(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityFanOut")
@@ -312,7 +312,7 @@ func TestContinueAsNewWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
@@ -338,7 +338,7 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			// First workflow
@@ -363,6 +363,14 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 	}
 }
 
+func TestInternalActorsSetupForWF(t *testing.T) {
+	ctx := context.Background()
+	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
+	assert.Equal(t, 2, len(engine.InternalActors()))
+	assert.Contains(t, engine.InternalActors(), workflowActorType)
+	assert.Contains(t, engine.InternalActors(), activityActorType)
+}
+
 // TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
 func TestRecreateRunningWorkflowFails(t *testing.T) {
 	r := task.NewTaskRegistry()
@@ -372,7 +380,8 @@ func TestRecreateRunningWorkflowFails(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
+
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			// Start the first workflow, which will not complete
@@ -410,7 +419,7 @@ func TestRetryWorkflowOnTimeout(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 
 	// Set a really short timeout to override the default workflow timeout so that we can exercise the timeout
 	// handling codepath in a short period of time.
@@ -460,7 +469,7 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 
 	// Set a really short timeout to override the default activity timeout (1 hour at the time of writing)
 	// so that we can exercise the timeout handling codepath in a short period of time.
@@ -503,7 +512,7 @@ func TestConcurrentTimerExecution(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "TimerFanOut")
@@ -537,7 +546,7 @@ func TestRaiseEvent(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "WorkflowForRaiseEvent")
@@ -619,7 +628,7 @@ func TestPauseResumeWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, r)
+	client, engine := startEngine(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "PauseWorkflow")
@@ -640,15 +649,15 @@ func TestPauseResumeWorkflow(t *testing.T) {
 	}
 }
 
-func startEngine(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
+func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
 	var client backend.TaskHubClient
-	engine := getEngine()
+	engine := getEngine(t)
 	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
 		client = backend.NewTaskHubClient(be)
 		return task.NewTaskExecutor(r)
 	})
 	if err := engine.Start(ctx); err != nil {
-		panic(err)
+		require.NoError(t, err)
 	}
 	return client, engine
 }
@@ -666,8 +675,8 @@ func startEngineAndGetStore(ctx context.Context, r *task.TaskRegistry) (backend.
 	return client, engine, store
 }
 
-func getEngine() *wfengine.WorkflowEngine {
-	engine := wfengine.NewWorkflowEngine()
+func getEngine(t *testing.T) *wfengine.WorkflowEngine {
+	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
@@ -685,7 +694,7 @@ func getEngine() *wfengine.WorkflowEngine {
 	})
 
 	if err := actors.Init(); err != nil {
-		panic(err)
+		require.NoError(t, err)
 	}
 	engine.SetActorRuntime(actors)
 	return engine
