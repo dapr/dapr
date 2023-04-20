@@ -25,24 +25,30 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
+const (
+	workflowActorType = "dapr.internal.default.wf-app.workflow"
+	activityActorType = "dapr.internal.default.wf-app.activity"
+)
+
 func TestNoWorkflowState(t *testing.T) {
 	actors := getActorRuntime()
-	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1")
+	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewWorkflowConfig(testAppID))
 	assert.NoError(t, err)
 	assert.Empty(t, state)
 }
 
 func TestDefaultWorkflowState(t *testing.T) {
-	state := wfengine.NewWorkflowState()
+	state := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
 	assert.Equal(t, uint64(1), state.Generation)
 }
 
 func TestAddingToInbox(t *testing.T) {
-	state := wfengine.NewWorkflowState()
+	state := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
 	for i := 0; i < 10; i++ {
 		state.AddToInbox(&backend.HistoryEvent{})
 	}
@@ -50,7 +56,7 @@ func TestAddingToInbox(t *testing.T) {
 	req, err := state.GetSaveRequest("wf1")
 	if assert.NoError(t, err) {
 		assert.Equal(t, "wf1", req.ActorID)
-		assert.Equal(t, wfengine.WorkflowActorType, req.ActorType)
+		assert.Equal(t, workflowActorType, req.ActorType)
 
 		upsertCount, deleteCount := countOperations(t, req)
 		assert.Equal(t, 12, upsertCount) // 10x inbox + metadata + customStatus
@@ -59,7 +65,7 @@ func TestAddingToInbox(t *testing.T) {
 }
 
 func TestClearingInbox(t *testing.T) {
-	state := wfengine.NewWorkflowState()
+	state := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
 	for i := 0; i < 10; i++ {
 		// Simulate the loadng of inbox events from storage
 		state.Inbox = append(state.Inbox, &backend.HistoryEvent{})
@@ -69,7 +75,7 @@ func TestClearingInbox(t *testing.T) {
 	req, err := state.GetSaveRequest("wf1")
 	if assert.NoError(t, err) {
 		assert.Equal(t, "wf1", req.ActorID)
-		assert.Equal(t, wfengine.WorkflowActorType, req.ActorType)
+		assert.Equal(t, workflowActorType, req.ActorType)
 
 		upsertCount, deleteCount := countOperations(t, req)
 		assert.Equal(t, 2, upsertCount)  // metadata + customStatus
@@ -78,7 +84,7 @@ func TestClearingInbox(t *testing.T) {
 }
 
 func TestAddingToHistory(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState()
+	wfstate := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
 		if err := runtimeState.AddEvent(&backend.HistoryEvent{}); !assert.NoError(t, err) {
@@ -90,7 +96,7 @@ func TestAddingToHistory(t *testing.T) {
 	req, err := wfstate.GetSaveRequest("wf1")
 	if assert.NoError(t, err) {
 		assert.Equal(t, "wf1", req.ActorID)
-		assert.Equal(t, wfengine.WorkflowActorType, req.ActorType)
+		assert.Equal(t, workflowActorType, req.ActorType)
 
 		upsertCount, deleteCount := countOperations(t, req)
 		assert.Equal(t, 12, upsertCount) // 10x history + metadata + customStatus
@@ -99,7 +105,7 @@ func TestAddingToHistory(t *testing.T) {
 }
 
 func TestLoadSavedState(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState()
+	wfstate := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
@@ -128,7 +134,7 @@ func TestLoadSavedState(t *testing.T) {
 		return
 	}
 
-	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1")
+	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewWorkflowConfig(testAppID))
 	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
 		assert.Equal(t, "my custom status", wfstate.CustomStatus)
 		assert.Equal(t, uint64(1), wfstate.Generation)
@@ -146,7 +152,7 @@ func TestLoadSavedState(t *testing.T) {
 }
 
 func TestResetLoadedState(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState()
+	wfstate := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
@@ -170,7 +176,7 @@ func TestResetLoadedState(t *testing.T) {
 		return
 	}
 
-	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actorRuntime, "wf1")
+	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actorRuntime, "wf1", wfengine.NewWorkflowConfig(testAppID))
 	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
 		assert.Equal(t, uint64(1), wfstate.Generation)
 		wfstate.Reset()
@@ -192,8 +198,10 @@ func getActorRuntime() actors.Actors {
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          config.ApplicationConfig{},
 	})
+	compStore := compstore.New()
+	compStore.AddStateStore("workflowStore", store)
 	actors := actors.NewActors(actors.ActorsOpts{
-		StateStore:     store,
+		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),

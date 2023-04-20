@@ -243,8 +243,13 @@ message BulkDeleteRequest {
 // reserved for future-proof extensibility
 message BulkDeleteResponse {}
 
+message BulkGetRequestOptions {
+  int64 parallelism = 1;
+}
+
 message BulkGetRequest {
   repeated GetRequest items = 1;
+  BulkGetRequestOptions options = 2;
 }
 
 message BulkStateItem {
@@ -264,7 +269,6 @@ message BulkStateItem {
 
 message BulkGetResponse {
   repeated BulkStateItem items = 1;
-  bool got = 2;
 }
 
 message BulkSetRequest {

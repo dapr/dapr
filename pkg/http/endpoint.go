@@ -13,7 +13,13 @@ limitations under the License.
 
 package http
 
-import "github.com/valyala/fasthttp"
+import (
+	"strings"
+
+	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/config"
+)
 
 // Endpoint is a collection of route information for an Dapr API.
 //
@@ -30,4 +36,38 @@ type Endpoint struct {
 	Handler           fasthttp.RequestHandler
 	AlwaysAllowed     bool // Endpoint is always allowed regardless of API access rules
 	IsHealthCheck     bool // Mark endpoint as healthcheck - for API logging purposes
+}
+
+// IsAllowed returns true if the endpoint is allowed given the API allowlist/denylist.
+func (endpoint Endpoint) IsAllowed(allowedAPIs []config.APIAccessRule, deniedAPIs []config.APIAccessRule) bool {
+	// If the endpoint is always allowed, return true
+	if endpoint.AlwaysAllowed {
+		return true
+	}
+
+	// First, check the denylist
+	if len(deniedAPIs) > 0 {
+		for _, rule := range deniedAPIs {
+			if endpointMatchesAPIAccessRule(endpoint, rule) {
+				return false
+			}
+		}
+	}
+
+	// Now check the allowlist if present
+	if len(allowedAPIs) == 0 {
+		return true
+	}
+
+	for _, rule := range allowedAPIs {
+		if endpointMatchesAPIAccessRule(endpoint, rule) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func endpointMatchesAPIAccessRule(endpoint Endpoint, rule config.APIAccessRule) bool {
+	return endpoint.Version == rule.Version && strings.HasPrefix(endpoint.Route, rule.Name)
 }

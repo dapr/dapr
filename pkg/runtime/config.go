@@ -26,10 +26,17 @@ import (
 type Protocol string
 
 const (
-	// GRPCProtocol is a gRPC communication protocol.
+	// GRPCProtocol is the gRPC communication protocol.
 	GRPCProtocol Protocol = "grpc"
-	// HTTPProtocol is a HTTP communication protocol.
+	// GRPCSProtocol is the gRPC communication protocol with TLS (without validating certificates).
+	GRPCSProtocol Protocol = "grpcs"
+	// HTTPProtocol is the HTTP communication protocol.
 	HTTPProtocol Protocol = "http"
+	// HTTPSProtocol is the HTTPS communication protocol with TLS (without validating certificates).
+	HTTPSProtocol Protocol = "https"
+	// H2CProtocol is the HTTP/2 Cleartext communication protocol (HTTP/2 without TLS).
+	H2CProtocol Protocol = "h2c"
+
 	// DefaultDaprHTTPPort is the default http port for Dapr.
 	DefaultDaprHTTPPort = 3500
 	// DefaultDaprPublicPort is the default http port for Dapr.
@@ -54,6 +61,16 @@ const (
 	DefaultChannelAddress = "127.0.0.1"
 )
 
+// IsHTTP returns true if the app protocol is using HTTP (including HTTPS and H2C).
+func (p Protocol) IsHTTP() bool {
+	switch p {
+	case HTTPProtocol, HTTPSProtocol, H2CProtocol:
+		return true
+	default:
+		return false
+	}
+}
+
 // Config holds the Dapr Runtime configuration.
 type Config struct {
 	ID                           string
@@ -75,7 +92,6 @@ type Config struct {
 	mtlsEnabled                  bool
 	SentryServiceAddress         string
 	CertChain                    *credentials.CertChain
-	AppSSL                       bool
 	MaxRequestBodySize           int
 	UnixDomainSocket             string
 	ReadBufferSize               int
@@ -106,7 +122,6 @@ type NewRuntimeConfigOpts struct {
 	MaxConcurrency               int
 	MTLSEnabled                  bool
 	SentryAddress                string
-	AppSSL                       bool
 	MaxRequestBodySize           int
 	UnixDomainSocket             string
 	ReadBufferSize               int
@@ -155,7 +170,6 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		MaxConcurrency:               opts.MaxConcurrency,
 		mtlsEnabled:                  opts.MTLSEnabled,
 		SentryServiceAddress:         opts.SentryAddress,
-		AppSSL:                       opts.AppSSL,
 		MaxRequestBodySize:           opts.MaxRequestBodySize,
 		UnixDomainSocket:             opts.UnixDomainSocket,
 		ReadBufferSize:               opts.ReadBufferSize,

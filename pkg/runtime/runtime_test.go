@@ -37,10 +37,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ghodss/yaml"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-multierror"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -55,6 +53,7 @@ import (
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
@@ -91,6 +90,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -605,7 +605,7 @@ func TestComponentsUpdate(t *testing.T) {
 			if comp.Name == "" {
 				continue
 			}
-			rt.appendOrReplaceComponents(comp)
+			rt.compStore.AddComponent(comp)
 			processedCh <- struct{}{}
 		}
 	}
@@ -659,7 +659,7 @@ func TestComponentsUpdate(t *testing.T) {
 		t.Errorf("Expect component [comp1] processed.")
 		t.FailNow()
 	}
-	_, exists := rt.getComponent(comp1.Spec.Type, comp1.Name)
+	_, exists := rt.compStore.GetComponent(comp1.Spec.Type, comp1.Name)
 	assert.True(t, exists, fmt.Sprintf("expect component, type: %s, name: %s", comp1.Spec.Type, comp1.Name))
 
 	// Close all client streams to trigger an stream error in `beginComponentsUpdates`
@@ -688,7 +688,7 @@ func TestComponentsUpdate(t *testing.T) {
 		t.Errorf("Expect component [comp2] processed.")
 		t.FailNow()
 	}
-	_, exists = rt.getComponent(comp2.Spec.Type, comp2.Name)
+	_, exists = rt.compStore.GetComponent(comp2.Spec.Type, comp2.Name)
 	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp2.Spec.Type, comp2.Name))
 
 	mockOpCli.UpdateComponent(comp3)
@@ -700,7 +700,7 @@ func TestComponentsUpdate(t *testing.T) {
 		t.Errorf("Expect component [comp3] processed.")
 		t.FailNow()
 	}
-	_, exists = rt.getComponent(comp3.Spec.Type, comp3.Name)
+	_, exists = rt.compStore.GetComponent(comp3.Spec.Type, comp3.Name)
 	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp3.Spec.Type, comp3.Name))
 }
 
@@ -780,7 +780,7 @@ func TestInitState(t *testing.T) {
 		// setup
 		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
-		rt.secretStores["mockSecretStore"] = &mockSecretStore{}
+		rt.compStore.AddSecretStore("mockSecretStore", &mockSecretStore{})
 
 		err := rt.initState(mockStateComponent)
 		ok := encryption.EncryptedStateStore("testpubsub")
@@ -1202,7 +1202,7 @@ func TestMetadataAppID(t *testing.T) {
 func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
-		rt.components = append(rt.components, componentsV1alpha1.Component{
+		rt.compStore.AddComponent(componentsV1alpha1.Component{
 			ObjectMeta: metaV1.ObjectMeta{
 				Name: "test",
 			},
@@ -1251,7 +1251,7 @@ func TestOnComponentUpdated(t *testing.T) {
 
 	t.Run("component spec unchanged, component is skipped", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
-		rt.components = append(rt.components, componentsV1alpha1.Component{
+		rt.compStore.AddComponent(componentsV1alpha1.Component{
 			ObjectMeta: metaV1.ObjectMeta{
 				Name: "test",
 			},
@@ -1415,9 +1415,11 @@ func TestInitPubSub(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
-		rt.topicRoutes = nil
-		rt.subscriptions = nil
-		rt.pubSubs = make(map[string]pubsubItem)
+		rt.compStore.SetTopicRoutes(nil)
+		rt.compStore.SetSubscriptions(nil)
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
+		}
 
 		return mockPubSub, mockPubSub2
 	}
@@ -1524,9 +1526,9 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 		ps, _ := initMockPubSubForRuntime(rts)
-		rts.pubSubs[TestPubsubName] = pubsubItem{
-			component: ps,
-		}
+		rts.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component: ps,
+		})
 		a := rts.getPublishAdapter()
 		assert.NotNil(t, a)
 	})
@@ -1736,7 +1738,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.NoError(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{Component: &mockPublishPubSub{}})
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
 		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
@@ -1756,7 +1758,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 
-		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{Component: &mockPublishPubSub{}})
 		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic1",
@@ -1787,10 +1789,10 @@ func TestInitPubSub(t *testing.T) {
 			require.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = pubsubItem{
-			component:     &mockPublishPubSub{},
-			allowedTopics: []string{"topic1"},
-		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component:     &mockPublishPubSub{},
+			AllowedTopics: []string{"topic1"},
+		})
 
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
@@ -1810,10 +1812,10 @@ func TestInitPubSub(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Empty(t, res)
 
-		rt.pubSubs[TestPubsubName] = pubsubItem{
-			component:     &mockPublishPubSub{},
-			allowedTopics: []string{"topic1"},
-		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component:     &mockPublishPubSub{},
+			AllowedTopics: []string{"topic1"},
+		})
 		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
@@ -1851,7 +1853,9 @@ func TestInitPubSub(t *testing.T) {
 			assert.NoError(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component: &mockPublishPubSub{},
+		})
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
 		err := rt.Publish(&pubsub.PublishRequest{
@@ -1862,7 +1866,9 @@ func TestInitPubSub(t *testing.T) {
 
 		assert.NoError(t, err)
 
-		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
+			Component: &mockPublishPubSub{},
+		})
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
@@ -1891,20 +1897,20 @@ func TestInitPubSub(t *testing.T) {
 			require.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = pubsubItem{
-			component:     &mockPublishPubSub{},
-			allowedTopics: []string{"topic1"},
-		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component:     &mockPublishPubSub{},
+			AllowedTopics: []string{"topic1"},
+		})
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 		})
 		assert.NotNil(t, err)
 
-		rt.pubSubs[TestPubsubName] = pubsubItem{
-			component:     &mockPublishPubSub{},
-			allowedTopics: []string{"topic1"},
-		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component:     &mockPublishPubSub{},
+			AllowedTopics: []string{"topic1"},
+		})
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
@@ -1913,66 +1919,70 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
-		rt.pubSubs = map[string]pubsubItem{
-			TestPubsubName: {allowedTopics: []string{"topic1"}},
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
 		}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{AllowedTopics: []string{"topic1"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
-		rt.pubSubs = map[string]pubsubItem{
-			TestPubsubName: {allowedTopics: []string{"topic1"}},
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
 		}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", rt.pubSubs[TestPubsubName].scopedPublishings)
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{AllowedTopics: []string{"topic1"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", pubSub.ScopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
-		rt.pubSubs = map[string]pubsubItem{
-			TestPubsubName: {
-				allowedTopics:     []string{"topic1"},
-				scopedPublishings: []string{"topic1"},
-			},
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
 		}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic1"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
-		rt.pubSubs = map[string]pubsubItem{
-			TestPubsubName: {
-				allowedTopics:     []string{"topic1"},
-				scopedPublishings: []string{"topic2"},
-			},
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
 		}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic2"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
-		rt.pubSubs = map[string]pubsubItem{
-			TestPubsubName: {
-				allowedTopics:     []string{"topic1"},
-				scopedPublishings: []string{},
-			},
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
 		}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("topics A and B in allowed topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
-		rt.pubSubs = map[string]pubsubItem{
-			TestPubsubName: {
-				allowedTopics:     []string{"A", "B"},
-				scopedPublishings: []string{"A"},
-			},
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
 		}
-
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", rt.pubSubs[TestPubsubName].scopedPublishings)
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{AllowedTopics: []string{"A", "B"}, ScopedPublishings: []string{"A"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", pubSub.ScopedPublishings)
 		assert.True(t, a)
-
-		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.pubSubs[TestPubsubName].scopedPublishings)
+		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", pubSub.ScopedPublishings)
 		assert.False(t, b)
 	})
 }
@@ -2022,7 +2032,9 @@ func TestInitSecretStores(t *testing.T) {
 			},
 		})
 		assert.NoError(t, err)
-		assert.NotNil(t, rt.secretStores["kubernetesMock"])
+		store, ok := rt.compStore.GetSecretStore("kubernetesMock")
+		assert.True(t, ok)
+		assert.NotNil(t, store)
 	})
 
 	t.Run("get secret store", func(t *testing.T) {
@@ -2046,7 +2058,8 @@ func TestInitSecretStores(t *testing.T) {
 			},
 		})
 
-		s := rt.getSecretStore("kubernetesMock")
+		s, ok := rt.compStore.GetSecretStore("kubernetesMock")
+		assert.True(t, ok)
 		assert.NotNil(t, s)
 	})
 }
@@ -2088,9 +2101,9 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 
 	t.Run("ignore component that does not exists", func(t *testing.T) {
 		rt := &DaprRuntime{
-			globalConfig:   &config.Configuration{},
-			componentsLock: &sync.RWMutex{},
-			runtimeConfig:  &Config{},
+			globalConfig:  &config.Configuration{},
+			runtimeConfig: &Config{},
+			compStore:     compstore.New(),
 		}
 
 		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
@@ -2107,32 +2120,32 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 		assert.Len(t, pipeline.Handlers, 0)
 	})
 
+	compStore := compstore.New()
+	compStore.AddComponent(componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "mymw1",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "middleware.http.fakemw",
+			Version: "v1",
+		},
+	})
+	compStore.AddComponent(componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "mymw2",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "middleware.http.fakemw",
+			Version: "v1",
+		},
+	})
+
 	t.Run("all components exists", func(t *testing.T) {
 		rt := &DaprRuntime{
 			globalConfig:           &config.Configuration{},
-			componentsLock:         &sync.RWMutex{},
+			compStore:              compStore,
 			httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
-			components: []componentsV1alpha1.Component{
-				{
-					ObjectMeta: metaV1.ObjectMeta{
-						Name: "mymw1",
-					},
-					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    "middleware.http.fakemw",
-						Version: "v1",
-					},
-				},
-				{
-					ObjectMeta: metaV1.ObjectMeta{
-						Name: "mymw2",
-					},
-					Spec: componentsV1alpha1.ComponentSpec{
-						Type:    "middleware.http.fakemw",
-						Version: "v1",
-					},
-				},
-			},
-			runtimeConfig: &Config{},
+			runtimeConfig:          &Config{},
 		}
 		called := 0
 		rt.httpMiddlewareRegistry.RegisterComponent(
@@ -2167,36 +2180,36 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 	})
 
 	testInitFail := func(ignoreErrors bool) func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddComponent(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: "mymw",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:    "middleware.http.fakemw",
+				Version: "v1",
+			},
+		})
+
+		compStore.AddComponent(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: "failmw",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:         "middleware.http.fakemw",
+				Version:      "v1",
+				IgnoreErrors: ignoreErrors,
+				Metadata: []componentsV1alpha1.MetadataItem{
+					{Name: "fail", Value: componentsV1alpha1.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
+				},
+			},
+		})
 		return func(t *testing.T) {
 			rt := &DaprRuntime{
+				compStore:              compStore,
 				globalConfig:           &config.Configuration{},
-				componentsLock:         &sync.RWMutex{},
 				httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
-				components: []componentsV1alpha1.Component{
-					{
-						ObjectMeta: metaV1.ObjectMeta{
-							Name: "mymw",
-						},
-						Spec: componentsV1alpha1.ComponentSpec{
-							Type:    "middleware.http.fakemw",
-							Version: "v1",
-						},
-					},
-					{
-						ObjectMeta: metaV1.ObjectMeta{
-							Name: "failmw",
-						},
-						Spec: componentsV1alpha1.ComponentSpec{
-							Type:         "middleware.http.fakemw",
-							Version:      "v1",
-							IgnoreErrors: ignoreErrors,
-							Metadata: []componentsV1alpha1.MetadataItem{
-								{Name: "fail", Value: componentsV1alpha1.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
-							},
-						},
-					},
-				},
-				runtimeConfig: &Config{},
+				runtimeConfig:          &Config{},
 			}
 			called := 0
 			rt.httpMiddlewareRegistry.RegisterComponent(
@@ -2348,10 +2361,11 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 		rt.populateSecretsConfiguration()
 
 		// verify
-		assert.Contains(t, rt.secretsConfiguration, "testMock", "Expected testMock secret store configuration to be populated")
-		assert.Equal(t, config.AllowAccess, rt.secretsConfiguration["testMock"].DefaultAccess, "Expected default access as allow")
-		assert.Empty(t, rt.secretsConfiguration["testMock"].DeniedSecrets, "Expected testMock deniedSecrets to not be populated")
-		assert.NotContains(t, rt.secretsConfiguration["testMock"].AllowedSecrets, "Expected testMock allowedSecrets to not be populated")
+		secConf, ok := rt.compStore.GetSecretsConfiguration("testMock")
+		require.True(t, ok, "Expected testMock secret store configuration to be populated")
+		assert.Equal(t, config.AllowAccess, secConf.DefaultAccess, "Expected default access as allow")
+		assert.Empty(t, secConf.DeniedSecrets, "Expected testMock deniedSecrets to not be populated")
+		assert.NotContains(t, secConf.AllowedSecrets, "Expected testMock allowedSecrets to not be populated")
 	})
 }
 
@@ -2730,12 +2744,13 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoutes{}
-	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRouteElem{
-			rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+	rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
+		TestPubsubName: map[string]compstore.TopicRouteElem{
+			"topic1": {
+				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+			},
 		},
-	}
+	})
 
 	t.Run("ok without result body", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -2847,12 +2862,13 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoutes{}
-	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRouteElem{
-			rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+	rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
+		TestPubsubName: map[string]compstore.TopicRouteElem{
+			"topic1": {
+				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+			},
 		},
-	}
+	})
 
 	testcases := []struct {
 		Name        string
@@ -2942,12 +2958,13 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoutes{}
-	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRouteElem{
-			rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+	rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
+		TestPubsubName: map[string]compstore.TopicRouteElem{
+			"topic1": {
+				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+			},
 		},
-	}
+	})
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -3353,12 +3370,14 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
-			rt.topicRoutes = map[string]TopicRoutes{}
-			rt.topicRoutes[TestPubsubName] = TopicRoutes{
-				topic: TopicRouteElem{
-					rules: []*runtimePubsub.Rule{{Path: topic}},
+			rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
+				TestPubsubName: map[string]compstore.TopicRouteElem{
+					topic: {
+						Rules: []*runtimePubsub.Rule{{Path: topic}},
+					},
 				},
-			}
+			})
+
 			var grpcServer *grpc.Server
 
 			// create mock application server first
@@ -3457,14 +3476,16 @@ func TestPubsubLifecycle(t *testing.T) {
 
 	forEachPubSub := func(f func(name string, comp *daprt.InMemoryPubsub)) int {
 		i := 0
-		for name, ps := range rt.pubSubs {
-			f(name, ps.component.(*daprt.InMemoryPubsub))
+		for name, ps := range rt.compStore.ListPubSubs() {
+			f(name, ps.Component.(*daprt.InMemoryPubsub))
 			i++
 		}
 		return i
 	}
 	getPubSub := func(name string) *daprt.InMemoryPubsub {
-		return rt.pubSubs[name].component.(*daprt.InMemoryPubsub)
+		pubSub, ok := rt.compStore.GetPubSub(name)
+		require.True(t, ok)
+		return pubSub.Component.(*daprt.InMemoryPubsub)
 	}
 
 	done := forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
@@ -3505,24 +3526,24 @@ func TestPubsubLifecycle(t *testing.T) {
 	})
 
 	setTopicRoutes := func() {
-		rt.topicRoutes = map[string]TopicRoutes{
+		rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 			"mockPubSub1": {
 				"topic1": {
-					metadata: map[string]string{"rawPayload": "true"},
-					rules:    []*runtimePubsub.Rule{{Path: "topic1"}},
+					Metadata: map[string]string{"rawPayload": "true"},
+					Rules:    []*runtimePubsub.Rule{{Path: "topic1"}},
 				},
 			},
 			"mockPubSub2": {
 				"topic2": {
-					metadata: map[string]string{"rawPayload": "true"},
-					rules:    []*runtimePubsub.Rule{{Path: "topic2"}},
+					Metadata: map[string]string{"rawPayload": "true"},
+					Rules:    []*runtimePubsub.Rule{{Path: "topic2"}},
 				},
 				"topic3": {
-					metadata: map[string]string{"rawPayload": "true"},
-					rules:    []*runtimePubsub.Rule{{Path: "topic3"}},
+					Metadata: map[string]string{"rawPayload": "true"},
+					Rules:    []*runtimePubsub.Rule{{Path: "topic3"}},
 				},
 			},
-		}
+		})
 
 		forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
 			comp.Calls = nil
@@ -3650,7 +3671,7 @@ func TestPubsubLifecycle(t *testing.T) {
 	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
 		resetState()
 
-		err = rt.subscribeTopic(rt.pubsubCtx, "mockPubSub3", "topic4", TopicRouteElem{})
+		err = rt.subscribeTopic(rt.pubsubCtx, "mockPubSub3", "topic4", compstore.TopicRouteElem{})
 		require.NoError(t, err)
 
 		sendMessages(t, 2)
@@ -3773,24 +3794,25 @@ func TestPubsubWithResiliency(t *testing.T) {
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
-		r.topicRoutes = make(map[string]TopicRoutes)
-		r.topicRoutes["failPubsub"] = TopicRoutes{
-			"failingSubTopic": {
-				metadata: map[string]string{
-					"rawPayload": "true",
-				},
-				rules: []*runtimePubsub.Rule{
-					{
-						Path: "failingPubsub",
+		r.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
+			"failPubsub": map[string]compstore.TopicRouteElem{
+				"failingSubTopic": {
+					Metadata: map[string]string{
+						"rawPayload": "true",
+					},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Path: "failingPubsub",
+						},
 					},
 				},
 			},
+		})
+
+		for name := range r.compStore.ListPubSubs() {
+			r.compStore.DeletePubSub(name)
 		}
-		r.pubSubs = map[string]pubsubItem{
-			"failPubsub": {
-				component: &failingPubsub,
-			},
-		}
+		r.compStore.AddPubSub("failPubsub", compstore.PubsubItem{Component: &failingPubsub})
 
 		r.topicCtxCancels = map[string]context.CancelFunc{}
 		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
@@ -3802,24 +3824,25 @@ func TestPubsubWithResiliency(t *testing.T) {
 	})
 
 	t.Run("pubsub times out sending event to app with resiliency", func(t *testing.T) {
-		r.topicRoutes = make(map[string]TopicRoutes)
-		r.topicRoutes["failPubsub"] = TopicRoutes{
-			"timeoutSubTopic": {
-				metadata: map[string]string{
-					"rawPayload": "true",
-				},
-				rules: []*runtimePubsub.Rule{
-					{
-						Path: "failingPubsub",
+		r.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
+			"failPubsub": map[string]compstore.TopicRouteElem{
+				"timeoutSubTopic": {
+					Metadata: map[string]string{
+						"rawPayload": "true",
+					},
+					Rules: []*runtimePubsub.Rule{
+						{
+							Path: "failingPubsub",
+						},
 					},
 				},
 			},
+		})
+
+		for name := range r.compStore.ListPubSubs() {
+			r.compStore.DeletePubSub(name)
 		}
-		r.pubSubs = map[string]pubsubItem{
-			"failPubsub": {
-				component: &failingPubsub,
-			},
-		}
+		r.compStore.AddPubSub("failPubsub", compstore.PubsubItem{Component: &failingPubsub})
 
 		r.topicCtxCancels = map[string]context.CancelFunc{}
 		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
@@ -3928,6 +3951,10 @@ func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.Subs
 	return nil
 }
 
+func (m *mockSubscribePubSub) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func TestPubSubDeadLetter(t *testing.T) {
 	testDeadLetterPubsub := "failPubsub"
 	pubsubComponent := componentsV1alpha1.Component{
@@ -3980,7 +4007,9 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Data:       []byte(`{"id":"1"}`),
 		})
 		assert.NoError(t, err)
-		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testDeadLetterPubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
 		// Ensure the message is sent to dead letter topic.
 		assert.Equal(t, 1, pubsubIns.pubCount["topic1"])
@@ -4027,7 +4056,9 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Data:       []byte(`{"id":"1"}`),
 		})
 		assert.NoError(t, err)
-		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
+		pubSub, ok := rt.compStore.GetPubSub(testDeadLetterPubsub)
+		require.True(t, ok)
+		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
 		assert.True(t, pubsubIns.pubCount["topic0"] >= 1)
 		// Make sure every message that is sent to topic0 is sent to its dead letter topic1.
@@ -4190,7 +4221,6 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int)
 		MaxConcurrency:               -1,
 		MTLSEnabled:                  false,
 		SentryAddress:                "",
-		AppSSL:                       false,
 		MaxRequestBodySize:           4,
 		UnixDomainSocket:             "",
 		ReadBufferSize:               4,
@@ -4286,6 +4316,10 @@ func (b *mockBinding) Close() error {
 	return b.closeErr
 }
 
+func (b *mockBinding) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func TestInvokeOutputBindings(t *testing.T) {
 	t.Run("output binding missing operation", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
@@ -4301,7 +4335,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 	t.Run("output binding valid operation", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.outputBindings["mockBinding"] = &mockBinding{}
+		rt.compStore.AddOutputBinding("mockBinding", &mockBinding{})
 
 		_, err := rt.sendToOutputBinding("mockBinding", &bindings.InvokeRequest{
 			Data:      []byte(""),
@@ -4313,7 +4347,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 	t.Run("output binding invalid operation", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.outputBindings["mockBinding"] = &mockBinding{}
+		rt.compStore.AddOutputBinding("mockBinding", &mockBinding{})
 
 		_, err := rt.sendToOutputBinding("mockBinding", &bindings.InvokeRequest{
 			Data:      []byte(""),
@@ -4355,7 +4389,7 @@ func TestReadInputBindings(t *testing.T) {
 
 		rt.appChannel = mockAppChannel
 
-		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
+		rt.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		b := mockBinding{}
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -4398,7 +4432,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
-		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
+		rt.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		b := mockBinding{}
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -4441,7 +4475,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
-		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
+		rt.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -4648,7 +4682,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPProtocol), 1024)
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPSProtocol), 1024)
 		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
@@ -4700,6 +4734,10 @@ func (m *mockPublishPubSub) Features() []pubsub.Feature {
 	return nil
 }
 
+func (m *mockPublishPubSub) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
 		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
@@ -4743,7 +4781,8 @@ func TestInitActors(t *testing.T) {
 		defer stopRuntime(t, r)
 
 		assert.Nil(t, r.actor)
-		assert.NotNil(t, r.stateStores)
+		assert.NotNil(t, r.compStore.ListStateStores())
+		assert.Equal(t, 0, r.compStore.StateStoresLen())
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
@@ -5211,11 +5250,8 @@ func TestStopWithErrors(t *testing.T) {
 	rt.nameResolver = &mockNameResolver{closeErr: testErr}
 
 	err := rt.shutdownOutputComponents()
-	assert.Error(t, err)
-	var merr *multierror.Error
-	merr, ok := err.(*multierror.Error)
-	require.True(t, ok)
-	assert.Equal(t, 5, len(merr.Errors))
+	require.Error(t, err)
+	assert.Len(t, strings.Split(err.Error(), "\n"), 5)
 }
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
@@ -5554,16 +5590,21 @@ func TestNamespacedPublisher(t *testing.T) {
 	rt.namespace = "ns1"
 	defer stopRuntime(t, rt)
 
-	rt.pubSubs[TestPubsubName] = pubsubItem{
-		component:       &mockPublishPubSub{},
-		namespaceScoped: true,
+	for name := range rt.compStore.ListPubSubs() {
+		rt.compStore.DeletePubSub(name)
 	}
+	rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+		Component:       &mockPublishPubSub{},
+		NamespaceScoped: true,
+	})
 	rt.Publish(&pubsub.PublishRequest{
 		PubsubName: TestPubsubName,
 		Topic:      "topic0",
 	})
 
-	assert.Equal(t, "ns1topic0", rt.pubSubs[TestPubsubName].component.(*mockPublishPubSub).PublishedRequest.Load().Topic)
+	pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+	require.True(t, ok)
+	assert.Equal(t, "ns1topic0", pubSub.Component.(*mockPublishPubSub).PublishedRequest.Load().Topic)
 }
 
 func TestGracefulShutdownPubSub(t *testing.T) {
@@ -5635,8 +5676,8 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cout.Spec.Type = "bindings.testOutputBinding"
 	require.NoError(t, rt.initInputBinding(cin))
 	require.NoError(t, rt.initOutputBinding(cout))
-	assert.Equal(t, len(rt.inputBindings), 1)
-	assert.Equal(t, len(rt.outputBindings), 1)
+	assert.Equal(t, len(rt.compStore.ListInputBindings()), 1)
+	assert.Equal(t, len(rt.compStore.ListOutputBindings()), 1)
 	rt.running.Store(true)
 	rt.inputBindingsCtx, rt.inputBindingsCancel = context.WithCancel(rt.ctx)
 	go sendSigterm(rt)
