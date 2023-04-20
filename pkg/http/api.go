@@ -1412,7 +1412,7 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 	return ""
 }
 
-// actorPrerequisiteWrapper warps the actor handler with the common actor prerequisite check.
+// actorPrerequisiteWrapper wraps the actor handler with the common actor prerequisite check.
 func (a *api) actorPrerequisiteWrapper(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		if a.appChannel == nil {
