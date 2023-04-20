@@ -596,18 +596,28 @@ func TestPurge(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, id, metadata.InstanceID)
 
+					// Get all the keys that were stored from the activity and ensure that they were stored
+					keysPrePurge := []string{}
+					keyCounter := 0
+					for key := range stateStore.(*daprt.FakeStateStore).Items {
+						keysPrePurge = append(keysPrePurge, key)
+						if strings.Contains(key, string(id)) {
+							keyCounter += 1
+						}
+					}
+					assert.Greater(t, keyCounter, 10)
+
 					err := client.PurgeOrchestrationState(ctx, id)
 					assert.NoError(t, err)
 
-					// Check that no key from the statestore that was expected to be purged is still present in the statestore
+					// Check that no key from the statestore containing the actor id is still present in the statestore
 					keysPostPurge := []string{}
-					for key := range stateStore.(*fakeStateStore).items {
+					for key := range stateStore.(*daprt.FakeStateStore).Items {
 						keysPostPurge = append(keysPostPurge, key)
 					}
 
 					for _, item := range keysPostPurge {
-						// Note that "activityState" comes from "getActivityInvocationKey" inside activity.go
-						if strings.Contains(item, "history") || strings.Contains(item, "activityState") || strings.Contains(item, "inbox") {
+						if strings.Contains(item, string(id)) {
 							assert.True(t, false)
 						}
 					}
@@ -701,15 +711,18 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 }
 
 func getEngineAndStateStore() (*wfengine.WorkflowEngine, state.Store) {
-	engine := wfengine.NewWorkflowEngine()
-	store := fakeStore().(*fakeStateStore)
+	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
+	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          config.ApplicationConfig{},
 	})
+	compStore := compstore.New()
+	compStore.AddStateStore("workflowStore", store)
+
 	actors := actors.NewActors(actors.ActorsOpts{
-		StateStore:     store,
+		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),

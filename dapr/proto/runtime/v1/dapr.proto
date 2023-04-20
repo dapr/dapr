@@ -889,11 +889,11 @@ message SubtleVerifyAlpha1Response {
 }
 
 message WorkflowReference {
-  string instance_id = 1 [json_name = "instanceId"];
+  string instance_id = 1 [json_name = "instanceID"];
 }
 
 message GetWorkflowRequest {
-  string instance_id  = 1 [json_name = "instanceId"];
+  string instance_id  = 1 [json_name = "instanceID"];
   string workflow_component = 2 [json_name = "workflowComponent"];
   string workflow_name = 3 [json_name = "workflowName"];
 }
@@ -905,7 +905,7 @@ message GetWorkflowResponse {
 }
 
 message StartWorkflowRequest {
-  string instance_id = 1 [json_name = "instanceId"];
+  string instance_id = 1 [json_name = "instanceID"];
   string workflow_component = 2 [json_name = "workflowComponent"];
   string workflow_name = 3 [json_name = "workflowName"];
   map<string, string> options = 4;
@@ -913,7 +913,7 @@ message StartWorkflowRequest {
 }
 
 message WorkflowActivityRequest {
-  string instance_id = 1 [json_name = "instanceId"];
+  string instance_id = 1 [json_name = "instanceID"];
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
@@ -931,7 +931,7 @@ message WorkflowActivityResponse {
 }
 
 message RaiseEventWorkflowRequest {
-  string instance_id = 1 [json_name = "instanceId"];
+  string instance_id = 1 [json_name = "instanceID"];
   string workflow_component = 2 [json_name = "workflowComponent"];
   string event_name = 3 [json_name = "eventName"];
   bytes input = 4;

@@ -236,7 +236,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 
 func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRequest, error) {
 	req := &actors.TransactionalRequest{
-		ActorType:  WorkflowActorType,
+		ActorType:  s.config.workflowActorType,
 		ActorID:    actorID,
 		Operations: make([]actors.TransactionalOperation, 0, 100),
 	}

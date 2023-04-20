@@ -235,27 +235,22 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 
 	// Loop through the history of the loaded workflow state and schedule purge calls for all the activities that have been completed
 
-	// RRL TODO: Looping through history and invoking each actor once. They are not in the same transaction. Eqch transaction happens as its own call
+	// RRL TODO: Looping through history and invoking each actor once. They are not in the same transaction. Each transaction happens as its own call
 	// We are deleting one by one in sequence and not in builk.
 	// In case of each actor returning an error, the entire function returns an error
-	// Everything before error is deleted, and erverything afyter is not.
+	// Everything before error is deleted, and everything after is not.
 	for _, e := range state.History {
 		if ts := e.GetTaskScheduled(); ts != nil {
 			targetActorID := getActivityActorID(actorID, e.EventId)
-			eventData, err := backend.MarshalHistoryEvent(e)
-			if err != nil {
-				return err
-			}
 			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
-				HistoryEvent: eventData,
-				Generation:   state.Generation,
+				Generation: state.Generation,
 			})
 			if err != nil {
 				return err
 			}
 			req := invokev1.
 				NewInvokeMethodRequest(PurgeWorkflowStateMethod).
-				WithActor(ActivityActorType, targetActorID).
+				WithActor(wf.config.activityActorType, targetActorID).
 				WithRawDataBytes(activityRequestBytes).
 				WithContentType(invokev1.OctetStreamContentType)
 

@@ -22,10 +22,26 @@ import (
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/workflows"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
 	"github.com/dapr/kit/logger"
 )
+
+var ComponentDefinition = componentsV1alpha1.Component{
+	TypeMeta: metav1.TypeMeta{
+		Kind: "Component",
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name: "dapr",
+	},
+	Spec: componentsV1alpha1.ComponentSpec{
+		Type:     "workflow.dapr",
+		Version:  "v1",
+		Metadata: []componentsV1alpha1.MetadataItem{},
+	},
+}
 
 // Status values are defined at: https://github.com/microsoft/durabletask-go/blob/119b361079c45e368f83b223888d56a436ac59b9/internal/protos/orchestrator_service.pb.go#L42-L64
 var statusMap = map[int32]string{
@@ -120,7 +136,7 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 	}
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
-		return errors.New("failed to Purge workflow %s: %w", req.InstanceID, err)
+		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
 	}
 
 	return nil

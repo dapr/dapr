@@ -81,14 +81,14 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
 	var state activityState
-	if _, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
+	if state, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
 		return nil, err
-	} else if state.Generation > 0 {
+	} else if state.Generation > 0 && methodName != "PurgeWorkflowState" {
 		return nil, ErrDuplicateInvocation
 	}
 
 	if methodName == "PurgeWorkflowState" {
-		return nil, a.purgeActivityState(ctx, actorID, state)
+		return nil, a.purgeActivityState(ctx, actorID, ar.Generation)
 	}
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
@@ -289,30 +289,26 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 	return nil
 }
 
-func (a *activityActor) purgeActivityState(ctx context.Context, actorID string, state activityState) error {
+func (a *activityActor) purgeActivityState(ctx context.Context, actorID string, generationKey uint64) error {
 	req := actors.TransactionalRequest{
-		ActorType: ActivityActorType,
+		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Operations: []actors.TransactionalOperation{{
 			Operation: actors.Delete,
 			Request: actors.TransactionalDelete{
-				Key: getActivityInvocationKey(state.Generation),
+				Key: getActivityInvocationKey(generationKey),
 			},
 		}},
 	}
 	if err := a.actorRuntime.TransactionalStateOperation(ctx, &req); err != nil {
-		return fmt.Errorf("failed to delete activity state with request key %w and error: %w", getActivityInvocationKey(state.Generation), err)
+		return fmt.Errorf("failed to delete activity state with request key %v and error: %w", getActivityInvocationKey(generationKey), err)
 	}
 
-	if !a.cachingDisabled {
-		a.statesCache.Store(actorID, state)
-	}
 	return nil
 }
 
 func getActivityInvocationKey(generation uint64) string {
-	// return fmt.Sprintf("activityreq-%d", generation)
-	return "activityState"
+	return fmt.Sprintf("activityreq-%d", generation)
 }
 
 func (a *activityActor) createReliableReminder(ctx context.Context, actorID string, data any) error {
