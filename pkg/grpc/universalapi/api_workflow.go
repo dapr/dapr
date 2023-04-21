@@ -211,7 +211,7 @@ func (a *UniversalAPI) validateInstanceId(instanceID string, isCreate bool) erro
 
 	if isCreate {
 		// Limit the length of the instance ID to avoid potential conflicts with state stores that have restrictive key limits.
-		maxInstanceIdLength := 64
+		const maxInstanceIdLength = 64
 		if len(instanceID) > maxInstanceIdLength {
 			return messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIdLength)
 		}
