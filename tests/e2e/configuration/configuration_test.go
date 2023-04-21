@@ -274,7 +274,7 @@ var protocols []string = []string{
 }
 
 var endpointTypes []string = []string{
-	// "stable",
+	"stable",
 	"alpha1",
 }
 
