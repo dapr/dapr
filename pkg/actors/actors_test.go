@@ -1365,6 +1365,9 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 }
 
 func TestReminderValidation(t *testing.T) {
+	t.Run("empty period", reminderValidation("", "", "-2s", ""))
+	t.Run("period is JSON null", reminderValidation("", "null", "-2s", ""))
+	t.Run("period is empty JSON object", reminderValidation("", "{}", "-2s", ""))
 	t.Run("reminder dueTime invalid (1)", reminderValidation("invalid", "R5/PT2S", "1h", "unsupported time/duration format: invalid"))
 	t.Run("reminder dueTime invalid (2)", reminderValidation("R5/PT2S", "R5/PT2S", "1h", "repetitions are not allowed"))
 	t.Run("reminder period invalid", reminderValidation(time.Now().Add(time.Minute).Format(time.RFC3339), "invalid", "1h", "unsupported duration format: invalid"))
