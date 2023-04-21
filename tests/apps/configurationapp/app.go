@@ -55,8 +55,8 @@ var (
 )
 
 type UnsubscribeConfigurationResponse struct {
-	Ok      bool   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
-	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Ok      bool   `json:"ok,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type appResponse struct {
