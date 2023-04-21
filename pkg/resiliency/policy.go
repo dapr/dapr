@@ -50,8 +50,8 @@ type PolicyDefinition struct {
 	r                         *retry.Config
 	cb                        *breaker.CircuitBreaker
 	addTimeoutActivatedMetric func()
-	addRetryActivateMetric    func()
-	addCBStateChangeMetric    func()
+	addRetryActivatedMetric   func()
+	addCBStateChangedMetric   func()
 }
 
 // NewPolicyDefinition returns a PolicyDefinition object with the given parameters.
@@ -161,8 +161,8 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				resAny, err := def.cb.Execute(func() (any, error) {
 					return operCopy(ctx)
 				})
-				if def.addCBStateChangeMetric != nil && prevState != def.cb.State() {
-					def.addCBStateChangeMetric()
+				if def.addCBStateChangedMetric != nil && prevState != def.cb.State() {
+					def.addCBStateChangedMetric()
 				}
 				if def.r != nil && breaker.IsErrorPermanent(err) {
 					// Break out of retry
@@ -198,8 +198,8 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 			},
 			b,
 			func(opErr error, d time.Duration) {
-				if def.addRetryActivateMetric != nil {
-					def.addRetryActivateMetric()
+				if def.addRetryActivatedMetric != nil {
+					def.addRetryActivatedMetric()
 				}
 				def.log.Infof("Error processing operation %s. Retrying in %v…", def.name, d)
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)

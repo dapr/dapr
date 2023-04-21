@@ -550,13 +550,13 @@ func (r *Resiliency) addMetricsToPolicy(policyDef *PolicyDefinition, target stri
 	}
 	if policyDef.r != nil {
 		diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, direction, target)
-		policyDef.addRetryActivateMetric = func() {
+		policyDef.addRetryActivatedMetric = func() {
 			diag.DefaultResiliencyMonitoring.PolicyActivated(r.name, r.namespace, diag.RetryPolicy, direction, target)
 		}
 	}
 	if policyDef.cb != nil {
 		diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
-		policyDef.addCBStateChangeMetric = func() {
+		policyDef.addCBStateChangedMetric = func() {
 			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
 		}
 	}
