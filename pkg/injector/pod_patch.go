@@ -63,6 +63,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionRe
 	}
 
 	appID := sidecar.GetAppID(pod.ObjectMeta)
+	metricsEnabled := sidecar.GetMetricsEnabled(pod.ObjectMeta)
 	err = validation.ValidateKubernetesAppID(appID)
 	if err != nil {
 		return nil, err
@@ -142,7 +143,8 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionRe
 			Value: sidecarContainer,
 		},
 		sidecar.AddDaprSideCarInjectedLabel(pod.Labels),
-		sidecar.AddDaprSideCarAppIDLabel(appID, pod.Labels))
+		sidecar.AddDaprSideCarAppIDLabel(appID, pod.Labels),
+		sidecar.AddDaprSideCarMetricsEnabledLabel(metricsEnabled, pod.Labels))
 
 	patchOps = append(patchOps,
 		sidecar.AddDaprEnvVarsToContainers(appContainers)...)
