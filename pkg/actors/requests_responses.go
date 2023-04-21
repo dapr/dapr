@@ -79,7 +79,8 @@ type ReminderResponse struct {
 }
 
 // MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
-// It implements the json.Marshaler interface.
+// Actor SDKs expect "data" to be a base64-encoded message with the JSON representation of the data, so this makes sure that happens.
+// This method implements the json.Marshaler interface.
 func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 	type responseAlias ReminderResponse
 	m := struct {
@@ -132,7 +133,8 @@ type TimerResponse struct {
 }
 
 // MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
-// It implements the json.Marshaler interface.
+// Actor SDKs expect "data" to be a base64-encoded message with the JSON representation of the data, so this makes sure that happens.
+// This method implements the json.Marshaler interface.
 func (t *TimerResponse) MarshalJSON() ([]byte, error) {
 	type responseAlias TimerResponse
 	m := struct {
