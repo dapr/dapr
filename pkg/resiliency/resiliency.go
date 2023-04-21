@@ -544,19 +544,19 @@ func (r *Resiliency) isProtectedPolicy(name string) bool {
 func (r *Resiliency) addMetricsToPolicy(policyDef *PolicyDefinition, target string, direction diag.PolicyFlowDirection) {
 	if policyDef.t != 0 {
 		diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, direction, target)
-		policyDef.onTimeout = func() {
+		policyDef.addTimeoutActivatedMetric = func() {
 			diag.DefaultResiliencyMonitoring.PolicyActivated(r.name, r.namespace, diag.TimeoutPolicy, direction, target)
 		}
 	}
 	if policyDef.r != nil {
 		diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, direction, target)
-		policyDef.onRetry = func() {
+		policyDef.addRetryActivateMetric = func() {
 			diag.DefaultResiliencyMonitoring.PolicyActivated(r.name, r.namespace, diag.RetryPolicy, direction, target)
 		}
 	}
 	if policyDef.cb != nil {
 		diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
-		policyDef.onCBStateChanged = func() {
+		policyDef.addCBStateChangeMetric = func() {
 			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
 		}
 	}
