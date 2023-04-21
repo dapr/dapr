@@ -79,6 +79,7 @@ type ReminderResponse struct {
 }
 
 // MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
+// It implements the json.Marshaler interface.
 func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 	type responseAlias ReminderResponse
 	m := struct {
@@ -88,10 +89,15 @@ func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 		responseAlias: (*responseAlias)(r),
 	}
 
-	var err error
-	m.Data, err = json.Marshal(r.Data)
-	if err != nil {
-		return nil, err
+	// r.Data is usually a json.RawMessage, but because it's stored in a field of type any, we need to use json.Marshal as fallback
+	if raw, ok := r.Data.(json.RawMessage); ok {
+		m.Data = []byte(raw)
+	} else {
+		var err error
+		m.Data, err = json.Marshal(r.Data)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return json.Marshal(m)
 }
@@ -126,6 +132,7 @@ type TimerResponse struct {
 }
 
 // MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
+// It implements the json.Marshaler interface.
 func (t *TimerResponse) MarshalJSON() ([]byte, error) {
 	type responseAlias TimerResponse
 	m := struct {
@@ -135,10 +142,15 @@ func (t *TimerResponse) MarshalJSON() ([]byte, error) {
 		responseAlias: (*responseAlias)(t),
 	}
 
-	var err error
-	m.Data, err = json.Marshal(t.Data)
-	if err != nil {
-		return nil, err
+	// t.Data is usually a json.RawMessage, but because it's stored in a field of type any, we need to use json.Marshal as fallback
+	if raw, ok := t.Data.(json.RawMessage); ok {
+		m.Data = []byte(raw)
+	} else {
+		var err error
+		m.Data, err = json.Marshal(t.Data)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return json.Marshal(m)
 }
