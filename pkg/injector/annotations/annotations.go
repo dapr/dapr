@@ -67,7 +67,7 @@ const (
 	KeyPluggableComponentsSocketsFolder = "dapr.io/pluggable-components-sockets-folder"
 	KeyPluggableComponentContainer      = "dapr.io/component-container"
 	KeyPluggableComponentsInjection     = "dapr.io/inject-pluggable-components"
-	KeyAppChannel                       = "dapr.io/app-channel"
+	KeyAppChannel                       = "dapr.io/app-channel-address"
 )
 
 // Default values
