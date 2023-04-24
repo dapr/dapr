@@ -174,6 +174,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		// Command should be empty, image's entrypoint to be used.
@@ -248,6 +249,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		// Command should be empty, image's entrypoint to be used.
@@ -322,6 +324,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		// Command should be empty, image's entrypoint to be used.
@@ -394,6 +397,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		// Command should be empty, image's entrypoint to be used.
@@ -467,6 +471,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		// Command should be empty, image's entrypoint to be used.
@@ -521,6 +526,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -564,6 +570,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -607,6 +614,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-graceful-shutdown-seconds", "5",
 			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -694,6 +702,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=true",
 			"--enable-mtls",
+			"--app-channel-address", "",
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -740,6 +749,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
 				"--enable-mtls",
+				"--app-channel-address", "",
 			}
 
 			assert.EqualValues(t, expectedArgs, container.Args)
@@ -775,6 +785,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--disable-builtin-k8s-secret-store=true",
 				"--enable-api-logging=true",
 				"--enable-mtls",
+				"--app-channel-address", "",
 			}
 
 			assert.EqualValues(t, expectedArgs, container.Args)
@@ -810,6 +821,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--disable-builtin-k8s-secret-store=true",
 				"--enable-api-logging=false",
 				"--enable-mtls",
+				"--app-channel-address", "",
 			}
 
 			assert.EqualValues(t, expectedArgs, container.Args)
