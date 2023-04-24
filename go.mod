@@ -164,7 +164,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
 	github.com/deepmap/oapi-codegen v1.11.0 // indirect
-	github.com/denisenkom/go-mssqldb v0.12.3 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/didip/tollbooth/v7 v7.0.1 // indirect
 	github.com/dubbogo/gost v1.13.1 // indirect
@@ -282,6 +281,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
+	github.com/microsoft/go-mssqldb v0.21.0 // indirect
 	github.com/miekg/dns v1.1.43 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
@@ -427,4 +427,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // DO NOT MERGE THIS CHANGE
-replace github.com/dapr/components-contrib => github.com/cgillum/dapr-components-contrib v0.0.0-20230410173729-f4047d1e15e3
+replace github.com/dapr/components-contrib => github.com/cgillum/dapr-components-contrib v0.0.0-20230424051708-9277f336b9e0
