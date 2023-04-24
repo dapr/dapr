@@ -307,8 +307,8 @@ github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XL
 github.com/cespare/xxhash/v2 v2.1.2/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj44=
 github.com/cespare/xxhash/v2 v2.2.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/cgillum/dapr-components-contrib v0.0.0-20230424051708-9277f336b9e0 h1:jaFfrzhk6fRCh8yaM61sF8VFWQHhg4jpJDiSx/8Lm6Q=
-github.com/cgillum/dapr-components-contrib v0.0.0-20230424051708-9277f336b9e0/go.mod h1:x9bVGsetgYz72rznqErAvqOU6jumRmH2nvgX83cNcq8=
+github.com/cgillum/dapr-components-contrib v0.0.0-20230424205739-ac0b474de3fb h1:ooICW+5i9CxJ7mcnWgfIBlMvZHh9G0M1D7tZt6Nse+Q=
+github.com/cgillum/dapr-components-contrib v0.0.0-20230424205739-ac0b474de3fb/go.mod h1:x1xYsAEKKEGgUyWFqGwMAtXAcp5uGJSn0dniE8hbY2o=
 github.com/chebyrash/promise v0.0.0-20220530143319-1123826567d6 h1:AtcTeZIfucJjiqhIeMoOAR292ti2QOyo2aqN3SoWopo=
 github.com/chebyrash/promise v0.0.0-20220530143319-1123826567d6/go.mod h1:4DRxP3p0R7/5msq1uKcI1THYmfWgFXxQqr0DutaIAEk=
 github.com/chzyer/logex v1.2.1/go.mod h1:JLbx6lG2kDbNRFnfkgvh4eRJRPX1QCoOIWomwysCBrQ=

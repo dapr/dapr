@@ -427,4 +427,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // DO NOT MERGE THIS CHANGE
-replace github.com/dapr/components-contrib => github.com/cgillum/dapr-components-contrib v0.0.0-20230424051708-9277f336b9e0
+replace github.com/dapr/components-contrib => github.com/cgillum/dapr-components-contrib v0.0.0-20230424205739-ac0b474de3fb
