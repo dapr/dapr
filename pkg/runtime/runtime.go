@@ -499,6 +499,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
 
+	ensureChannelAddress()
 	a.blockUntilAppIsReady()
 
 	err = a.createAppChannel()
@@ -2872,6 +2873,12 @@ func (a *DaprRuntime) loadAppConfiguration() {
 	if appConfig != nil {
 		a.appConfig = *appConfig
 		log.Info("Application configuration loaded")
+	}
+}
+
+func ensureChannelAddress() {
+	if channel.Address == "" {
+		channel.Address = DefaultChannelAddress
 	}
 }
 
