@@ -83,7 +83,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(apphealth.DefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	appHealthThreshold := flag.Int("app-health-threshold", int(apphealth.DefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 
-	flag.StringVar(&channel.Address, "channel-address", DefaultChannelAddress, "The network address the application listens on")
+	flag.StringVar(&channel.Address, "app-channel-address", DefaultChannelAddress, "The network address the application listens on")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
