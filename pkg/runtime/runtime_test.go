@@ -67,7 +67,6 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	"github.com/dapr/dapr/pkg/channel"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
@@ -4069,8 +4068,6 @@ func TestPubSubDeadLetter(t *testing.T) {
 }
 
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
-	channel.Address = "127.0.0.1"
-
 	testCases := []struct {
 		name             string
 		expectedResponse []string
@@ -4229,6 +4226,7 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int)
 		GracefulShutdownDuration:     time.Second,
 		EnableAPILogging:             true,
 		DisableBuiltinK8sSecretStore: false,
+		AppChannelAddress:            "127.0.0.1",
 	})
 }
 
@@ -5291,9 +5289,9 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 }
 
 func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
-	channel.Address = "my.app"
-
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
+	rt.runtimeConfig.AppChannelAddress = "my.app"
+
 	defer stopRuntime(t, rt)
 
 	p, err := rt.buildAppHTTPPipeline()

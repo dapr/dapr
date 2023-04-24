@@ -598,7 +598,7 @@ func (a *actorsRuntime) callRemoteActor(
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
-	return strings.Contains(targetActorAddress, "localhost") || strings.Contains(targetActorAddress, channel.Address) ||
+	return strings.Contains(targetActorAddress, "localhost") || strings.Contains(targetActorAddress, a.config.AppChannelAddress) ||
 		targetActorAddress == hostAddress+":"+strconv.Itoa(grpcPort)
 }
 

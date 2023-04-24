@@ -27,9 +27,6 @@ const (
 	AppChannelMinTLSVersion = tls.VersionTLS12
 )
 
-// Address is the network address that the user application listens on.
-var Address string
-
 // AppChannel is an abstraction over communications with user code.
 type AppChannel interface {
 	GetAppConfig() (*config.ApplicationConfig, error)

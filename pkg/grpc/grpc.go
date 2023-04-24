@@ -53,6 +53,7 @@ type AppChannelConfig struct {
 	MaxRequestBodySizeMB int
 	ReadBufferSizeKB     int
 	AllowInsecureTLS     bool
+	BaseAddress          string
 }
 
 // Manager is a wrapper around gRPC connection pooling.
@@ -99,6 +100,7 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 		g.channelConfig.TracingSpec,
 		g.channelConfig.MaxRequestBodySizeMB,
 		g.channelConfig.ReadBufferSizeKB,
+		g.channelConfig.BaseAddress,
 	)
 	return ch, nil
 }
@@ -157,7 +159,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 	}
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
-	address := net.JoinHostPort(channel.Address, strconv.Itoa(port))
+	address := net.JoinHostPort(g.channelConfig.BaseAddress, strconv.Itoa(port))
 
 	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
 	defer cancel()
