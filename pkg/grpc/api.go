@@ -1524,7 +1524,8 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 	_, ok := a.CompStore.GetConfigurationSubscribe(subscribeID)
 	if !ok {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
-			Ok: true,
+			Ok:      false,
+			Message: fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, "subscription does not exist"),
 		}, nil
 	}
 	a.CompStore.DeleteConfigurationSubscribe(subscribeID)
