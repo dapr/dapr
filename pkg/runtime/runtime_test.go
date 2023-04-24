@@ -4069,6 +4069,8 @@ func TestPubSubDeadLetter(t *testing.T) {
 }
 
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
+	channel.Address = "127.0.0.1"
+
 	testCases := []struct {
 		name             string
 		expectedResponse []string

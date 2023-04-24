@@ -33,6 +33,7 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
+	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
@@ -162,6 +163,8 @@ func wrapString(str string) string {
 }
 
 func TestComponentCalls(t *testing.T) {
+	channel.Address = "127.0.0.1"
+
 	getStateStore := func(srv *server) (statestore *grpcStateStore, cleanupf func(), err error) {
 		withSvc := testingGrpc.TestServerWithDialer(testLogger, func(s *grpc.Server, svc *server) {
 			proto.RegisterStateStoreServer(s, svc)
