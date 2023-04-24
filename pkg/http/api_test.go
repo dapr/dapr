@@ -3273,7 +3273,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	})
 
 	t.Run("Start with too long instance ID", func(t *testing.T) {
-		maxInstanceIdLength := 64
+		maxInstanceIDLength := 64
 		apiPath := "v1.0-alpha1/workflows/dapr/workflowName/start?instanceID=this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -3281,7 +3281,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_INSTANCE_ID_TOO_LONG", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIdLength).Message(), resp.ErrorBody["message"])
+		assert.Equal(t, messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength).Message(), resp.ErrorBody["message"])
 	})
 
 	t.Run("Start with explicit instance ID", func(t *testing.T) {
