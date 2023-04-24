@@ -245,8 +245,7 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
 	req := invokev1.
 		NewInvokeMethodRequest(PurgeWorkflowStateMethod).
-		WithActor(be.config.workflowActorType, string(id)).
-		WithContentType(invokev1.OctetStreamContentType)
+		WithActor(be.config.workflowActorType, string(id))
 	defer req.Close()
 
 	resp, err := be.actors.Call(ctx, req)

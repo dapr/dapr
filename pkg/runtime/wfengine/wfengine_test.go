@@ -591,38 +591,37 @@ func TestPurge(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChainToPurge")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.Equal(t, id, metadata.InstanceID)
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.Equal(t, id, metadata.InstanceID)
 
-					// Get all the keys that were stored from the activity and ensure that they were stored
-					keysPrePurge := []string{}
-					keyCounter := 0
-					for key := range stateStore.(*daprt.FakeStateStore).Items {
-						keysPrePurge = append(keysPrePurge, key)
-						if strings.Contains(key, string(id)) {
-							keyCounter += 1
-						}
-					}
-					assert.Greater(t, keyCounter, 10)
-
-					err := client.PurgeOrchestrationState(ctx, id)
-					assert.NoError(t, err)
-
-					// Check that no key from the statestore containing the actor id is still present in the statestore
-					keysPostPurge := []string{}
-					for key := range stateStore.(*daprt.FakeStateStore).Items {
-						keysPostPurge = append(keysPostPurge, key)
-					}
-
-					for _, item := range keysPostPurge {
-						if strings.Contains(item, string(id)) {
-							assert.True(t, false)
-						}
-					}
+			// Get all the keys that were stored from the activity and ensure that they were stored
+			keysPrePurge := []string{}
+			keyCounter := 0
+			for key := range stateStore.(*daprt.FakeStateStore).Items {
+				keysPrePurge = append(keysPrePurge, key)
+				if strings.Contains(key, string(id)) {
+					keyCounter += 1
 				}
 			}
+			assert.Greater(t, keyCounter, 10)
+
+			err = client.PurgeOrchestrationState(ctx, id)
+			assert.NoError(t, err)
+
+			// Check that no key from the statestore containing the actor id is still present in the statestore
+			keysPostPurge := []string{}
+			for key := range stateStore.(*daprt.FakeStateStore).Items {
+				keysPostPurge = append(keysPostPurge, key)
+			}
+
+			for _, item := range keysPostPurge {
+				if strings.Contains(item, string(id)) {
+					assert.True(t, false)
+				}
+			}
+
 		})
 	}
 }
