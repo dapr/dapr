@@ -228,8 +228,15 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpoin
 }
 
 func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
-	url := fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, subscriptionId, protocol, endpointType)
-	_, err := utils.HTTPGet(url)
+	// Unsubscribe with incorrect subscriptionId
+	url := fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, "incorrect-id", protocol, endpointType)
+	resp, err := utils.HTTPGet(url)
+	require.NoError(t, err, "error unsubscribing to key values")
+	require.Contains(t, string(resp), "error subscriptionID not found")
+
+	// Unsubscribe with correct subscriptionId
+	url = fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, subscriptionId, protocol, endpointType)
+	_, err = utils.HTTPGet(url)
 	require.NoError(t, err, "error unsubscribing to key values")
 
 	items := updateKeyValues(subscribedKeyValues, v1)
