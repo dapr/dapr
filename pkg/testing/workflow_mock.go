@@ -23,7 +23,7 @@ import (
 
 type MockWorkflow struct{}
 
-const ErrorInstanceId = "errorInstanceId"
+const ErrorInstanceID = "errorInstanceID"
 
 var ErrFakeWorkflowComponentError = errors.New("fake workflow error")
 
@@ -32,7 +32,7 @@ func (w *MockWorkflow) Init(metadata workflowContrib.Metadata) error {
 }
 
 func (w *MockWorkflow) Start(ctx context.Context, req *workflowContrib.StartRequest) (*workflowContrib.StartResponse, error) {
-	if req.InstanceID == ErrorInstanceId {
+	if req.InstanceID == ErrorInstanceID {
 		return nil, ErrFakeWorkflowComponentError
 	}
 	res := &workflowContrib.StartResponse{
@@ -42,14 +42,14 @@ func (w *MockWorkflow) Start(ctx context.Context, req *workflowContrib.StartRequ
 }
 
 func (w *MockWorkflow) Terminate(ctx context.Context, req *workflowContrib.TerminateRequest) error {
-	if req.InstanceID == ErrorInstanceId {
+	if req.InstanceID == ErrorInstanceID {
 		return ErrFakeWorkflowComponentError
 	}
 	return nil
 }
 
 func (w *MockWorkflow) Get(ctx context.Context, req *workflowContrib.GetRequest) (*workflowContrib.StateResponse, error) {
-	if req.InstanceID == ErrorInstanceId {
+	if req.InstanceID == ErrorInstanceID {
 		return nil, ErrFakeWorkflowComponentError
 	}
 	res := &workflowContrib.StateResponse{
@@ -65,21 +65,21 @@ func (w *MockWorkflow) Get(ctx context.Context, req *workflowContrib.GetRequest)
 }
 
 func (w *MockWorkflow) RaiseEvent(ctx context.Context, req *workflowContrib.RaiseEventRequest) error {
-	if req.InstanceID == ErrorInstanceId {
+	if req.InstanceID == ErrorInstanceID {
 		return ErrFakeWorkflowComponentError
 	}
 	return nil
 }
 
 func (w *MockWorkflow) Pause(ctx context.Context, req *workflowContrib.PauseRequest) error {
-	if req.InstanceID == ErrorInstanceId {
+	if req.InstanceID == ErrorInstanceID {
 		return ErrFakeWorkflowComponentError
 	}
 	return nil
 }
 
 func (w *MockWorkflow) Resume(ctx context.Context, req *workflowContrib.ResumeRequest) error {
-	if req.InstanceID == ErrorInstanceId {
+	if req.InstanceID == ErrorInstanceID {
 		return ErrFakeWorkflowComponentError
 	}
 	return nil

@@ -26,7 +26,7 @@ import (
 )
 
 func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
@@ -59,7 +59,7 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 }
 
 func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
-	if err := a.validateInstanceId(in.InstanceId, true /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.InstanceId, true /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
@@ -98,7 +98,7 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 // TerminateWorkflowAlpha1 is the API handler for terminating a workflow
 func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -122,7 +122,7 @@ func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev
 
 func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -157,7 +157,7 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 // PauseWorkflowAlpha1 is the API handler for pausing a workflow
 func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -182,7 +182,7 @@ func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 // ResumeWorkflowAlpha1 is the API handler for resuming a workflow
 func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceId(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -204,16 +204,16 @@ func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb
 	return emptyResponse, nil
 }
 
-func (a *UniversalAPI) validateInstanceId(instanceID string, isCreate bool) error {
+func (a *UniversalAPI) validateInstanceID(instanceID string, isCreate bool) error {
 	if instanceID == "" {
 		return messages.ErrMissingOrEmptyInstance
 	}
 
 	if isCreate {
 		// Limit the length of the instance ID to avoid potential conflicts with state stores that have restrictive key limits.
-		const maxInstanceIdLength = 64
-		if len(instanceID) > maxInstanceIdLength {
-			return messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIdLength)
+		const maxInstanceIDLength = 64
+		if len(instanceID) > maxInstanceIDLength {
+			return messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength)
 		}
 
 		// Check to see if the instance ID contains invalid characters. Valid characters are letters, digits, dashes, and underscores.

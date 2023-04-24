@@ -28,10 +28,13 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+const (
+	fakeComponentName = "fakeWorkflowComponent"
+	fakeInstanceID    = "fake-instance-ID__123"
+)
+
 func TestStartWorkflowAPI(t *testing.T) {
-	fakeComponentName := "fakeWorkflowComponent"
 	fakeWorkflowName := "fakeWorkflow"
-	fakeInstanceID := "fake-instance-ID__123"
 
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
@@ -90,7 +93,7 @@ func TestStartWorkflowAPI(t *testing.T) {
 			testName:          "Start for this instance throws error",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
-			instanceID:        daprt.ErrorInstanceId,
+			instanceID:        daprt.ErrorInstanceID,
 			expectedError:     messages.ErrStartWorkflow.WithFormat(fakeWorkflowName, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
@@ -132,9 +135,6 @@ func TestStartWorkflowAPI(t *testing.T) {
 }
 
 func TestGetWorkflowAPI(t *testing.T) {
-	fakeComponentName := "fakeWorkflowComponent"
-	fakeInstanceID := "fake_instance_ID_123"
-
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
 	}
@@ -166,8 +166,8 @@ func TestGetWorkflowAPI(t *testing.T) {
 		{
 			testName:          "Get for this instance throws error",
 			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceId,
-			expectedError:     messages.ErrWorkflowGetResponse.WithFormat(daprt.ErrorInstanceId, daprt.ErrFakeWorkflowComponentError),
+			instanceID:        daprt.ErrorInstanceID,
+			expectedError:     messages.ErrWorkflowGetResponse.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in get request",
@@ -206,9 +206,6 @@ func TestGetWorkflowAPI(t *testing.T) {
 }
 
 func TestTerminateWorkflowAPI(t *testing.T) {
-	fakeComponentName := "fakeWorkflowComponent"
-	fakeInstanceID := "fake_instance_ID_123"
-
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
 	}
@@ -240,8 +237,8 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 		{
 			testName:          "Terminate for this instance throws error",
 			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceId,
-			expectedError:     messages.ErrTerminateWorkflow.WithFormat(daprt.ErrorInstanceId, daprt.ErrFakeWorkflowComponentError),
+			instanceID:        daprt.ErrorInstanceID,
+			expectedError:     messages.ErrTerminateWorkflow.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in terminate request",
@@ -280,8 +277,6 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 }
 
 func TestRaiseEventWorkflowApi(t *testing.T) {
-	fakeComponentName := "fakeWorkflowComponent"
-	fakeInstanceID := "fake_instance_ID_123"
 	fakeEventName := "fake_event_name"
 
 	fakeWorkflows := map[string]workflows.Workflow{
@@ -326,9 +321,9 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 		{
 			testName:          "Raise event for this instance throws error",
 			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceId,
+			instanceID:        daprt.ErrorInstanceID,
 			eventName:         fakeEventName,
-			expectedError:     messages.ErrRaiseEventWorkflow.WithFormat(daprt.ErrorInstanceId, daprt.ErrFakeWorkflowComponentError),
+			expectedError:     messages.ErrRaiseEventWorkflow.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in raise event request",
@@ -370,9 +365,6 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 }
 
 func TestPauseWorkflowApi(t *testing.T) {
-	fakeComponentName := "fakeWorkflowComponent"
-	fakeInstanceID := "fake_instance_ID_123"
-
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
 	}
@@ -404,8 +396,8 @@ func TestPauseWorkflowApi(t *testing.T) {
 		{
 			testName:          "Pause for this instance throws error",
 			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceId,
-			expectedError:     messages.ErrPauseWorkflow.WithFormat(daprt.ErrorInstanceId, daprt.ErrFakeWorkflowComponentError),
+			instanceID:        daprt.ErrorInstanceID,
+			expectedError:     messages.ErrPauseWorkflow.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in pause request",
@@ -444,9 +436,6 @@ func TestPauseWorkflowApi(t *testing.T) {
 }
 
 func TestResumeWorkflowApi(t *testing.T) {
-	fakeComponentName := "fakeWorkflowComponent"
-	fakeInstanceID := "fake_instance_ID_123"
-
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
 	}
@@ -478,8 +467,8 @@ func TestResumeWorkflowApi(t *testing.T) {
 		{
 			testName:          "Resume for this instance throws error",
 			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceId,
-			expectedError:     messages.ErrResumeWorkflow.WithFormat(daprt.ErrorInstanceId, daprt.ErrFakeWorkflowComponentError),
+			instanceID:        daprt.ErrorInstanceID,
+			expectedError:     messages.ErrResumeWorkflow.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in resume request",
