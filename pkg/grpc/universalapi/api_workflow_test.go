@@ -27,13 +27,13 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
-var (
-	TerminateWorkflow = "TerminateWorkflow"
-	PauseWorkflow     = "PauseWorkflow"
-	ResumeWorkflow    = "ResumeWorkflow"
-)
-
 func TestPauseResumeWorkflow(t *testing.T) {
+	const (
+		TerminateWorkflow = "TerminateWorkflow"
+		PauseWorkflow     = "PauseWorkflow"
+		ResumeWorkflow    = "ResumeWorkflow"
+	)
+
 	fakeWorkflowComponent := daprt.MockWorkflow{}
 	fakeWorkflows := map[string]workflows.Workflow{
 		"fakeWorkflow": &fakeWorkflowComponent,

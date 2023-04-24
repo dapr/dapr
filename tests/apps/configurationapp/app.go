@@ -54,6 +54,11 @@ var (
 	grpcClient      runtimev1pb.DaprClient
 )
 
+type UnsubscribeConfigurationResponse struct {
+	Ok      bool   `json:"ok,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 type appResponse struct {
 	Message   string `json:"message,omitempty"`
 	StartTime int    `json:"start_time,omitempty"`
@@ -336,6 +341,14 @@ func unsubscribeHTTP(subscriptionID string, endpointType string) (string, error)
 	}
 	defer resp.Body.Close()
 	respInBytes, _ := io.ReadAll(resp.Body)
+	var unsubscribeResp UnsubscribeConfigurationResponse
+	err = json.Unmarshal(respInBytes, &unsubscribeResp)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling unsubscribe response: %s", err.Error())
+	}
+	if !unsubscribeResp.Ok {
+		return "", fmt.Errorf("error subscriptionID not found: %s", unsubscribeResp.Message)
+	}
 	return string(respInBytes), nil
 }
 
@@ -352,7 +365,7 @@ func unsubscribeGRPC(subscriptionID string, endpointType string) (string, error)
 		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
 	}
 	if !resp.Ok {
-		return "", fmt.Errorf("error unsubscribing config updates: %s", resp.GetMessage())
+		return "", fmt.Errorf("error subscriptionID not found: %s", resp.GetMessage())
 	}
 	return resp.GetMessage(), nil
 }
