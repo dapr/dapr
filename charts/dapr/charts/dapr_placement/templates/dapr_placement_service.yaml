@@ -1,3 +1,4 @@
+{{- if eq .Values.global.actors.enabled true }}
 kind: Service
 apiVersion: v1
 metadata:
@@ -19,3 +20,4 @@ spec:
   - name: raft-node
     port: {{ .Values.ports.raftRPCPort }}
   clusterIP: None
+{{- end }}

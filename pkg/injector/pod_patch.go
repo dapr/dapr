@@ -116,6 +116,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionRe
 		TrustAnchors:                 trustAnchors,
 		VolumeMounts:                 volumeMounts,
 		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
+		SkipPlacement:                i.config.GetSkipPlacement(),
 		RunAsNonRoot:                 i.config.GetRunAsNonRoot(),
 		ReadOnlyRootFilesystem:       i.config.GetReadOnlyRootFilesystem(),
 		SidecarDropALLCapabilities:   i.config.GetDropCapabilities(),
