@@ -954,7 +954,7 @@ func findMatchingRoute(rules []*runtimePubsub.Rule, cloudEvent interface{}) (pat
 
 func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) (*runtimePubsub.Rule, error) {
 	for _, rule := range rules {
-		if rule.Match == nil || rule.Match.program == nil {
+		if rule.Match == nil {
 			return rule, nil
 		}
 		iResult, err := rule.Match.Eval(data)
