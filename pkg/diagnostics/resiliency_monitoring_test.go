@@ -1,9 +1,13 @@
 package diagnostics_test
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
@@ -18,12 +22,13 @@ import (
 )
 
 const (
-	resiliencyCountViewName  = "resiliency/count"
-	resiliencyLoadedViewName = "resiliency/loaded"
-	testAppID                = "fakeID"
-	testResiliencyName       = "testResiliency"
-	testResiliencyNamespace  = "testNamespace"
-	testStateStoreName       = "testStateStore"
+	resiliencyCountViewName      = "resiliency/count"
+	resiliencyActivationViewName = "resiliency/activations_total"
+	resiliencyLoadedViewName     = "resiliency/loaded"
+	testAppID                    = "fakeID"
+	testResiliencyName           = "testResiliency"
+	testResiliencyNamespace      = "testNamespace"
+	testStateStoreName           = "testStateStore"
 )
 
 func TestResiliencyCountMonitoring(t *testing.T) {
@@ -47,9 +52,12 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				newTag("app_id", testAppID),
 				newTag("name", testResiliencyName),
 				newTag("namespace", testResiliencyNamespace),
-				newTag("policy", "timeout"),
-				newTag("policy", "retry"),
-				newTag("policy", "circuitbreaker"),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
+				newTag(diag.StatusKey.Name(), "closed"),
 			},
 		},
 		{
@@ -63,8 +71,11 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				newTag("app_id", testAppID),
 				newTag("name", testResiliencyName),
 				newTag("namespace", testResiliencyNamespace),
-				newTag("policy", "retry"),
-				newTag("policy", "circuitbreaker"),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyActorTarget("fakeActor")),
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
 			},
 			wantNumberOfRows: 2,
 		},
@@ -79,7 +90,9 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				newTag("app_id", testAppID),
 				newTag("name", testResiliencyName),
 				newTag("namespace", testResiliencyNamespace),
-				newTag("policy", "timeout"),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyActorTarget("fakeActor")),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
 			},
 			wantNumberOfRows: 1,
 		},
@@ -94,9 +107,12 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				newTag("app_id", testAppID),
 				newTag("name", testResiliencyName),
 				newTag("namespace", testResiliencyNamespace),
-				newTag("policy", "timeout"),
-				newTag("policy", "retry"),
-				newTag("policy", "timeout"),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
 			},
 			wantNumberOfRows: 3,
 		},
@@ -111,11 +127,53 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				newTag("app_id", testAppID),
 				newTag("name", testResiliencyName),
 				newTag("namespace", testResiliencyNamespace),
-				newTag("policy", "timeout"),
-				newTag("policy", "retry"),
-				newTag("policy", "timeout"),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.InboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
 			},
 			wantNumberOfRows: 3,
+		},
+		{
+			name:  "ComponentInboundDefaultPolicy",
+			appID: testAppID,
+			unitFn: func() {
+				r := createDefaultTestResiliency(testResiliencyName, testResiliencyNamespace)
+				_ = r.ComponentInboundPolicy(testStateStoreName, resiliency.Statestore)
+			},
+			wantNumberOfRows: 3,
+			wantTags: []tag.Tag{
+				newTag("app_id", testAppID),
+				newTag("name", testResiliencyName),
+				newTag("namespace", testResiliencyNamespace),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.InboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
+			},
+		},
+		{
+			name:  "ComponentOutboundDefaultPolicy",
+			appID: testAppID,
+			unitFn: func() {
+				r := createDefaultTestResiliency(testResiliencyName, testResiliencyNamespace)
+				_ = r.ComponentOutboundPolicy(testStateStoreName, resiliency.Statestore)
+			},
+			wantNumberOfRows: 2,
+			wantTags: []tag.Tag{
+				newTag("app_id", testAppID),
+				newTag("name", testResiliencyName),
+				newTag("namespace", testResiliencyNamespace),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
+			},
 		},
 	}
 
@@ -123,6 +181,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Cleanup(func() {
 				view.Unregister(view.Find(resiliencyCountViewName))
+				view.Unregister(view.Find(resiliencyActivationViewName))
 			})
 			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil)
 			test.unitFn()
@@ -131,10 +190,287 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				require.Error(t, err)
 			}
 			require.NoError(t, err)
-			require.Equal(t, len(rows), test.wantNumberOfRows)
+			require.Equal(t, test.wantNumberOfRows, len(rows))
 			for _, wantTag := range test.wantTags {
 				requireTagExist(t, rows, wantTag)
 			}
+		})
+	}
+}
+
+func TestResiliencyCountMonitoringCBStates(t *testing.T) {
+	tests := []struct {
+		name                string
+		unitFn              func()
+		wantNumberOfRows    int
+		wantCbStateTagCount map[tag.Tag]int64
+	}{
+		{
+			name: "EndpointPolicyCloseState",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				for i := 0; i < 2; i++ {
+					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+						return nil, nil
+					})
+				}
+			},
+			wantNumberOfRows:    3,
+			wantCbStateTagCount: map[tag.Tag]int64{newTag(diag.StatusKey.Name(), "closed"): 2},
+		},
+		{
+			name: "EndpointPolicyOpenState",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				for i := 0; i < 3; i++ {
+					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+						return nil, fmt.Errorf("fake error")
+					})
+				}
+			},
+			wantNumberOfRows: 4,
+			wantCbStateTagCount: map[tag.Tag]int64{
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 2,
+				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
+			},
+		},
+		{
+			name: "EndpointPolicyHalfOpenState",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				for i := 0; i < 3; i++ {
+					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+						return nil, fmt.Errorf("fake error")
+					})
+				}
+				// let the circuit breaker to go to half open state (5x cb timeout)
+				time.Sleep(500 * time.Millisecond)
+				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					return nil, fmt.Errorf("fake error")
+				})
+			},
+			wantNumberOfRows: 5,
+			wantCbStateTagCount: map[tag.Tag]int64{
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)):   2,
+				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):     1,
+				newTag(diag.StatusKey.Name(), string(breaker.StateHalfOpen)): 1,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
+			t.Cleanup(func() {
+				view.Unregister(view.Find(resiliencyActivationViewName))
+				view.Unregister(view.Find(resiliencyCountViewName))
+			})
+			test.unitFn()
+			rows, err := view.RetrieveData(resiliencyCountViewName)
+			require.NoError(t, err)
+			require.Equal(t, test.wantNumberOfRows, len(rows))
+
+			wantedTags := []tag.Tag{
+				newTag("app_id", testAppID),
+				newTag("name", testResiliencyName),
+				newTag("namespace", testResiliencyNamespace),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
+			}
+			for _, wantTag := range wantedTags {
+				requireTagExist(t, rows, wantTag)
+			}
+			for cbTag, wantCount := range test.wantCbStateTagCount {
+				gotCount := getCountForTagSet(rows, map[tag.Tag]bool{cbTag: true, newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
+				require.Equal(t, wantCount, gotCount)
+			}
+		})
+	}
+}
+
+func TestResiliencyActivationsCountMonitoring(t *testing.T) {
+	tests := []struct {
+		name                string
+		unitFn              func()
+		wantNumberOfRows    int
+		wantCbStateTagCount map[tag.Tag]int64
+		wantTags            []tag.Tag
+		wantRetriesCount    int64
+		wantTimeoutCount    int64
+		wantCBChangeCount   int64
+	}{
+		{
+			name: "EndpointPolicyNoActivations",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				for i := 0; i < 2; i++ {
+					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+						return nil, nil
+					})
+				}
+			},
+			wantNumberOfRows: 0,
+		},
+		{
+			name: "EndpointPolicyOneRetryNoCBTrip",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					return nil, fmt.Errorf("fake error")
+				})
+			},
+			wantNumberOfRows: 1,
+			wantRetriesCount: 1,
+			wantTags: []tag.Tag{
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+			},
+			wantCbStateTagCount: map[tag.Tag]int64{
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
+				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   0,
+			},
+		},
+		{
+			name: "EndpointPolicyTwoRetryWithCBTrip",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+				for i := 0; i < 2; i++ {
+					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+						return nil, fmt.Errorf("fake error")
+					})
+				}
+			},
+			wantNumberOfRows: 2,
+			wantRetriesCount: 2,
+			wantTags: []tag.Tag{
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+			},
+			wantCbStateTagCount: map[tag.Tag]int64{
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
+				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
+			},
+		},
+		{
+			name: "EndpointPolicyTwoRetryWithCBTripTimeout",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					time.Sleep(500 * time.Millisecond)
+					return nil, fmt.Errorf("fake error")
+				})
+				policyRunner = resiliency.NewRunner[any](context.Background(), policyDef)
+				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					return nil, fmt.Errorf("fake error")
+				})
+			},
+			wantNumberOfRows: 3,
+			wantRetriesCount: 2,
+			wantTimeoutCount: 1,
+			wantTags: []tag.Tag{
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+			},
+			wantCbStateTagCount: map[tag.Tag]int64{
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
+				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
+			},
+		},
+		{
+			name: "EndpointPolicyOpenAndCloseState",
+			unitFn: func() {
+				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
+				for i := 0; i < 2; i++ {
+					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+						return nil, fmt.Errorf("fake error")
+					})
+				}
+				// let the circuit breaker to go to half open state (5x cb timeout) and then return success to close it
+				time.Sleep(500 * time.Millisecond)
+				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+					return nil, nil
+				})
+
+				// now open the circuit breaker again
+				for i := 0; i < 2; i++ {
+					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
+					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
+						return nil, fmt.Errorf("fake error")
+					})
+				}
+			},
+			wantNumberOfRows: 3,
+			wantRetriesCount: 4,
+			wantTags: []tag.Tag{
+				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+			},
+			wantCbStateTagCount: map[tag.Tag]int64{
+				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 1,
+				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   2,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
+			t.Cleanup(func() {
+				view.Unregister(view.Find(resiliencyCountViewName))
+				view.Unregister(view.Find(resiliencyActivationViewName))
+			})
+			test.unitFn()
+			rows, err := view.RetrieveData(resiliencyActivationViewName)
+			require.NoError(t, err)
+			require.Equal(t, test.wantNumberOfRows, len(rows))
+			if test.wantNumberOfRows == 0 {
+				return
+			}
+
+			wantedTags := []tag.Tag{
+				newTag("app_id", testAppID),
+				newTag("name", testResiliencyName),
+				newTag("namespace", testResiliencyNamespace),
+				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				newTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
+			}
+			wantedTags = append(wantedTags, test.wantTags...)
+			for _, wantTag := range wantedTags {
+				requireTagExist(t, rows, wantTag)
+			}
+			for cbTag, wantCount := range test.wantCbStateTagCount {
+				gotCount := getCountForTagSet(rows, map[tag.Tag]bool{cbTag: true, newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
+				require.Equal(t, wantCount, gotCount)
+			}
+			gotRetriesCount := getCountForTagSet(rows, map[tag.Tag]bool{newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)): true})
+			require.Equal(t, test.wantRetriesCount, gotRetriesCount)
+
+			gotTimeoutCount := getCountForTagSet(rows, map[tag.Tag]bool{newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)): true})
+			require.Equal(t, test.wantTimeoutCount, gotTimeoutCount)
 		})
 	}
 }
@@ -150,10 +486,18 @@ func createTestResiliency(resiliencyName string, resiliencyNamespace string, sta
 	return r
 }
 
+func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace string) *resiliency.Resiliency {
+	r := resiliency.FromConfigurations(logger.NewLogger("fake-logger"), newTestDefaultResiliencyConfig(
+		resiliencyName, resiliencyNamespace,
+	))
+	return r
+}
+
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
 		t.Cleanup(func() {
 			view.Unregister(view.Find(resiliencyCountViewName))
+			view.Unregister(view.Find(resiliencyActivationViewName))
 		})
 		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil)
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
@@ -176,6 +520,21 @@ func newTag(key string, value string) tag.Tag {
 	}
 }
 
+func getCountForTagSet(rows []*view.Row, wantedTagSetCount map[tag.Tag]bool) int64 {
+	for _, row := range rows {
+		foundTags := 0
+		for _, aTag := range row.Tags {
+			if wantedTagSetCount[aTag] {
+				foundTags++
+			}
+		}
+		if foundTags == len(wantedTagSetCount) {
+			return row.Data.(*view.CountData).Value
+		}
+	}
+	return 0
+}
+
 func requireTagExist(t *testing.T, rows []*view.Row, wantedTag tag.Tag) {
 	t.Helper()
 	var found bool
@@ -188,7 +547,38 @@ outerLoop:
 			}
 		}
 	}
-	require.True(t, found, fmt.Sprintf("did not found tag (%s) in rows:", wantedTag), rows)
+	require.True(t, found, fmt.Sprintf("did not find tag (%s) in rows:", wantedTag), rows)
+}
+
+func newTestDefaultResiliencyConfig(resiliencyName, resiliencyNamespace string) *resiliencyV1alpha.Resiliency {
+	return &resiliencyV1alpha.Resiliency{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      resiliencyName,
+			Namespace: resiliencyNamespace,
+		},
+		Spec: resiliencyV1alpha.ResiliencySpec{
+			Policies: resiliencyV1alpha.Policies{
+				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
+					"DefaultComponentCircuitBreakerPolicy": {
+						Interval:    "0",
+						Timeout:     "100ms",
+						Trip:        "consecutiveFailures > 2",
+						MaxRequests: 1,
+					},
+				},
+				Retries: map[string]resiliencyV1alpha.Retry{
+					"DefaultComponentInboundRetryPolicy": {
+						Policy:     "constant",
+						Duration:   "10ms",
+						MaxRetries: ptr.Of(3),
+					},
+				},
+				Timeouts: map[string]string{
+					"DefaultTimeoutPolicy": "100ms",
+				},
+			},
+		},
+	}
 }
 
 func newTestResiliencyConfig(resiliencyName, resiliencyNamespace, appName, actorType, storeName string) *resiliencyV1alpha.Resiliency {
@@ -200,20 +590,20 @@ func newTestResiliencyConfig(resiliencyName, resiliencyNamespace, appName, actor
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
 				Timeouts: map[string]string{
-					"testTimeout": "5s",
+					"testTimeout": "100ms",
 				},
 				Retries: map[string]resiliencyV1alpha.Retry{
 					"testRetry": {
 						Policy:     "constant",
-						Duration:   "5s",
-						MaxRetries: ptr.Of(10),
+						Duration:   "10ms",
+						MaxRetries: ptr.Of(3),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
 					"testCB": {
-						Interval:    "8s",
-						Timeout:     "45s",
-						Trip:        "consecutiveFailures > 8",
+						Interval:    "0",
+						Timeout:     "100ms",
+						Trip:        "consecutiveFailures > 4",
 						MaxRequests: 1,
 					},
 				},

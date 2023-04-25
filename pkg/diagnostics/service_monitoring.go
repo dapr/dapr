@@ -28,6 +28,8 @@ var (
 	sourceAppIDKey      = tag.MustNewKey("src_app_id")
 	methodKey           = tag.MustNewKey("method")
 	statusKey           = tag.MustNewKey("status")
+	flowDirectionKey    = tag.MustNewKey("flow_direction")
+	targetKey           = tag.MustNewKey("target")
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
