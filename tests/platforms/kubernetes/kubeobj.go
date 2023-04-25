@@ -308,22 +308,6 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 		targetPort = appDesc.AppPort
 	}
 
-	ports := []apiv1.ServicePort{
-		{
-			Protocol:   apiv1.ProtocolTCP,
-			Port:       DefaultExternalPort,
-			TargetPort: intstr.IntOrString{IntVal: int32(targetPort)},
-		},
-	}
-
-	if appDesc.ServicePort > 0 {
-		ports = append(ports, apiv1.ServicePort{
-			Protocol:   apiv1.ProtocolTCP,
-			Port:       int32(appDesc.ServicePort),
-			TargetPort: intstr.IntOrString{IntVal: int32(targetPort)},
-		})
-	}
-
 	return &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appDesc.AppName,
@@ -336,8 +320,14 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 			Selector: map[string]string{
 				TestAppLabelKey: appDesc.AppName,
 			},
-			Ports: ports,
-			Type:  serviceType,
+			Ports: []apiv1.ServicePort{
+				{
+					Protocol:   apiv1.ProtocolTCP,
+					Port:       DefaultExternalPort,
+					TargetPort: intstr.IntOrString{IntVal: int32(targetPort)},
+				},
+			},
+			Type: serviceType,
 		},
 	}
 }

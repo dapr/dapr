@@ -148,6 +148,15 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
+			AppName:        "grpcproxyserverexternal",
+			DaprEnabled:    false,
+			ImageName:      "e2e-service_invocation_grpc_proxy_server",
+			Replicas:       1,
+			MetricsEnabled: true,
+			AppProtocol:    "grpc",
+			AppPort:        50051,
+		},
+		{
 			AppName:           "grpcproxyserver",
 			DaprEnabled:       true,
 			ImageName:         "e2e-service_invocation_grpc_proxy_server",
@@ -155,8 +164,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:    true,
 			AppProtocol:       "grpc",
 			AppPort:           50051,
-			AppChannelAddress: "grpcproxyserver",
-			ServicePort:       50051,
+			AppChannelAddress: "grpcproxyserver-app",
 		},
 	}
 
