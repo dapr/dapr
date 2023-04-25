@@ -32,6 +32,8 @@ import (
 
 var ErrDuplicateInvocation = errors.New("duplicate invocation")
 
+const activityStateKey = "activityState"
+
 type activityActor struct {
 	actorRuntime     actors.Actors
 	scheduler        workflowScheduler
@@ -80,11 +82,8 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	}
 
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
-	var state activityState
-	if state, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
+	if _, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
 		return nil, err
-	} else if state.Generation > 0 && methodName != "PurgeWorkflowState" {
-		return nil, ErrDuplicateInvocation
 	}
 
 	if methodName == "PurgeWorkflowState" {
@@ -92,7 +91,7 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	}
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
-	state = activityState{
+	state := activityState{
 		Generation:   ar.Generation,
 		EventPayload: ar.HistoryEvent,
 	}
@@ -235,11 +234,7 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 	result, ok := a.statesCache.Load(actorID)
 	if ok {
 		cachedState := result.(activityState)
-
-		// Make sure the cached state is for the same generation of the workflow.
-		if cachedState.Generation == generation {
-			return cachedState, nil
-		}
+		return cachedState, nil
 	}
 
 	// Loading from the state store is only expected in process failure recovery scenarios.
@@ -248,7 +243,7 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 	req := actors.GetStateRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
-		Key:       getActivityInvocationKey(generation),
+		Key:       activityStateKey,
 	}
 	res, err := a.actorRuntime.GetState(ctx, &req)
 	if err != nil {
@@ -274,7 +269,7 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 		Operations: []actors.TransactionalOperation{{
 			Operation: actors.Upsert,
 			Request: actors.TransactionalUpsert{
-				Key:   getActivityInvocationKey(state.Generation),
+				Key:   activityStateKey,
 				Value: state,
 			},
 		}},
@@ -296,19 +291,15 @@ func (a *activityActor) purgeActivityState(ctx context.Context, actorID string, 
 		Operations: []actors.TransactionalOperation{{
 			Operation: actors.Delete,
 			Request: actors.TransactionalDelete{
-				Key: getActivityInvocationKey(generationKey),
+				Key: activityStateKey,
 			},
 		}},
 	}
 	if err := a.actorRuntime.TransactionalStateOperation(ctx, &req); err != nil {
-		return fmt.Errorf("failed to delete activity state with request key %v and error: %w", getActivityInvocationKey(generationKey), err)
+		return fmt.Errorf("failed to delete activity state with error: %w", err)
 	}
 
 	return nil
-}
-
-func getActivityInvocationKey(generation uint64) string {
-	return fmt.Sprintf("activityreq-%d", generation)
 }
 
 func (a *activityActor) createReliableReminder(ctx context.Context, actorID string, data any) error {

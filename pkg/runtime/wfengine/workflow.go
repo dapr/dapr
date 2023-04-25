@@ -333,6 +333,32 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		return nil
 	}
 
+	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
+	// TODO: for optimization make multiple go routines and run them in parallel
+	for _, e := range state.Inbox {
+		var taskID int32
+		if ts := e.GetTaskCompleted(); ts != nil {
+			taskID = ts.TaskScheduledId
+		} else if tf := e.GetTaskFailed(); tf != nil {
+			taskID = tf.TaskScheduledId
+		} else {
+			continue
+		}
+		req := actors.TransactionalRequest{
+			ActorType: wf.config.activityActorType,
+			ActorID:   getActivityActorID(actorID, taskID),
+			Operations: []actors.TransactionalOperation{{
+				Operation: actors.Delete,
+				Request: actors.TransactionalDelete{
+					Key: activityStateKey,
+				},
+			}},
+		}
+		if err := wf.actors.TransactionalStateOperation(ctx, &req); err != nil {
+			return fmt.Errorf("failed to delete activity state with error: %w", err)
+		}
+	}
+
 	runtimeState := getRuntimeState(actorID, state)
 	wi := &backend.OrchestrationWorkItem{
 		InstanceID: runtimeState.InstanceID(),

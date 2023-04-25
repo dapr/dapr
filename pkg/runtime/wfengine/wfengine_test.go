@@ -621,11 +621,79 @@ func TestPurge(t *testing.T) {
 					assert.True(t, false)
 				}
 			}
-
 		})
 	}
 }
 
+func TestPurgeContinueAsNew(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ContinueAsNewTest", func(ctx *task.OrchestrationContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+
+		if input < 10 {
+			if err := ctx.CreateTimer(0).Await(nil); err != nil {
+				return nil, err
+			}
+			var nextInput int32
+			if err := ctx.CallActivity("PlusOne", input).Await(&nextInput); err != nil {
+				return nil, err
+			}
+			ctx.ContinueAsNew(nextInput)
+		}
+		return input, nil
+	})
+	r.AddActivityN("PlusOne", func(ctx task.ActivityContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input + 1, nil
+	})
+	ctx := context.Background()
+	client, engine, stateStore := startEngineAndGetStore(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+
+			// Second Test
+			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
+
+			// Purging
+			// Get all the keys that were stored from the activity and ensure that they were stored
+			keysPrePurge := []string{}
+			keyCounter := 0
+			for key := range stateStore.(*daprt.FakeStateStore).Items {
+				keysPrePurge = append(keysPrePurge, key)
+				if strings.Contains(key, string(id)) {
+					keyCounter += 1
+				}
+			}
+			assert.Greater(t, keyCounter, 2)
+
+			err = client.PurgeOrchestrationState(ctx, id)
+			assert.NoError(t, err)
+
+			// Check that no key from the statestore containing the actor id is still present in the statestore
+			keysPostPurge := []string{}
+			for key := range stateStore.(*daprt.FakeStateStore).Items {
+				keysPostPurge = append(keysPostPurge, key)
+			}
+
+			for _, item := range keysPostPurge {
+				if strings.Contains(item, string(id)) {
+					assert.True(t, false)
+				}
+			}
+		})
+	}
+}
 func TestPauseResumeWorkflow(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("PauseWorkflow", func(ctx *task.OrchestrationContext) (any, error) {

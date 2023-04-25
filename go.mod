@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/dapr/components-contrib v1.10.6-0.20230424230259-3fbaad85440a
+	github.com/dapr/components-contrib v1.10.6-0.20230425214846-180b6e108475
 	github.com/dapr/kit v0.0.5-0.20230418193628-15a7040dec41
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/fasthttp/router v1.4.18
@@ -421,7 +421,7 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => ../components-contrib
+// replace github.com/dapr/components-contrib => ../components-contrib
 
 //
 // Then, run `make modtidy` in this repository.
