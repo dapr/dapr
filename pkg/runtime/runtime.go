@@ -528,10 +528,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
+
 	err = a.createHTTPEndpointsAppChannel()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app for external service invocation: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
+
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 	a.directMessaging.SetAppChannel(a.appChannel)
@@ -1157,7 +1159,9 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 			var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
 
 			// Retry on stream error.
-			backoff.Retry(func() error {
+			streamData, err := backoff.RetryWithData(func() (interface{}, error) {
+				var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
+
 				var err error
 				stream, err = a.operatorClient.HTTPEndpointUpdate(context.Background(), &operatorv1pb.HTTPEndpointUpdateRequest{
 					Namespace: a.namespace,
@@ -1165,10 +1169,20 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 				})
 				if err != nil {
 					log.Errorf("error from operator stream: %s", err)
-					return err
+					return nil, err
 				}
-				return nil
+
+				return stream, nil
 			}, backoff.NewExponentialBackOff())
+
+			if err != nil {
+				// Retry on stream error.
+				needList = true
+				log.Errorf("error from operator stream: %s", err)
+				continue
+			}
+
+			stream = streamData.(operatorv1pb.Operator_HTTPEndpointUpdateClient)
 
 			if needList {
 				// We should get all http endpoints again to avoid missing any updates during the failure time.
@@ -1184,8 +1198,8 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 					endpoints := resp.GetHttpEndpoints()
 					for i := 0; i < len(endpoints); i++ {
 						// avoid missing any updates during the init http endpoint time.
-						go func(comp []byte) {
-							parseAndUpdate(comp)
+						go func(endpt []byte) {
+							parseAndUpdate(endpt)
 						}(endpoints[i])
 					}
 
@@ -1194,15 +1208,20 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 			}
 
 			for {
-				e, err := stream.Recv()
-				if err != nil {
-					// Retry on stream error.
-					needList = true
-					log.Errorf("error from operator stream: %s", err)
-					break
-				}
+				select {
+				case <-a.ctx.Done():
+					return // goroutine exits when context is cancelled
+				default:
+					e, err := stream.Recv()
+					if err != nil {
+						// Retry on stream error.
+						needList = true
+						log.Errorf("error from operator stream: %s", err)
+						break
+					}
 
-				parseAndUpdate(e.GetHttpEndpoints())
+					parseAndUpdate(e.GetHttpEndpoints())
+				}
 			}
 		}
 	}()

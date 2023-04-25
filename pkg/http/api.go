@@ -1253,10 +1253,8 @@ func (ie invokeError) Error() string {
 
 func (a *api) isHTTPEndpoint(appID string) bool {
 	endpoint, ok := a.universal.CompStore.GetHTTPEndpoint(appID)
-	if ok {
-		if endpoint.Name == appID {
-			return true
-		}
+	if ok && endpoint.Name == appID {
+		return true
 	}
 	return false
 }
@@ -1302,7 +1300,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
 		baseURL := targetID
 		invokeMethodName := reqCtx.UserValue(methodParam).(string)
-		prefix := fmt.Sprintf("v1.0/invoke/%s/%s/", baseURL, methodParam)
+		prefix := "v1.0/invoke" + baseURL + "/" + methodParam
 		invokeActualMethodName := invokeMethodName[len(prefix):]
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+"/"+invokeActualMethodName)
 		req = invokev1.NewInvokeMethodRequest(invokeActualMethodName).
