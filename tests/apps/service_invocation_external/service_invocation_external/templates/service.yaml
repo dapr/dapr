@@ -37,7 +37,7 @@ spec:
     spec:
       containers:
       - name: service-invocation-external-via-crd
-        image: docker.io/samdiagrid/e2e-service_invocation_external:dev-linux-amd64
+        image: {{ .Values.Image }}
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
