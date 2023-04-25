@@ -27,11 +27,13 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
+	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -252,7 +254,7 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{workflowName}/{instanceID}/start",
+			Route:   "workflows/{workflowComponent}/{workflowName}/start",
 			Version: apiVersionV1alpha1,
 			Handler: a.onStartWorkflowHandler(),
 		},
@@ -260,19 +262,19 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
 			Version: apiVersionV1alpha1,
-			Handler: a.onWorkflowActivityHandler(a.universal.PauseWorkflowAlpha1),
+			Handler: a.onPauseWorkflowHandler(),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
 			Version: apiVersionV1alpha1,
-			Handler: a.onWorkflowActivityHandler(a.universal.ResumeWorkflowAlpha1),
+			Handler: a.onResumeWorkflowHandler(),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
-			Handler: a.onWorkflowActivityHandler(a.universal.TerminateWorkflowAlpha1),
+			Handler: a.onTerminateWorkflowHandler(),
 		},
 	}
 }
@@ -693,24 +695,41 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 	return state, storeName, nil
 }
 
-// Route:   "workflows/{workflowComponent}/{workflowName}/{instanceId}",
+// Route:   "workflows/{workflowComponent}/{workflowName}/start?instanceID={instanceID}",
 // Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
 func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.StartWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.StartWorkflowRequest, *runtimev1pb.WorkflowReference]{
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.StartWorkflowRequest, *runtimev1pb.StartWorkflowResponse]{
+			// We pass the input body manually rather than parsing it using protojson
+			SkipInputBody: true,
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
 				in.WorkflowName = reqCtx.UserValue(workflowName).(string)
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+
+				// The instance ID is optional. If not specified, we generate a random one.
+				instanceID := string(reqCtx.QueryArgs().Peek(instanceID))
+				if instanceID == "" {
+					if randomID, err := uuid.NewRandom(); err == nil {
+						instanceID = randomID.String()
+					} else {
+						return nil, err
+					}
+				}
+				in.InstanceId = instanceID
+
+				// We accept the HTTP request body as the input to the workflow
+				// without making any assumptions about its format.
+				in.Input = reqCtx.PostBody()
 				return in, nil
 			},
 			SuccessStatusCode: fasthttp.StatusAccepted,
 		})
 }
 
+// Route: POST "workflows/{workflowComponent}/{instanceID}"
 func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.GetWorkflowAlpha1,
@@ -723,14 +742,12 @@ func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
 		})
 }
 
-type workflowActivityHandler = func(ctx context.Context, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityResponse, error)
-
-// This is a common handler for TerminateWorkflow, PauseWorkflow and ResumeWorkflow
-func (a *api) onWorkflowActivityHandler(handler workflowActivityHandler) fasthttp.RequestHandler {
+// Route: POST "workflows/{workflowComponent}/{instanceID}/terminate"
+func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
-		handler,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.WorkflowActivityRequest, *runtimev1pb.WorkflowActivityResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.WorkflowActivityRequest) (*runtimev1pb.WorkflowActivityRequest, error) {
+		a.universal.TerminateWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
@@ -739,14 +756,49 @@ func (a *api) onWorkflowActivityHandler(handler workflowActivityHandler) fasthtt
 		})
 }
 
+// Route: POST "workflows/{workflowComponent}/{instanceID}/events/{eventName}"
 func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.RaiseEventWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *runtimev1pb.RaiseEventWorkflowResponse]{
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *emptypb.Empty]{
+			// We pass the input body manually rather than parsing it using protojson
+			SkipInputBody: true,
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.EventName = reqCtx.UserValue(eventName).(string)
+
+				// We accept the HTTP request body as the payload of the workflow event
+				// without making any assumptions about its format.
+				in.EventData = reqCtx.PostBody()
+				return in, nil
+			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
+		})
+}
+
+// ROUTE: POST "workflows/{workflowComponent}/{instanceID}/pause"
+func (a *api) onPauseWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.PauseWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.PauseWorkflowRequest, *emptypb.Empty]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.PauseWorkflowRequest) (*runtimev1pb.PauseWorkflowRequest, error) {
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+				return in, nil
+			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
+		})
+}
+
+// ROUTE: POST "workflows/{workflowComponent}/{instanceID}/resume"
+func (a *api) onResumeWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.ResumeWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.ResumeWorkflowRequest, *emptypb.Empty]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.ResumeWorkflowRequest) (*runtimev1pb.ResumeWorkflowRequest, error) {
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
 			},
 			SuccessStatusCode: fasthttp.StatusAccepted,
