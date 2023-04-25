@@ -30,16 +30,17 @@ import (
 	"google.golang.org/grpc/status"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
-	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
@@ -75,7 +76,7 @@ type directMessaging struct {
 	readBufferSize          int
 	resiliency              resiliency.Provider
 	isStreamingEnabled      bool
-	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+	universal               *universalapi.UniversalAPI
 }
 
 type remoteApp struct {
@@ -89,6 +90,7 @@ type NewDirectMessagingOpts struct {
 	AppID                   string
 	Namespace               string
 	Port                    int
+	CompStore               *compstore.ComponentStore
 	Mode                    modes.DaprMode
 	AppChannel              channel.AppChannel
 	HTTPEndpointsAppChannel channel.HTTPEndpointAppChannel
@@ -99,7 +101,7 @@ type NewDirectMessagingOpts struct {
 	ReadBufferSize          int
 	Resiliency              resiliency.Provider
 	IsStreamingEnabled      bool
-	HTTPEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+	universal               *universalapi.UniversalAPI
 }
 
 // NewDirectMessaging returns a new direct messaging api.
@@ -123,7 +125,12 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 		isStreamingEnabled:      opts.IsStreamingEnabled,
 		hostAddress:             hAddr,
 		hostName:                hName,
-		httpEndpoints:           opts.HTTPEndpoints,
+		universal: &universalapi.UniversalAPI{
+			AppID:      opts.AppID,
+			Logger:     log,
+			Resiliency: opts.Resiliency,
+			CompStore:  opts.CompStore,
+		},
 	}
 
 	if dm.proxy != nil {
@@ -143,7 +150,7 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	}
 
 	// invoke external calls first if appID matches an httpEndpoint.Name or app.id == baseURL that is overwritten
-	if d.isHTTPEndpoint(app.id) || strings.Contains(app.id, "://") {
+	if d.isHTTPEndpoint(app.id) || strings.HasPrefix(app.id, "http://") || strings.HasPrefix(app.id, "https://") {
 		return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeHTTPEndpoint, req)
 	}
 
@@ -187,11 +194,13 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 // checkHTTPEndpoints takes an app id and checks if the app id is associated with the http endpoint CRDs,
 // and returns the baseURL if an http endpoint is found.
 func (d *directMessaging) checkHTTPEndpoints(targetAppID string) string {
-	for _, endpoint := range d.httpEndpoints {
+	endpoint, ok := d.universal.CompStore.GetHTTPEndpoint(targetAppID)
+	if ok {
 		if endpoint.Name == targetAppID {
 			return endpoint.Spec.BaseURL
 		}
 	}
+
 	return ""
 }
 
@@ -205,7 +214,6 @@ func (d *directMessaging) invokeWithRetry(
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-
 	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) {
 		// This policy has built-in retries so enable replay in the request
 		req.WithReplay(true)
@@ -257,45 +265,27 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 }
 
 func (d *directMessaging) isHTTPEndpoint(appID string) bool {
-	for _, endpoint := range d.httpEndpoints {
-		if endpoint.Name == appID {
-			return true
-		}
-	}
-	return false
+	_, ok := d.universal.CompStore.GetHTTPEndpoint(appID)
+	return ok
+}
+func noopTeardown(destroy bool) {
+	// Nop
 }
 
 func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
-	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	ctx = d.setContextSpan(ctx)
-
-	d.addForwardedHeadersToMetadata(req)
-	d.addDestinationAppIDHeaderToMetadata(appID, req)
-	d.addCallerAndCalleeAppIDHeaderToMetadata(d.appID, appID, req)
-
-	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
-
-	opts := []grpc.CallOption{
-		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB << 20),
-		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB << 20),
-	}
 
 	// Set up timers
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
-
-	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, clientV1, req, opts, appID)
+	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, nil, req, nil, appID)
 
 	// Diagnostics
 	if imr != nil {
 		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
 	}
 
-	return imr, teardown, err
+	return imr, noopTeardown, err
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
@@ -578,7 +568,7 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 	// Note: check for case where URL is overwritten for external service invocation,
 	// or if current app id is associated with an http endpoint CRD.
 	// This will also forgo service discovery.
-	if strings.Contains(id, "://") {
+	if strings.HasPrefix(id, "http://") || strings.HasPrefix(id, "https://") {
 		address = id
 	} else if d.isHTTPEndpoint(id) {
 		address = d.checkHTTPEndpoints(id)

@@ -1307,12 +1307,12 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	var policyDef *resiliency.PolicyDefinition
 	switch {
 	// overwritten URL, so targetID = baseURL
-	case strings.Contains(targetID, "://"):
+	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
 		baseUrl := targetID
-		policyDef = a.resiliency.EndpointPolicy(targetID, baseUrl)
 		invokeMethodName := reqCtx.UserValue(methodParam).(string)
-		prefix := fmt.Sprintf("v1.0/invoke%s/%s/", baseUrl, methodParam)
+		prefix := fmt.Sprintf("v1.0/invoke/%s/%s/", baseUrl, methodParam)
 		invokeActualMethodName := invokeMethodName[len(prefix):]
+		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+"/"+invokeActualMethodName)
 		req = invokev1.NewInvokeMethodRequest(invokeActualMethodName).
 			WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
 			WithRawDataBytes(reqCtx.Request.Body()).
@@ -1373,6 +1373,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 				statusCode: fasthttp.StatusInternalServerError,
 				msg:        NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr)),
 			}
+
 			if status.Code(rErr) == codes.PermissionDenied {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}

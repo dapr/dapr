@@ -1020,7 +1020,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		ReadBufferSize:          a.runtimeConfig.ReadBufferSize,
 		Resiliency:              a.resiliency,
 		IsStreamingEnabled:      a.globalConfig.IsFeatureEnabled(config.ServiceInvocationStreaming),
-		HTTPEndpoints:           a.compStore.ListHTTPEndpoints(),
+		CompStore:               a.compStore,
 	})
 }
 
@@ -2754,7 +2754,7 @@ func (a *DaprRuntime) loadHTTPEndpoints(opts *runtimeOpts) error {
 	}
 
 	for _, e := range endpoints {
-		log.Debug("Found http endpoint: %s", e.Name)
+		log.Infof("Found http endpoint: %s", e.Name)
 		a.pendingHTTPEndpoints <- e
 	}
 

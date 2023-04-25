@@ -30,7 +30,6 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
@@ -88,19 +87,8 @@ func CreateNonLocalChannel(config ChannelConfigurationForHTTPEndpoints) (channel
 	return c, nil
 }
 
-// InvokeMethod invokes user code via HTTP.
-// InvokeMethod for HTTPEndpointAppChannel will invoke the external application
+// InvokeMethod invokes external http endpoint via HTTP.
 func (h *HTTPEndpointAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (rsp *invokev1.InvokeMethodResponse, err error) {
-	// Check if HTTP Extension is given. Otherwise, it will return error.
-	httpExt := req.Message().GetHttpExtension()
-	if httpExt == nil {
-		return nil, status.Error(codes.InvalidArgument, "missing HTTP extension field")
-	}
-	// Go's net/http library does not support sending requests with the CONNECT method
-	if httpExt.Verb == commonv1pb.HTTPExtension_NONE || httpExt.Verb == commonv1pb.HTTPExtension_CONNECT { //nolint:nosnakecase
-		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
-	}
-
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
 		rsp, err = h.invokeMethodV1(ctx, req, appID)
