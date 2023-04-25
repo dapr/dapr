@@ -770,7 +770,7 @@ func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
 
 				// We accept the HTTP request body as the payload of the workflow event
 				// without making any assumptions about its format.
-				in.Input = reqCtx.PostBody()
+				in.EventData = reqCtx.PostBody()
 				return in, nil
 			},
 			SuccessStatusCode: fasthttp.StatusAccepted,

@@ -952,50 +952,82 @@ message DecryptResponse {
   common.v1.StreamPayload payload = 1;
 }
 
+// GetWorkflowRequest is the request for GetWorkflowAlpha1.
 message GetWorkflowRequest {
+  // ID of the workflow instance to query.
   string instance_id  = 1 [json_name = "instanceID"];
+  // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
+// GetWorkflowResponse is the response for GetWorkflowAlpha1.
 message GetWorkflowResponse {
+  // ID of the workflow instance.
   string instance_id = 1 [json_name = "instanceID"];
+  // Name of the workflow.
   string workflow_name = 2 [json_name = "workflowName"];
+  // The time at which the workflow instance was created.
   google.protobuf.Timestamp created_at = 3 [json_name = "createdAt"];
+  // The last time at which the workflow instance had its state changed.
   google.protobuf.Timestamp last_updated_at = 4 [json_name = "lastUpdatedAt"];
+  // The current status of the workflow instance, for example, "PENDING", "RUNNING", "SUSPENDED", "COMPLETED", "FAILED", and "TERMINATED".
   string runtime_status = 5 [json_name = "runtimeStatus"];
+  // Additional component-specific properties of the workflow instance.
   map<string, string> properties = 6;
 }
 
+// StartWorkflowRequest is the request for StartWorkflowAlpha1.
 message StartWorkflowRequest {
+  // The ID to assign to the started workflow instance. If empty, a random ID is generated.
   string instance_id = 1 [json_name = "instanceID"];
+  // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Name of the workflow.
   string workflow_name = 3 [json_name = "workflowName"];
+  // Additional component-specific options for starting the workflow instance.
   map<string, string> options = 4;
+  // Input data for the workflow instance.
   bytes input = 5;
 }
 
+// StartWorkflowResponse is the response for StartWorkflowAlpha1.
 message StartWorkflowResponse {
+  // ID of the started workflow instance.
   string instance_id = 1 [json_name = "instanceID"];
 }
 
+// TerminateWorkflowRequest is the request for TerminateWorkflowAlpha1.
 message TerminateWorkflowRequest {
+  // ID of the workflow instance to terminate.
   string instance_id = 1 [json_name = "instanceID"];
+  // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
+// PauseWorkflowRequest is the request for PauseWorkflowAlpha1.
 message PauseWorkflowRequest {
+  // ID of the workflow instance to pause.
   string instance_id = 1 [json_name = "instanceID"];
+  // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
+// ResumeWorkflowRequest is the request for ResumeWorkflowAlpha1.
 message ResumeWorkflowRequest {
+  // ID of the workflow instance to resume.
   string instance_id = 1 [json_name = "instanceID"];
+  // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
+// RaiseEventWorkflowRequest is the request for RaiseEventWorkflowAlpha1.
 message RaiseEventWorkflowRequest {
+  // ID of the workflow instance to raise an event for.
   string instance_id = 1 [json_name = "instanceID"];
+  // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Name of the event.
   string event_name = 3 [json_name = "eventName"];
-  bytes input = 4;
+  // Data associated with the event.
+  bytes event_data = 4;
 }

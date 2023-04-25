@@ -31,7 +31,7 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
-	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
 	if err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -70,7 +70,7 @@ func (a *UniversalAPI) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
-	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
 	if err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
@@ -103,7 +103,7 @@ func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev
 		return emptyResponse, err
 	}
 
-	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
@@ -133,7 +133,7 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 		return emptyResponse, err
 	}
 
-	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
@@ -142,7 +142,7 @@ func (a *UniversalAPI) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtime
 	req := workflows.RaiseEventRequest{
 		InstanceID: in.InstanceId,
 		EventName:  in.EventName,
-		EventData:  in.Input,
+		EventData:  in.EventData,
 	}
 
 	err = workflowComponent.RaiseEvent(ctx, &req)
@@ -162,7 +162,7 @@ func (a *UniversalAPI) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 		return emptyResponse, err
 	}
 
-	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
@@ -187,7 +187,7 @@ func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb
 		return emptyResponse, err
 	}
 
-	workflowComponent, err := a.getComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
@@ -227,7 +227,7 @@ func (a *UniversalAPI) validateInstanceID(instanceID string, isCreate bool) erro
 	return nil
 }
 
-func (a *UniversalAPI) getComponent(componentName string) (workflows.Workflow, error) {
+func (a *UniversalAPI) getWorkflowComponent(componentName string) (workflows.Workflow, error) {
 	if componentName == "" {
 		return nil, messages.ErrNoOrMissingWorkflowComponent
 	}

@@ -351,7 +351,7 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 				EventName:         tt.eventName,
-				Input:             []byte("fake_input"),
+				EventData:         []byte("fake_input"),
 			}
 			_, err := fakeAPI.RaiseEventWorkflowAlpha1(context.Background(), req)
 
