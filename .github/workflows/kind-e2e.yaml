@@ -193,6 +193,10 @@ jobs:
       run: |
         make setup-test-env-zipkin
 
+    - name: Setup postgres
+      run: |
+        make setup-test-env-postgres
+
     - name: Setup test components
       run: |
         make setup-test-components
