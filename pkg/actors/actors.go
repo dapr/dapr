@@ -64,6 +64,11 @@ const (
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
 )
 
+var metricsSuccessStatusString = map[bool]string{
+	true:  "success",
+	false: "failure",
+}
+
 var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -944,7 +949,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 			}
 
 			err = a.executeReminder(reminder, false)
-			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
+			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, metricsSuccessStatusString[err == nil])
 			if err != nil {
 				if errors.Is(err, ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
@@ -1302,7 +1307,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 			if _, exists := a.actorsTable.Load(actorKey); exists {
 				err = a.executeReminder(reminder, true)
-				diag.DefaultMonitoring.ActorTimerFired(req.ActorType, err == nil)
+				diag.DefaultMonitoring.ActorTimerFired(req.ActorType, metricsSuccessStatusString[err == nil])
 				if err != nil {
 					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 				}

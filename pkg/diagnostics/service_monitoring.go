@@ -359,30 +359,23 @@ func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
 }
 
 // ActorReminderFired records metric when actor reminder is fired.
-func (s *serviceMetrics) ActorReminderFired(actorType string, succeeded bool) {
+func (s *serviceMetrics) ActorReminderFired(actorType, status string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(s.actorReminderFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, statusKey, getSuccessStatusString(succeeded)),
+			diagUtils.WithTags(s.actorReminderFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, statusKey, status),
 			s.actorReminderFiredTotal.M(1))
 	}
 }
 
 // ActorTimerFired records metric when actor timer is fired.
-func (s *serviceMetrics) ActorTimerFired(actorType string, succeeded bool) {
+func (s *serviceMetrics) ActorTimerFired(actorType, status string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(s.actorTimerFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, statusKey, getSuccessStatusString(succeeded)),
+			diagUtils.WithTags(s.actorTimerFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, statusKey, status),
 			s.actorTimerFiredTotal.M(1))
 	}
-}
-
-func getSuccessStatusString(success bool) string {
-	if success {
-		return "succeeded"
-	}
-	return "failed"
 }
 
 // ActorReminders records the current number of reminders for an actor type.
