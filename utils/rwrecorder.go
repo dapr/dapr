@@ -1,4 +1,4 @@
-package http
+package utils
 
 /*!
 Adapted from the Go 1.19.2 source code
@@ -17,27 +17,27 @@ import (
 	"golang.org/x/net/http/httpguts"
 )
 
-type rwRecorder struct {
+type RWRecorder struct {
 	statusCode int
 	h          http.Header
-	w          io.ReadWriter
+	W          io.ReadWriter
 }
 
-func (w *rwRecorder) StatusCode() int {
+func (w *RWRecorder) StatusCode() int {
 	if w.statusCode == 0 {
 		return http.StatusOK
 	}
 	return w.statusCode
 }
 
-func (w *rwRecorder) Header() http.Header {
+func (w *RWRecorder) Header() http.Header {
 	if w.h == nil {
 		w.h = make(http.Header)
 	}
 	return w.h
 }
 
-func (w *rwRecorder) WriteHeader(code int) {
+func (w *RWRecorder) WriteHeader(code int) {
 	if code < 100 || code > 999 {
 		panic(fmt.Sprintf("invalid WriteHeader code %v", code))
 	}
@@ -45,16 +45,16 @@ func (w *rwRecorder) WriteHeader(code int) {
 	w.statusCode = code
 }
 
-func (w *rwRecorder) Write(p []byte) (int, error) {
-	return w.w.Write(p)
+func (w *RWRecorder) Write(p []byte) (int, error) {
+	return w.W.Write(p)
 }
 
-func (w *rwRecorder) Result() *http.Response {
+func (w *RWRecorder) Result() *http.Response {
 	res := &http.Response{
 		Proto:      "HTTP/1.1",
 		ProtoMajor: 1,
 		ProtoMinor: 1,
-		Body:       io.NopCloser(w.w),
+		Body:       io.NopCloser(w.W),
 		StatusCode: w.StatusCode(),
 		Header:     w.h,
 	}

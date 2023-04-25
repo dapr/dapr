@@ -39,6 +39,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/utils"
 	streamutils "github.com/dapr/dapr/utils/streams"
 )
 
@@ -224,8 +225,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	var resp *http.Response
 	if len(h.pipeline.Handlers) > 0 {
 		// Exec pipeline only if at least one handler is specified
-		rw := &rwRecorder{
-			w: &bytes.Buffer{},
+		rw := &utils.RWRecorder{
+			W: &bytes.Buffer{},
 		}
 		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
 			// Send request to user application
