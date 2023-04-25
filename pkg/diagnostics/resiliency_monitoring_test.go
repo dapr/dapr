@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/resiliency/breaker"
-
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -17,19 +15,38 @@ import (
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
 const (
-	resiliencyCountViewName      = "resiliency/count"
-	resiliencyActivationViewName = "resiliency/activations_total"
-	resiliencyLoadedViewName     = "resiliency/loaded"
-	testAppID                    = "fakeID"
-	testResiliencyName           = "testResiliency"
-	testResiliencyNamespace      = "testNamespace"
-	testStateStoreName           = "testStateStore"
+	resiliencyCountViewName         = "resiliency/count"
+	resiliencyActivationViewName    = "resiliency/activations_total"
+	resiliencyLoadedViewName        = "resiliency/loaded"
+	actorTimersLastValueViewName    = "runtime/actor/timers"
+	actorRemindersLastValueViewName = "runtime/actor/reminders"
+	testAppID                       = "fakeID"
+	testResiliencyName              = "testResiliency"
+	testResiliencyNamespace         = "testNamespace"
+	testStateStoreName              = "testStateStore"
 )
+
+func cleanupRegisteredViews() {
+	var views []*view.View
+	for _, v := range []string{
+		resiliencyCountViewName,
+		resiliencyLoadedViewName,
+		resiliencyActivationViewName,
+		actorTimersLastValueViewName,
+		actorRemindersLastValueViewName,
+	} {
+		if v := view.Find(v); v != nil {
+			views = append(views, v)
+		}
+	}
+	view.Unregister(views...)
+}
 
 func TestResiliencyCountMonitoring(t *testing.T) {
 	tests := []struct {
@@ -179,11 +196,8 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			t.Cleanup(func() {
-				view.Unregister(view.Find(resiliencyCountViewName))
-				view.Unregister(view.Find(resiliencyActivationViewName))
-			})
-			_ = diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil)
+			cleanupRegisteredViews()
+			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -268,11 +282,8 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			cleanupRegisteredViews()
 			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
-			t.Cleanup(func() {
-				view.Unregister(view.Find(resiliencyActivationViewName))
-				view.Unregister(view.Find(resiliencyCountViewName))
-			})
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
@@ -438,11 +449,8 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			cleanupRegisteredViews()
 			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
-			t.Cleanup(func() {
-				view.Unregister(view.Find(resiliencyCountViewName))
-				view.Unregister(view.Find(resiliencyActivationViewName))
-			})
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
@@ -495,11 +503,8 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
-		t.Cleanup(func() {
-			view.Unregister(view.Find(resiliencyCountViewName))
-			view.Unregister(view.Find(resiliencyActivationViewName))
-		})
-		_ = diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil)
+		cleanupRegisteredViews()
+		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)

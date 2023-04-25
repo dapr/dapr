@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/dapr/components-contrib v1.10.6-0.20230419230437-7099066436ee
+	github.com/dapr/components-contrib v1.10.6-0.20230424230259-3fbaad85440a
 	github.com/dapr/kit v0.0.5-0.20230418193628-15a7040dec41
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/fasthttp/router v1.4.18
@@ -32,7 +32,7 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/labstack/gommon v0.4.0
 	github.com/lestrrat-go/jwx/v2 v2.0.9
-	github.com/microsoft/durabletask-go v0.1.4
+	github.com/microsoft/durabletask-go v0.2.1-0.20230409004853-b1c4226121e6
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
