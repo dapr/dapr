@@ -53,6 +53,10 @@ type serviceMetrics struct {
 	actorDeactivationTotal       *stats.Int64Measure
 	actorDeactivationFailedTotal *stats.Int64Measure
 	actorPendingCalls            *stats.Int64Measure
+	actorReminders               *stats.Int64Measure
+	actorReminderFiredTotal      *stats.Int64Measure
+	actorTimers                  *stats.Int64Measure
+	actorTimerFiredTotal         *stats.Int64Measure
 
 	// Access Control Lists for Service Invocation metrics
 	appPolicyActionAllowed    *stats.Int64Measure
@@ -136,6 +140,22 @@ func newServiceMetrics() *serviceMetrics {
 			"runtime/actor/pending_actor_calls",
 			"The number of pending actor calls waiting to acquire the per-actor lock.",
 			stats.UnitDimensionless),
+		actorTimers: stats.Int64(
+			"runtime/actor/timers",
+			"The number of the actor timer requests.",
+			stats.UnitDimensionless),
+		actorReminders: stats.Int64(
+			"runtime/actor/reminders",
+			"The number of the actor reminder requests.",
+			stats.UnitDimensionless),
+		actorReminderFiredTotal: stats.Int64(
+			"runtime/actor/reminders_fired_total",
+			"The number of the actor reminder fired requests.",
+			stats.UnitDimensionless),
+		actorTimerFiredTotal: stats.Int64(
+			"runtime/actor/timers_fired_total",
+			"The number of the actor timer fired requests.",
+			stats.UnitDimensionless),
 
 		// Access Control Lists for service invocation
 		appPolicyActionAllowed: stats.Int64(
@@ -204,6 +224,10 @@ func (s *serviceMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.actorTimers, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
+		diagUtils.NewMeasureView(s.actorReminders, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
+		diagUtils.NewMeasureView(s.actorReminderFiredTotal, []tag.Key{appIDKey, actorTypeKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(s.actorTimerFiredTotal, []tag.Key{appIDKey, actorTypeKey, statusKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
@@ -331,6 +355,46 @@ func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
 			s.ctx,
 			diagUtils.WithTags(s.actorDeactivationFailedTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
 			s.actorDeactivationFailedTotal.M(1))
+	}
+}
+
+// ActorReminderFired records metric when actor reminder is fired.
+func (s *serviceMetrics) ActorReminderFired(actorType, status string) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(s.actorReminderFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, statusKey, status),
+			s.actorReminderFiredTotal.M(1))
+	}
+}
+
+// ActorTimerFired records metric when actor timer is fired.
+func (s *serviceMetrics) ActorTimerFired(actorType, status string) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(s.actorTimerFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, statusKey, status),
+			s.actorTimerFiredTotal.M(1))
+	}
+}
+
+// ActorReminders records the current number of reminders for an actor type.
+func (s *serviceMetrics) ActorReminders(actorType string, reminders int64) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(s.actorReminders.Name(), appIDKey, s.appID, actorTypeKey, actorType),
+			s.actorReminders.M(reminders))
+	}
+}
+
+// ActorTimers records the current number of timers for an actor type.
+func (s *serviceMetrics) ActorTimers(actorType string, timers int64) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(s.actorTimers.Name(), appIDKey, s.appID, actorTypeKey, actorType),
+			s.actorTimers.M(timers))
 	}
 }
 
