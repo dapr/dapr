@@ -40,7 +40,6 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -515,11 +514,6 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	return r, nil
 }
 
-type bulkGetRes struct {
-	bulkGet   bool
-	responses []state.BulkGetResponse
-}
-
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
 	bulkResp := &runtimev1pb.GetBulkStateResponse{}
 	store, err := a.getStateStore(in.StoreName)
@@ -549,74 +543,36 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 	start := time.Now()
 	policyDef := a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
-	bgrPolicyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
-	bgr, err := bgrPolicyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-		rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, reqs)
-		return &bulkGetRes{
-			bulkGet:   rBulkGet,
-			responses: rBulkResponse,
-		}, rErr
+	bgrPolicyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx, policyDef)
+	responses, err := bgrPolicyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+		return store.BulkGet(ctx, reqs, state.BulkGetOpts{
+			Parallelism: int(in.Parallelism),
+		})
 	})
-	elapsed := diag.ElapsedSince(start)
 
+	elapsed := diag.ElapsedSince(start)
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
-	if bgr == nil {
-		bgr = &bulkGetRes{}
+	if err != nil {
+		return bulkResp, err
 	}
 
-	// if store supports bulk get
-	if bgr.bulkGet {
-		if err != nil {
-			return bulkResp, err
+	bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(responses))
+	for i := 0; i < len(responses); i++ {
+		item := &runtimev1pb.BulkStateItem{
+			Key:      stateLoader.GetOriginalStateKey(responses[i].Key),
+			Data:     responses[i].Data,
+			Etag:     stringValueOrEmpty(responses[i].ETag),
+			Metadata: responses[i].Metadata,
+			Error:    responses[i].Error,
 		}
-		for i := 0; i < len(bgr.responses); i++ {
-			item := &runtimev1pb.BulkStateItem{
-				Key:      stateLoader.GetOriginalStateKey(bgr.responses[i].Key),
-				Data:     bgr.responses[i].Data,
-				Etag:     stringValueOrEmpty(bgr.responses[i].ETag),
-				Metadata: bgr.responses[i].Metadata,
-				Error:    bgr.responses[i].Error,
-			}
-			bulkResp.Items = append(bulkResp.Items, item)
-		}
-	} else {
-		// if store doesn't support bulk get, fallback to call get() method one by one
-		bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(reqs))
-		limiter := concurrency.NewLimiter(int(in.Parallelism))
-		for i := range reqs {
-			bulkResp.Items[i] = &runtimev1pb.BulkStateItem{
-				Key: reqs[i].Key,
-			}
-
-			fn := func(iAny any) {
-				rI := iAny.(int)
-				policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
-				res, rErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-					return store.Get(ctx, &reqs[rI])
-				})
-
-				item := &runtimev1pb.BulkStateItem{
-					Key: stateLoader.GetOriginalStateKey(reqs[rI].Key),
-				}
-
-				if rErr != nil {
-					item.Error = rErr.Error()
-				} else if res != nil {
-					item.Data = res.Data
-					item.Etag = stringValueOrEmpty(res.ETag)
-					item.Metadata = res.Metadata
-				}
-				bulkResp.Items[rI] = item
-			}
-			limiter.Execute(fn, i)
-		}
-		limiter.Wait()
+		bulkResp.Items[i] = item
 	}
 
 	if encryption.EncryptedStateStore(in.StoreName) {
 		for i := range bulkResp.Items {
 			if bulkResp.Items[i].Error != "" || len(bulkResp.Items[i].Data) == 0 {
+				bulkResp.Items[i].Data = nil
 				continue
 			}
 
@@ -718,20 +674,27 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		return empty, err
 	}
 
-	reqs := []state.SetRequest{}
-	for _, s := range in.States {
-		key, err1 := stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
-		if err1 != nil {
-			return empty, err1
+	l := len(in.States)
+	if l == 0 {
+		return empty, nil
+	}
+
+	reqs := make([]state.SetRequest, l)
+	for i, s := range in.States {
+		var key string
+		key, err = stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
+		if err != nil {
+			return empty, err
 		}
 		req := state.SetRequest{
 			Key:      key,
 			Metadata: s.Metadata,
 		}
 
-		if contentType, ok := req.Metadata[contribMetadata.ContentType]; ok && contentType == contenttype.JSONContentType {
-			if err1 = json.Unmarshal(s.Value, &req.Value); err1 != nil {
-				return empty, err1
+		if req.Metadata[contribMetadata.ContentType] == contenttype.JSONContentType {
+			err = json.Unmarshal(s.Value, &req.Value)
+			if err != nil {
+				return empty, err
 			}
 		} else {
 			req.Value = s.Value
@@ -756,15 +719,19 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			req.Value = val
 		}
 
-		reqs = append(reqs, req)
+		reqs[i] = req
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](ctx,
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkSet(ctx, reqs)
+	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+		// If there's a single request, perform it in non-bulk
+		if len(reqs) == 1 {
+			return struct{}{}, store.Set(ctx, &reqs[0])
+		}
+		return struct{}{}, store.BulkSet(ctx, reqs)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -920,7 +887,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			return &emptypb.Empty{}, err
 		}
 		switch state.OperationType(inputReq.OperationType) {
-		case state.Upsert:
+		case state.OperationUpsert:
 			setReq := state.SetRequest{
 				Key: key,
 				// Limitation:
@@ -940,12 +907,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = state.TransactionalStateOperation{
-				Operation: state.Upsert,
-				Request:   setReq,
-			}
+			operations[i] = setReq
 
-		case state.Delete:
+		case state.OperationDelete:
 			delReq := state.DeleteRequest{
 				Key:      key,
 				Metadata: req.Metadata,
@@ -961,10 +925,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = state.TransactionalStateOperation{
-				Operation: state.Delete,
-				Request:   delReq,
-			}
+			operations[i] = delReq
 
 		default:
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
@@ -975,8 +936,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	if encryption.EncryptedStateStore(in.StoreName) {
 		for i, op := range operations {
-			if op.Operation == state.Upsert {
-				req := op.Request.(*state.SetRequest)
+			switch req := op.(type) {
+			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(in.StoreName, data)
 				if err != nil {
@@ -986,7 +947,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 
 				req.Value = val
-				operations[i].Request = req
+				operations[i] = req
 			}
 		}
 	}
@@ -1166,8 +1127,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	for _, op := range in.Operations {
 		var actorOp actors.TransactionalOperation
-		switch state.OperationType(op.OperationType) {
-		case state.Upsert:
+		switch op.OperationType {
+		case string(state.OperationUpsert):
 			setReq := map[string]any{
 				"key":   op.Key,
 				"value": op.Value.Value,
@@ -1181,7 +1142,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				Operation: actors.Upsert,
 				Request:   setReq,
 			}
-		case state.Delete:
+		case string(state.OperationDelete):
 			delReq := map[string]interface{}{
 				"key": op.Key,
 				// Actor state do not user other attributes from state request.
@@ -1406,7 +1367,7 @@ func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	return conf, nil
 }
 
-func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
 	response := &runtimev1pb.GetConfigurationResponse{}
 
 	store, err := a.getConfigurationStore(in.StoreName)
@@ -1452,6 +1413,11 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 	return response, nil
 }
 
+// TODO: Remove this method when the alpha API is removed.
+func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+	return a.GetConfiguration(ctx, in)
+}
+
 type configurationEventHandler struct {
 	api          *api
 	storeName    string
@@ -1478,7 +1444,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	return nil
 }
 
-func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
+func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error { //nolint:nosnakecase
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1538,7 +1504,12 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	return nil
 }
 
-func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
+// TODO: Remove this method when the alpha API is removed.
+func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
+	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
+}
+
+func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
 	store, err := a.getConfigurationStore(request.GetStoreName())
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1553,7 +1524,8 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	_, ok := a.CompStore.GetConfigurationSubscribe(subscribeID)
 	if !ok {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
-			Ok: true,
+			Ok:      false,
+			Message: fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, "subscription does not exist"),
 		}, nil
 	}
 	a.CompStore.DeleteConfigurationSubscribe(subscribeID)
@@ -1582,6 +1554,11 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
+}
+
+// TODO: Remove this method when the alpha API is removed.
+func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
+	return a.UnsubscribeConfiguration(ctx, request)
 }
 
 func (a *api) Close() error {

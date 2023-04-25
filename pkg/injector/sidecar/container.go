@@ -35,7 +35,7 @@ import (
 // ContainerConfig contains the configuration for the sidecar container.
 type ContainerConfig struct {
 	AppID                        string
-	Annotations                  Annotations
+	Annotations                  annotations.Map
 	CertChain                    string
 	CertKey                      string
 	ControlPlaneAddress          string
@@ -51,6 +51,7 @@ type ContainerConfig struct {
 	TrustAnchors                 string
 	VolumeMounts                 []corev1.VolumeMount
 	ComponentsSocketsVolumeMount *corev1.VolumeMount
+	SkipPlacement                bool
 	RunAsNonRoot                 bool
 	ReadOnlyRootFilesystem       bool
 	SidecarDropALLCapabilities   bool
@@ -97,8 +98,11 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		log.Warn(err)
 	}
 
+	// We still include PlacementServiceAddress if explicitly set as annotation
 	if cfg.Annotations.Exist(annotations.KeyPlacementHostAddresses) {
 		cfg.PlacementServiceAddress = cfg.Annotations.GetString(annotations.KeyPlacementHostAddresses)
+	} else if cfg.SkipPlacement {
+		cfg.PlacementServiceAddress = ""
 	}
 
 	ports := []corev1.ContainerPort{
@@ -401,7 +405,7 @@ func podContainsTolerations(ts []corev1.Toleration, podTolerations []corev1.Tole
 	return false
 }
 
-func getResourceRequirements(an Annotations) (*corev1.ResourceRequirements, error) {
+func getResourceRequirements(an annotations.Map) (*corev1.ResourceRequirements, error) {
 	r := corev1.ResourceRequirements{
 		Limits:   corev1.ResourceList{},
 		Requests: corev1.ResourceList{},

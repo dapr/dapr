@@ -107,7 +107,7 @@ func (t *Table) DaprLatency(latency float64) *Table {
 
 // AddedLatency is a shortcut for Outputf("Added latency avg", "%2.fms")
 func (t *Table) AddedLatency(latency float64) *Table {
-	return t.Outputf("Dapr latency avg", "%.2fms", latency)
+	return t.Outputf("Added latency avg", "%.2fms", latency)
 }
 
 // SidecarMemory is a shortcut for .Outputf("Sidecar Memory", "%vm")
