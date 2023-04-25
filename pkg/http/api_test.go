@@ -2287,6 +2287,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
 		}
 		testAPI.appChannel = nil
+		testAPI.actor = nil
 
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
