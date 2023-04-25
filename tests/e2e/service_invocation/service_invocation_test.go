@@ -43,6 +43,14 @@ type testCommandRequest struct {
 	Message          *string `json:"message"`
 }
 
+type testCommandRequestExternal struct {
+	RemoteApp        string  `json:"remoteApp,omitempty"`
+	Method           string  `json:"method,omitempty"`
+	RemoteAppTracing string  `json:"remoteAppTracing"`
+	Message          *string `json:"message"`
+	ExternalIP       string  `json:"externalIP,omitempty"`
+}
+
 type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
@@ -156,6 +164,15 @@ func TestMain(m *testing.M) {
 			AppProtocol:    "grpc",
 			AppPort:        50051,
 		},
+		{
+			AppName:        "serviceinvocation-callee-external",
+			DaprEnabled:    false,
+			ImageName:      "e2e-service_invocation_external",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+			AppProtocol:    "http",
+		},
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
@@ -265,6 +282,33 @@ var moreServiceinvocationTests = []struct {
 		"grpcapp",
 		"grpcToGrpcTest",
 		"success",
+	},
+}
+
+var externalServiceInvocationTests = []struct {
+	in               string
+	path             string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+	isHTTPEndpoint   bool // this determines if the corresponding URL will use the HTTPEndpoint name, or external service IP
+}{
+	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
+	{
+		"Test HTTP to HTTP Externally using HTTP Endpoint CRD",
+		"/httptohttptest_external",
+		"serviceinvocation-callee-external",
+		"externalInvocation",
+		"success",
+		false,
+	},
+	{
+		"Test HTTP to HTTP Externally",
+		"httptohttptest_external",
+		"external-http-endpoint",
+		"externalInvocation",
+		"success",
+		true,
 	},
 }
 
@@ -435,6 +479,77 @@ func TestServiceInvocation(t *testing.T) {
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
+}
+
+func TestServiceInvocationExternally(t *testing.T) {
+	testFn := func(targetApp string) func(t *testing.T) {
+		return func(t *testing.T) {
+			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
+			invokeExternalServiceIP := tr.Platform.AcquireAppExternalURL("serviceinvocation-callee-external")
+
+			require.NotEmpty(t, externalURL, "external URL must not be empty!")
+			require.NotEmpty(t, invokeExternalServiceIP, "external service URL must not be empty!")
+			var err error
+			// This initial probe makes the test wait a little bit longer when needed,
+			// making this test less flaky due to delays in the deployment.
+			_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+			require.NoError(t, err)
+
+			t.Logf("externalURL is '%s'\n", externalURL)
+
+			// invoke via overwritten URL to non-Daprized service
+			for _, tt := range externalServiceInvocationTests {
+				switch tt.isHTTPEndpoint {
+				case false:
+					// test using overwritten URLs
+					t.Run(tt.in, func(t *testing.T) {
+						body, err := json.Marshal(testCommandRequestExternal{
+							RemoteApp:  tt.remoteApp,
+							Method:     tt.appMethod,
+							ExternalIP: invokeExternalServiceIP,
+						})
+						require.NoError(t, err)
+						t.Logf("invoking post to http://%s%s", externalURL, tt.path)
+
+						resp, err := utils.HTTPPost(
+							fmt.Sprintf("http://%s%s", externalURL, tt.path), body)
+						t.Log("checking err...")
+						require.NoError(t, err)
+
+						var appResp appResponse
+						t.Logf("unmarshalling..%s\n", string(resp))
+						err = json.Unmarshal(resp, &appResp)
+						t.Logf("appResp %s", appResp)
+						require.NoError(t, err)
+						require.Equal(t, tt.expectedResponse, appResp.Message)
+					})
+				default:
+					// invoke via HTTPEndpoint CRD
+					t.Run(tt.in, func(t *testing.T) {
+						body, err := json.Marshal(testCommandRequestExternal{
+							RemoteApp: tt.remoteApp,
+							Method:    tt.appMethod,
+						})
+						require.NoError(t, err)
+
+						resp, err := utils.HTTPPost(
+							fmt.Sprintf("http://%s/%s", externalURL, tt.path), body)
+						t.Log("checking err...")
+						require.NoError(t, err)
+
+						var appResp appResponse
+						t.Logf("unmarshalling..%s\n", string(resp))
+						err = json.Unmarshal(resp, &appResp)
+						t.Logf("appResp %s", appResp)
+						require.NoError(t, err)
+						require.Equal(t, tt.expectedResponse, appResp.Message)
+					})
+				}
+
+			}
+		}
+	}
+	t.Run("serviceinvocation-callee-external", testFn("serviceinvocation-caller"))
 }
 
 func TestGRPCProxy(t *testing.T) {
@@ -1375,4 +1490,5 @@ func TestCrossNamespaceCases(t *testing.T) {
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
+
 }

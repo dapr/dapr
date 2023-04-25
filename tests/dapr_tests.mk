@@ -25,6 +25,7 @@ service_invocation \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
 service_invocation_grpc_proxy_server \
+service_invocation_external \
 binding_input \
 binding_input_grpc \
 binding_output \
@@ -501,8 +502,12 @@ setup-disable-mtls:
 setup-app-configurations:
 	$(KUBECTL) apply -f ./tests/config/dapr_observability_test_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
+setup-external-invocation-components:
+	$(KUBECTL) apply -f ./tests/config/external_service_invocation_service.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/service_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
+
 # Apply component yaml for state, secrets, pubsub, workflows, and bindings
-setup-test-components: setup-app-configurations
+setup-test-components: setup-app-configurations setup-external-invocation-components
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -544,6 +549,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tracing_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/service_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

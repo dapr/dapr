@@ -1,0 +1,43 @@
+# In e2e test, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing e2e test.
+kind: Service
+apiVersion: v1
+metadata:
+  name: service-invocation-external-via-crd
+  labels:
+    testapp: service-invocation-external-via-crd
+spec:
+  selector:
+    testapp: service-invocation-external-via-crd
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-invocation-external-via-crd
+  labels:
+    testapp: service-invocation-external-via-crd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: service-invocation-external-via-crd
+  template:
+    metadata:
+      labels:
+        testapp: service-invocation-external-via-crd
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+      - name: service-invocation-external-via-crd
+        image: docker.io/samdiagrid/e2e-service_invocation_external:dev-linux-amd64
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always

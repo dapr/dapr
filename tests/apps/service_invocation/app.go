@@ -77,6 +77,14 @@ type testCommandRequest struct {
 	Message          *string `json:"message,omitempty"`
 }
 
+type testCommandRequestExternal struct {
+	RemoteApp        string  `json:"remoteApp,omitempty"`
+	Method           string  `json:"method,omitempty"`
+	RemoteAppTracing string  `json:"remoteAppTracing"`
+	Message          *string `json:"message"`
+	ExternalIP       string  `json:"externalIP,omitempty"`
+}
+
 type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
@@ -392,6 +400,9 @@ func appRouter() *mux.Router {
 
 	// test path for Dapr method invocation decode
 	router.PathPrefix("/path/").HandlerFunc(testPathHTTPCall)
+
+	// service invocation to external HTTPEndpoint resources + through overwriting the URL
+	router.HandleFunc("/httptohttptest_external", httpTohttpTestExternal).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
@@ -899,6 +910,79 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	logAndSetResponse(w, http.StatusOK, "success")
 }
 
+// Performs calls from http client to http server.
+// It sends a random string to the non-Daprized app,
+// and expects the response to contain the same string inside an appResponse.
+func httpTohttpTestExternal(w http.ResponseWriter, r *http.Request) {
+	log.Println("Enter httpTohttpTestExternal")
+	defer r.Body.Close()
+	var commandBody testCommandRequestExternal
+	err := json.NewDecoder(r.Body).Decode(&commandBody)
+	if err != nil {
+		onBadRequest(w, err)
+		return
+	}
+	daprAddress := fmt.Sprintf("localhost:%d", daprHTTPPort)
+
+	log.Printf("dapr address is %s\n", daprAddress)
+	log.Printf("httpTohttpTestExternal calling with method %s\n", commandBody.Method)
+
+	for _, test := range testMethods {
+		testMessage := "success"
+		if test.SendBody {
+			if commandBody.Message != nil {
+				testMessage = *commandBody.Message
+			} else {
+				testMessage = guuid.New().String()
+			}
+		}
+		// case of overwritten URL
+		var url string
+		if commandBody.ExternalIP == "" {
+			url = fmt.Sprintf(
+				"http://localhost:%s/v1.0/invoke/%s/method/%s",
+				strconv.Itoa(daprHTTPPort), commandBody.RemoteApp,
+				commandBody.Method)
+		} else {
+			url = fmt.Sprintf(
+				"http://localhost:%s/v1.0/invoke/%s/method/%s",
+				strconv.Itoa(daprHTTPPort), sanitizeHTTPURL(commandBody.ExternalIP),
+				commandBody.Method)
+		}
+
+		log.Printf("%s invoke url is %s\n", test.Verb, url)
+		var b []byte
+
+		if test.SendBody {
+			var err error
+			b, err = json.Marshal(testMessage)
+			if err != nil {
+				log.Printf("marshal had error %s\n", err)
+				onSerializationFailed(w, err)
+				return
+			}
+			log.Printf("sending body: %s\n", string(b))
+		}
+
+		resp, err := httpWrapper(test.Verb, url, b)
+		if err != nil {
+			log.Printf("response had error %s\n", err)
+			onHTTPCallFailed(w, 0, err)
+			return
+		}
+
+		if test.ExpectBody && testMessage != resp.Message {
+			errorMessage := "Expected " + testMessage + " received " + resp.Message
+			logAndSetResponse(w, http.StatusInternalServerError, errorMessage)
+			return
+		}
+
+		log.Printf("httpTohttpTestExternal - %s test successful\n", test.Verb)
+	}
+
+	logAndSetResponse(w, http.StatusOK, "success")
+}
+
 // data should be serialized by caller
 func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error) {
 	var appResp appResponse
@@ -913,9 +997,14 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 		return appResp, err
 	}
 	res, err := httpClient.Do(req)
+	if res != nil {
+		log.Printf("res in httpWrapper() %v with status code %d", res, res.StatusCode)
+	}
+	log.Printf("res error in httpWrapper() %v", err)
 	if err != nil {
 		return appResp, err
 	}
+
 	defer func() {
 		// Drain before closing
 		_, _ = io.Copy(io.Discard, res.Body)
@@ -923,7 +1012,6 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 	}()
 
 	actualVerb := res.Header.Get("x-dapr-tests-request-method")
-
 	if httpMethod != actualVerb {
 		return appResp, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb) //nolint:stylecheck
 	}
