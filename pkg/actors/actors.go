@@ -64,6 +64,11 @@ const (
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
 )
 
+var metricsSuccessStatusString = map[bool]string{
+	true:  "success",
+	false: "failure",
+}
+
 var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -110,6 +115,8 @@ type actorsRuntime struct {
 	config                 Config
 	actorsTable            *sync.Map
 	activeTimers           *sync.Map
+	activeTimersCount      map[string]*int64
+	activeTimersCountLock  sync.RWMutex
 	activeTimersLock       sync.RWMutex
 	activeReminders        *sync.Map
 	remindersLock          sync.RWMutex
@@ -197,6 +204,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		placement:            opts.MockPlacement,
 		actorsTable:          &sync.Map{},
 		activeTimers:         &sync.Map{},
+		activeTimersCount:    make(map[string]*int64),
 		activeReminders:      &sync.Map{},
 		reminders:            map[string][]actorReminderReference{},
 		evaluationChan:       make(chan struct{}, 1),
@@ -940,6 +948,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 			}
 
 			err = a.executeReminder(reminder, false)
+			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, metricsSuccessStatusString[err == nil])
 			if err != nil {
 				if errors.Is(err, ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
@@ -1256,6 +1265,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 	stop := make(chan struct{}, 1)
 	a.activeTimers.Store(timerKey, stop)
+	a.updateActiveTimersCount(req.ActorType, 1)
 
 	go func() {
 		var (
@@ -1296,6 +1306,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 			if _, exists := a.actorsTable.Load(actorKey); exists {
 				err = a.executeReminder(reminder, true)
+				diag.DefaultMonitoring.ActorTimerFired(req.ActorType, metricsSuccessStatusString[err == nil])
 				if err != nil {
 					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 				}
@@ -1325,6 +1336,21 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		}
 	}()
 	return nil
+}
+
+func (a *actorsRuntime) updateActiveTimersCount(actorType string, inc int64) {
+	a.activeTimersCountLock.RLock()
+	_, ok := a.activeTimersCount[actorType]
+	a.activeTimersCountLock.RUnlock()
+	if !ok {
+		a.activeTimersCountLock.Lock()
+		if _, ok = a.activeTimersCount[actorType]; !ok { // re-check
+			a.activeTimersCount[actorType] = new(int64)
+		}
+		a.activeTimersCountLock.Unlock()
+	}
+
+	diag.DefaultMonitoring.ActorTimers(actorType, atomic.AddInt64(a.activeTimersCount[actorType], inc))
 }
 
 func (a *actorsRuntime) saveActorTypeMetadataRequest(actorType string, actorMetadata *ActorMetadata, stateMetadata map[string]string) state.SetRequest {
@@ -1676,6 +1702,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		}
 
 		a.remindersLock.Lock()
+		diag.DefaultMonitoring.ActorReminders(actorType, int64(len(reminders)))
 		a.reminders[actorType] = reminders
 		a.remindersLock.Unlock()
 		return struct{}{}, nil
@@ -1797,6 +1824,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, store transactionalSt
 		}
 
 		a.remindersLock.Lock()
+		diag.DefaultMonitoring.ActorReminders(reminder.ActorType, int64(len(reminders)))
 		a.reminders[reminder.ActorType] = reminders
 		a.remindersLock.Unlock()
 		return struct{}{}, nil
@@ -1833,6 +1861,7 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 	if exists {
 		close(stopChan.(chan struct{}))
 		a.activeTimers.Delete(timerKey)
+		a.updateActiveTimersCount(req.ActorType, -1)
 	}
 
 	return nil
