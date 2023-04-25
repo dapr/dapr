@@ -545,7 +545,6 @@ func TestServiceInvocationExternally(t *testing.T) {
 						require.Equal(t, tt.expectedResponse, appResp.Message)
 					})
 				}
-
 			}
 		}
 	}
@@ -1490,5 +1489,4 @@ func TestCrossNamespaceCases(t *testing.T) {
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
-
 }

@@ -20,8 +20,9 @@ import (
 
 	"github.com/dapr/kit/logger"
 
-	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+
+	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 
 	config "github.com/dapr/dapr/pkg/config/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"

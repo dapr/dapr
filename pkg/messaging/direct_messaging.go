@@ -143,7 +143,6 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 
 // Invoke takes a message requests and invokes an app, either local or remote.
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-
 	app, err := d.getRemoteApp(targetAppID)
 	if err != nil {
 		return nil, err
@@ -268,6 +267,7 @@ func (d *directMessaging) isHTTPEndpoint(appID string) bool {
 	_, ok := d.universal.CompStore.GetHTTPEndpoint(appID)
 	return ok
 }
+
 func noopTeardown(destroy bool) {
 	// Nop
 }

@@ -2641,6 +2641,7 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints() {
 	a.pendingHTTPEndpoints <- httpEndpointV1alpha1.HTTPEndpoint{}
 	log.Info("All outstanding http endpoints processed")
 }
+
 func (a *DaprRuntime) flushOutstandingComponents() {
 	log.Info("Waiting for all outstanding components to be processed")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
