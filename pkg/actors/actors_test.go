@@ -66,7 +66,7 @@ var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
 
 // testRequest is the request object that encapsulates the `data` field of a request.
 type testRequest struct {
-	Data json.RawMessage `json:"data"`
+	Data []byte `json:"data"`
 }
 
 type mockAppChannel struct {
@@ -1084,7 +1084,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, reminders[0].reminder.Data, request.Data)
+			assert.Equal(t, []byte(reminders[0].reminder.Data), request.Data)
 		case <-time.After(1500 * time.Millisecond):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -1139,7 +1139,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, reminders[0].reminder.Data, request.Data)
+			assert.Equal(t, []byte(reminders[0].reminder.Data), request.Data)
 
 			// Check reminder is updated
 			assert.Equal(t, "7s", reminders[0].reminder.Period.String())
@@ -1338,7 +1338,7 @@ func TestReminderRepeats(t *testing.T) {
 				assert.ErrorContains(t, err, "has zero repetitions")
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			testActorsRuntime.remindersLock.RLock()
 			assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
@@ -1373,7 +1373,7 @@ func TestReminderRepeats(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, reminder.Data, request.Data)
+						assert.Equal(t, []byte(reminder.Data), request.Data)
 						count++
 					case <-ticker.C():
 					}
@@ -1465,8 +1465,9 @@ func Test_ReminderTTL(t *testing.T) {
 				TTL:       ttl,
 				Data:      json.RawMessage(`"data"`),
 			}
+
 			err := testActorsRuntime.CreateReminder(ctx, &reminder)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			count := 0
 
@@ -1485,7 +1486,7 @@ func Test_ReminderTTL(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, reminder.Data, request.Data)
+						assert.Equal(t, []byte(reminder.Data), request.Data)
 						count++
 					case <-ctx.Done():
 					case <-ticker.C():
@@ -1529,6 +1530,9 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 }
 
 func TestReminderValidation(t *testing.T) {
+	t.Run("empty period", reminderValidation("", "", "-2s", ""))
+	t.Run("period is JSON null", reminderValidation("", "null", "-2s", ""))
+	t.Run("period is empty JSON object", reminderValidation("", "{}", "-2s", ""))
 	t.Run("reminder dueTime invalid (1)", reminderValidation("invalid", "R5/PT2S", "1h", "unsupported time/duration format: invalid"))
 	t.Run("reminder dueTime invalid (2)", reminderValidation("R5/PT2S", "R5/PT2S", "1h", "repetitions are not allowed"))
 	t.Run("reminder period invalid", reminderValidation(time.Now().Add(time.Minute).Format(time.RFC3339), "invalid", "1h", "unsupported duration format: invalid"))
@@ -1663,7 +1667,7 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, timer3.Data, request.Data)
+			assert.Equal(t, []byte(timer3.Data), request.Data)
 		case <-time.After(1500 * time.Millisecond):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -1708,7 +1712,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, timer4.Data, request.Data)
+			assert.Equal(t, []byte(timer4.Data), request.Data)
 		case <-time.After(1500 * time.Millisecond):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -1869,7 +1873,7 @@ func Test_TimerRepeats(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, timer.Data, request.Data)
+						assert.Equal(t, []byte(timer.Data), request.Data)
 						count++
 					case <-ctx.Done():
 					case <-ticker.C():
@@ -1944,7 +1948,7 @@ func Test_TimerTTL(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, timer.Data, request.Data)
+						assert.Equal(t, []byte(timer.Data), request.Data)
 						count++
 					case <-ticker.C():
 						// nop
