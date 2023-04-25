@@ -23,9 +23,9 @@ import (
 	"os"
 	"strconv"
 
-	// runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/tests/apps/utils"
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 type httpTestMethods struct {
@@ -84,26 +84,7 @@ var testMethods = []httpTestMethods{
 	},
 }
 
-var (
-	appPort = 3000
-
-	httpClient = utils.NewHTTPClient()
-	// daprClient runtimev1pb.DaprClient
-
-	httpMethods []string
-)
-
-type testCommandRequestExternal struct {
-	RemoteApp        string  `json:"remoteApp,omitempty"`
-	Method           string  `json:"method,omitempty"`
-	RemoteAppTracing string  `json:"remoteAppTracing"`
-	Message          *string `json:"message"`
-	ExternalIP       string  `json:"externalIP,omitempty"`
-}
-
-const (
-	jsonContentType = "application/json"
-)
+var appPort = 3000
 
 type appResponse struct {
 	Message string `json:"message,omitempty"`
@@ -117,8 +98,6 @@ func init() {
 }
 
 func main() {
-	httpMethods = []string{"POST", "GET", "PUT", "DELETE"}
-
 	log.Printf("service_invocation_external - listening on http://localhost:%d", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }
@@ -169,21 +148,6 @@ func logAndSetResponse(w http.ResponseWriter, statusCode int, message string) {
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).
 		Encode(appResponse{Message: message})
-}
-
-func testExternalInvocationHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("Enter testExternalInvocationHandler")
-	var commandBody testCommandRequestExternal
-	err := json.NewDecoder(r.Body).Decode(&commandBody)
-	if err != nil {
-		onBadRequest(w, err)
-		return
-	}
-
-	log.Printf("testExternalInvocationHandler invoked %s with method %s\n", commandBody.RemoteApp, commandBody.Method)
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode("success")
 }
 
 // Handles a request with a JSON body.  Extracts s string from the input json and returns in it an appResponse.

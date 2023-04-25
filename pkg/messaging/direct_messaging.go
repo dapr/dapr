@@ -101,7 +101,6 @@ type NewDirectMessagingOpts struct {
 	ReadBufferSize          int
 	Resiliency              resiliency.Provider
 	IsStreamingEnabled      bool
-	universal               *universalapi.UniversalAPI
 }
 
 // NewDirectMessaging returns a new direct messaging api.

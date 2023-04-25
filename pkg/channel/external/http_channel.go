@@ -26,7 +26,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -56,8 +55,6 @@ type HTTPEndpointAppChannel struct {
 	tracingSpec           config.TracingSpec
 	appHeaderToken        string
 	maxResponseBodySizeMB int
-	appHealthCheckPath    string
-	appHealth             *apphealth.AppHealth
 	pipeline              httpMiddleware.Pipeline
 }
 
@@ -273,9 +270,4 @@ func copyHeader(dst http.Header, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
-}
-
-// SetAppHealthCheckPath sets the path where to send requests for health probes.
-func (h *HTTPEndpointAppChannel) SetAppHealthCheckPath(path string) {
-	h.appHealthCheckPath = "/" + strings.TrimPrefix(path, "/")
 }

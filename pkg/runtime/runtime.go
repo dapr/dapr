@@ -2549,14 +2549,6 @@ func (a *DaprRuntime) namespaceComponentAuthorizer(component componentsV1alpha1.
 	return false
 }
 
-func (a *DaprRuntime) namespaceHTTPEndpointAuthorizer(endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
-	if a.namespace == "" || endpoint.ObjectMeta.Namespace == "" || (a.namespace != "" && endpoint.ObjectMeta.Namespace == a.namespace) {
-		return endpoint.IsAppScoped(a.runtimeConfig.ID)
-	}
-
-	return false
-}
-
 func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	var loader components.ComponentLoader
 
@@ -3193,7 +3185,6 @@ func (a *DaprRuntime) createHTTPEndpointsAppChannel() (err error) {
 	if err != nil {
 		return err
 	}
-	ch.(*httpEndpointChannel.HTTPEndpointAppChannel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
 
 	a.httpEndpointsAppChannel = ch
 

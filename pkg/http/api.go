@@ -123,7 +123,7 @@ type metadata struct {
 	ActiveActorsCount       []actors.ActiveActorsCount `json:"actors"`
 	Extended                map[string]string          `json:"extended"`
 	RegisteredComponents    []registeredComponent      `json:"components"`
-	RegisteredHTTPEndpoints []registeredHTTPEndpoint   `json:"http_endpoints"`
+	RegisteredHTTPEndpoints []registeredHTTPEndpoint   `json:"httpEndpoints"`
 	Subscriptions           []pubsubSubscription       `json:"subscriptions"`
 }
 
@@ -1273,15 +1273,6 @@ func (a *api) getBaseURL(targetAppID string) string {
 	return ""
 }
 
-func (a *api) getAppIdFromBaseURL(baseURL string) string {
-	for _, endpoint := range a.universal.CompStore.ListHTTPEndpoints() {
-		if endpoint.Spec.BaseURL == baseURL {
-			return endpoint.Name
-		}
-	}
-	return ""
-}
-
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
 	// Because this can respond with `withStream()`, we can't defer a call to cancel() here
@@ -1309,9 +1300,9 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	switch {
 	// overwritten URL, so targetID = baseURL
 	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
-		baseUrl := targetID
+		baseURL := targetID
 		invokeMethodName := reqCtx.UserValue(methodParam).(string)
-		prefix := fmt.Sprintf("v1.0/invoke/%s/%s/", baseUrl, methodParam)
+		prefix := fmt.Sprintf("v1.0/invoke/%s/%s/", baseURL, methodParam)
 		invokeActualMethodName := invokeMethodName[len(prefix):]
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+"/"+invokeActualMethodName)
 		req = invokev1.NewInvokeMethodRequest(invokeActualMethodName).
@@ -1326,8 +1317,8 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		defer req.Close()
 	// http endpoint CRD resource is detected being used for service invocation
 	case a.isHTTPEndpoint(targetID):
-		baseUrl := a.getBaseURL(targetID)
-		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+baseUrl)
+		baseURL := a.getBaseURL(targetID)
+		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+baseURL)
 		invokeMethodName := reqCtx.UserValue(methodParam).(string)
 
 		req = invokev1.NewInvokeMethodRequest(invokeMethodName).
