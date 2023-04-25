@@ -145,6 +145,10 @@ spec:
         - name: IGNORE_ENTRYPOINT_TOLERATIONS
           value: "{{ .Values.ignoreEntrypointTolerations }}"
 {{- end }}
+{{- if not .Values.global.actors.enabled }}
+        - name: SKIP_PLACEMENT
+          value: "true"
+{{- end }}
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: "{{ .Values.sidecarRunAsNonRoot }}"
         - name: SIDECAR_DROP_ALL_CAPABILITIES
