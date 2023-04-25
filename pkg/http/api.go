@@ -1416,12 +1416,14 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 // actorPrerequisiteWrapper wraps the actor handler with the common actor prerequisite check.
 func (a *api) actorPrerequisiteWrapper(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		if a.appChannel == nil {
+		// check if app channel has been initialized. For actor client use case the app channel will not be initialized but actor runtime should start successfully.
+		if a.appChannel == nil && a.actor == nil {
 			msg := NewErrorResponse("ERR_APP_CHANNEL_NIL", messages.ErrChannelNotFound)
 			respond(ctx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
 			return
 		}
+		// app channel is initialized but actor runtime isn't initialized, there is more likely a misconfiguration.
 		if a.actor == nil {
 			msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 			respond(ctx, withError(fasthttp.StatusInternalServerError, msg))
