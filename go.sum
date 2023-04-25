@@ -368,8 +368,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.10.6-0.20230419230437-7099066436ee h1:eXfQy2NewQMBBPcrF5UA9Mf5HXPHhvOdLv+xYfWZ44Y=
-github.com/dapr/components-contrib v1.10.6-0.20230419230437-7099066436ee/go.mod h1:x9bVGsetgYz72rznqErAvqOU6jumRmH2nvgX83cNcq8=
+github.com/dapr/components-contrib v1.10.6-0.20230424230259-3fbaad85440a h1:QAM3KKqp39yJducTvdf0dSrVBELZnvaWO9EgwKvkVoU=
+github.com/dapr/components-contrib v1.10.6-0.20230424230259-3fbaad85440a/go.mod h1:x1xYsAEKKEGgUyWFqGwMAtXAcp5uGJSn0dniE8hbY2o=
 github.com/dapr/kit v0.0.5-0.20230418193628-15a7040dec41 h1:G55KmJAn2UsJm2+T0Vyz8gPcbphDe1PvjrES18JxfHQ=
 github.com/dapr/kit v0.0.5-0.20230418193628-15a7040dec41/go.mod h1:VTWiX6nk5RWZ/kqEJD/EGjJU8hdwHZ73r75K510OHBY=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1063,8 +1063,8 @@ github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5
 github.com/matttproud/golang_protobuf_extensions v1.0.4 h1:mmDVorXM7PCGKw94cs5zkfA9PSy5pEvNWRP0ET0TIVo=
 github.com/matttproud/golang_protobuf_extensions v1.0.4/go.mod h1:BSXmuO+STAnVfrANrmjBb36TMTDstsz7MSK+HVaYKv4=
 github.com/microcosm-cc/bluemonday v1.0.21 h1:dNH3e4PSyE4vNX+KlRGHT5KrSvjeUkoNPwEORjffHJg=
-github.com/microsoft/durabletask-go v0.1.4 h1:sHVFysoJQvG2Sp4wh2tblZBd4DDJmXrBdYCyUlo38MM=
-github.com/microsoft/durabletask-go v0.1.4/go.mod h1:UOgcE09cx6SzBS31p4darJ7ve9P5pSVIStPShxDnvPo=
+github.com/microsoft/durabletask-go v0.2.1-0.20230409004853-b1c4226121e6 h1:MOZFQfiTG1CDRW1ZZD9zpMbzYK99a1ZCvhHm4dYkbSc=
+github.com/microsoft/durabletask-go v0.2.1-0.20230409004853-b1c4226121e6/go.mod h1:UtJXHmKalksdccRiN9Y16cHJYYtZN0bqmqOSiy56V8g=
 github.com/microsoft/go-mssqldb v0.21.0 h1:p2rpHIL7TlSv1QrbXJUAcbyRKnIT0C9rRkH2E4OjLn8=
 github.com/microsoft/go-mssqldb v0.21.0/go.mod h1:+4wZTUnz/SV6nffv+RRRB/ss8jPng5Sho2SmM1l2ts4=
 github.com/miekg/dns v1.0.14/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=
