@@ -36,7 +36,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/utils"
 	streamutils "github.com/dapr/dapr/utils/streams"
 )
 
@@ -123,8 +122,8 @@ func (h *HTTPEndpointAppChannel) invokeMethodV1(ctx context.Context, req *invoke
 	var resp *http.Response
 	if len(h.pipeline.Handlers) > 0 {
 		// Exec pipeline only if at least one handler is specified
-		rw := &utils.RWRecorder{
-			W: &bytes.Buffer{},
+		rw := &rwRecorder{
+			w: &bytes.Buffer{},
 		}
 		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
 			// Send request to user application
@@ -185,7 +184,6 @@ func (h *HTTPEndpointAppChannel) getBaseURL(appID string) string {
 
 func (h *HTTPEndpointAppChannel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {
 	// Construct app channel URI: VERB http://api.github.com/method?query1=value1
-
 	msg := req.Message()
 	verb := msg.HttpExtension.Verb.String()
 	method := msg.Method
