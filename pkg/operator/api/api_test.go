@@ -51,6 +51,20 @@ func (m *mockComponentUpdateServer) Context() context.Context {
 	return context.TODO()
 }
 
+type mockHTTPEndpointUpdateServer struct {
+	grpc.ServerStream
+	Calls atomic.Int64
+}
+
+func (m *mockHTTPEndpointUpdateServer) Send(*operatorv1pb.HTTPEndpointUpdateEvent) error {
+	m.Calls.Add(1)
+	return nil
+}
+
+func (m *mockHTTPEndpointUpdateServer) Context() context.Context {
+	return context.TODO()
+}
+
 func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
 		c := componentsapi.Component{
@@ -254,6 +268,75 @@ func TestComponentUpdate(t *testing.T) {
 		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
 			Namespace: "ns1",
 		}, mockSidecar)
+
+		assert.Equal(t, int64(1), mockSidecar.Calls.Load())
+	})
+}
+
+func TestHTTPEndpointUpdate(t *testing.T) {
+	e := httpendpointapi.HTTPEndpoint{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "ns1",
+		},
+		Spec: httpendpointapi.HTTPEndpointSpec{},
+	}
+
+	s := runtime.NewScheme()
+	err := scheme.AddToScheme(s)
+	assert.NoError(t, err)
+
+	err = corev1.AddToScheme(s)
+	assert.NoError(t, err)
+
+	client := fake.NewClientBuilder().
+		WithScheme(s).Build()
+
+	mockSidecar := &mockHTTPEndpointUpdateServer{}
+	api := NewAPIServer(client).(*apiServer)
+	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
+		go func() {
+			assert.Eventually(t, func() bool {
+				api.endpointLock.Lock()
+				defer api.endpointLock.Unlock()
+				return len(api.allEndpointsUpdateChan) == 1
+			}, time.Second, 10*time.Millisecond)
+
+			api.endpointLock.Lock()
+			defer api.endpointLock.Unlock()
+			for key := range api.allEndpointsUpdateChan {
+				api.allEndpointsUpdateChan[key] <- &e
+				close(api.allEndpointsUpdateChan[key])
+			}
+		}()
+
+		// Start sidecar update loop
+		assert.NoError(t, api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
+			Namespace: "ns2",
+		}, mockSidecar))
+
+		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
+	})
+
+	t.Run("sidecar is updated when endpoint namespace is a match", func(t *testing.T) {
+		go func() {
+			assert.Eventually(t, func() bool {
+				api.endpointLock.Lock()
+				defer api.endpointLock.Unlock()
+				return len(api.allEndpointsUpdateChan) == 1
+			}, time.Second, 10*time.Millisecond)
+
+			api.endpointLock.Lock()
+			defer api.endpointLock.Unlock()
+			for key := range api.allEndpointsUpdateChan {
+				api.allEndpointsUpdateChan[key] <- &e
+				close(api.allEndpointsUpdateChan[key])
+			}
+		}()
+
+		// Start sidecar update loop
+		assert.NoError(t, api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
+			Namespace: "ns1",
+		}, mockSidecar))
 
 		assert.Equal(t, int64(1), mockSidecar.Calls.Load())
 	})

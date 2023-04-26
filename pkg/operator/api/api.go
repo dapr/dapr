@@ -137,7 +137,9 @@ func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsa
 func (a *apiServer) OnHTTPEndpointUpdated(_ context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
 	a.endpointLock.Lock()
 	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
-		endpointUpdateChan <- endpoint
+		go func(endpointUpdateChan chan *httpendpointsapi.HTTPEndpoint) {
+			endpointUpdateChan <- endpoint
+		}(endpointUpdateChan)
 	}
 	a.endpointLock.Unlock()
 }

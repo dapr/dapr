@@ -3030,7 +3030,7 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.H
 			continue
 		}
 
-		secretStoreName := a.authSecretStoreOrDefaultHTTPEndpoint(endpoint)
+		secretStoreName := a.authSecretStoreOrDefault(endpoint)
 
 		// If running in Kubernetes and have an operator client, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
@@ -3100,24 +3100,24 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.H
 	return endpoint, ""
 }
 
-func (a *DaprRuntime) authSecretStoreOrDefault(comp componentsV1alpha1.Component) string {
-	if comp.SecretStore == "" {
+func (a *DaprRuntime) authSecretStoreOrDefault(object interface{}) string {
+	var secretStore string
+	switch obj := object.(type) {
+	case componentsV1alpha1.Component:
+		secretStore = obj.SecretStore
+	case httpEndpointV1alpha1.HTTPEndpoint:
+		secretStore = obj.SecretStore
+	default:
+		// Handle unsupported types
+		return ""
+	}
+	if secretStore == "" {
 		switch a.runtimeConfig.Mode {
 		case modes.KubernetesMode:
 			return "kubernetes"
 		}
 	}
-	return comp.SecretStore
-}
-
-func (a *DaprRuntime) authSecretStoreOrDefaultHTTPEndpoint(endpoint httpEndpointV1alpha1.HTTPEndpoint) string {
-	if endpoint.SecretStore == "" {
-		switch a.runtimeConfig.Mode {
-		case modes.KubernetesMode:
-			return "kubernetes"
-		}
-	}
-	return endpoint.SecretStore
+	return secretStore
 }
 
 func (a *DaprRuntime) blockUntilAppIsReady() {
