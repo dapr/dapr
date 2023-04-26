@@ -57,10 +57,10 @@ const (
 	TestKeyName                     = "key0"
 	TestActorMetadataPartitionCount = 3
 
-	actorTimersLastValueViewName    = "runtime/actor/timers"
-	actorRemindersLastValueViewName = "runtime/actor/reminders"
-	actorTimersFiredTotalViewName   = "runtime/actor/timers_fired_total"
-	actorRemindersFiredTotalName    = "runtime/actor/reminders_fired_total"
+	actorTimersLastValueViewName     = "runtime/actor/timers"
+	actorRemindersLastValueViewName  = "runtime/actor/reminders"
+	actorTimersFiredTotalViewName    = "runtime/actor/timers_fired_total"
+	actorRemindersFiredTotalViewName = "runtime/actor/reminders_fired_total"
 )
 
 var DefaultAppConfig = config.ApplicationConfig{
@@ -638,8 +638,8 @@ func metricsCleanup() {
 	diagtestutils.CleanupRegisteredViews(
 		actorRemindersLastValueViewName,
 		actorTimersLastValueViewName,
-		actorRemindersFiredTotalName,
-		actorRemindersFiredTotalName)
+		actorRemindersFiredTotalViewName,
+		actorRemindersFiredTotalViewName)
 }
 
 func TestReminderCountFiring(t *testing.T) {
@@ -681,7 +681,7 @@ func TestReminderCountFiring(t *testing.T) {
 	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
 
 	// check metrics recorded
-	rows, err = view.RetrieveData(actorRemindersFiredTotalName)
+	rows, err = view.RetrieveData(actorRemindersFiredTotalViewName)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
@@ -727,7 +727,7 @@ func TestReminderCountFiringBad(t *testing.T) {
 	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
 
 	// check metrics recorded
-	rows, err = view.RetrieveData(actorRemindersFiredTotalName)
+	rows, err = view.RetrieveData(actorRemindersFiredTotalViewName)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
