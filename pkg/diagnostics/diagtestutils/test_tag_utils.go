@@ -53,6 +53,7 @@ outerLoop:
 	require.True(t, found, fmt.Sprintf("did not find tag (%s) in rows:", wantedTag), rows)
 }
 
+// RequireTagNotExist checks a tag in a slice of rows return from view.RetrieveData is not present
 func RequireTagNotExist(t *testing.T, rows []*view.Row, wantedTag tag.Tag) {
 	t.Helper()
 	var found bool
@@ -68,6 +69,7 @@ outerLoop:
 	require.False(t, found, fmt.Sprintf("found tag (%s) in rows:", wantedTag), rows)
 }
 
+// CleanupRegisteredViews is a safe method to removed registered views to avoid errors when running tests on the same metrics
 func CleanupRegisteredViews(viewNames ...string) {
 	var views []*view.View
 	for _, v := range viewNames {
