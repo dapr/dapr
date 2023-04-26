@@ -47,7 +47,6 @@ type activityActor struct {
 // ActivityRequest represents a request by a worklow to invoke an activity.
 type ActivityRequest struct {
 	HistoryEvent []byte
-	Generation   uint64
 }
 
 type activityState struct {
@@ -81,12 +80,12 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	}
 
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
-	if _, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
+	if _, err := a.loadActivityState(ctx, actorID); err != nil {
 		return nil, err
 	}
 
 	if methodName == "PurgeWorkflowState" {
-		return nil, a.purgeActivityState(ctx, actorID, ar.Generation)
+		return nil, a.purgeActivityState(ctx, actorID)
 	}
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
@@ -99,7 +98,7 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	}
 
 	// The actual execution is triggered by a reminder
-	err := a.createReliableReminder(ctx, actorID, ar.Generation)
+	err := a.createReliableReminder(ctx, actorID, nil)
 	return nil, err
 }
 
@@ -112,7 +111,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 		// Likely the result of an incompatible activity reminder format change. This is non-recoverable.
 		return err
 	}
-	state, _ := a.loadActivityState(ctx, actorID, generation)
+	state, _ := a.loadActivityState(ctx, actorID)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
@@ -227,7 +226,7 @@ func (a *activityActor) DeactivateActor(ctx context.Context, actorID string) err
 	return nil
 }
 
-func (a *activityActor) loadActivityState(ctx context.Context, actorID string, generation uint64) (activityState, error) {
+func (a *activityActor) loadActivityState(ctx context.Context, actorID string) (activityState, error) {
 	// See if the state for this actor is already cached in memory.
 	result, ok := a.statesCache.Load(actorID)
 	if ok {
@@ -282,7 +281,7 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 	return nil
 }
 
-func (a *activityActor) purgeActivityState(ctx context.Context, actorID string, generationKey uint64) error {
+func (a *activityActor) purgeActivityState(ctx context.Context, actorID string) error {
 	req := actors.TransactionalRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,

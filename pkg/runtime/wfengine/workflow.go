@@ -233,11 +233,6 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 		return api.ErrNotCompleted
 	}
 
-	// Looping through history and invoking each actor once. They are not in the same transaction. Each transaction happens as its own call
-	// We are deleting one by one in sequence and not in bulk.
-	// In case of each actor returning an error, the entire function returns an error
-	// Everything before error is deleted, and everything after is not.
-
 	err = wf.removeCompletedStateData(ctx, state, actorID)
 	if err != nil {
 		return err
@@ -418,7 +413,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			}
 			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
 				HistoryEvent: eventData,
-				Generation:   state.Generation,
 			})
 			if err != nil {
 				return err
