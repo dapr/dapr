@@ -1159,7 +1159,6 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 
 		needList := false
 		for a.ctx.Err() == nil {
-
 			var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
 			streamData, err := backoff.RetryWithData(func() (interface{}, error) {
 				var err error
@@ -1173,7 +1172,6 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 				}
 				return stream, nil
 			}, backoff.NewExponentialBackOff())
-
 			if err != nil {
 				// Retry on stream error.
 				needList = true
@@ -1195,7 +1193,6 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 
 					return resp.GetHttpEndpoints(), nil
 				}, backoff.NewExponentialBackOff())
-
 				if err != nil {
 					// Retry on stream error.
 					log.Errorf("persistent error from operator stream: %s", err)
@@ -2555,16 +2552,16 @@ func (a *DaprRuntime) getAuthorizedObjects(objects interface{}, authorizer func(
 }
 
 func (a *DaprRuntime) isObjectAuthorized(object interface{}) bool {
-	switch object.(type) {
+	switch obj := object.(type) {
 	case httpEndpointV1alpha1.HTTPEndpoint:
 		for _, auth := range a.httpEndpointAuthorizers {
-			if !auth(object.(httpEndpointV1alpha1.HTTPEndpoint)) {
+			if !auth(obj) {
 				return false
 			}
 		}
 	case componentsV1alpha1.Component:
 		for _, auth := range a.componentAuthorizers {
-			if !auth(object.(componentsV1alpha1.Component)) {
+			if !auth(obj) {
 				return false
 			}
 		}

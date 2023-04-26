@@ -593,6 +593,7 @@ func (c *mockOperatorClient) ClientHTTPEndpointStreamCount() int {
 func (c *mockOperatorClient) AllowOneNewClientStreamCreate() {
 	c.clientStreamCreateWait <- struct{}{}
 }
+
 func (c *mockOperatorClient) AllowOneNewClientEndpointStreamCreate() {
 	c.clientEndpointStreamCreateWait <- struct{}{}
 }
@@ -684,6 +685,7 @@ func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operatorv1pb.Compone
 	}
 	return e, nil
 }
+
 func (cs *mockOperatorHTTPEndpointUpdateClientStream) Recv() (*operatorv1pb.HTTPEndpointUpdateEvent, error) {
 	e, ok := <-cs.updateCh
 	if !ok {
