@@ -1305,20 +1305,14 @@ func (ie invokeError) Error() string {
 
 func (a *api) isHTTPEndpoint(appID string) bool {
 	endpoint, ok := a.universal.CompStore.GetHTTPEndpoint(appID)
-	if ok && endpoint.Name == appID {
-		return true
-	}
-	return false
+	return ok && endpoint.Name == appID
 }
 
-// getBaseURL takes an app id and checks if the app id a http endpoint CRD.
+// getBaseURL takes an app id and checks if the app id is an HTTP endpoint CRD.
 // It returns the baseURL if found.
 func (a *api) getBaseURL(targetAppID string) string {
-	endpoint, ok := a.universal.CompStore.GetHTTPEndpoint(targetAppID)
-	if ok {
-		if endpoint.Name == targetAppID {
-			return endpoint.Spec.BaseURL
-		}
+	if endpoint, ok := a.universal.CompStore.GetHTTPEndpoint(targetAppID); ok && endpoint.Name == targetAppID {
+		return endpoint.Spec.BaseURL
 	}
 	return ""
 }
@@ -1538,11 +1532,12 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 	if strings.HasPrefix(uri, "/v1.0/invoke/") {
 		parts := strings.Split(uri, "/")
 		// Example: http://localhost:3500/v1.0/invoke/http://api.github.com/method/<method>
-		// parts[0]: v1.0
-		// parts[1]: invoke
-		// parts[2]: http:
-		// parts[3]: api.github.com
-		// parts[4]: method
+		// parts[0]: /
+		// parts[1]: v1.0
+		// parts[2]: invoke
+		// parts[3]: http:
+		// parts[4]: api.github.com
+		// parts[5]: method
 		targetURL := parts[3] + "//" + parts[4]
 		return targetURL
 	}

@@ -27,7 +27,7 @@ import (
 
 const yamlSeparator = "\n---"
 
-// manifestLoader loads a specific manifest kind from a folder.
+// DiskManifestLoader loads a specific manifest kind from a folder.
 type DiskManifestLoader[T kubernetesManifest] struct {
 	zvFn  func() T
 	kind  string

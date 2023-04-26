@@ -3007,7 +3007,7 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 		}
 
 		val, ok := resp.Data[secretKeyName]
-		if ok {
+		if ok && val != "" {
 			component.Spec.Metadata[i].Value = componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(val),
