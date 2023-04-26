@@ -1329,6 +1329,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	ctx, cancel := context.WithCancel(reqCtx)
 
 	targetID := a.findTargetID(reqCtx)
+
 	if targetID == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
@@ -1337,7 +1338,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	verb := strings.ToUpper(string(reqCtx.Method()))
-
 	if a.directMessaging == nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1352,7 +1352,13 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
 		baseURL := targetID
 		invokeMethodName := reqCtx.UserValue(methodParam).(string)
-		prefix := "v1.0/invoke" + baseURL + "/" + methodParam
+		prefix := "v1.0/invoke/" + baseURL + "/" + methodParam
+		if len(invokeMethodName) <= len(prefix) {
+			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			cancel()
+			return
+		}
 		invokeActualMethodName := invokeMethodName[len(prefix):]
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+"/"+invokeActualMethodName)
 		req = invokev1.NewInvokeMethodRequest(invokeActualMethodName).
@@ -1528,8 +1534,9 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 		}
 	}
 
-	if strings.HasPrefix(string(reqCtx.URI().Path()), "/v1.0/invoke/") {
-		parts := strings.Split(string(reqCtx.URI().Path()), "/")
+	uri := string(reqCtx.URI().Path())
+	if strings.HasPrefix(uri, "/v1.0/invoke/") {
+		parts := strings.Split(uri, "/")
 		// Example: http://localhost:3500/v1.0/invoke/http://api.github.com/method/<method>
 		// parts[0]: v1.0
 		// parts[1]: invoke

@@ -215,13 +215,12 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 			}
 
 			val, ok := secret.Data[key]
-			enc := b64.StdEncoding.EncodeToString(val)
-			jsonEnc, err := json.Marshal(enc)
-			if err != nil {
-				return err
-			}
-
 			if ok {
+				enc := b64.StdEncoding.EncodeToString(val)
+				jsonEnc, err := json.Marshal(enc)
+				if err != nil {
+					return err
+				}
 				component.Spec.Metadata[i].Value = componentsapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: jsonEnc,

@@ -175,7 +175,7 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 		return "", "", errors.New("app id is empty")
 	}
 	// external invocation with targetAppID == baseURL
-	if strings.Contains(targetAppID, "://") {
+	if strings.HasPrefix(targetAppID, "http://") || strings.HasPrefix(targetAppID, "https://") {
 		return targetAppID, "", nil
 	}
 	items := strings.Split(targetAppID, ".")
@@ -343,6 +343,7 @@ func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 intern
 	if err != nil {
 		return nil, err
 	}
+
 	return invokev1.InternalInvokeResponse(resp)
 }
 
