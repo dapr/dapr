@@ -275,7 +275,6 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 	}
 	wf.states.Delete(actorID)
 	return nil
-
 }
 
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {

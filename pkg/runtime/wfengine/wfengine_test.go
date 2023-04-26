@@ -565,7 +565,7 @@ func TestRaiseEvent(t *testing.T) {
 	}
 }
 
-// TestPurge verifies that a workflow can have a series of activites created and then
+// TestPurge verifies that a workflow can have a series of activities created and then
 // verifies that all the metadata for those activities can be deleted from the statestore
 func TestPurge(t *testing.T) {
 	r := task.NewTaskRegistry()
@@ -656,7 +656,6 @@ func TestPurgeContinueAsNew(t *testing.T) {
 	client, engine, stateStore := startEngineAndGetStore(ctx, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
-
 			// Second Test
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
 			require.NoError(t, err)
