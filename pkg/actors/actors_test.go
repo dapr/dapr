@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	"go.opencensus.io/stats/view"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,8 +57,10 @@ const (
 	TestKeyName                     = "key0"
 	TestActorMetadataPartitionCount = 3
 
-	actorTimersLastValueViewName    = "runtime/actor/timers"
-	actorRemindersLastValueViewName = "runtime/actor/reminders"
+	actorTimersLastValueViewName     = "runtime/actor/timers"
+	actorRemindersLastValueViewName  = "runtime/actor/reminders"
+	actorTimersFiredTotalViewName    = "runtime/actor/timers_fired_total"
+	actorRemindersFiredTotalViewName = "runtime/actor/reminders_fired_total"
 )
 
 var DefaultAppConfig = config.ApplicationConfig{
@@ -124,6 +128,23 @@ func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeM
 	}
 
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
+}
+
+type mockAppChannelBadInvoke struct {
+	channel.AppChannel
+	requestC chan testRequest
+}
+
+func (m *mockAppChannelBadInvoke) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if m.requestC != nil {
+		var request testRequest
+		err := json.NewDecoder(req.RawData()).Decode(&request)
+		if err == nil {
+			m.requestC <- request
+		}
+	}
+
+	return invokev1.NewInvokeMethodResponse(http.StatusInternalServerError, "problems with server", nil), nil
 }
 
 type reentrantAppChannel struct {
@@ -313,6 +334,12 @@ func newTestActorsRuntimeWithoutStore() *actorsRuntime {
 
 func newTestActorsRuntime() *actorsRuntime {
 	appChannel := new(mockAppChannel)
+
+	return newTestActorsRuntimeWithMock(appChannel)
+}
+
+func newTestActorsRuntimeWithBadInvoke() *actorsRuntime {
+	appChannel := new(mockAppChannelBadInvoke)
 
 	return newTestActorsRuntimeWithMock(appChannel)
 }
@@ -607,6 +634,14 @@ func TestReminderExecution(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func metricsCleanup() {
+	diagtestutils.CleanupRegisteredViews(
+		actorRemindersLastValueViewName,
+		actorTimersLastValueViewName,
+		actorRemindersFiredTotalViewName,
+		actorRemindersFiredTotalViewName)
+}
+
 func TestReminderCountFiring(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
@@ -617,8 +652,7 @@ func TestReminderCountFiring(t *testing.T) {
 	// init default service metrics where actor metrics are registered
 	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.config.AppID))
 	t.Cleanup(func() {
-		view.Unregister(view.Find(actorRemindersLastValueViewName))
-		view.Unregister(view.Find(actorTimersLastValueViewName))
+		metricsCleanup()
 	})
 
 	numReminders := 10
@@ -647,10 +681,58 @@ func TestReminderCountFiring(t *testing.T) {
 	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
 
 	// check metrics recorded
-	rows, err = view.RetrieveData("runtime/actor/reminders_fired_total")
+	rows, err = view.RetrieveData(actorRemindersFiredTotalViewName)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
+	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
+	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
+}
+
+func TestReminderCountFiringBad(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntimeWithBadInvoke()
+	defer testActorsRuntime.Stop()
+
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+	// init default service metrics where actor metrics are registered
+	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.config.AppID))
+	t.Cleanup(func() {
+	})
+
+	numReminders := 2
+
+	for i := 0; i < numReminders; i++ {
+		require.NoError(t, testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("reminder%d", i),
+			Data:      json.RawMessage(`"data"`),
+			Period:    "10s",
+		}))
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	testActorsRuntime.clock.Sleep(500 * time.Millisecond)
+	numPeriods := 5
+	for i := 0; i < numPeriods; i++ {
+		testActorsRuntime.clock.Sleep(10 * time.Second)
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	rows, err := view.RetrieveData(actorRemindersLastValueViewName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
+
+	// check metrics recorded
+	rows, err = view.RetrieveData(actorRemindersFiredTotalViewName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
+	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
+	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
 }
 
 func TestReminderExecutionZeroDuration(t *testing.T) {
@@ -1504,10 +1586,10 @@ func TestTimerCounter(t *testing.T) {
 	numberOfTimersToDelete := 255
 
 	// init default service metrics where actor metrics are registered
+	metricsCleanup()
 	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.config.AppID))
 	t.Cleanup(func() {
-		view.Unregister(view.Find(actorRemindersLastValueViewName))
-		view.Unregister(view.Find(actorTimersLastValueViewName))
+		metricsCleanup()
 	})
 
 	var wg sync.WaitGroup
@@ -1552,12 +1634,14 @@ func TestTimerCounter(t *testing.T) {
 	assert.Equal(t, int64(numberOfLongTimersToCreate-numberOfTimersToDelete), atomic.LoadInt64(testActorsRuntime.activeTimersCount[actorType]))
 
 	// check metrics recorded
-	rows, err := view.RetrieveData("runtime/actor/timers_fired_total")
+	rows, err := view.RetrieveData(actorTimersFiredTotalViewName)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, int64(numberOfLongTimersToCreate+numberOfOneTimeTimersToCreate), rows[0].Data.(*view.CountData).Value)
+	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
+	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
 
-	rows, err = view.RetrieveData("runtime/actor/timers")
+	rows, err = view.RetrieveData(actorTimersLastValueViewName)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, int64(numberOfLongTimersToCreate-numberOfTimersToDelete), int64(rows[0].Data.(*view.LastValueData).Value))
