@@ -52,7 +52,6 @@ type ActivityRequest struct {
 
 type activityState struct {
 	EventPayload []byte
-	Generation   uint64
 }
 
 // NewActivityActor creates an internal activity actor for executing workflow activity logic.
@@ -92,7 +91,6 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
 	state := activityState{
-		Generation:   ar.Generation,
 		EventPayload: ar.HistoryEvent,
 	}
 

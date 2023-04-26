@@ -596,11 +596,9 @@ func TestPurge(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, id, metadata.InstanceID)
 
-			// Get all the keys that were stored from the activity and ensure that they were stored
-			keysPrePurge := []string{}
+			// Get the number of keys that were stored from the activity and ensure that at least some keys were stored
 			keyCounter := 0
 			for key := range stateStore.(*daprt.FakeStateStore).Items {
-				keysPrePurge = append(keysPrePurge, key)
 				if strings.Contains(key, string(id)) {
 					keyCounter += 1
 				}
@@ -656,7 +654,6 @@ func TestPurgeContinueAsNew(t *testing.T) {
 	client, engine, stateStore := startEngineAndGetStore(ctx, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
-			// Second Test
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
 			require.NoError(t, err)
 			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
@@ -665,11 +662,9 @@ func TestPurgeContinueAsNew(t *testing.T) {
 			assert.Equal(t, `10`, metadata.SerializedOutput)
 
 			// Purging
-			// Get all the keys that were stored from the activity and ensure that they were stored
-			keysPrePurge := []string{}
+			// Get the number of keys that were stored from the activity and ensure that at least some keys were stored
 			keyCounter := 0
 			for key := range stateStore.(*daprt.FakeStateStore).Items {
-				keysPrePurge = append(keysPrePurge, key)
 				if strings.Contains(key, string(id)) {
 					keyCounter += 1
 				}
@@ -693,6 +688,7 @@ func TestPurgeContinueAsNew(t *testing.T) {
 		})
 	}
 }
+
 func TestPauseResumeWorkflow(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("PauseWorkflow", func(ctx *task.OrchestrationContext) (any, error) {

@@ -254,9 +254,7 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 	req.Operations = append(req.Operations, actors.TransactionalOperation{
 		Operation: actors.Delete,
 		Request:   actors.TransactionalDelete{Key: customStatusKey},
-	})
-
-	req.Operations = append(req.Operations, actors.TransactionalOperation{
+	}, actors.TransactionalOperation{
 		Operation: actors.Delete,
 		Request:   actors.TransactionalDelete{Key: metadataKey},
 	})

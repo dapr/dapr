@@ -233,34 +233,14 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 		return api.ErrNotCompleted
 	}
 
-	// Loop through the history of the loaded workflow state and schedule purge calls for all the activities that have been completed
-
-	// RRL TODO: Looping through history and invoking each actor once. They are not in the same transaction. Each transaction happens as its own call
-	// We are deleting one by one in sequence and not in builk.
+	// Looping through history and invoking each actor once. They are not in the same transaction. Each transaction happens as its own call
+	// We are deleting one by one in sequence and not in bulk.
 	// In case of each actor returning an error, the entire function returns an error
 	// Everything before error is deleted, and everything after is not.
-	for _, e := range state.History {
-		if ts := e.GetTaskScheduled(); ts != nil {
-			targetActorID := getActivityActorID(actorID, e.EventId)
-			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
-				Generation: state.Generation,
-			})
-			if err != nil {
-				return err
-			}
-			req := invokev1.
-				NewInvokeMethodRequest(PurgeWorkflowStateMethod).
-				WithActor(wf.config.activityActorType, targetActorID).
-				WithRawDataBytes(activityRequestBytes).
-				WithContentType(invokev1.OctetStreamContentType)
 
-			resp, err := wf.actors.Call(ctx, req)
-			req.Close()
-			if err != nil {
-				return fmt.Errorf("failed to purge activity actor '%s' ('%s'): %w", targetActorID, ts.Name, err)
-			}
-			resp.Close()
-		}
+	err = wf.removeCompletedStateData(ctx, state, actorID)
+	if err != nil {
+		return err
 	}
 
 	// This will create a request to purge everything
@@ -563,4 +543,35 @@ func getRuntimeState(actorID string, state workflowState) *backend.Orchestration
 func getActivityActorID(workflowActorID string, taskID int32) string {
 	// An activity can be identified by it's name followed by it's task ID. Example: SayHello#0, SayHello#1, etc.
 	return fmt.Sprintf("%s#%d", workflowActorID, taskID)
+}
+
+func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state workflowState, actorID string) error {
+	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
+	// TODO: for optimization make multiple go routines and run them in parallel
+	var err error
+	for _, e := range state.Inbox {
+		var taskID int32
+		if ts := e.GetTaskCompleted(); ts != nil {
+			taskID = ts.TaskScheduledId
+		} else if tf := e.GetTaskFailed(); tf != nil {
+			taskID = tf.TaskScheduledId
+		} else {
+			continue
+		}
+		req := actors.TransactionalRequest{
+			ActorType: wf.config.activityActorType,
+			ActorID:   getActivityActorID(actorID, taskID),
+			Operations: []actors.TransactionalOperation{{
+				Operation: actors.Delete,
+				Request: actors.TransactionalDelete{
+					Key: activityStateKey,
+				},
+			}},
+		}
+		if err = wf.actors.TransactionalStateOperation(ctx, &req); err != nil {
+			return fmt.Errorf("failed to delete activity state with error: %w", err)
+		}
+	}
+
+	return err
 }
