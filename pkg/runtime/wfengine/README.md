@@ -26,35 +26,35 @@ DEBUG=1 make build
 After building, the following bash command can be run from the project root to test the code:
 
 ```bash
-./dist/linux_amd64/debug/daprd --app-id foo --dapr-grpc-port 4001 --placement-host-address :50005 --components-path ~/.dapr/components/ --config ~/.dapr/config.yaml
+./dist/linux_amd64/debug/daprd --app-id wfapp --dapr-grpc-port 4001 --placement-host-address :6050 --components-path ~/.dapr/components/ --config ~/.dapr/config.yaml
 ```
 * The gRPC port is set to `4001` since that's what the Durable Task test clients default to.
-* This assumes a placement service running locally on port `50005` (the default).
+* This assumes a placement service running locally on port `6050` (the default).
 * This assumes a basic actor-compatible state store is configured in `~/.dapr/components`.
 * You should see logs with `scope=dapr.runtime.wfengine` if the workflow engine is enabled in your build.
 
 Here's an example of the log output you'll see from Dapr when the workflow engine is enabled:
 
 ```
-INFO[0000] configuring workflow engine gRPC endpoint          app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-INFO[0000] configuring workflow engine with actors backend    app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-INFO[0000] Registering component for dapr workflow engine...  app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-INFO[0000] Initializing Dapr workflow engine                  app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0000] configuring workflow engine gRPC endpoint          app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0000] configuring workflow engine with actors backend    app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0000] Registering component for dapr workflow engine...  app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0000] Initializing Dapr workflow engine                  app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
 ```
 
 Note that the workflow engine doesn't fully start up until an application opens a work-item stream on it, after which you'll see the following logs:
 
 ```
-INFO[0146] work item stream established by user-agent: XYZ   app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-INFO[0146] worker started with backend dapr.actors/v1-alpha  app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-INFO[0146] workflow engine started                           app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0146] work item stream established by user-agent: XYZ   app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0146] worker started with backend dapr.actors/v1-alpha  app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+INFO[0146] workflow engine started                           app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
 ```
 
 If you want to see the full set of logs, run daprd with verbose logging enabled (`--log-level debug`). You'll see a few additional logs in this case, indicating that the workflow engine is waiting for new work items:
 
 ```
-DEBU[0000] orchestration-processor: waiting for new work items...  app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
-DEBU[0000] activity-processor: waiting for new work items...       app_id=foo instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+DEBU[0000] orchestration-processor: waiting for new work items...  app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
+DEBU[0000] activity-processor: waiting for new work items...       app_id=wfapp instance=XYZ scope=dapr.runtime.wfengine type=log ver=edge
 ```
 
 ## Running tests
