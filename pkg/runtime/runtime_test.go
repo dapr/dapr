@@ -4662,9 +4662,11 @@ func TestAuthorizedComponents(t *testing.T) {
 		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 1)
-		assert.Equal(t, testCompName, comps[0].Name)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(components))
+		assert.Equal(t, testCompName, components[0].Name)
 	})
 
 	t.Run("namespace mismatch", func(t *testing.T) {
@@ -4676,8 +4678,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("namespace match", func(t *testing.T) {
@@ -4689,8 +4693,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 1)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(components))
 	})
 
 	t.Run("in scope, namespace match", func(t *testing.T) {
@@ -4703,8 +4709,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{TestRuntimeConfigID}
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 1)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(components))
 	})
 
 	t.Run("not in scope, namespace match", func(t *testing.T) {
@@ -4717,8 +4725,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{"other"}
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("in scope, namespace mismatch", func(t *testing.T) {
@@ -4731,8 +4741,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{TestRuntimeConfigID}
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
@@ -4745,8 +4757,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("no authorizers", func(t *testing.T) {
@@ -4760,9 +4774,11 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 1)
-		assert.Equal(t, testCompName, comps[0].Name)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(components))
+		assert.Equal(t, testCompName, components[0].Name)
 	})
 
 	t.Run("only deny all", func(t *testing.T) {
@@ -4777,8 +4793,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
@@ -4792,8 +4810,101 @@ func TestAuthorizedComponents(t *testing.T) {
 		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
+	})
+}
+
+func TestAuthorizedHTTPEndpoints(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	defer stopRuntime(t, rt)
+	endpoint := createTestEndpoint("testEndpoint", "http://api.test.com")
+
+	t.Run("standalone mode, no namespace", func(t *testing.T) {
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(endpoints))
+		assert.Equal(t, endpoint.Name, endpoints[0].Name)
+	})
+
+	t.Run("namespace mismatch", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "b"
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(endpoints))
+	})
+
+	t.Run("namespace match", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "a"
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(endpoints))
+	})
+
+	t.Run("in scope, namespace match", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "a"
+		endpoint.Scopes = []string{TestRuntimeConfigID}
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(endpoints))
+	})
+
+	t.Run("not in scope, namespace match", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "a"
+		endpoint.Scopes = []string{"other"}
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(endpoints))
+	})
+
+	t.Run("in scope, namespace mismatch", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "b"
+		endpoint.Scopes = []string{TestRuntimeConfigID}
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(endpoints))
+	})
+
+	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "b"
+		endpoint.Scopes = []string{"other"}
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(endpoints))
+	})
+
+	t.Run("no authorizers", func(t *testing.T) {
+		rt.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{}
+		// Namespace mismatch, should be accepted anyways
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "b"
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(endpoints))
+		assert.Equal(t, endpoint.Name, endpoints[0].ObjectMeta.Name)
 	})
 }
 

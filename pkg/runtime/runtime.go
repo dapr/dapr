@@ -175,30 +175,31 @@ type DaprRuntime struct {
 	actor                   actors.Actors
 	subscribeBindingList    []string
 
-	nameResolver         nr.Resolver
-	hostAddress          string
-	actorStateStoreName  string
-	actorStateStoreLock  *sync.RWMutex
-	authenticator        security.Authenticator
-	namespace            string
-	podName              string
-	daprHTTPAPI          http.API
-	daprGRPCAPI          grpc.API
-	operatorClient       operatorv1pb.OperatorClient
-	pubsubCtx            context.Context
-	pubsubCancel         context.CancelFunc
-	topicsLock           *sync.RWMutex
-	topicCtxCancels      map[string]context.CancelFunc // Key is "componentName||topicName"
-	shutdownC            chan error
-	running              atomic.Bool
-	apiClosers           []io.Closer
-	componentAuthorizers []ComponentAuthorizer
-	appHealth            *apphealth.AppHealth
-	appHealthReady       func() // Invoked the first time the app health becomes ready
-	appHealthLock        *sync.Mutex
-	bulkSubLock          *sync.Mutex
-	appHTTPClient        *nethttp.Client
-	compStore            *compstore.ComponentStore
+	nameResolver            nr.Resolver
+	hostAddress             string
+	actorStateStoreName     string
+	actorStateStoreLock     *sync.RWMutex
+	authenticator           security.Authenticator
+	namespace               string
+	podName                 string
+	daprHTTPAPI             http.API
+	daprGRPCAPI             grpc.API
+	operatorClient          operatorv1pb.OperatorClient
+	pubsubCtx               context.Context
+	pubsubCancel            context.CancelFunc
+	topicsLock              *sync.RWMutex
+	topicCtxCancels         map[string]context.CancelFunc // Key is "componentName||topicName"
+	shutdownC               chan error
+	running                 atomic.Bool
+	apiClosers              []io.Closer
+	componentAuthorizers    []ComponentAuthorizer
+	httpEndpointAuthorizers []HTTPEndpointAuthorizer
+	appHealth               *apphealth.AppHealth
+	appHealthReady          func() // Invoked the first time the app health becomes ready
+	appHealthLock           *sync.Mutex
+	bulkSubLock             *sync.Mutex
+	appHTTPClient           *nethttp.Client
+	compStore               *compstore.ComponentStore
 
 	stateStoreRegistry         *stateLoader.Registry
 	secretStoresRegistry       *secretstoresLoader.Registry
@@ -279,6 +280,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		dl := newComponentDenyList(globalConfig.Spec.ComponentsSpec.Deny)
 		rt.componentAuthorizers = append(rt.componentAuthorizers, dl.IsAllowed)
 	}
+
+	rt.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{rt.namespaceHTTPEndpointAuthorizer}
 
 	rt.initAppHTTPClient()
 
@@ -529,14 +532,14 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
 
+	a.daprHTTPAPI.SetAppChannel(a.appChannel)
+	a.daprGRPCAPI.SetAppChannel(a.appChannel)
+	a.directMessaging.SetAppChannel(a.appChannel)
+
 	err = a.createHTTPEndpointsAppChannel()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app for external service invocation: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
-
-	a.daprHTTPAPI.SetAppChannel(a.appChannel)
-	a.daprGRPCAPI.SetAppChannel(a.appChannel)
-	a.directMessaging.SetAppChannel(a.appChannel)
 
 	// add another app channel dedicated to external service invocation
 	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
@@ -1052,7 +1055,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 				return
 			}
 
-			if !a.isComponentAuthorized(component) {
+			if !a.isObjectAuthorized(component) {
 				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
 				return
 			}
@@ -1155,71 +1158,66 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 		}
 
 		needList := false
-		for {
-			select {
-			case <-a.ctx.Done():
-				// Runtime context is canceled, so stop the goroutine.
-				return
-			default:
-				var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
+		for a.ctx.Err() == nil {
+
+			var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
+			streamData, err := backoff.RetryWithData(func() (interface{}, error) {
+				var err error
+				stream, err = a.operatorClient.HTTPEndpointUpdate(context.Background(), &operatorv1pb.HTTPEndpointUpdateRequest{
+					Namespace: a.namespace,
+					PodName:   a.podName,
+				})
+				if err != nil {
+					log.Errorf("error from operator stream: %s", err)
+					return nil, err
+				}
+				return stream, nil
+			}, backoff.NewExponentialBackOff())
+
+			if err != nil {
+				// Retry on stream error.
+				needList = true
+				log.Errorf("error from operator stream: %s", err)
+				continue
+			}
+			stream = streamData.(operatorv1pb.Operator_HTTPEndpointUpdateClient)
+
+			if needList {
+				// We should get all http endpoints again to avoid missing any updates during the failure time.
 				streamData, err := backoff.RetryWithData(func() (interface{}, error) {
-					var err error
-					stream, err = a.operatorClient.HTTPEndpointUpdate(context.Background(), &operatorv1pb.HTTPEndpointUpdateRequest{
+					resp, err := a.operatorClient.ListHTTPEndpoints(context.Background(), &operatorv1pb.ListHTTPEndpointsRequest{
 						Namespace: a.namespace,
-						PodName:   a.podName,
 					})
 					if err != nil {
-						log.Errorf("error from operator stream: %s", err)
+						log.Errorf("error listing http endpoints: %s", err)
 						return nil, err
 					}
-					return stream, nil
+
+					return resp.GetHttpEndpoints(), nil
 				}, backoff.NewExponentialBackOff())
 
 				if err != nil {
 					// Retry on stream error.
-					needList = true
-					log.Errorf("error from operator stream: %s", err)
+					log.Errorf("persistent error from operator stream: %s", err)
 					continue
 				}
-				stream = streamData.(operatorv1pb.Operator_HTTPEndpointUpdateClient)
 
-				if needList {
-					// We should get all http endpoints again to avoid missing any updates during the failure time.
-					streamData, err := backoff.RetryWithData(func() (interface{}, error) {
-						resp, err := a.operatorClient.ListHTTPEndpoints(context.Background(), &operatorv1pb.ListHTTPEndpointsRequest{
-							Namespace: a.namespace,
-						})
-						if err != nil {
-							log.Errorf("error listing http endpoints: %s", err)
-							return nil, err
-						}
+				endpointsToUpdate := streamData.([][]byte)
+				for i := 0; i < len(endpointsToUpdate); i++ {
+					parseAndUpdate(endpointsToUpdate[i])
+				}
+			}
 
-						return resp.GetHttpEndpoints(), nil
-					}, backoff.NewExponentialBackOff())
-
-					if err != nil {
-						// Retry on stream error.
-						log.Errorf("persistent error from operator stream: %s", err)
-						continue
-					}
-
-					endpointsToUpdate := streamData.([][]byte)
-					for i := 0; i < len(endpointsToUpdate); i++ {
-						parseAndUpdate(endpointsToUpdate[i])
-					}
+			for {
+				e, err := stream.Recv()
+				if err != nil {
+					// Retry on stream error.
+					needList = true
+					log.Errorf("error from operator stream: %s", err)
+					break
 				}
 
-				for {
-					e, err := stream.Recv()
-					if err != nil {
-						// Retry on stream error.
-						needList = true
-						log.Errorf("error from operator stream: %s", err)
-						break
-					}
-
-					parseAndUpdate(e.GetHttpEndpoints())
-				}
+				parseAndUpdate(e.GetHttpEndpoints())
 			}
 		}
 	}()
@@ -2536,34 +2534,53 @@ func (a *DaprRuntime) initActors() error {
 	return NewInitError(InitFailure, "actors", err)
 }
 
-func (a *DaprRuntime) getAuthorizedComponents(components []componentsV1alpha1.Component) []componentsV1alpha1.Component {
-	authorized := make([]componentsV1alpha1.Component, len(components))
-
-	i := 0
-	for _, c := range components {
-		if a.isComponentAuthorized(c) {
-			authorized[i] = c
-			i++
-		}
-	}
-	return authorized[0:i]
-}
-
-func (a *DaprRuntime) isComponentAuthorized(component componentsV1alpha1.Component) bool {
-	for _, auth := range a.componentAuthorizers {
-		if !auth(component) {
-			return false
-		}
-	}
-	return true
-}
-
 func (a *DaprRuntime) namespaceComponentAuthorizer(component componentsV1alpha1.Component) bool {
 	if a.namespace == "" || component.ObjectMeta.Namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
 		return component.IsAppScoped(a.runtimeConfig.ID)
 	}
 
 	return false
+}
+
+func (a *DaprRuntime) getAuthorizedObjects(objects interface{}, authorizer func(interface{}) bool) interface{} {
+	reflectValue := reflect.ValueOf(objects)
+	authorized := reflect.MakeSlice(reflectValue.Type(), 0, reflectValue.Len())
+	for i := 0; i < reflectValue.Len(); i++ {
+		object := reflectValue.Index(i).Interface()
+		if authorizer(object) {
+			authorized = reflect.Append(authorized, reflect.ValueOf(object))
+		}
+	}
+	return authorized.Interface()
+}
+
+func (a *DaprRuntime) isObjectAuthorized(object interface{}) bool {
+	switch object.(type) {
+	case httpEndpointV1alpha1.HTTPEndpoint:
+		for _, auth := range a.httpEndpointAuthorizers {
+			if !auth(object.(httpEndpointV1alpha1.HTTPEndpoint)) {
+				return false
+			}
+		}
+	case componentsV1alpha1.Component:
+		for _, auth := range a.componentAuthorizers {
+			if !auth(object.(componentsV1alpha1.Component)) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (a *DaprRuntime) namespaceHTTPEndpointAuthorizer(endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
+	switch {
+	case a.namespace == "",
+		endpoint.ObjectMeta.Namespace == "",
+		(a.namespace != "" && endpoint.ObjectMeta.Namespace == a.namespace):
+		return endpoint.IsAppScoped(a.runtimeConfig.ID)
+	default:
+		return false
+	}
 }
 
 func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
@@ -2584,7 +2601,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 		return err
 	}
 
-	authorizedComps := a.getAuthorizedComponents(comps)
+	authorizedComps := a.getAuthorizedObjects(comps, a.isObjectAuthorized).([]componentsV1alpha1.Component)
 
 	// Iterate through the list twice
 	// First, we look for secret stores and load those, then all other components
@@ -2763,7 +2780,9 @@ func (a *DaprRuntime) loadHTTPEndpoints(opts *runtimeOpts) error {
 		return err
 	}
 
-	for _, e := range endpoints {
+	authorizedHTTPEndpoints := a.getAuthorizedObjects(endpoints, a.isObjectAuthorized).([]httpEndpointV1alpha1.HTTPEndpoint)
+
+	for _, e := range authorizedHTTPEndpoints {
 		log.Infof("Found http endpoint: %s", e.Name)
 		a.pendingHTTPEndpoints <- e
 	}
