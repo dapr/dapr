@@ -1156,62 +1156,60 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 
 		needList := false
 		for {
-			var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
-
-			// Retry on stream error.
-			streamData, err := backoff.RetryWithData(func() (interface{}, error) {
+			select {
+			case <-a.ctx.Done():
+				// Runtime context is canceled, so stop the goroutine.
+				return
+			default:
 				var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
-
-				var err error
-				stream, err = a.operatorClient.HTTPEndpointUpdate(context.Background(), &operatorv1pb.HTTPEndpointUpdateRequest{
-					Namespace: a.namespace,
-					PodName:   a.podName,
-				})
-				if err != nil {
-					log.Errorf("error from operator stream: %s", err)
-					return nil, err
-				}
-
-				return stream, nil
-			}, backoff.NewExponentialBackOff())
-
-			if err != nil {
-				// Retry on stream error.
-				needList = true
-				log.Errorf("error from operator stream: %s", err)
-				continue
-			}
-
-			stream = streamData.(operatorv1pb.Operator_HTTPEndpointUpdateClient)
-
-			if needList {
-				// We should get all http endpoints again to avoid missing any updates during the failure time.
-				backoff.Retry(func() error {
-					resp, err := a.operatorClient.ListHTTPEndpoints(context.Background(), &operatorv1pb.ListHTTPEndpointsRequest{
+				streamData, err := backoff.RetryWithData(func() (interface{}, error) {
+					var err error
+					stream, err = a.operatorClient.HTTPEndpointUpdate(context.Background(), &operatorv1pb.HTTPEndpointUpdateRequest{
 						Namespace: a.namespace,
+						PodName:   a.podName,
 					})
 					if err != nil {
-						log.Errorf("error listing http endpoints: %s", err)
-						return err
+						log.Errorf("error from operator stream: %s", err)
+						return nil, err
 					}
-
-					endpoints := resp.GetHttpEndpoints()
-					for i := 0; i < len(endpoints); i++ {
-						// avoid missing any updates during the init http endpoint time.
-						go func(endpt []byte) {
-							parseAndUpdate(endpt)
-						}(endpoints[i])
-					}
-
-					return nil
+					return stream, nil
 				}, backoff.NewExponentialBackOff())
-			}
 
-			for {
-				select {
-				case <-a.ctx.Done():
-					return // goroutine exits when context is cancelled
-				default:
+				if err != nil {
+					// Retry on stream error.
+					needList = true
+					log.Errorf("error from operator stream: %s", err)
+					continue
+				}
+				stream = streamData.(operatorv1pb.Operator_HTTPEndpointUpdateClient)
+
+				if needList {
+					// We should get all http endpoints again to avoid missing any updates during the failure time.
+					streamData, err := backoff.RetryWithData(func() (interface{}, error) {
+						resp, err := a.operatorClient.ListHTTPEndpoints(context.Background(), &operatorv1pb.ListHTTPEndpointsRequest{
+							Namespace: a.namespace,
+						})
+						if err != nil {
+							log.Errorf("error listing http endpoints: %s", err)
+							return nil, err
+						}
+
+						return resp.GetHttpEndpoints(), nil
+					}, backoff.NewExponentialBackOff())
+
+					if err != nil {
+						// Retry on stream error.
+						log.Errorf("persistent error from operator stream: %s", err)
+						continue
+					}
+
+					endpointsToUpdate := streamData.([][]byte)
+					for i := 0; i < len(endpointsToUpdate); i++ {
+						parseAndUpdate(endpointsToUpdate[i])
+					}
+				}
+
+				for {
 					e, err := stream.Recv()
 					if err != nil {
 						// Retry on stream error.
