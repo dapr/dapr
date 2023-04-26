@@ -3,7 +3,6 @@ package diagnostics_test
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
@@ -33,19 +33,12 @@ const (
 )
 
 func cleanupRegisteredViews() {
-	var views []*view.View
-	for _, v := range []string{
+	diagtestutils.CleanupRegisteredViews(
 		resiliencyCountViewName,
 		resiliencyLoadedViewName,
 		resiliencyActivationViewName,
 		actorTimersLastValueViewName,
-		actorRemindersLastValueViewName,
-	} {
-		if v := view.Find(v); v != nil {
-			views = append(views, v)
-		}
-	}
-	view.Unregister(views...)
+		actorRemindersLastValueViewName)
 }
 
 func TestResiliencyCountMonitoring(t *testing.T) {
@@ -66,15 +59,15 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			},
 			wantNumberOfRows: 3,
 			wantTags: []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
-				newTag(diag.StatusKey.Name(), "closed"),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
+				diagtestutils.NewTag(diag.StatusKey.Name(), "closed"),
 			},
 		},
 		{
@@ -85,14 +78,14 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				_ = r.ActorPreLockPolicy("fakeActor", "fakeActorId")
 			},
 			wantTags: []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyActorTarget("fakeActor")),
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyActorTarget("fakeActor")),
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
 			},
 			wantNumberOfRows: 2,
 		},
@@ -104,12 +97,12 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				_ = r.ActorPostLockPolicy("fakeActor", "fakeActorId")
 			},
 			wantTags: []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyActorTarget("fakeActor")),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyActorTarget("fakeActor")),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
 			},
 			wantNumberOfRows: 1,
 		},
@@ -121,15 +114,15 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				_ = r.ComponentOutboundPolicy(testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
 			},
 			wantNumberOfRows: 3,
 		},
@@ -141,15 +134,15 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				_ = r.ComponentInboundPolicy(testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.InboundPolicyFlowDirection)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.InboundPolicyFlowDirection)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
 			},
 			wantNumberOfRows: 3,
 		},
@@ -162,15 +155,15 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			},
 			wantNumberOfRows: 3,
 			wantTags: []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.InboundPolicyFlowDirection)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.InboundPolicyFlowDirection)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
 			},
 		},
 		{
@@ -182,14 +175,14 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			},
 			wantNumberOfRows: 2,
 			wantTags: []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyComponentTarget(testStateStoreName, string(resiliency.Statestore))),
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)),
 			},
 		},
 	}
@@ -206,7 +199,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, test.wantNumberOfRows, len(rows))
 			for _, wantTag := range test.wantTags {
-				requireTagExist(t, rows, wantTag)
+				diagtestutils.RequireTagExist(t, rows, wantTag)
 			}
 		})
 	}
@@ -232,7 +225,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				}
 			},
 			wantNumberOfRows:    3,
-			wantCbStateTagCount: map[tag.Tag]int64{newTag(diag.StatusKey.Name(), "closed"): 2},
+			wantCbStateTagCount: map[tag.Tag]int64{diagtestutils.NewTag(diag.StatusKey.Name(), "closed"): 2},
 		},
 		{
 			name: "EndpointPolicyOpenState",
@@ -248,8 +241,8 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			},
 			wantNumberOfRows: 4,
 			wantCbStateTagCount: map[tag.Tag]int64{
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 2,
-				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 2,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
 			},
 		},
 		{
@@ -273,9 +266,9 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			},
 			wantNumberOfRows: 5,
 			wantCbStateTagCount: map[tag.Tag]int64{
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)):   2,
-				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):     1,
-				newTag(diag.StatusKey.Name(), string(breaker.StateHalfOpen)): 1,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)):   2,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):     1,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateHalfOpen)): 1,
 			},
 		},
 	}
@@ -290,20 +283,21 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			require.Equal(t, test.wantNumberOfRows, len(rows))
 
 			wantedTags := []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
 			}
 			for _, wantTag := range wantedTags {
-				requireTagExist(t, rows, wantTag)
+				diagtestutils.RequireTagExist(t, rows, wantTag)
 			}
 			for cbTag, wantCount := range test.wantCbStateTagCount {
-				gotCount := getCountForTagSet(rows, map[tag.Tag]bool{cbTag: true, newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
+				gotCount := diagtestutils.GetValueForObservationWithTagSet(
+					rows, map[tag.Tag]bool{cbTag: true, diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
 				require.Equal(t, wantCount, gotCount)
 			}
 		})
@@ -348,11 +342,11 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			wantNumberOfRows: 1,
 			wantRetriesCount: 1,
 			wantTags: []tag.Tag{
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
 			},
 			wantCbStateTagCount: map[tag.Tag]int64{
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
-				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   0,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   0,
 			},
 		},
 		{
@@ -370,12 +364,12 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			wantNumberOfRows: 2,
 			wantRetriesCount: 2,
 			wantTags: []tag.Tag{
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
 			},
 			wantCbStateTagCount: map[tag.Tag]int64{
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
-				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
 			},
 		},
 		{
@@ -397,13 +391,13 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			wantRetriesCount: 2,
 			wantTimeoutCount: 1,
 			wantTags: []tag.Tag{
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
 			},
 			wantCbStateTagCount: map[tag.Tag]int64{
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
-				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 0,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
 			},
 		},
 		{
@@ -437,12 +431,12 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			wantNumberOfRows: 3,
 			wantRetriesCount: 4,
 			wantTags: []tag.Tag{
-				newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
-				newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)),
+				diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)),
 			},
 			wantCbStateTagCount: map[tag.Tag]int64{
-				newTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 1,
-				newTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   2,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 1,
+				diagtestutils.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   2,
 			},
 		},
 	}
@@ -460,24 +454,27 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			}
 
 			wantedTags := []tag.Tag{
-				newTag("app_id", testAppID),
-				newTag("name", testResiliencyName),
-				newTag("namespace", testResiliencyNamespace),
-				newTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
-				newTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
+				diagtestutils.NewTag("app_id", testAppID),
+				diagtestutils.NewTag("name", testResiliencyName),
+				diagtestutils.NewTag("namespace", testResiliencyNamespace),
+				diagtestutils.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
+				diagtestutils.NewTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
 			}
 			wantedTags = append(wantedTags, test.wantTags...)
 			for _, wantTag := range wantedTags {
-				requireTagExist(t, rows, wantTag)
+				diagtestutils.RequireTagExist(t, rows, wantTag)
 			}
 			for cbTag, wantCount := range test.wantCbStateTagCount {
-				gotCount := getCountForTagSet(rows, map[tag.Tag]bool{cbTag: true, newTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
+				gotCount := diagtestutils.GetValueForObservationWithTagSet(
+					rows, map[tag.Tag]bool{cbTag: true, diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
 				require.Equal(t, wantCount, gotCount)
 			}
-			gotRetriesCount := getCountForTagSet(rows, map[tag.Tag]bool{newTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)): true})
+			gotRetriesCount := diagtestutils.GetValueForObservationWithTagSet(
+				rows, map[tag.Tag]bool{diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)): true})
 			require.Equal(t, test.wantRetriesCount, gotRetriesCount)
 
-			gotTimeoutCount := getCountForTagSet(rows, map[tag.Tag]bool{newTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)): true})
+			gotTimeoutCount := diagtestutils.GetValueForObservationWithTagSet(
+				rows, map[tag.Tag]bool{diagtestutils.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)): true})
 			require.Equal(t, test.wantTimeoutCount, gotTimeoutCount)
 		})
 	}
@@ -512,47 +509,10 @@ func TestResiliencyLoadedMonitoring(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, len(rows))
 
-		requireTagExist(t, rows, newTag("app_id", testAppID))
-		requireTagExist(t, rows, newTag("name", testResiliencyName))
-		requireTagExist(t, rows, newTag("namespace", testResiliencyNamespace))
+		diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("app_id", testAppID))
+		diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("name", testResiliencyName))
+		diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("namespace", testResiliencyNamespace))
 	})
-}
-
-func newTag(key string, value string) tag.Tag {
-	return tag.Tag{
-		Key:   tag.MustNewKey(key),
-		Value: value,
-	}
-}
-
-func getCountForTagSet(rows []*view.Row, wantedTagSetCount map[tag.Tag]bool) int64 {
-	for _, row := range rows {
-		foundTags := 0
-		for _, aTag := range row.Tags {
-			if wantedTagSetCount[aTag] {
-				foundTags++
-			}
-		}
-		if foundTags == len(wantedTagSetCount) {
-			return row.Data.(*view.CountData).Value
-		}
-	}
-	return 0
-}
-
-func requireTagExist(t *testing.T, rows []*view.Row, wantedTag tag.Tag) {
-	t.Helper()
-	var found bool
-outerLoop:
-	for _, row := range rows {
-		for _, aTag := range row.Tags {
-			if reflect.DeepEqual(wantedTag, aTag) {
-				found = true
-				break outerLoop
-			}
-		}
-	}
-	require.True(t, found, fmt.Sprintf("did not find tag (%s) in rows:", wantedTag), rows)
 }
 
 func newTestDefaultResiliencyConfig(resiliencyName, resiliencyNamespace string) *resiliencyV1alpha.Resiliency {
