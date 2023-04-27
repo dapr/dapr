@@ -44,11 +44,8 @@ type testCommandRequest struct {
 }
 
 type testCommandRequestExternal struct {
-	RemoteApp        string  `json:"remoteApp,omitempty"`
-	Method           string  `json:"method,omitempty"`
-	RemoteAppTracing string  `json:"remoteAppTracing"`
-	Message          *string `json:"message"`
-	ExternalIP       string  `json:"externalIP,omitempty"`
+	testCommandRequest `json:",inline"`
+	ExternalIP         string `json:"externalIP,omitempty"`
 }
 
 type appResponse struct {
