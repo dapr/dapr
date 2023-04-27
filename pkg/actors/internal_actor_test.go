@@ -194,7 +194,7 @@ func TestInternalActorReminder(t *testing.T) {
 		Name:           "reminder1",
 		Data:           data,
 	}
-	err = testActorRuntime.executeReminder(testReminder, false)
+	err = testActorRuntime.executeReminder(testReminder)
 	require.NoError(t, err)
 	require.Len(t, ia.InvokedReminders, 1)
 	invokedReminder := ia.InvokedReminders[0]

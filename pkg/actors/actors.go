@@ -941,7 +941,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 				break L
 			}
 
-			err = a.executeReminder(reminder, false)
+			err = a.executeReminder(reminder)
 			if err != nil {
 				if errors.Is(err, ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
@@ -992,38 +992,24 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 	return nil
 }
 
-// Executes a reminder or timer
-func (a *actorsRuntime) executeReminder(reminder *reminders.Reminder, isTimer bool) (err error) {
-	var (
-		data         any
-		logName      string
-		invokeMethod string
-	)
-
-	if isTimer {
-		logName = "timer"
-		invokeMethod = "timer/" + reminder.Name
-		data = &TimerResponse{
-			Callback: reminder.Callback,
-			Data:     reminder.Data,
-			DueTime:  reminder.DueTime,
-			Period:   reminder.Period.String(),
-		}
-	} else {
-		logName = "reminder"
-		invokeMethod = "remind/" + reminder.Name
-		data = &ReminderResponse{
-			DueTime: reminder.DueTime,
-			Period:  reminder.Period.String(),
-			Data:    reminder.Data,
-		}
+// Executes a reminder
+func (a *actorsRuntime) executeReminder(reminder *reminders.Reminder) (err error) {
+	r := ReminderResponse{
+		DueTime: reminder.DueTime,
+		Period:  reminder.Period.String(),
+		Data:    reminder.Data,
 	}
+	b, err := json.Marshal(&r)
+	if err != nil {
+		return err
+	}
+
 	policyDef := a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
 
-	log.Debug("Executing " + logName + " for actor " + reminder.Key())
-	req := invokev1.NewInvokeMethodRequest(invokeMethod).
+	log.Debug("executing reminder for actor " + reminder.Key())
+	req := invokev1.NewInvokeMethodRequest("remind/"+reminder.Name).
 		WithActor(reminder.ActorType, reminder.ActorID).
-		WithDataObject(data).
+		WithRawDataBytes(b).
 		WithContentType(invokev1.JSONContentType)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
@@ -1039,7 +1025,50 @@ func (a *actorsRuntime) executeReminder(reminder *reminders.Reminder, isTimer bo
 		return a.callLocalActor(ctx, req)
 	})
 	if err != nil && !errors.Is(err, ErrReminderCanceled) {
-		log.Errorf("Error executing %s for actor %s: %v", logName, reminder.Key(), err)
+		log.Errorf("error execution of reminder %s for actor type %s with id %s: %s",
+			reminder.Name, reminder.ActorType, reminder.ActorID, err)
+	}
+	if imr != nil {
+		_ = imr.Close()
+	}
+	return err
+}
+
+// Executes a timer
+func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, callback string, data interface{}) error {
+	t := TimerResponse{
+		Callback: callback,
+		Data:     data,
+		DueTime:  dueTime,
+		Period:   period,
+	}
+	b, err := json.Marshal(&t)
+	if err != nil {
+		return err
+	}
+
+	policyDef := a.resiliency.ActorPreLockPolicy(actorType, actorID)
+
+	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
+	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("timer/%s", name))
+	req.WithActor(actorType, actorID)
+	req.WithRawDataBytes(b)
+	req.WithContentType(invokev1.JSONContentType)
+	if policyDef != nil {
+		req.WithReplay(policyDef.HasRetries())
+	}
+	defer req.Close()
+
+	policyRunner := resiliency.NewRunnerWithOptions(context.TODO(), policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
+	)
+	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+		return a.callLocalActor(ctx, req)
+	})
+	if err != nil && !errors.Is(err, ErrReminderCanceled) {
+		log.Errorf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
 	}
 	if imr != nil {
 		_ = imr.Close()
@@ -1293,7 +1322,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 			}
 
 			if _, exists := a.actorsTable.Load(actorKey); exists {
-				err = a.executeReminder(reminder, true)
+				err = a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
 				if err != nil {
 					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 				}

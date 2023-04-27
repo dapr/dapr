@@ -704,17 +704,7 @@ func TestTimerExecution(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := reminders.NewReminderPeriod("2s")
-	err := testActorsRuntime.executeReminder(&reminders.Reminder{
-		ActorType:      actorType,
-		ActorID:        actorID,
-		Name:           "timer1",
-		Period:         period,
-		RegisteredTime: testActorsRuntime.clock.Now().Add(2 * time.Second),
-		DueTime:        "2s",
-		Callback:       "callback",
-		Data:           json.RawMessage(`"data"`),
-	}, true)
+	err := testActorsRuntime.executeTimer(actorType, actorID, "timer1", "2s", "2s", "callback", "data")
 	assert.NoError(t, err)
 }
 
@@ -725,17 +715,7 @@ func TestTimerExecutionZeroDuration(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := reminders.NewReminderPeriod("0ms")
-	err := testActorsRuntime.executeReminder(&reminders.Reminder{
-		ActorType:      actorType,
-		ActorID:        actorID,
-		Name:           "timer1",
-		Period:         period,
-		RegisteredTime: testActorsRuntime.clock.Now(),
-		DueTime:        "0ms",
-		Callback:       "callback",
-		Data:           json.RawMessage(`"data"`),
-	}, true)
+	err := testActorsRuntime.executeTimer(actorType, actorID, "timer1", "0ms", "0ms", "callback", "data")
 	assert.NoError(t, err)
 }
 
@@ -754,7 +734,7 @@ func TestReminderExecution(t *testing.T) {
 		Period:         period,
 		Name:           "reminder1",
 		Data:           json.RawMessage(`"data"`),
-	}, false)
+	})
 	assert.NoError(t, err)
 }
 
@@ -772,7 +752,7 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 		Period:    period,
 		Name:      "reminder0",
 		Data:      json.RawMessage(`"data"`),
-	}, false)
+	})
 	assert.NoError(t, err)
 }
 
