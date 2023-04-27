@@ -72,6 +72,7 @@ type AppDescription struct {
 	AppHealthProbeInterval    int                             `json:",omitempty"` // In seconds
 	AppHealthProbeTimeout     int                             `json:",omitempty"` // In milliseconds
 	AppHealthThreshold        int                             `json:",omitempty"`
+	AppChannelAddress         string                          `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {
