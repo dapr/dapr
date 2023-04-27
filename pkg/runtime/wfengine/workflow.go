@@ -37,6 +37,7 @@ const (
 	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
 	GetWorkflowMetadataMethod    = "GetWorkflowMetadata"
 	AddWorkflowEventMethod       = "AddWorkflowEvent"
+	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
 )
 
 type workflowActor struct {
@@ -98,6 +99,8 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 		result, err = wf.getWorkflowMetadata(ctx, actorID)
 	case AddWorkflowEventMethod:
 		err = wf.addWorkflowEvent(ctx, actorID, request)
+	case PurgeWorkflowStateMethod:
+		err = wf.purgeWorkflowState(ctx, actorID)
 	default:
 		err = fmt.Errorf("no such method: %s", methodName)
 	}
@@ -216,6 +219,39 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string
 	return metadata, nil
 }
 
+// This method purges all the completed activity data from a workflow associated with the given actorID
+func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string) error {
+	state, exists, err := wf.loadInternalState(ctx, actorID)
+	if err != nil {
+		return err
+	} else if !exists {
+		return api.ErrInstanceNotFound
+	}
+
+	runtimeState := getRuntimeState(actorID, state)
+	if !runtimeState.IsCompleted() {
+		return api.ErrNotCompleted
+	}
+
+	err = wf.removeCompletedStateData(ctx, state, actorID)
+	if err != nil {
+		return err
+	}
+
+	// This will create a request to purge everything
+	req, err := state.GetPurgeRequest(actorID)
+	if err != nil {
+		return err
+	}
+	// This will do the purging
+	err = wf.actors.TransactionalStateOperation(ctx, req)
+	if err != nil {
+		return err
+	}
+	wf.states.Delete(actorID)
+	return nil
+}
+
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {
 	state, exists, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -269,6 +305,32 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		// for some of those already processed events.
 		wfLogger.Debugf("%s: ignoring run request for reminder '%s' because the workflow inbox is empty", reminderName, actorID)
 		return nil
+	}
+
+	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
+	// TODO: for optimization make multiple go routines and run them in parallel
+	for _, e := range state.Inbox {
+		var taskID int32
+		if ts := e.GetTaskCompleted(); ts != nil {
+			taskID = ts.TaskScheduledId
+		} else if tf := e.GetTaskFailed(); tf != nil {
+			taskID = tf.TaskScheduledId
+		} else {
+			continue
+		}
+		req := actors.TransactionalRequest{
+			ActorType: wf.config.activityActorType,
+			ActorID:   getActivityActorID(actorID, taskID),
+			Operations: []actors.TransactionalOperation{{
+				Operation: actors.Delete,
+				Request: actors.TransactionalDelete{
+					Key: activityStateKey,
+				},
+			}},
+		}
+		if err := wf.actors.TransactionalStateOperation(ctx, &req); err != nil {
+			return fmt.Errorf("failed to delete activity state with error: %w", err)
+		}
 	}
 
 	runtimeState := getRuntimeState(actorID, state)
@@ -351,7 +413,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			}
 			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
 				HistoryEvent: eventData,
-				Generation:   state.Generation,
 			})
 			if err != nil {
 				return err
@@ -476,4 +537,35 @@ func getRuntimeState(actorID string, state workflowState) *backend.Orchestration
 func getActivityActorID(workflowActorID string, taskID int32) string {
 	// An activity can be identified by it's name followed by it's task ID. Example: SayHello#0, SayHello#1, etc.
 	return fmt.Sprintf("%s#%d", workflowActorID, taskID)
+}
+
+func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state workflowState, actorID string) error {
+	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
+	// TODO: for optimization make multiple go routines and run them in parallel
+	var err error
+	for _, e := range state.Inbox {
+		var taskID int32
+		if ts := e.GetTaskCompleted(); ts != nil {
+			taskID = ts.TaskScheduledId
+		} else if tf := e.GetTaskFailed(); tf != nil {
+			taskID = tf.TaskScheduledId
+		} else {
+			continue
+		}
+		req := actors.TransactionalRequest{
+			ActorType: wf.config.activityActorType,
+			ActorID:   getActivityActorID(actorID, taskID),
+			Operations: []actors.TransactionalOperation{{
+				Operation: actors.Delete,
+				Request: actors.TransactionalDelete{
+					Key: activityStateKey,
+				},
+			}},
+		}
+		if err = wf.actors.TransactionalStateOperation(ctx, &req); err != nil {
+			return fmt.Errorf("failed to delete activity state with error: %w", err)
+		}
+	}
+
+	return err
 }

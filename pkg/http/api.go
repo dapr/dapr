@@ -276,6 +276,12 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Version: apiVersionV1alpha1,
 			Handler: a.onTerminateWorkflowHandler(),
 		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/purge",
+			Version: apiVersionV1alpha1,
+			Handler: a.onPurgeWorkflowHandler(),
+		},
 	}
 }
 
@@ -801,6 +807,19 @@ func (a *api) onResumeWorkflowHandler() fasthttp.RequestHandler {
 		a.universal.ResumeWorkflowAlpha1,
 		UniversalFastHTTPHandlerOpts[*runtimev1pb.ResumeWorkflowRequest, *emptypb.Empty]{
 			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.ResumeWorkflowRequest) (*runtimev1pb.ResumeWorkflowRequest, error) {
+				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
+				in.InstanceId = reqCtx.UserValue(instanceID).(string)
+				return in, nil
+			},
+			SuccessStatusCode: fasthttp.StatusAccepted,
+		})
+}
+
+func (a *api) onPurgeWorkflowHandler() fasthttp.RequestHandler {
+	return UniversalFastHTTPHandler(
+		a.universal.PurgeWorkflowAlpha1,
+		UniversalFastHTTPHandlerOpts[*runtimev1pb.PurgeWorkflowRequest, *emptypb.Empty]{
+			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil

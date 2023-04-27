@@ -397,7 +397,6 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	if lar == nil {
 		lar = &lookupActorRes{}
 	}
-
 	var resp *invokev1.InvokeMethodResponse
 	if a.isActorLocal(lar.targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(ctx, req)
