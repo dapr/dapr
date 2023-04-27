@@ -154,6 +154,9 @@ service Dapr {
   // Gets details about a started workflow instance
   rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
 
+  // Purge Workflow
+  rpc PurgeWorkflowAlpha1 (PurgeWorkflowRequest) returns (google.protobuf.Empty) {}
+
   // Terminates a running workflow instance
   rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (google.protobuf.Empty) {}
 
@@ -1030,4 +1033,12 @@ message RaiseEventWorkflowRequest {
   string event_name = 3 [json_name = "eventName"];
   // Data associated with the event.
   bytes event_data = 4;
+}
+
+// PurgeWorkflowRequest is the request for PurgeWorkflowAlpha1.
+message PurgeWorkflowRequest {
+  // ID of the workflow instance to purge.
+  string instance_id = 1 [json_name = "instanceID"];
+  // Name of the workflow component.
+  string workflow_component = 2 [json_name = "workflowComponent"];
 }
