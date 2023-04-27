@@ -4329,6 +4329,7 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int)
 		GracefulShutdownDuration:     time.Second,
 		EnableAPILogging:             true,
 		DisableBuiltinK8sSecretStore: false,
+		AppChannelAddress:            "127.0.0.1",
 	})
 }
 
@@ -5499,6 +5500,19 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 		Match: e,
 		Path:  path,
 	}, nil
+}
+
+func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
+	rt.runtimeConfig.AppChannelAddress = "my.app"
+
+	defer stopRuntime(t, rt)
+
+	p, err := rt.buildAppHTTPPipeline()
+	assert.Nil(t, err)
+
+	c := rt.getAppHTTPChannelConfig(p)
+	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 
 func TestComponentsCallback(t *testing.T) {

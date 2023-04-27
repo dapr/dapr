@@ -2511,6 +2511,7 @@ func (a *DaprRuntime) initActors() error {
 		AppConfig:          a.appConfig,
 		HealthHTTPClient:   a.appHTTPClient,
 		HealthEndpoint:     a.getAppHTTPEndpoint(),
+		AppChannelAddress:  a.runtimeConfig.AppChannelAddress,
 	})
 
 	act := actors.NewActors(actors.ActorsOpts{
@@ -3141,7 +3142,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		default:
 			// nop - continue execution
 		}
-		conn, _ := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(a.runtimeConfig.ApplicationPort), time.Millisecond*500)
+		conn, _ := net.DialTimeout("tcp", a.runtimeConfig.AppChannelAddress+":"+strconv.Itoa(a.runtimeConfig.ApplicationPort), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()
 			break
@@ -3230,9 +3231,9 @@ func (a *DaprRuntime) getAppHTTPEndpoint() string {
 	port := strconv.Itoa(a.runtimeConfig.ApplicationPort)
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol, H2CProtocol:
-		return "http://" + channel.DefaultChannelAddress + ":" + port
+		return "http://" + a.runtimeConfig.AppChannelAddress + ":" + port
 	case HTTPSProtocol:
-		return "https://" + channel.DefaultChannelAddress + ":" + port
+		return "https://" + a.runtimeConfig.AppChannelAddress + ":" + port
 	default:
 		return ""
 	}
@@ -3559,6 +3560,7 @@ func createGRPCManager(runtimeConfig *Config, globalConfig *config.Configuration
 		grpcAppChannelConfig.EnableTLS = (runtimeConfig.ApplicationProtocol == GRPCSProtocol)
 		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.MaxRequestBodySize
 		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.ReadBufferSize
+		grpcAppChannelConfig.BaseAddress = runtimeConfig.AppChannelAddress
 	}
 
 	m := grpc.NewGRPCManager(runtimeConfig.Mode, grpcAppChannelConfig)
