@@ -78,11 +78,8 @@ type testCommandRequest struct {
 }
 
 type testCommandRequestExternal struct {
-	RemoteApp        string  `json:"remoteApp,omitempty"`
-	Method           string  `json:"method,omitempty"`
-	RemoteAppTracing string  `json:"remoteAppTracing"`
-	Message          *string `json:"message"`
-	ExternalIP       string  `json:"externalIP,omitempty"`
+	testCommandRequest `json:",inline"`
+	ExternalIP         string `json:"externalIP,omitempty"`
 }
 
 type appResponse struct {
@@ -403,6 +400,8 @@ func appRouter() *mux.Router {
 
 	// service invocation to external HTTPEndpoint resources + through overwriting the URL
 	router.HandleFunc("/httptohttptest_external", httpTohttpTestExternal).Methods("POST")
+	router.HandleFunc("/tests/dapr_id_httptohttptest", testDaprIDRequestHTTPToHTTP).Methods("POST")
+	router.HandleFunc("/tests/v1_httptohttptest", testV1RequestHTTPToHTTP).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
