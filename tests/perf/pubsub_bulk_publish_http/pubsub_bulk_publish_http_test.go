@@ -77,6 +77,8 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
+// TestPubsubBulkPublishHttpPerformance compares the performance of bulk publish vs normal publish
+// for different brokers, bulk sizes and message sizes.
 func TestPubsubBulkPublishHttpPerformance(t *testing.T) {
 	publishTypes := []string{"normal", "bulk"}
 	bulkSizes := []int{10, 100}
