@@ -555,6 +555,89 @@ func TestListsNamespaced(t *testing.T) {
 	})
 }
 
+func TestProcessHTTPEndpointSecrets(t *testing.T) {
+	e := httpendpointapi.HTTPEndpoint{
+		Spec: httpendpointapi.HTTPEndpointSpec{
+			BaseURL: "http://test.com/",
+			Headers: []httpendpointapi.Header{
+				{
+					Name: "test1",
+					SecretKeyRef: httpendpointapi.SecretKeyRef{
+						Name: "secret1",
+						Key:  "key1",
+					},
+				},
+			},
+		},
+		Auth: httpendpointapi.Auth{
+			SecretStore: "secretstore",
+		},
+	}
+	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
+		err := processHTTPEndpointSecrets(context.Background(), &e, "default", nil)
+		assert.NoError(t, err)
+	})
+
+	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
+		e.Auth.SecretStore = kubernetesSecretStore
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		assert.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "secret1",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"key1": []byte("value1"),
+				},
+			}).
+			Build()
+		assert.NoError(t, processHTTPEndpointSecrets(context.Background(), &e, "default", client))
+		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
+		jsonEnc, err := json.Marshal(enc)
+		assert.NoError(t, err)
+		assert.Equal(t, jsonEnc, e.Spec.Headers[0].Value.Raw)
+	})
+
+	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
+		e.Auth.SecretStore = ""
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		assert.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "secret1",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"key1": []byte("value1"),
+				},
+			}).
+			Build()
+
+		assert.NoError(t, processHTTPEndpointSecrets(context.Background(), &e, "default", client))
+
+		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
+		jsonEnc, err := json.Marshal(enc)
+		assert.NoError(t, err)
+		assert.Equal(t, jsonEnc, e.Spec.Headers[0].Value.Raw)
+	})
+
+}
+
 func Test_Ready(t *testing.T) {
 	tests := map[string]struct {
 		readyCh func() chan struct{}

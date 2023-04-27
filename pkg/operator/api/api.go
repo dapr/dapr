@@ -254,13 +254,12 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 			}
 
 			val, ok := secret.Data[key]
-			enc := b64.StdEncoding.EncodeToString(val)
-			jsonEnc, err := json.Marshal(enc)
-			if err != nil {
-				return err
-			}
-
 			if ok {
+				enc := b64.StdEncoding.EncodeToString(val)
+				jsonEnc, err := json.Marshal(enc)
+				if err != nil {
+					return err
+				}
 				endpoint.Spec.Headers[i].Value = httpendpointsapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: jsonEnc,
