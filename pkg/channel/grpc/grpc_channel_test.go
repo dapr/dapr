@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -168,4 +169,9 @@ func TestHealthProbe(t *testing.T) {
 	success, err = c.HealthProbe(ctx)
 	assert.NoError(t, err)
 	assert.False(t, success)
+}
+
+func TestCreateLocalChannelWithBaseAddress(t *testing.T) {
+	ch := CreateLocalChannel(8080, 1, nil, config.TracingSpec{}, 1024, 1, "my.app")
+	assert.Equal(t, "my.app:8080", ch.baseAddress)
 }
