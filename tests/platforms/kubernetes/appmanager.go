@@ -143,23 +143,25 @@ func (m *AppManager) Init(runCtx context.Context) error {
 	}
 
 	if !m.app.IsJob {
-		// Job cannot have side car validated because it is shutdown on successful completion.
-		log.Printf("Validating sidecar for app %v ....", m.app.AppName)
-		for i := 0; i <= maxSideCarDetectionRetries; i++ {
-			// Validate daprd side car is injected
-			if err := m.ValidateSidecar(); err != nil {
-				if i == maxSideCarDetectionRetries {
-					return err
+		if m.app.DaprEnabled {
+			// Job cannot have side car validated because it is shutdown on successful completion.
+			log.Printf("Validating sidecar for app %v ....", m.app.AppName)
+			for i := 0; i <= maxSideCarDetectionRetries; i++ {
+				// Validate daprd side car is injected
+				if err := m.ValidateSidecar(); err != nil {
+					if i == maxSideCarDetectionRetries {
+						return err
+					}
+
+					log.Printf("Did not find sidecar for app %v error %s, retrying ....", m.app.AppName, err)
+					time.Sleep(10 * time.Second)
+					continue
 				}
 
-				log.Printf("Did not find sidecar for app %v error %s, retrying ....", m.app.AppName, err)
-				time.Sleep(10 * time.Second)
-				continue
+				break
 			}
-
-			break
+			log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
 		}
-		log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
 
 		// Create Ingress endpoint
 		log.Printf("Creating ingress for app %v ....", m.app.AppName)
