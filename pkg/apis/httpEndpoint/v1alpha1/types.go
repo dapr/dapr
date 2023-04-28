@@ -77,8 +77,8 @@ type HTTPEndpointSpec struct {
 
 // SecretKeyRef is a reference to a secret holding the value for the metadata item. Name is the secret name, and key is the field in the secret.
 type SecretKeyRef struct {
-	Name string `json:"name"`
-	Key  string `json:"key"`
+	Name string `json:"name" validate:"required"`
+	Key  string `json:"key" validate:"required"`
 }
 
 // Auth represents authentication details for the component.
