@@ -79,8 +79,8 @@ func TestStartWorkflowAPI(t *testing.T) {
 			testName:          "Invalid instance ID provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
-			instanceID:        "invalid#12",
-			expectedError:     messages.ErrInvalidInstanceID.WithFormat("invalid#12"),
+			instanceID:        "invalid_12",
+			expectedError:     messages.ErrInvalidInstanceID.WithFormat("invalid_12"),
 		},
 		{
 			testName:          "Too long instance ID provided in start request",
