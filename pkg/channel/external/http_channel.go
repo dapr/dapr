@@ -37,7 +37,10 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	streamutils "github.com/dapr/dapr/utils/streams"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.external-app-channel")
 
 const (
 	// HTTPStatusCode is an dapr http channel status code.
@@ -90,6 +93,7 @@ func (h *HTTPEndpointAppChannel) InvokeMethod(ctx context.Context, req *invokev1
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
 		rsp, err = h.invokeMethodV1(ctx, req, appID)
+		log.Infof("external http endpoint response %v and err %v", rsp, err)
 
 	default:
 		// Reject unsupported version
@@ -191,7 +195,7 @@ func (h *HTTPEndpointAppChannel) constructRequest(ctx context.Context, req *invo
 
 	// check for overwritten baseURL set as appID.
 	// otherwise, get baseURL from http endpoint CRDs.
-	if strings.Contains(appID, "://") {
+	if strings.HasPrefix("https://", appID) || strings.HasPrefix("http://", appID) {
 		uri.WriteString(appID)
 	} else {
 		uri.WriteString(h.getBaseURL(appID))
