@@ -504,7 +504,7 @@ setup-app-configurations:
 	$(KUBECTL) apply -f ./tests/config/dapr_observability_test_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 setup-external-invocation-components: build-e2e-app-service_invocation_external push-e2e-app-service_invocation_external
-	$(HELM) install external-service-invocations ./tests/apps/service_invocation_external/service_invocation_external --set Image="${DAPR_REGISTRY}/e2e-service_invocation_external:${DAPR_TAG}" --namespace ${DAPR_TEST_NAMESPACE}
+	$(HELM) upgrade --install external-service-invocations ./tests/apps/service_invocation_external/service_invocation_external --set Image="${DAPR_REGISTRY}/e2e-service_invocation_external:${DAPR_TAG}" --namespace ${DAPR_TEST_NAMESPACE}
 	$(KUBECTL) apply -f ./tests/config/service_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 # Apply component yaml for state, secrets, pubsub, workflows, and bindings
