@@ -315,7 +315,7 @@ test-deps:
 	command -v gotestsum || go install gotest.tools/gotestsum@latest
 
 # start all e2e tests
-test-e2e-all: check-e2e-env test-deps
+test-e2e-all: check-e2e-env test-deps setup-external-invocation-components
 	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
 	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
