@@ -28,6 +28,10 @@ import (
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
+const (
+	jsonContentType = "application/json"
+)
+
 type httpTestMethods struct {
 	Verb       string
 	SendBody   bool
@@ -110,6 +114,7 @@ func appRouter() *mux.Router {
 	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
+	router.HandleFunc("/retrieve_request_object", retrieveRequestObject).Methods("POST")
 	// these are called through dapr service invocation
 	for _, test := range testMethods {
 		if test.SendBody {
@@ -121,6 +126,29 @@ func appRouter() *mux.Router {
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
+}
+
+func retrieveRequestObject(w http.ResponseWriter, r *http.Request) {
+	headers := map[string][]string{}
+	for k, vals := range r.Header {
+		headers[k] = vals
+		log.Printf("headers: %s %q", k, vals)
+	}
+
+	serializedHeaders, _ := json.Marshal(headers)
+
+	w.Header().Set("Content-Type", jsonContentType)
+	w.Header().Set("DaprTest-Response-1", "DaprTest-Response-Value-1")
+	w.Header().Set("DaprTest-Response-2", "DaprTest-Response-Value-2")
+	w.Header().Add("DaprTest-Response-Multi", "DaprTest-Response-Multi-1")
+	w.Header().Add("DaprTest-Response-Multi", "DaprTest-Response-Multi-2")
+
+	if val, ok := headers["Daprtest-Traceid"]; ok {
+		// val[0] is client app given trace id
+		w.Header().Set("traceparent", val[0])
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(serializedHeaders)
 }
 
 // indexHandler is the handler for root path

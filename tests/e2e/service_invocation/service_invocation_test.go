@@ -371,7 +371,6 @@ var grpcProxyTests = []struct {
 	},
 }
 
-
 func TestServiceInvocation(t *testing.T) {
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
@@ -561,7 +560,6 @@ func TestServiceInvocationExternally(t *testing.T) {
 	t.Run("serviceinvocation-callee-external", testFn("serviceinvocation-caller"))
 }
 
-
 func TestGRPCProxy(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
@@ -600,74 +598,25 @@ func TestHeadersExternal(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
-	hostname := "service=invocation-external"
+	hostname := "serviceinvocation-callee-external"
 	hostnameCRD := "service-invocation-external-via-crd"
-	hostIP := tr.Platform.AcquireAppExternalURL("serviceinvocation-callee-external")
-	expectedForwarded := fmt.Sprintf("for=%s;by=%s;host=%s", hostIP, hostIP, hostname)
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
-
 	t.Logf("externalURL is '%s'\n", externalURL)
 
-	t.Run("http-to-http-v1-using-external-invocation-crd", func(t *testing.T) {
-		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL)
-		verifyHTTPToHTTP(t, externalURL, targetApp, url, expectedForwarded, hostIP)
-	})
 	t.Run("http-to-http-v1-using-external-invocation-overwritten-url", func(t *testing.T) {
-		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL)
-		verifyHTTPToHTTP(t, externalURL, targetApp, url, expectedForwarded, hostnameCRD)
+		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest_external", externalURL)
+		verifyHTTPToHTTPExternal(t, externalURL, targetApp, url, hostname)
 	})
 
-	t.Run("http-to-http-dapr-app-id-using-external-invocation", func(t *testing.T) {
-		url := fmt.Sprintf("http://%s/tests/dapr_id_httptohttptest", externalURL)
-		verifyHTTPToHTTP(t, externalURL, targetApp, url, expectedForwarded, hostIP)
-	})
-	t.Run("http-to-http-dapr-app-id-using-external-invocation-crd", func(t *testing.T) {
-		url := fmt.Sprintf("http://%s/tests/dapr_id_httptohttptest", externalURL)
-		verifyHTTPToHTTP(t, externalURL, targetApp, url, expectedForwarded, hostnameCRD)
-	})
-
-	/* Tracing specific tests */
-	/*
-		// following is the span context of expectedTraceID
-		trace.SpanContext{
-		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-		TraceOptions: trace.TraceOptions(1),
-		}
-
-		string representation of span context : "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-
-		all the -bin headers are stored in Dapr as base64 encoded string.
-		for the above span context when passed in grpc-trace-bin header, Dapr retrieved binary header and stored as encoded string.
-		the encoded string for the above span context is:
-		"AABL+S81d7NNpqPOkp0ODkc2AQDwZ6oLqQK3AgE="
-	*/
-	expectedTraceID := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-	// expectedEncodedTraceID := "AABL+S81d7NNpqPOkp0ODkc2AQDwZ6oLqQK3AgE="
-
-	t.Run("http-to-http-tracing-v1--overwrite-url", func(t *testing.T) {
-		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL)
-		verifyHTTPToHTTPTracing(t, url, expectedTraceID, hostnameCRD)
-	})
-	t.Run("http-to-http-tracing-v1-external-http-endpoint", func(t *testing.T) {
-		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL)
-		verifyHTTPToHTTPTracing(t, url, expectedTraceID, hostIP)
-	})
-
-	t.Run("http-to-http-tracing-dapr-id-overwrite-url", func(t *testing.T) {
-		url := fmt.Sprintf("http://%s/tests/dapr_id_httptohttptest", externalURL)
-		verifyHTTPToHTTPTracing(t, url, expectedTraceID, hostIP)
-	})
-	t.Run("http-to-http-tracing-dapr-id-external-http-endpoint", func(t *testing.T) {
-		url := fmt.Sprintf("http://%s/tests/dapr_id_httptohttptest", externalURL)
-		verifyHTTPToHTTPTracing(t, url, expectedTraceID, hostnameCRD)
+	t.Run("http-to-http-v1-using-external-invocation-crd", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest_external", externalURL)
+		verifyHTTPToHTTPExternal(t, externalURL, targetApp, url, hostnameCRD)
 	})
 }
-
 
 func TestHeaders(t *testing.T) {
 	testFn := func(targetApp string) func(t *testing.T) {
@@ -1242,6 +1191,65 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 		assert.NotNil(t, responseHeaders["Traceparent"][0])
 }
 
+func verifyHTTPToHTTPExternal(t *testing.T, hostIP string, hostname string, url string, remoteApp string) {
+	invokeExternalServiceIP := tr.Platform.AcquireAppExternalURL("serviceinvocation-callee-external")
+
+	body, err := json.Marshal(testCommandRequestExternal{
+		testCommandRequest: testCommandRequest{
+			RemoteApp:        remoteApp,
+			Method:           "/retrieve_request_object",
+			RemoteAppTracing: "true",
+		},
+		ExternalIP: invokeExternalServiceIP,
+	})
+	require.NoError(t, err)
+
+	resp, err := utils.HTTPPost(url, body)
+	t.Log("checking err...")
+	require.NoError(t, err)
+
+	var appResp appResponse
+	t.Logf("unmarshalling..%s\n", string(resp))
+	err = json.Unmarshal(resp, &appResp)
+
+	actualHeaders := struct {
+		Request  string `json:"request"`
+		Response string `json:"response"`
+	}{}
+	err = json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+	require.NoError(t, err, "failed to unmarshal response: %s", appResp.Message)
+	requestHeaders := map[string][]string{}
+	responseHeaders := map[string][]string{}
+	json.Unmarshal([]byte(actualHeaders.Request), &requestHeaders)
+	json.Unmarshal([]byte(actualHeaders.Response), &responseHeaders)
+
+	t.Logf("requestHeaders: [%#v] - responseHeaders: [%#v]", requestHeaders, responseHeaders)
+
+	require.NoError(t, err)
+	_ = assert.NotEmpty(t, requestHeaders["Content-Type"]) &&
+		assert.True(t, strings.HasPrefix(requestHeaders["Content-Type"][0], "application/json"))
+	_ = assert.NotEmpty(t, requestHeaders["Daprtest-Request-1"]) &&
+		assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
+	_ = assert.NotEmpty(t, requestHeaders["Daprtest-Request-2"]) &&
+		assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
+	_ = assert.NotEmpty(t, requestHeaders["Daprtest-Multi"]) &&
+		assert.Equal(t, []string{"M'illumino", "d'immenso"}, requestHeaders["Daprtest-Multi"])
+	_ = assert.NotEmpty(t, requestHeaders["Traceparent"]) &&
+		assert.NotNil(t, requestHeaders["Traceparent"][0])
+	_ = assert.NotEmpty(t, requestHeaders["User-Agent"]) &&
+		assert.NotNil(t, requestHeaders["User-Agent"][0])
+	_ = assert.NotEmpty(t, responseHeaders["Content-Type"]) &&
+		assert.True(t, strings.HasPrefix(responseHeaders["Content-Type"][0], "application/json"))
+	_ = assert.NotEmpty(t, responseHeaders["Daprtest-Response-1"]) &&
+		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
+	_ = assert.NotEmpty(t, responseHeaders["Daprtest-Response-2"]) &&
+		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
+	_ = assert.NotEmpty(t, responseHeaders["Daprtest-Response-Multi"]) &&
+		assert.Equal(t, []string{"DaprTest-Response-Multi-1", "DaprTest-Response-Multi-2"}, responseHeaders["Daprtest-Response-Multi"])
+	_ = assert.NotEmpty(t, responseHeaders["Traceparent"]) &&
+		assert.NotNil(t, responseHeaders["Traceparent"][0])
+}
+
 func TestUppercaseMiddlewareServiceInvocation(t *testing.T) {
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
@@ -1280,10 +1288,6 @@ func TestUppercaseMiddlewareServiceInvocation(t *testing.T) {
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
-}
-
-func TestUppercaseMiddlewareServiceInvocationExternal(t *testing.T) {
-	// TODO(@Sam)
 }
 
 func TestNegativeCases(t *testing.T) {
@@ -1531,7 +1535,7 @@ func TestNegativeCases(t *testing.T) {
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
-}*/
+}
 
 func TestNegativeCasesExternal(t *testing.T) {
 	// TODO(@Sam)
@@ -1582,4 +1586,3 @@ func TestCrossNamespaceCases(t *testing.T) {
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
 }
-

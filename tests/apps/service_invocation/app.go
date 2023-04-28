@@ -400,8 +400,7 @@ func appRouter() *mux.Router {
 
 	// service invocation to external HTTPEndpoint resources + through overwriting the URL
 	router.HandleFunc("/httptohttptest_external", httpTohttpTestExternal).Methods("POST")
-	router.HandleFunc("/tests/dapr_id_httptohttptest", testDaprIDRequestHTTPToHTTP).Methods("POST")
-	router.HandleFunc("/tests/v1_httptohttptest", testV1RequestHTTPToHTTP).Methods("POST")
+	router.HandleFunc("/tests/v1_httptohttptest_external", testV1RequestHTTPToHTTPExternal).Methods("POST") // headers
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
@@ -500,6 +499,83 @@ func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteA
 	logAndSetResponse(w, http.StatusOK, string(respBody))
 }
 
+func requestHTTPToHTTPExternal(w http.ResponseWriter, r *http.Request, send func(remoteApp, method string, data []byte, headers http.Header) (*http.Response, error)) {
+	var commandBody testCommandRequestExternal
+	err := json.NewDecoder(r.Body).Decode(&commandBody)
+	if err != nil {
+		onBadRequest(w, err)
+		return
+	}
+
+	log.Printf("httpTohttpTestExternal - target app: %s\n", commandBody.RemoteApp)
+
+	daprAddress := fmt.Sprintf("localhost:%d", daprHTTPPort)
+
+	log.Printf("dapr address is %s\n", daprAddress)
+	testMessage := guuid.New().String()
+	b, err := json.Marshal(testMessage)
+	if err != nil {
+		log.Printf("marshal had error %s\n", err)
+		onSerializationFailed(w, err)
+		return
+	}
+
+	log.Printf("httpTohttpTest calling with message %s\n", string(b))
+	headers := map[string][]string{
+		"DaprTest-Request-1": {"DaprValue1"},
+		"DaprTest-Request-2": {"DaprValue2"},
+		"DaprTest-Multi":     {"M'illumino", "d'immenso"},
+	}
+
+	tracing, _ := strconv.ParseBool(commandBody.RemoteAppTracing)
+	if tracing {
+		headers["Daprtest-Traceid"] = []string{"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+	}
+
+	// case of overwritten URL
+	var remoteApp string
+	if commandBody.ExternalIP == "" {
+		remoteApp = commandBody.RemoteApp
+	} else {
+		remoteApp = sanitizeHTTPURL(commandBody.ExternalIP)
+	}
+
+	resp, err := send(remoteApp, "retrieve_request_object", b, headers)
+	if err != nil {
+		log.Printf("response had error %s\n", err)
+		onHTTPCallFailed(w, 0, err)
+		return
+	}
+
+	respHeaders := map[string][]string{}
+	for k, vals := range resp.Header {
+		respHeaders[k] = vals
+	}
+	respHeaderString, _ := json.Marshal(respHeaders)
+
+	reqHeadersString, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		onBadRequest(w, err)
+		return
+	}
+
+	respMessage := map[string]string{
+		"request":  string(reqHeadersString),
+		"response": string(respHeaderString),
+	}
+
+	respBody, err := json.Marshal(respMessage)
+	if err != nil {
+		onBadRequest(w, err)
+		return
+	}
+
+	log.Printf("response was %s\n", respBody)
+
+	logAndSetResponse(w, http.StatusOK, string(respBody))
+}
+
 // testDaprIDRequestHTTPToHTTP calls from http caller to http callee without requiring the caller to use Dapr style URL.
 func testDaprIDRequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Println("Enter service invocation with dapr-app-id header and shorter URL - http -> http")
@@ -510,6 +586,12 @@ func testDaprIDRequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
 func testV1RequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Println("Enter service invocation v1 - http -> http")
 	requestHTTPToHTTP(w, r, invokeServiceWithBodyHeader)
+}
+
+// testV1RequestHTTPToHTTPExternal calls from http caller to http callee
+func testV1RequestHTTPToHTTPExternal(w http.ResponseWriter, r *http.Request) {
+	log.Println("Enter service invocation external v1 - http -> http")
+	requestHTTPToHTTPExternal(w, r, invokeServiceWithBodyHeader)
 }
 
 // testV1RequestHTTPToGRPC calls from http caller to grpc callee
