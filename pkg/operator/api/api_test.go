@@ -635,7 +635,6 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, jsonEnc, e.Spec.Headers[0].Value.Raw)
 	})
-
 }
 
 func Test_Ready(t *testing.T) {
