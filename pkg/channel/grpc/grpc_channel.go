@@ -27,7 +27,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/apphealth"
-	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -50,12 +49,12 @@ type Channel struct {
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string) *Channel {
 	// readBufferSize is unused
 	c := &Channel{
 		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
 		conn:                 conn,
-		baseAddress:          net.JoinHostPort(channel.DefaultChannelAddress, strconv.Itoa(port)),
+		baseAddress:          net.JoinHostPort(baseAddress, strconv.Itoa(port)),
 		tracingSpec:          spec,
 		appMetadataToken:     auth.GetAppToken(),
 		maxRequestBodySizeMB: maxRequestBodySize,

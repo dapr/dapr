@@ -30,63 +30,21 @@ on:
       - release-*
       - feature/*
 jobs:
-  build:
-    name: "Build and test on ${{ matrix.job_name }}"
-    runs-on: "${{ matrix.os }}"
+  lint:
+    name: lint & proto validation
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target_os: ["linux"]
+        target_arch: ["amd64"]
     env:
       GOLANGCILINT_VER: "v1.51.2"
       PROTOC_VERSION: "21.12"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
-      ARCHIVE_OUTDIR: "dist/archives"
-      TEST_OUTPUT_FILE_PREFIX: "test_report"
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target_os: linux
-            target_arch: amd64
-            job_name: "Linux/amd64"
-          - os: ubuntu-latest
-            target_os: linux
-            target_arch: arm64
-            job_name: "Linux/arm64"
-          - os: ubuntu-latest
-            target_os: linux
-            target_arch: arm
-            job_name: "Linux/arm"
-          - os: windows-2019
-            target_os: windows
-            target_arch: amd64
-            windows_version: "1809"
-            job_name: "Windows 1809"
-          - os: windows-2022
-            target_os: windows
-            target_arch: amd64
-            windows_version: ltsc2022
-            job_name: "Windows LTSC 2022"
-          - os: macOS-latest
-            target_os: darwin
-            target_arch: amd64
-            job_name: "macOS/Intel"
-          - os: macOS-latest
-            target_os: darwin
-            target_arch: arm64
-            job_name: "macOS/Apple Silicon"
     steps:
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
-        with:
-          image: tonistiigi/binfmt:latest
-          platforms: arm64
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
-        with:
-          version: v0.10.1 # Don't use latest since it broke our workflow once
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
       - name: Set up Go
@@ -94,17 +52,8 @@ jobs:
         uses: actions/setup-go@v3
         with:
           go-version-file: "go.mod"
-      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
-        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
-      - name: Set REPO_OWNER
-        if: matrix.target_os != 'darwin'
-        run: |
-          REPO_OWNER=${{ github.repository_owner }}
-          # Lowercase the value
-          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
-        shell: bash
       - name: Check white space in .md files
-        if: matrix.target_os == 'linux' && github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request'
         run: |
           TRAILING_WHITESPACE=0
           # only check changed docs in pr
@@ -122,6 +71,68 @@ jobs:
             echo >&2
             exit 1
           fi
+      - name: Cache Go modules (Linux)
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Check for disallowed changes in go.mod
+        run: node ./.github/scripts/check_go_mod.mjs
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3.2.0
+        with:
+          version: ${{ env.GOLANGCILINT_VER }}
+          skip-cache: true
+          args: --build-tags all_components
+      - name: Run go mod tidy check diff
+        run: make modtidy check-diff
+      - name: Run gen-proto check diff
+        run: |
+          wget https://github.com/protocolbuffers/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
+          unzip protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip -d protoc
+          sudo cp -r protoc/include/google/ /usr/local/include/
+          sudo chmod -R 755 /usr/local/include/google
+          sudo cp protoc/bin/protoc /usr/local/bin/
+          sudo chmod +x /usr/local/bin/protoc
+          rm -r protoc protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
+          make init-proto
+          make gen-proto check-proto-diff
+  unit-tests:
+    name: Unit tests
+    needs: lint
+    runs-on: "${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: amd64
+    env:
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+      ARCHIVE_OUTDIR: "dist/archives"
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
       - name: Cache Go modules (Linux)
         if: matrix.target_os == 'linux'
         uses: actions/cache@v3
@@ -152,54 +163,176 @@ jobs:
           key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
-      - name: Check for disallowed changes in go.mod
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        run: node ./.github/scripts/check_go_mod.mjs
-      - name: golangci-lint
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        uses: golangci/golangci-lint-action@v3.2.0
-        with:
-          version: ${{ env.GOLANGCILINT_VER }}
-          skip-cache: true
-      - name: Run go mod tidy check diff
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        run: make modtidy check-diff
-      - name: Run gen-proto check diff
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        run: |
-          wget https://github.com/protocolbuffers/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
-          unzip protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip -d protoc
-          sudo cp -r protoc/include/google/ /usr/local/include/
-          sudo chmod -R 755 /usr/local/include/google
-          sudo cp protoc/bin/protoc /usr/local/bin/
-          sudo chmod +x /usr/local/bin/protoc
-          rm -r protoc protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
-          make init-proto
-          make gen-proto check-proto-diff
       - name: Run make test
-        if: matrix.target_arch == 'amd64'
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
         run: make test
       - name: Codecov
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         uses: codecov/codecov-action@v1
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
+  build:
+    name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
+    runs-on: "${{ matrix.os }}"
+    needs: unit-tests
+    env:
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+      ARCHIVE_OUTDIR: "dist/archives"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            job_name: "Linux/amd64"
+            sidecar_flavor: "all"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            job_name: "Linux/amd64"
+            sidecar_flavor: "stable"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+            job_name: "Linux/arm64"
+            sidecar_flavor: "all"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+            job_name: "Linux/arm64"
+            sidecar_flavor: "stable"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm
+            job_name: "Linux/arm"
+            sidecar_flavor: "all"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm
+            job_name: "Linux/arm"
+            sidecar_flavor: "stable"
+          - os: windows-2019
+            target_os: windows
+            target_arch: amd64
+            windows_version: "1809"
+            job_name: "Windows 1809"
+            sidecar_flavor: "all"
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+            job_name: "Windows LTSC 2022"
+            sidecar_flavor: "all"
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: amd64
+            job_name: "macOS/Intel"
+            sidecar_flavor: "all"
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: arm64
+            job_name: "macOS/Apple Silicon"
+            sidecar_flavor: "all"
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        with:
+          image: tonistiigi/binfmt:latest
+          platforms: arm64
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        with:
+          version: v0.10.1 # Don't use latest since it broke our workflow once
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Updates version for sidecar flavor
+        if: matrix.sidecar_flavor != 'all'
+        run: |
+          echo "REL_VERSION=${REL_VERSION}-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
+          # Only sidecar is built
+          echo "BINARIES=daprd" >>${GITHUB_ENV}
+        shell: bash
+      - name: Set REPO_OWNER
+        if: matrix.target_os != 'darwin'
+        run: |
+          REPO_OWNER=${{ github.repository_owner }}
+          # Lowercase the value
+          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+        shell: bash
+      - name: Cache Go modules (Linux)
+        if: matrix.target_os == 'linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (Windows)
+        if: matrix.target_os == 'windows'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (macOS)
+        if: matrix.target_os == 'darwin'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Run make release to build and archive binaries
         env:
           GOOS: ${{ matrix.target_os }}
           GOARCH: ${{ matrix.target_arch }}
           ARCHIVE_OUT_DIR: ${{ env.ARCHIVE_OUTDIR }}
+        if: matrix.sidecar_flavor == 'all'
         run: |
           mkdir -p "${ARCHIVE_OUT_DIR}"
           make release
         shell: bash
+      - name: Run make release to build and archive binaries for flavor
+        env:
+          GOOS: ${{ matrix.target_os }}
+          GOARCH: ${{ matrix.target_arch }}
+          ARCHIVE_OUT_DIR: ${{ env.ARCHIVE_OUTDIR }}
+          DAPR_SIDECAR_FLAVOR: "${{ matrix.sidecar_flavor }}"
+        if: matrix.sidecar_flavor != 'all'
+        run: |
+          mkdir -p "${ARCHIVE_OUT_DIR}"
+          make release-flavor
+        shell: bash
       - name: upload artifacts
         uses: actions/upload-artifact@master
         with:
-          name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}
+          name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ matrix.sidecar_flavor }}
           path: ${{ env.ARCHIVE_OUTDIR }}
       - name: upload artifacts - grafana dashboards
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && matrix.sidecar_flavor == 'all'
         uses: actions/upload-artifact@master
         with:
           name: dapr_grafana_dashboards
@@ -252,15 +385,218 @@ jobs:
             DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
           fi
         shell: bash
-      - name: Upload test results
-        if: always() && matrix.target_arch == 'amd64'
-        uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
-          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
   publish:
-    name: Publish docker image and binaries
+    name: Publish binaries
     needs: build
+    if: github.event_name != 'pull_request'
+    env:
+      ARTIFACT_DIR: ./release
+      DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Set REPO_OWNER
+        if: matrix.target_os != 'darwin'
+        shell: bash
+        run: |
+          REPO_OWNER=${{ github.repository_owner }}
+          # Lowercase the value
+          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+      - name: "download artifact: dapr_linux_amd64_all"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_amd64_all
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_amd64_stable"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_amd64_stable
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm_all"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm_all
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm_stable"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm_stable
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm64_all"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm64_all
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm64_stable"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm64_stable
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_windows_amd64_all"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_windows_amd64_all
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_darwin_amd64_all"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_darwin_amd64_all
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_darwin_arm64_all"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_darwin_arm64_all
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_grafana_dashboards"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_grafana_dashboards
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: generate checksum files
+        run: cd ${ARTIFACT_DIR} && for i in *; do sha256sum -b $i > "$i.sha256"; done && cd -
+      - name: lists artifacts
+        run: ls -l ${{ env.ARTIFACT_DIR }}
+      - name: publish binaries to github
+        if: startswith(github.ref, 'refs/tags/v')
+        run: |
+          echo "installing github-release-cli..."
+          sudo npm install --silent --no-progress -g github-release-cli@2.1.0
+          if [ "$LATEST_RELEASE" = "true" ]; then
+            export RELEASE_BODY=`cat ./docs/release_notes/v${REL_VERSION}.md`
+          else
+            export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
+          fi
+          # Get the list of files
+          RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
+          # Parse repository to get owner and repo names
+          OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          export GITHUB_TOKEN=${{ secrets.DAPR_BOT_TOKEN }}
+          echo "Uploading Dapr Runtime Binaries to GitHub Release"
+          github-release upload \
+            --owner $OWNER_NAME \
+            --repo $REPO_NAME \
+            --tag "v${REL_VERSION}" \
+            --release-name "Dapr Runtime v${REL_VERSION}" \
+            --body "${RELEASE_BODY}" \
+            --prerelease true \
+            ${RELEASE_ARTIFACT[*]}
+        shell: bash
+  docker-publish:
+    name: Publish docker images
+    needs: build
+    if: github.event_name != 'pull_request'
+    env:
+      DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sidecar_flavor: ["all", "stable"]
+        target_os: ["linux", "windows"]
+        exclude:
+          - sidecar_flavor: "stable"
+            target_os: "windows"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Updates version for sidecar flavor
+        if: matrix.sidecar_flavor != 'all'
+        run: |
+          echo "REL_VERSION=${REL_VERSION}-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
+          echo "LATEST_TAG=latest-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
+          # We are doing image flavors only for Linux.
+          echo "DOCKER_MULTI_ARCH=linux-amd64 linux-arm64 linux-arm" >>${GITHUB_ENV}
+          # Only sidecar is built
+          echo "BINARIES=daprd" >>${GITHUB_ENV}
+        shell: bash
+      - name: Set REPO_OWNER
+        if: matrix.target_os != 'darwin'
+        shell: bash
+        run: |
+          REPO_OWNER=${{ github.repository_owner }}
+          # Lowercase the value
+          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+      - name: Docker Hub Login
+        uses: docker/login-action@v2
+        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
+        with:
+          username: ${{ secrets.DOCKER_REGISTRY_ID }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: GitHub Container Registry login
+        uses: docker/login-action@v2
+        if: matrix.target_os != 'darwin'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Docker multiarch manifest to Docker Hub
+        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != ''
+        env:
+          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+        run: |
+          echo "Build Docker multiarch manifest and push to Docker"
+          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
+
+          # Publish the `-mariner` tag
+          # Mariner images are built only on linux/amd64 and linux/arm64
+          # Also, these use the "latest-mariner" tag if it's the latest
+          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
+          LATEST_TAG=${{ env.LATEST_TAG }}-mariner \
+            make docker-publish
+        shell: bash
+      - name: Build and push Docker multiarch Windows manifest to Docker Hub
+        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != '' && matrix.sidecar_flavor == 'all'
+        env:
+          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
+          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+        run: |
+          # Publish the `-windows-amd64` manifest.
+          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
+          LATEST_TAG=latest-windows-amd64 \
+          MANIFEST_TAG="${{ env.REL_VERSION }}" \
+          MANIFEST_LATEST_TAG="${{ env.LATEST_TAG }}" \
+            make docker-publish
+        shell: bash
+      - name: Build and push Docker multiarch manifest to GHCR
+        if: matrix.target_os != 'darwin'
+        env:
+          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
+        run: |
+          echo "Build Docker multiarch manifest and push to GHCR"
+          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
+
+          # Publish the `-mariner` tag
+          # Mariner images are built only on linux/amd64 and linux/arm64
+          # Also, these use the "latest-mariner" tag if it's the latest
+          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
+          LATEST_TAG=${{ env.LATEST_TAG }}-mariner \
+            make docker-publish
+      - name: Build and push Docker multiarch Windows manifest to GHCR
+        if: matrix.target_os != 'darwin' && matrix.sidecar_flavor == 'all'
+        env:
+          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
+        run: |
+          # Publish the `-windows-amd64` manifest.
+          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
+          LATEST_TAG=latest-windows-amd64 \
+          MANIFEST_TAG="${{ env.REL_VERSION }}" \
+          MANIFEST_LATEST_TAG="${{ env.LATEST_TAG }}" \
+            make docker-publish
+        shell: bash
+  helm:
+    name: Package Helm Chart
+    needs: [publish, docker-publish]
     if: github.event_name != 'pull_request'
     env:
       ARTIFACT_DIR: ./release
@@ -300,145 +636,6 @@ jobs:
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}
           mv ./dist/install/dapr.yaml ${{ env.ARTIFACT_DIR }}/dapr-operator.yaml
-      - name: "download artifact: dapr_linux_amd64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_linux_amd64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_linux_arm
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_linux_arm64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_windows_amd64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_windows_amd64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_darwin_amd64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_darwin_amd64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_darwin_arm64"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_darwin_arm64
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_grafana_dashboards"
-        uses: actions/download-artifact@master
-        with:
-          name: dapr_grafana_dashboards
-          path: ${{ env.ARTIFACT_DIR }}
-      - name: tar release binaries
-        run: |
-          IMAGE_ARCHS=(amd64 arm arm64)
-          for img_arch in "${IMAGE_ARCHS[@]}"; do
-            echo "Preparing linux_${img_arch} image..."
-            RELEASE_DIR=dist/linux_${img_arch}/release/
-            mkdir -p $RELEASE_DIR
-            for tgzfile in $ARTIFACT_DIR/*linux_${img_arch}.tar.gz; do
-              echo "Extracting $tgzfile ..."
-              tar xzvf $tgzfile -C $RELEASE_DIR
-            done
-          done
-      - name: generate checksum files
-        run: cd ${ARTIFACT_DIR} && for i in *; do sha256sum -b $i > "$i.sha256"; done && cd -
-      - name: lists artifacts
-        run: ls -l ${{ env.ARTIFACT_DIR }}
-      - name: publish binaries to github
-        if: startswith(github.ref, 'refs/tags/v')
-        run: |
-          echo "installing github-release-cli..."
-          sudo npm install --silent --no-progress -g github-release-cli@2.1.0
-          if [ "$LATEST_RELEASE" = "true" ]; then
-            export RELEASE_BODY=`cat ./docs/release_notes/v${REL_VERSION}.md`
-          else
-            export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
-          fi
-          # Get the list of files
-          RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
-          # Parse repository to get owner and repo names
-          OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
-          REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          export GITHUB_TOKEN=${{ secrets.DAPR_BOT_TOKEN }}
-          echo "Uploading Dapr Runtime Binaries to GitHub Release"
-          github-release upload \
-            --owner $OWNER_NAME \
-            --repo $REPO_NAME \
-            --tag "v${REL_VERSION}" \
-            --release-name "Dapr Runtime v${REL_VERSION}" \
-            --body "${RELEASE_BODY}" \
-            --prerelease true \
-            ${RELEASE_ARTIFACT[*]}
-        shell: bash
-      - name: Docker Hub Login
-        uses: docker/login-action@v2
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
-        with:
-          username: ${{ secrets.DOCKER_REGISTRY_ID }}
-          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: GitHub Container Registry login
-        uses: docker/login-action@v2
-        if: matrix.target_os != 'darwin'
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push Docker multiarch manifest to Docker Hub
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != ''
-        env:
-          DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
-          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-        run: |
-          echo "Build Docker multiarch manifest and push to GHCR"
-          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
-
-          # Publish the `-mariner` tag
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          # Also, these use the "latest-mariner" tag if it's the latest
-          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
-          LATEST_TAG=latest-mariner \
-            make docker-publish
-
-          # Publish the `-windows-amd64` manifest.
-          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
-          LATEST_TAG=latest-windows-amd64 \
-          MANIFEST_TAG="${{ env.REL_VERSION }}" \
-          MANIFEST_LATEST_TAG="latest" \
-            make docker-publish
-        shell: bash
-      - name: Build and push Docker multiarch manifest to GHCR
-        if: matrix.target_os != 'darwin'
-        env:
-          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
-        run: |
-          echo "Build Docker multiarch manifest and push to GHCR"
-          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
-
-          # Publish the `-mariner` tag
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          # Also, these use the "latest-mariner" tag if it's the latest
-          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
-          LATEST_TAG=latest-mariner \
-            make docker-publish
-
-          # Publish the `-windows-amd64` manifest.
-          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
-          LATEST_TAG=latest-windows-amd64 \
-          MANIFEST_TAG="${{ env.REL_VERSION }}" \
-          MANIFEST_LATEST_TAG="latest" \
-            make docker-publish
-        shell: bash
       - name: Save release version
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
@@ -462,7 +659,7 @@ jobs:
   # This does not run on forks
   helmpublish:
     name: Publish helm charts to Helm github pages repo
-    needs: publish
+    needs: helm
     if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
     env:
       ARTIFACT_DIR: ./release
