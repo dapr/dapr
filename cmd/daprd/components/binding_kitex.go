@@ -1,5 +1,5 @@
-//go:build !(linux && arm)
-// +build !linux !arm
+//go:build !(linux && arm) || all_components
+// +build !linux !arm all_components
 
 /*
 Copyright 2023 The Dapr Authors
