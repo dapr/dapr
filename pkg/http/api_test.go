@@ -3942,6 +3942,53 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// assert
 		assert.Nil(t, resp.ErrorBody)
 	})
+
+	/////////////////////
+	// PURGE API TESTS //
+	/////////////////////
+	t.Run("Purge with no workflow component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows//instanceID/purge"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
+	})
+
+	t.Run("Purge with non existent component", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/purge"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
+	})
+
+	t.Run("Purge with no instance ID", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr//purge"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
+	})
+	t.Run("Purge with valid API path", func(t *testing.T) {
+		// Note that this test passes even though there is no workflow implemented.
+		// This is due to the fact that the 'fakecomponent' has the 'purge' method implemented to simply return nil
+
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/purge"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
 }
 
 func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
