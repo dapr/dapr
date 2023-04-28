@@ -241,6 +241,21 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 	}
 }
 
+// PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
+func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
+	req := invokev1.
+		NewInvokeMethodRequest(PurgeWorkflowStateMethod).
+		WithActor(be.config.workflowActorType, string(id))
+	defer req.Close()
+
+	resp, err := be.actors.Call(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Close()
+	return nil
+}
+
 // Start implements backend.Backend
 func (be *actorBackend) Start(ctx context.Context) error {
 	var err error

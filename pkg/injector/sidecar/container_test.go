@@ -172,6 +172,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -246,6 +247,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -320,6 +322,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -392,6 +395,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -465,6 +469,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -520,6 +525,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--enable-mtls",
 		}
 
@@ -563,6 +569,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--enable-mtls",
 		}
 
@@ -606,6 +613,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "5",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--enable-mtls",
 		}
 
@@ -693,6 +701,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=true",
+			"--app-channel-address", "",
 			"--enable-mtls",
 		}
 
@@ -739,6 +748,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--app-channel-address", "",
 				"--enable-mtls",
 			}
 
@@ -773,6 +783,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--app-channel-address", "",
 				"--enable-api-logging=true",
 				"--enable-mtls",
 			}
@@ -808,6 +819,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--app-channel-address", "",
 				"--enable-api-logging=false",
 				"--enable-mtls",
 			}

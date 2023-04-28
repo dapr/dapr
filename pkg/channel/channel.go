@@ -23,8 +23,6 @@ import (
 )
 
 const (
-	// DefaultChannelAddress is the address that user application listen to.
-	DefaultChannelAddress = "127.0.0.1"
 	// AppChannelMinTLSVersion is the minimum TLS version that the app channel will use.
 	AppChannelMinTLSVersion = tls.VersionTLS12
 )
