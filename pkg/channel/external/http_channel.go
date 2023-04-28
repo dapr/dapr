@@ -106,6 +106,7 @@ func (h *HTTPEndpointAppChannel) InvokeMethod(ctx context.Context, req *invokev1
 // invokeMethodV1 constructs the http endpoint request and performs the request while collecting metrics.
 func (h *HTTPEndpointAppChannel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	channelReq, err := h.constructRequest(ctx, req, appID)
+	log.Infof("channelReq %v and err %v", channelReq, err)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +196,7 @@ func (h *HTTPEndpointAppChannel) constructRequest(ctx context.Context, req *invo
 
 	// check for overwritten baseURL set as appID.
 	// otherwise, get baseURL from http endpoint CRDs.
-	if strings.HasPrefix("https://", appID) || strings.HasPrefix("http://", appID) {
+	if strings.HasPrefix(appID, "https://") || strings.HasPrefix(appID, "http://") {
 		uri.WriteString(appID)
 	} else {
 		uri.WriteString(h.getBaseURL(appID))
