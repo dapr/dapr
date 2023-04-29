@@ -26,7 +26,6 @@ service_invocation_external \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
 service_invocation_grpc_proxy_server \
-service_invocation_external \
 binding_input \
 binding_input_grpc \
 binding_output \
@@ -505,7 +504,6 @@ setup-app-configurations:
 	$(KUBECTL) apply -f ./tests/config/dapr_observability_test_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 setup-external-invocation-components: build-e2e-app-service_invocation_external push-e2e-app-service_invocation_external
-	$(HELM) upgrade --install external-service-invocations ./tests/apps/service_invocation_external/service_invocation_external --set Image="${DAPR_REGISTRY}/e2e-service_invocation_external:${DAPR_TAG}" --namespace ${DAPR_TEST_NAMESPACE}
 	$(KUBECTL) apply -f ./tests/config/service_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 # Apply component yaml for state, secrets, pubsub, workflows, and bindings
@@ -553,6 +551,7 @@ setup-test-components: setup-app-configurations setup-external-invocation-compon
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/service_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/grpcproxyserverexternal_service.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

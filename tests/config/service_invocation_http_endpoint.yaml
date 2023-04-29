@@ -3,7 +3,7 @@ kind: HTTPEndpoint
 metadata:
   name: "external-http-endpoint"
 spec:
-  baseUrl: http://service-invocation-external-via-crd.dapr-tests.svc.cluster.local:80
+  baseUrl: http://service-invocation-external-via-crd:80
   headers:
   - name: "Accept-Language"
     value: "en-US"
