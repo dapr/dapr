@@ -9,7 +9,7 @@ metadata:
     testapp: service-invocation-external
 spec:
   selector:
-    testapp: service-invocation-external
+    testapp: serviceinvocation-callee-external
   ports:
   - protocol: TCP
     port: 80
