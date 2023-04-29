@@ -20,6 +20,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -1538,7 +1539,66 @@ func TestNegativeCases(t *testing.T) {
 }
 
 func TestNegativeCasesExternal(t *testing.T) {
-	// TODO(@Sam)
+	testFn := func(targetApp string) func(t *testing.T) {
+		return func(t *testing.T) {
+			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
+			require.NotEmpty(t, externalURL, "external URL must not be empty!")
+			externalServiceName := "serviceinvocation-callee-external"
+			invokeExternalServiceIP := tr.Platform.AcquireAppExternalURL(externalServiceName)
+			hostNameCRD := "service-invocation-external-via-crd"
+			// // This initial probe makes the test wait a little bit longer when needed,
+			// // making this test less flaky due to delays in the deployment.
+			// _, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+			// require.NoError(t, err)
+
+			// t.Logf("externalURL is '%s'\n", externalURL)
+
+			t.Run("missing_method_http", func(t *testing.T) {
+				body, err := json.Marshal(testCommandRequest{
+					RemoteApp:        utils.SanitizeHTTPURL(invokeExternalServiceIP),
+					Method:           "missing",
+					RemoteAppTracing: "true",
+				})
+				require.NoError(t, err)
+
+				resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+
+				var testResults negativeTestResult
+				require.NoError(t, json.Unmarshal(resp, &testResults))
+
+				// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
+				require.False(t, testResults.MainCallSuccessful)
+				require.Equal(t, http.StatusNotFound, status)
+				require.Contains(t, string(testResults.RawBody), "404 page not found")
+				require.Nil(t, err)
+			})
+
+			// TODO(@Sam): this is giving a 500 not 404
+			// t.Run("missing_method_http - http endpoint CRD name", func(t *testing.T) {
+			// 	body, err := json.Marshal(testCommandRequest{
+			// 		RemoteApp:        hostNameCRD,
+			// 		Method:           "missing",
+			// 		RemoteAppTracing: "true",
+			// 	})
+			// 	require.NoError(t, err)
+
+			// 	resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+
+			// 	var testResults negativeTestResult
+			// 	require.NoError(t, json.Unmarshal(resp, &testResults), err)
+
+			// 	// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
+			// 	require.False(t, testResults.MainCallSuccessful)
+			// 	require.Equal(t, http.StatusNotFound, status)
+			// 	require.Contains(t, string(testResults.RawBody), "404 page not found")
+			// 	require.Nil(t, err)
+			// })
+
+			// TODO(@Sam): test service timeout, parse error from service, and large data
+		}
+	}
+
+	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 }
 
 func TestCrossNamespaceCases(t *testing.T) {

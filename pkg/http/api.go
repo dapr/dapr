@@ -1360,21 +1360,22 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	var req *invokev1.InvokeMethodRequest
 	var policyDef *resiliency.PolicyDefinition
+	var invokeMethodName string
 	switch {
 	// overwritten URL, so targetID = baseURL
 	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
 		baseURL := targetID
-		invokeMethodName := reqCtx.UserValue(methodParam).(string)
+		invokeMethodNameWithPrefix := reqCtx.UserValue(methodParam).(string)
 		prefix := "v1.0/invoke/" + baseURL + "/" + methodParam
-		if len(invokeMethodName) <= len(prefix) {
-			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
-			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		if len(invokeMethodNameWithPrefix) <= len(prefix) {
+			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
+			respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
 			cancel()
 			return
 		}
-		invokeActualMethodName := invokeMethodName[len(prefix):]
-		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+"/"+invokeActualMethodName)
-		req = invokev1.NewInvokeMethodRequest(invokeActualMethodName).
+		invokeMethodName = invokeMethodNameWithPrefix[len(prefix):]
+		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+"/"+invokeMethodNameWithPrefix)
+		req = invokev1.NewInvokeMethodRequest(invokeMethodName).
 			WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
 			WithRawDataBytes(reqCtx.Request.Body()).
 			WithContentType(string(reqCtx.Request.Header.ContentType())).
@@ -1388,8 +1389,13 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	case a.isHTTPEndpoint(targetID):
 		baseURL := a.getBaseURL(targetID)
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+baseURL)
-		invokeMethodName := reqCtx.UserValue(methodParam).(string)
-
+		invokeMethodName = reqCtx.UserValue(methodParam).(string)
+		if invokeMethodName == "" {
+			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
+			respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
+			cancel()
+			return
+		}
 		req = invokev1.NewInvokeMethodRequest(invokeMethodName).
 			WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
 			WithRawDataBytes(reqCtx.Request.Body()).
@@ -1403,7 +1409,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		defer req.Close()
 	// regular service to service invocation
 	default:
-		invokeMethodName := reqCtx.UserValue(methodParam).(string)
+		invokeMethodName = reqCtx.UserValue(methodParam).(string)
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
 
 		req = invokev1.NewInvokeMethodRequest(invokeMethodName).

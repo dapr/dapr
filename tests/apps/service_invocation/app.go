@@ -1244,7 +1244,7 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 	testResponse.MainCallSuccessful = err == nil && resp.StatusCode == 200
 
 	if resp != nil && resp.Body != nil {
-		fmt.Printf("badServiceCallTestHTTP - Response Code: %d", resp.StatusCode)
+		fmt.Printf("badServiceCallTestHTTP - Response Code: %d\n", resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
 		rawBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -1254,7 +1254,6 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		testResponse.RawError = err.Error()
-
 		if resp == nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
