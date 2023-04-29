@@ -22,6 +22,7 @@ hellodapr \
 stateapp \
 secretapp \
 service_invocation \
+service_invocation_external \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
 service_invocation_grpc_proxy_server \
