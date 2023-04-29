@@ -1573,28 +1573,28 @@ func TestNegativeCasesExternal(t *testing.T) {
 				require.Nil(t, err)
 			})
 
-TODO(@Sam): this is giving a 500 not 404
-t.Run("missing_method_http - http endpoint CRD name", func(t *testing.T) {
-	body, err := json.Marshal(testCommandRequest{
-		RemoteApp:        hostNameCRD,
-		Method:           "missing",
-		RemoteAppTracing: "true",
-	})
-	require.NoError(t, err)
+			/*TODO(@Sam): this is giving a 500 not 404
+			  t.Run("missing_method_http - http endpoint CRD name", func(t *testing.T) {
+			  	body, err := json.Marshal(testCommandRequest{
+			  		RemoteApp:        hostNameCRD,
+			  		Method:           "missing",
+			  		RemoteAppTracing: "true",
+			  	})
+			  	require.NoError(t, err)
 
-	resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+			  	resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
 
-	var testResults negativeTestResult
-	require.NoError(t, json.Unmarshal(resp, &testResults), err)
+			  	var testResults negativeTestResult
+			  	require.NoError(t, json.Unmarshal(resp, &testResults), err)
 
-	// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
-	require.False(t, testResults.MainCallSuccessful)
-	require.Equal(t, http.StatusNotFound, status)
-	require.Contains(t, string(testResults.RawBody), "404 page not found")
-	require.Nil(t, err)
-})
+			  	// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
+			  	require.False(t, testResults.MainCallSuccessful)
+			  	require.Equal(t, http.StatusNotFound, status)
+			  	require.Contains(t, string(testResults.RawBody), "404 page not found")
+			  	require.Nil(t, err)
+			  })*/
 
-TODO(@Sam): test service timeout, parse error from service, and large data
+			//TODO(@Sam): test service timeout, parse error from service, and large data
 		}
 	}
 
