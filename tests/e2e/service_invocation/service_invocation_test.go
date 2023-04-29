@@ -1545,7 +1545,7 @@ func TestNegativeCasesExternal(t *testing.T) {
 			require.NotEmpty(t, externalURL, "external URL must not be empty!")
 			externalServiceName := "serviceinvocation-callee-external"
 			invokeExternalServiceIP := tr.Platform.AcquireAppExternalURL(externalServiceName)
-			hostNameCRD := "service-invocation-external-via-crd"
+			// hostNameCRD := "service-invocation-external-via-crd"
 			// // This initial probe makes the test wait a little bit longer when needed,
 			// // making this test less flaky due to delays in the deployment.
 			// _, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
