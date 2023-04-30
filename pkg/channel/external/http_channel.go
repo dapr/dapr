@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/channel"
+	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -127,8 +128,8 @@ func (h *HTTPEndpointAppChannel) invokeMethodV1(ctx context.Context, req *invoke
 	var resp *http.Response
 	if len(h.pipeline.Handlers) > 0 {
 		// Exec pipeline only if at least one handler is specified
-		rw := &rwRecorder{
-			w: &bytes.Buffer{},
+		rw := &httpChannel.RWRecorder{
+			W: &bytes.Buffer{},
 		}
 		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
 			// Send request to user application
