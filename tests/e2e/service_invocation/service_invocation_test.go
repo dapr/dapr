@@ -494,7 +494,7 @@ func TestServiceInvocationExternally(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
 			serviceIP := tr.Platform.AcquireAppExternalURL("serviceinvocation-callee-external")
-			invokeExternalServiceIP := utils.SanitizeHTTPURL(serviceIP)
+			invokeExternalServiceIP := "http://service-invocation-external:80"
 			require.NotEmpty(t, externalURL, "external URL must not be empty!")
 			require.NotEmpty(t, invokeExternalServiceIP, "external service URL must not be empty!")
 			var err error
@@ -1193,7 +1193,7 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 }
 
 func verifyHTTPToHTTPExternal(t *testing.T, hostIP string, hostname string, url string, remoteApp string) {
-	invokeExternalServiceIP := tr.Platform.AcquireAppExternalURL("serviceinvocation-callee-external")
+	invokeExternalServiceIP := "http://service-invocation-external"
 
 	body, err := json.Marshal(testCommandRequestExternal{
 		testCommandRequest: testCommandRequest{
