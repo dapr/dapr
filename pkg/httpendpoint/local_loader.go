@@ -15,6 +15,7 @@ package httpendpoint
 
 import (
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 // LocalHTTPEndpoints loads http endpoints from a given directory.
@@ -25,7 +26,7 @@ type LocalHTTPEndpoints struct {
 // NewLocalHTTPEndpoints returns a new LocalHTTPEndpoint.
 func NewLocalHTTPEndpoints(resourcesPaths ...string) *LocalHTTPEndpoints {
 	return &LocalHTTPEndpoints{
-		httpEndpointsManifestLoader: NewDiskManifestLoader[httpEndpointsV1alpha1.HTTPEndpoint](resourcesPaths...),
+		httpEndpointsManifestLoader: components.NewDiskManifestLoader[httpEndpointsV1alpha1.HTTPEndpoint](resourcesPaths...),
 	}
 }
 
