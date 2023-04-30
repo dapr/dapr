@@ -493,7 +493,7 @@ func TestServiceInvocationExternally(t *testing.T) {
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
-			serviceIP := tr.Platform.AcquireAppExternalURL("serviceinvocation-callee-external")
+			//serviceIP := tr.Platform.AcquireAppExternalURL("serviceinvocation-callee-external")
 			invokeExternalServiceIP := "http://service-invocation-external:80"
 			require.NotEmpty(t, externalURL, "external URL must not be empty!")
 			require.NotEmpty(t, invokeExternalServiceIP, "external service URL must not be empty!")
