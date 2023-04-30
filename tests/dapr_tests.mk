@@ -503,11 +503,8 @@ setup-disable-mtls:
 setup-app-configurations:
 	$(KUBECTL) apply -f ./tests/config/dapr_observability_test_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
-setup-external-invocation-components: build-e2e-app-service_invocation_external push-e2e-app-service_invocation_external
-	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
-
 # Apply component yaml for state, secrets, pubsub, workflows, and bindings
-setup-test-components: setup-app-configurations setup-external-invocation-components
+setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
