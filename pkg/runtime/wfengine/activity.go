@@ -146,7 +146,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 		return err
 	}
 
-	endIndex := strings.LastIndex(actorID, "_")
+	endIndex := strings.LastIndex(actorID, "::")
 	if endIndex < 0 {
 		return fmt.Errorf("invalid activity actor ID: %s", actorID)
 	}

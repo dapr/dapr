@@ -429,7 +429,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			resp, err := wf.actors.Call(ctx, req)
 			if err != nil {
 				if errors.Is(err, ErrDuplicateInvocation) {
-					wfLogger.Warnf("%s: activity invocation %s_%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
+					wfLogger.Warnf("%s: activity invocation %s::%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
 					continue
 				}
 				return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
@@ -535,8 +535,8 @@ func getRuntimeState(actorID string, state workflowState) *backend.Orchestration
 }
 
 func getActivityActorID(workflowActorID string, taskID int32) string {
-	// An activity can be identified by it's name followed by it's task ID. Example: SayHello_0, SayHello_1, etc.
-	return fmt.Sprintf("%s_%d", workflowActorID, taskID)
+	// An activity can be identified by it's name followed by it's task ID. Example: SayHello::0, SayHello::1, etc.
+	return fmt.Sprintf("%s::%d", workflowActorID, taskID)
 }
 
 func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state workflowState, actorID string) error {
