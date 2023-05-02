@@ -143,8 +143,8 @@ func (m *AppManager) Init(runCtx context.Context) error {
 	}
 
 	if !m.app.IsJob {
+		// Job cannot have side car validated because it is shutdown on successful completion.
 		if m.app.DaprEnabled {
-			// Job cannot have side car validated because it is shutdown on successful completion.
 			log.Printf("Validating sidecar for app %v ....", m.app.AppName)
 			for i := 0; i <= maxSideCarDetectionRetries; i++ {
 				// Validate daprd side car is injected

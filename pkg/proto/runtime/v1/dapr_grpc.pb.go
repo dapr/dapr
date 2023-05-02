@@ -109,6 +109,8 @@ type DaprClient interface {
 	StartWorkflowAlpha1(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error)
 	// Gets details about a started workflow instance
 	GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
+	// Purge Workflow
+	PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Terminates a running workflow instance
 	TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Pauses a running workflow instance
@@ -597,6 +599,15 @@ func (c *daprClient) GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowReque
 	return out, nil
 }
 
+func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PurgeWorkflowAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/TerminateWorkflowAlpha1", in, out, opts...)
@@ -731,6 +742,8 @@ type DaprServer interface {
 	StartWorkflowAlpha1(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error)
 	// Gets details about a started workflow instance
 	GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
+	// Purge Workflow
+	PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error)
 	// Terminates a running workflow instance
 	TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error)
 	// Pauses a running workflow instance
@@ -872,6 +885,9 @@ func (UnimplementedDaprServer) StartWorkflowAlpha1(context.Context, *StartWorkfl
 }
 func (UnimplementedDaprServer) GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeWorkflowAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TerminateWorkflowAlpha1 not implemented")
@@ -1678,6 +1694,24 @@ func _Dapr_GetWorkflowAlpha1_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_PurgeWorkflowAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).PurgeWorkflowAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/PurgeWorkflowAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).PurgeWorkflowAlpha1(ctx, req.(*PurgeWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_TerminateWorkflowAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TerminateWorkflowRequest)
 	if err := dec(in); err != nil {
@@ -1926,6 +1960,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetWorkflowAlpha1",
 			Handler:    _Dapr_GetWorkflowAlpha1_Handler,
+		},
+		{
+			MethodName: "PurgeWorkflowAlpha1",
+			Handler:    _Dapr_PurgeWorkflowAlpha1_Handler,
 		},
 		{
 			MethodName: "TerminateWorkflowAlpha1",
