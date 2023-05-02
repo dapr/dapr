@@ -85,6 +85,13 @@ func (w *MockWorkflow) Resume(ctx context.Context, req *workflowContrib.ResumeRe
 	return nil
 }
 
+func (w *MockWorkflow) Purge(ctx context.Context, req *workflowContrib.PurgeRequest) error {
+	if req.InstanceID == ErrorInstanceID {
+		return ErrFakeWorkflowComponentError
+	}
+	return nil
+}
+
 func (w *MockWorkflow) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }

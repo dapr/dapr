@@ -23,8 +23,6 @@ import (
 )
 
 const (
-	// DefaultChannelAddress is the address that user application listen to.
-	DefaultChannelAddress = "127.0.0.1"
 	// AppChannelMinTLSVersion is the minimum TLS version that the app channel will use.
 	AppChannelMinTLSVersion = tls.VersionTLS12
 )
@@ -35,4 +33,9 @@ type AppChannel interface {
 	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	HealthProbe(ctx context.Context) (bool, error)
 	SetAppHealth(ah *apphealth.AppHealth)
+}
+
+// HTTPEndpointAppChannel is an abstraction over communications with http endpoint resources.
+type HTTPEndpointAppChannel interface {
+	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error)
 }

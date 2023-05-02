@@ -152,6 +152,19 @@ func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, even
 	return nil
 }
 
+func addPurgeStateOperations(req *actors.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent) error {
+	// TODO: Investigate whether Dapr state stores put limits on batch sizes. It seems some storage
+	//       providers have limits and we need to know if that impacts this algorithm:
+	//       https://learn.microsoft.com/azure/cosmos-db/nosql/transactional-batch#limitations
+	for i := 0; i < len(events); i++ {
+		req.Operations = append(req.Operations, actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request:   actors.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
+		})
+	}
+	return nil
+}
+
 func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config wfConfig) (workflowState, error) {
 	loadStartTime := time.Now()
 	loadedRecords := 0
@@ -219,6 +232,34 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 
 	wfLogger.Infof("%s: loaded %d state records in %v", actorID, loadedRecords, time.Since(loadStartTime))
 	return state, nil
+}
+
+func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRequest, error) {
+	req := &actors.TransactionalRequest{
+		ActorType:  s.config.workflowActorType,
+		ActorID:    actorID,
+		Operations: make([]actors.TransactionalOperation, 0, 100),
+	}
+
+	// Inbox Purging
+	if err := addPurgeStateOperations(req, inboxKeyPrefix, s.Inbox); err != nil {
+		return nil, err
+	}
+
+	// History Purging
+	if err := addPurgeStateOperations(req, historyKeyPrefix, s.History); err != nil {
+		return nil, err
+	}
+
+	req.Operations = append(req.Operations, actors.TransactionalOperation{
+		Operation: actors.Delete,
+		Request:   actors.TransactionalDelete{Key: customStatusKey},
+	}, actors.TransactionalOperation{
+		Operation: actors.Delete,
+		Request:   actors.TransactionalDelete{Key: metadataKey},
+	})
+
+	return req, nil
 }
 
 func getMultiEntryKeyName(prefix string, i int) string {
