@@ -90,11 +90,16 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_actor_activated_failed_total: The number of the actor activation failures.
 * dapr_runtime_actor_deactivated_total: The number of the successful actor deactivation.
 * dapr_runtime_actor_deactivated_failed_total: The number of the failed actor deactivation.
+* dapr_runtime_actor_timers: The number of actor timers requests.
+* dapr_runtime_actor_reminders: The number of actor reminders requests.
+* dapr_runtime_actor_reminders_fired_total: The number of actor reminders fired requests.
+* dpar_runtime_actor_timers_fired_total: The number of actor timers fired requests.
 
 #### Resiliency
 
-* dapr_runtime_resiliency_loaded: The number of resiliency policies loaded.
-* dapr_runtime_resiliency_count: The number of times a resiliency policy has been executed.
+* dapr_resiliency_loaded: The number of resiliency policies loaded.
+* dapr_resiliency_count: The number of times a resiliency policy has been executed.
+* dapr_resiliency_activations_total: Number of times a resiliency policy has been activated in a building block after a failure or after a state change.
 
 ### gRPC monitoring metrics
 
