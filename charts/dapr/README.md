@@ -114,7 +114,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_operator.debug.enabled`             | Boolean value for enabling debug mode | `{}` |
 | `dapr_operator.serviceReconciler.enabled`| If false, disables the reconciler that creates Services for Dapr-enabled Deployments and StatefulSets.<br>Note: disabling this reconciler could prevent Dapr service invocation from working. | `true` |
-| `dapr_operator.watchNamespace`            | The namespace to watch for annoated Dapr resources in | `""` |
+| `dapr_operator.watchNamespace`            | The namespace to watch for annotated Dapr resources in | `""` |
 
 ### Dapr Placement options:
 | Parameter                                 | Description                                                             | Default                 |

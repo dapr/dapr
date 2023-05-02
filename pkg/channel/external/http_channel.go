@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,12 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package external
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,59 +26,57 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
+	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	streamutils "github.com/dapr/dapr/utils/streams"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.external-app-channel")
 
 const (
 	// HTTPStatusCode is an dapr http channel status code.
 	HTTPStatusCode = "http.status_code"
 	httpScheme     = "http"
 	httpsScheme    = "https"
-
-	appConfigEndpoint = "dapr/config"
 )
 
-// Channel is an HTTP implementation of an AppChannel.
-type Channel struct {
+// HTTPEndpointAppChannel is an HTTP implementation of an AppChannel.
+type HTTPEndpointAppChannel struct {
 	client                *http.Client
-	baseAddress           string
 	ch                    chan struct{}
+	compStore             *compstore.ComponentStore
 	tracingSpec           config.TracingSpec
 	appHeaderToken        string
 	maxResponseBodySizeMB int
-	appHealthCheckPath    string
-	appHealth             *apphealth.AppHealth
 	pipeline              httpMiddleware.Pipeline
 }
 
-// ChannelConfiguration is the configuration used to create an HTTP AppChannel.
-type ChannelConfiguration struct {
+// ChannelConfigurationForHTTPEndpoints is the configuration used to create an HTTP AppChannel for external service invocation.
+type ChannelConfigurationForHTTPEndpoints struct {
 	Client               *http.Client
-	Endpoint             string
+	CompStore            *compstore.ComponentStore
 	MaxConcurrency       int
 	Pipeline             httpMiddleware.Pipeline
 	TracingSpec          config.TracingSpec
 	MaxRequestBodySizeMB int
 }
 
-// CreateLocalChannel creates an HTTP AppChannel.
-func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error) {
-	c := &Channel{
+// CreateNonLocalChannel creates an HTTP AppChannel for external service invocation.
+func CreateNonLocalChannel(config ChannelConfigurationForHTTPEndpoints) (channel.HTTPEndpointAppChannel, error) {
+	c := &HTTPEndpointAppChannel{
 		pipeline:              config.Pipeline,
 		client:                config.Client,
-		baseAddress:           config.Endpoint,
+		compStore:             config.CompStore,
 		tracingSpec:           config.TracingSpec,
 		appHeaderToken:        auth.GetAppToken(),
 		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
@@ -92,65 +89,12 @@ func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error)
 	return c, nil
 }
 
-// GetAppConfig gets application config from user application
-// GET http://localhost:<app_port>/dapr/config
-func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
-	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint).
-		WithHTTPExtension(http.MethodGet, "").
-		WithContentType(invokev1.JSONContentType)
-	defer req.Close()
-
-	resp, err := h.InvokeMethod(context.TODO(), req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Close()
-
-	var config config.ApplicationConfig
-
-	if resp.Status().Code != http.StatusOK {
-		return &config, nil
-	}
-
-	// Get versioning info, currently only v1 is supported.
-	headers := resp.Headers()
-	var version string
-	if val, ok := headers["dapr-app-config-version"]; ok && len(val.Values) > 0 {
-		version = val.Values[0]
-	}
-
-	switch version {
-	case "v1":
-		fallthrough
-	default:
-		err = json.NewDecoder(resp.RawData()).Decode(&config)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &config, nil
-}
-
-// InvokeMethod invokes user code via HTTP.
-func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (rsp *invokev1.InvokeMethodResponse, err error) {
-	if h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
-		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
-	}
-
-	// Check if HTTP Extension is given. Otherwise, it will return error.
-	httpExt := req.Message().GetHttpExtension()
-	if httpExt == nil {
-		return nil, status.Error(codes.InvalidArgument, "missing HTTP extension field")
-	}
-	// Go's net/http library does not support sending requests with the CONNECT method
-	if httpExt.Verb == commonv1pb.HTTPExtension_NONE || httpExt.Verb == commonv1pb.HTTPExtension_CONNECT { //nolint:nosnakecase
-		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
-	}
-
+// InvokeMethod invokes external http endpoint via HTTP.
+func (h *HTTPEndpointAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (rsp *invokev1.InvokeMethodResponse, err error) {
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
-		rsp, err = h.invokeMethodV1(ctx, req)
+		rsp, err = h.invokeMethodV1(ctx, req, appID)
+		log.Infof("external http endpoint response %v and err %v", rsp, err)
 
 	default:
 		// Reject unsupported version
@@ -160,50 +104,10 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	return rsp, err
 }
 
-// SetAppHealthCheckPath sets the path where to send requests for health probes.
-func (h *Channel) SetAppHealthCheckPath(path string) {
-	h.appHealthCheckPath = "/" + strings.TrimPrefix(path, "/")
-}
-
-// SetAppHealth sets the apphealth.AppHealth object.
-func (h *Channel) SetAppHealth(ah *apphealth.AppHealth) {
-	h.appHealth = ah
-}
-
-// HealthProbe performs a health probe.
-func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
-	channelReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseAddress+h.appHealthCheckPath, nil)
-	if err != nil {
-		return false, err
-	}
-
-	diag.DefaultHTTPMonitoring.AppHealthProbeStarted(ctx)
-	startRequest := time.Now()
-
-	channelResp, err := h.client.Do(channelReq)
-
-	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
-
-	if err != nil {
-		// Errors here are network-level errors, so we are not returning them as errors
-		// Instead, we just return a failed probe
-		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), elapsedMs)
-		//nolint:nilerr
-		return false, nil
-	}
-
-	// Drain before closing
-	_, _ = io.Copy(io.Discard, channelResp.Body)
-	channelResp.Body.Close()
-
-	status := channelResp.StatusCode >= 200 && channelResp.StatusCode < 300
-	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(channelResp.StatusCode), elapsedMs)
-
-	return status, nil
-}
-
-func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	channelReq, err := h.constructRequest(ctx, req)
+// invokeMethodV1 constructs the http endpoint request and performs the request while collecting metrics.
+func (h *HTTPEndpointAppChannel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	channelReq, err := h.constructRequest(ctx, req, appID)
+	log.Infof("channelReq %v and err %v", channelReq, err)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +128,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	var resp *http.Response
 	if len(h.pipeline.Handlers) > 0 {
 		// Exec pipeline only if at least one handler is specified
-		rw := &RWRecorder{
+		rw := &httpChannel.RWRecorder{
 			W: &bytes.Buffer{},
 		}
 		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
@@ -275,14 +179,30 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	return rsp, nil
 }
 
-func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
-	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
+func (h *HTTPEndpointAppChannel) getBaseURL(appID string) string {
+	for _, endpoint := range h.compStore.ListHTTPEndpoints() {
+		if appID == endpoint.Name {
+			return endpoint.Spec.BaseURL
+		}
+	}
+	return ""
+}
+
+func (h *HTTPEndpointAppChannel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {
+	// Construct app channel URI: VERB http://api.github.com/method?query1=value1
 	msg := req.Message()
 	verb := msg.HttpExtension.Verb.String()
 	method := msg.Method
-
 	uri := strings.Builder{}
-	uri.WriteString(h.baseAddress)
+
+	// check for overwritten baseURL set as appID.
+	// otherwise, get baseURL from http endpoint CRDs.
+	if strings.HasPrefix(appID, "https://") || strings.HasPrefix(appID, "http://") {
+		uri.WriteString(appID)
+	} else {
+		uri.WriteString(h.getBaseURL(appID))
+	}
+
 	if len(method) > 0 && method[0] != '/' {
 		uri.WriteRune('/')
 	}
@@ -301,11 +221,14 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Add)
+	channelReq.Header.Set("content-type", req.ContentType())
 
-	if ct := req.ContentType(); ct != "" {
-		channelReq.Header.Set("content-type", ct)
-	} else {
-		channelReq.Header.Del("content-type")
+	// Configure headers from http endpoint CRD
+	endpoint, ok := h.compStore.GetHTTPEndpoint(appID)
+	if ok {
+		for _, header := range endpoint.Spec.Headers {
+			channelReq.Header.Set(header.Name, header.Value.String())
+		}
 	}
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
@@ -324,7 +247,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	return channelReq, nil
 }
 
-func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channelResp *http.Response) (*invokev1.InvokeMethodResponse, error) {
+func (h *HTTPEndpointAppChannel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channelResp *http.Response) (*invokev1.InvokeMethodResponse, error) {
 	contentType := channelResp.Header.Get("content-type")
 
 	// Limit response body if needed
