@@ -34,6 +34,10 @@ service Operator {
   rpc ListResiliency (ListResiliencyRequest) returns (ListResiliencyResponse) {}
   // Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
   rpc ListSubscriptionsV2 (ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
+  // Returns a list of http endpoints
+  rpc ListHTTPEndpoints (ListHTTPEndpointsRequest) returns (ListHTTPEndpointsResponse) {}
+  // Sends events to Dapr sidecars upon http endpoint changes.
+  rpc HTTPEndpointUpdate (HTTPEndpointUpdateRequest) returns (stream HTTPEndpointUpdateEvent) {}
 }
 
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
@@ -99,4 +103,35 @@ message ListResiliencyResponse {
 message ListSubscriptionsRequest {
   string podName = 1;
   string namespace = 2;
+}
+
+// GetHTTPEndpointRequest is the request to get an http endpoint configuration.
+message GetHTTPEndpointRequest {
+  string name = 1;
+  string namespace = 2;
+}
+
+// GetHTTPEndpointResponse includes the requested http endpoint configuration.
+message GetHTTPEndpointResponse {
+  bytes http_endpoint = 1;
+}
+
+// ListHTTPEndpointsResponse includes the list of available http endpoint configurations.
+message ListHTTPEndpointsResponse {
+  repeated bytes http_endpoints = 1;
+}
+
+message ListHTTPEndpointsRequest {
+  string namespace = 1;
+}
+
+// HTTPEndpointsUpdateRequest is the request to get updates about new http endpoints for a given namespace.
+message HTTPEndpointUpdateRequest {
+  string namespace = 1;
+  string pod_name = 2;
+}
+
+// HTTPEndpointsUpdateEvent includes the updated http endpoint event.
+message HTTPEndpointUpdateEvent {
+  bytes http_endpoints = 1;
 }
