@@ -142,19 +142,19 @@ func newServiceMetrics() *serviceMetrics {
 			stats.UnitDimensionless),
 		actorTimers: stats.Int64(
 			"runtime/actor/timers",
-			"The number of the actor timer requests.",
+			"The number of actor timer requests.",
 			stats.UnitDimensionless),
 		actorReminders: stats.Int64(
 			"runtime/actor/reminders",
-			"The number of the actor reminder requests.",
+			"The number of actor reminder requests.",
 			stats.UnitDimensionless),
 		actorReminderFiredTotal: stats.Int64(
 			"runtime/actor/reminders_fired_total",
-			"The number of the actor reminder fired requests.",
+			"The number of actor reminders fired requests.",
 			stats.UnitDimensionless),
 		actorTimerFiredTotal: stats.Int64(
 			"runtime/actor/timers_fired_total",
-			"The number of the actor timer fired requests.",
+			"The number of actor timers fired requests.",
 			stats.UnitDimensionless),
 
 		// Access Control Lists for service invocation
@@ -226,8 +226,8 @@ func (s *serviceMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorTimers, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorReminders, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
-		diagUtils.NewMeasureView(s.actorReminderFiredTotal, []tag.Key{appIDKey, actorTypeKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorTimerFiredTotal, []tag.Key{appIDKey, actorTypeKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(s.actorReminderFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(s.actorTimerFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
@@ -349,7 +349,7 @@ func (s *serviceMetrics) ActorDeactivated(actorType string) {
 }
 
 // ActorDeactivationFailed records metric when actor deactivation is failed.
-func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
+func (s *serviceMetrics) ActorDeactivationFailed(actorType string, reason string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
@@ -359,21 +359,21 @@ func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
 }
 
 // ActorReminderFired records metric when actor reminder is fired.
-func (s *serviceMetrics) ActorReminderFired(actorType, status string) {
+func (s *serviceMetrics) ActorReminderFired(actorType string, success bool) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(s.actorReminderFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, statusKey, status),
+			diagUtils.WithTags(s.actorReminderFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, successKey, strconv.FormatBool(success)),
 			s.actorReminderFiredTotal.M(1))
 	}
 }
 
 // ActorTimerFired records metric when actor timer is fired.
-func (s *serviceMetrics) ActorTimerFired(actorType, status string) {
+func (s *serviceMetrics) ActorTimerFired(actorType string, success bool) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(s.actorTimerFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, statusKey, status),
+			diagUtils.WithTags(s.actorTimerFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, successKey, strconv.FormatBool(success)),
 			s.actorTimerFiredTotal.M(1))
 	}
 }

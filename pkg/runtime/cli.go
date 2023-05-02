@@ -82,6 +82,8 @@ func FromFlags() (*DaprRuntime, error) {
 	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(apphealth.DefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	appHealthThreshold := flag.Int("app-health-threshold", int(apphealth.DefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 
+	appChannelAddress := flag.String("app-channel-address", DefaultChannelAddress, "The network address the application listens on")
+
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
@@ -322,6 +324,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AppHealthProbeInterval:       healthProbeInterval,
 		AppHealthProbeTimeout:        healthProbeTimeout,
 		AppHealthThreshold:           healthThreshold,
+		AppChannelAddress:            *appChannelAddress,
 	})
 
 	// set environment variables
@@ -390,6 +393,7 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Info("loading default configuration")
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
+	daprGlobalConfig.SetTracingSpecFromEnv(globalConfig)
 
 	globalConfig.LoadFeatures()
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {

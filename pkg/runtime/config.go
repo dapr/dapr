@@ -57,6 +57,8 @@ const (
 	DefaultGracefulShutdownDuration = time.Second * 5
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
 	DefaultAppHealthCheckPath = "/healthz"
+	// DefaultChannelAddress is the default local network address that user application listen on.
+	DefaultChannelAddress = "127.0.0.1"
 )
 
 // IsHTTP returns true if the app protocol is using HTTP (including HTTPS and H2C).
@@ -98,6 +100,7 @@ type Config struct {
 	DisableBuiltinK8sSecretStore bool
 	AppHealthCheck               *apphealth.Config
 	AppHealthCheckHTTPPath       string
+	AppChannelAddress            string
 }
 
 // NewRuntimeConfigOpts contains options for NewRuntimeConfig.
@@ -131,6 +134,7 @@ type NewRuntimeConfigOpts struct {
 	AppHealthProbeInterval       time.Duration
 	AppHealthProbeTimeout        time.Duration
 	AppHealthThreshold           int32
+	AppChannelAddress            string
 }
 
 // NewRuntimeConfig returns a new runtime config.
@@ -143,6 +147,10 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 			ProbeOnly:     true,
 			Threshold:     opts.AppHealthThreshold,
 		}
+	}
+
+	if opts.AppChannelAddress == "" {
+		opts.AppChannelAddress = DefaultChannelAddress
 	}
 
 	return &Config{
@@ -176,5 +184,6 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
 		AppHealthCheck:               appHealthCheck,
 		AppHealthCheckHTTPPath:       opts.AppHealthCheckPath,
+		AppChannelAddress:            opts.AppChannelAddress,
 	}
 }
