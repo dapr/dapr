@@ -1,0 +1,129 @@
+#
+# Copyright 2023 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: dapr-test-sdk
+
+on:
+  # Run every 12 hours on weekdays, and every 24 hours on weekends.
+  schedule:
+    - cron: "0 */12 * * 1-5"
+    - cron: "30 0 * * 0,6"
+  issue_comment:
+    types: [created, edited]
+env:
+  GOOS: linux
+  GOARCH: amd64
+  GOPROXY: https://proxy.golang.org
+  DAPR_CLI_VER: 1.10.0
+
+jobs:
+  java-sdk:
+    if: ${{ github.event_name == 'schedule' }} || contains(github.event.comment.body, '/test-sdk-java') || contains(github.event.comment.body, '/test-sdk-all')
+    name: "Java SDK verification tests jdk:${{ matrix.java }} sb:${{ matrix.spring-boot-version }} exp:${{ matrix.experimental }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        java: [ 11, 13, 15, 16 ]
+        java: [ 16 ]
+        spring-boot-version: [ 2.7.8 ]
+        experimental: [ false ]
+        include:
+        - java: 11
+          spring-boot-version: 2.6.14
+          experimental: false
+        - java: 11
+          spring-boot-version: 2.5.7
+          experimental: false
+        - java: 11
+          spring-boot-version: 2.4.0
+          experimental: false
+        - java: 11
+          spring-boot-version: 2.3.6.RELEASE
+          experimental: false
+    env:
+      JDK_VER: ${{ matrix.java }}
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up OpenJDK ${{ env.JDK_VER }}
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'adopt'
+        java-version: ${{ env.JDK_VER }}
+    - name: "Set up Go"
+      id: setup-go
+      uses: actions/setup-go@v3
+      with:
+        go-version-file: "go.mod"
+    - name: Checkout java-sdk repo to run tests.
+      uses: actions/checkout@v3
+      with:
+        repository: dapr/java-sdk
+        path: java-sdk
+    - name: Set up Dapr CLI
+      run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_CLI_VER }}
+    - name: Initialize Dapr runtime
+      run: |
+        dapr init
+    - name: Build and override daprd with HEAD.
+      run: |
+        make
+        mkdir -p $HOME/.dapr/bin/
+        cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
+    - name: Override placement service.
+      run: |
+        docker stop dapr_placement
+        ./dist/linux_amd64/release/placement &
+    - name: Install java-sdk kafka using docker-compose
+      run: |
+        docker-compose -f ./java-sdk/sdk-tests/deploy/local-test-kafka.yml up -d
+        docker ps
+    - name: Install Local mongo database using docker-compose
+      run: |
+        docker-compose -f ./java-sdk/sdk-tests/deploy/local-test-mongo.yml up -d
+        docker ps
+    - name: Clean up files
+      run: cd java-sdk && mvn clean -B
+    - name: Build sdk
+      run: cd java-sdk && mvn compile -B -q
+    - name: Unit tests
+      run: cd java-sdk && mvn -B test -q
+    - name: Codecov
+      uses: codecov/codecov-action@v3.1.1
+    - name: Install jars
+      run: cd java-sdk && mvn install -q -B -DskipTests
+    - name: Integration tests using spring boot version ${{ matrix.spring-boot-version }}
+      id: integration_tests
+      run: cd java-sdk && PRODUCT_SPRING_BOOT_VERSION=${{ matrix.spring-boot-version }} mvn -B -f sdk-tests/pom.xml verify
+    - name: Upload test report for sdk
+      uses: actions/upload-artifact@master
+      with:
+        name: report-dapr-java-sdk
+        path: java-sdk/sdk/target/jacoco-report/
+    - name: Upload test report for sdk-actors
+      uses: actions/upload-artifact@master
+      with:
+        name: report-dapr-java-sdk-actors
+        path: java-sdk/sdk-actors/target/jacoco-report/
+    - name: Upload failsafe test report for sdk-tests on failure
+      if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
+      uses: actions/upload-artifact@master
+      with:
+        name: failsafe-report-sdk-tests
+        path: java-sdk/sdk-tests/target/failsafe-reports
+    - name: Upload surefire test report for sdk-tests on failure
+      if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
+      uses: actions/upload-artifact@master
+      with:
+        name: surefire-report-sdk-tests
+        path: java-sdk/sdk-tests/target/surefire-reports
