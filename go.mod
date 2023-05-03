@@ -32,7 +32,7 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/labstack/gommon v0.4.0
 	github.com/lestrrat-go/jwx/v2 v2.0.9
-	github.com/microsoft/durabletask-go v0.2.1-0.20230409004853-b1c4226121e6
+	github.com/microsoft/durabletask-go v0.2.1
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
