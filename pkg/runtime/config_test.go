@@ -47,6 +47,7 @@ func TestNewConfig(t *testing.T) {
 		GracefulShutdownDuration:     time.Second,
 		EnableAPILogging:             true,
 		DisableBuiltinK8sSecretStore: true,
+		AppChannelAddress:            "1.1.1.1",
 	})
 
 	assert.Equal(t, "app1", c.ID)
@@ -74,4 +75,5 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, time.Second, c.GracefulShutdownDuration)
 	assert.Equal(t, true, c.EnableAPILogging)
 	assert.Equal(t, true, c.DisableBuiltinK8sSecretStore)
+	assert.Equal(t, "1.1.1.1", c.AppChannelAddress)
 }

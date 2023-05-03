@@ -22,6 +22,7 @@ hellodapr \
 stateapp \
 secretapp \
 service_invocation \
+service_invocation_external \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
 service_invocation_grpc_proxy_server \
@@ -56,7 +57,7 @@ tracingapp \
 configurationapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -78,6 +79,7 @@ pubsub_bulk_publish_grpc \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
+configuration \
 pubsub_subscribe_http \
 
 KUBECTL=kubectl
@@ -544,6 +546,9 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tracing_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/grpcproxyserverexternal_service.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
