@@ -599,6 +599,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
 
 	conn, err := a.grpc.GetAppClient()
+	defer a.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
