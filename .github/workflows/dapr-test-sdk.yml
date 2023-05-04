@@ -63,11 +63,11 @@ jobs:
           ./dist/linux_amd64/release/placement --healthz-port 9091 &
       - name: Install python-sdk kafka using docker-compose
         run: |
-          docker-compose -f ./python-sdk/sdk-tests/deploy/local-test-kafka.yml up -d
+          docker-compose -f python-sdk/sdk-tests/deploy/local-test-kafka.yml up -d
           docker ps
       - name: Install Local mongo database using docker-compose
         run: |
-          docker-compose -f ./python-sdk/sdk-tests/deploy/local-test-mongo.yml up -d
+          docker-compose -f python-sdk/sdk-tests/deploy/local-test-mongo.yml up -d
           docker ps
       - name: Install dependencies
         run: |
