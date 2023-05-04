@@ -355,7 +355,7 @@ func (x *InvokeRequest) GetHttpExtension() *HTTPExtension {
 	return nil
 }
 
-// InvokeResponse is the response message inclduing data and its content type
+// InvokeResponse is the response message including data and its content type
 // from app callback.
 // This message is used in InvokeService of Dapr gRPC Service and OnInvoke
 // of AppCallback gRPC service.
