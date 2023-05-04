@@ -19,16 +19,31 @@ on:
     - cron: "0 */12 * * 1-5"
     - cron: "30 0 * * 0,6"
   issue_comment:
-    types: [created, edited]
+    types: [created]
 env:
   GOOS: linux
   GOARCH: amd64
   GOPROXY: https://proxy.golang.org
-  DAPR_CLI_VER: 1.10.0
 
+# Job(s) can be triggered with the following commands:
+  # /test-sdk-all
+  # /test-sdk-python
+  # /test-sdk-java
+# Because of the way the GitHub handles string litterals, we need to use
+# `fromJSON` so that we only match on commands which are on their own line
+# with no space text.
+# Janky, but this is produces better UX for maintainers and prevents accidental
+# runs.
 jobs:
   python-sdk:
-    if: ${{ github.event_name == 'schedule' }} || contains(github.event.comment.body, '/test-sdk-python') || contains(github.event.comment.body, '/test-sdk-all')
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'issue_comment' &&
+        (
+          contains(format(fromJSON('"\r\n{0}\r\n"'), github.event.comment.body), fromJSON('"\r\n/test-sdk-all\r\n"')) ||
+          contains(format(fromJSON('"\r\n{0}\r\n"'), github.event.comment.body), fromJSON('"\r\n/test-sdk-python\r\n"'))
+        )
+      )
     name: "Python SDK verification tests"
     runs-on: ubuntu-latest
     steps:
@@ -48,7 +63,7 @@ jobs:
           repository: dapr/python-sdk
           path: python-sdk
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_CLI_VER }}
+        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
       - name: Initialize Dapr runtime
         run: |
           dapr init
@@ -61,14 +76,6 @@ jobs:
         run: |
           docker stop dapr_placement
           ./dist/linux_amd64/release/placement --healthz-port 9091 &
-      - name: Install python-sdk kafka using docker-compose
-        run: |
-          docker-compose -f python-sdk/sdk-tests/deploy/local-test-kafka.yml up -d
-          docker ps
-      - name: Install Local mongo database using docker-compose
-        run: |
-          docker-compose -f python-sdk/sdk-tests/deploy/local-test-mongo.yml up -d
-          docker ps
       - name: Install dependencies
         run: |
           cd python-sdk
@@ -79,17 +86,19 @@ jobs:
           cd python-sdk || true
           tox -e examples
   java-sdk:
-    if: ${{ github.event_name == 'schedule' }} || contains(github.event.comment.body, '/test-sdk-java') || contains(github.event.comment.body, '/test-sdk-all')
-    name: "Java SDK verification tests jdk:${{ matrix.java }} sb:${{ matrix.spring-boot-version }} exp:${{ matrix.experimental }}"
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'issue_comment' &&
+        (
+          contains(format(fromJSON('"\r\n{0}\r\n"'), github.event.comment.body), fromJSON('"\r\n/test-sdk-all\r\n"')) ||
+          contains(format(fromJSON('"\r\n{0}\r\n"'), github.event.comment.body), fromJSON('"\r\n/test-sdk-java\r\n"'))
+        )
+      )
+    name: "Java SDK verification tests"
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        java: [ 16 ]
-        spring-boot-version: [ 2.7.8 ]
-        experimental: [ false ]
     env:
-      JDK_VER: ${{ matrix.java }}
+      JDK_VER: 16
+      JAVA_SPRING_BOOT_VERSION: 2.7.8
     steps:
       - uses: actions/checkout@v3
       - name: Set up OpenJDK ${{ env.JDK_VER }}
@@ -108,7 +117,7 @@ jobs:
           repository: dapr/java-sdk
           path: java-sdk
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_CLI_VER }}
+        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
       - name: Initialize Dapr runtime
         run: |
           dapr init
@@ -139,9 +148,9 @@ jobs:
         uses: codecov/codecov-action@v3.1.1
       - name: Install jars
         run: cd java-sdk && mvn install -q -B -DskipTests
-      - name: Integration tests using spring boot version ${{ matrix.spring-boot-version }}
+      - name: Integration tests using spring boot version ${{ env.JAVA_SPRING_BOOT_VERSION }}
         id: integration_tests
-        run: cd java-sdk && PRODUCT_SPRING_BOOT_VERSION=${{ matrix.spring-boot-version }} mvn -B -f sdk-tests/pom.xml verify
+        run: cd java-sdk && PRODUCT_SPRING_BOOT_VERSION=${{ env.JAVA_SPRING_BOOT_VERSION }} mvn -B -f sdk-tests/pom.xml verify
       - name: Upload test report for sdk
         uses: actions/upload-artifact@master
         with:
