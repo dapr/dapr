@@ -153,7 +153,7 @@ func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 
 // ProtoWithData returns a copy of the internal InternalInvokeResponse Proto object with the entire data stream read into the Data property.
 func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeResponse, error) {
-	if imr.r == nil {
+	if imr.r == nil || imr.r.Message == nil {
 		return nil, errors.New("message is nil")
 	}
 
@@ -169,7 +169,7 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 
 	// Read the data and store it in the object
 	data, err := imr.RawDataFull()
-	if err != nil || len(data) == 0 {
+	if err != nil {
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{
