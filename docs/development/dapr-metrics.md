@@ -128,9 +128,11 @@ We support only server side metrics.
 * [server metrics](../../pkg/diagnostics/http_monitoring.go)
 
 #### Server metrics
+> Note: Server metrics are prefixed by a forward slash character `/`
 
 * dapr_http_server_request_count: Number of HTTP requests started in server
 * dapr_http_server_request_bytes: HTTP request body size if set as ContentLength (uncompressed) in server
+* dapr_http_server_response_count: Number of HTTP responses in server
 * dapr_http_server_response_bytes: HTTP response body size (uncompressed) in server.
 * dapr_http_server_latency: HTTP request end to end latency in server.
 
