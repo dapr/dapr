@@ -97,7 +97,7 @@ jobs:
     name: "Java SDK verification tests"
     runs-on: ubuntu-latest
     env:
-      JDK_VER: 16
+      JDK_VER: 11
       JAVA_SPRING_BOOT_VERSION: 2.7.8
     steps:
       - uses: actions/checkout@v3
