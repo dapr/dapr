@@ -84,15 +84,14 @@ type ReminderResponse struct {
 func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 	type responseAlias ReminderResponse
 	m := struct {
-		Data []byte `json:"data,omitempty"`
+		Data json.RawMessage `json:"data,omitempty"`
 		*responseAlias
 	}{
 		responseAlias: (*responseAlias)(r),
 	}
 
-	// r.Data is usually a json.RawMessage, but because it's stored in a field of type any, we need to use json.Marshal as fallback
 	if raw, ok := r.Data.(json.RawMessage); ok {
-		m.Data = []byte(raw)
+		m.Data = raw
 	} else {
 		var err error
 		m.Data, err = json.Marshal(r.Data)
@@ -138,21 +137,12 @@ type TimerResponse struct {
 func (t *TimerResponse) MarshalJSON() ([]byte, error) {
 	type responseAlias TimerResponse
 	m := struct {
-		Data []byte `json:"data,omitempty"`
+		Data any `json:"data,omitempty"`
 		*responseAlias
 	}{
 		responseAlias: (*responseAlias)(t),
 	}
 
-	// t.Data is usually a json.RawMessage, but because it's stored in a field of type any, we need to use json.Marshal as fallback
-	if raw, ok := t.Data.(json.RawMessage); ok {
-		m.Data = []byte(raw)
-	} else {
-		var err error
-		m.Data, err = json.Marshal(t.Data)
-		if err != nil {
-			return nil, err
-		}
-	}
+	m.Data = t.Data
 	return json.Marshal(m)
 }
