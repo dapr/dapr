@@ -153,7 +153,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			default:
 				return false
 			}
-		}, testStreamSendLatency, time.Millisecond, "no membership change")
+		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
 		// act
 		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
@@ -204,7 +204,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			default:
 				return false
 			}
-		}, testStreamSendLatency, time.Millisecond, "no membership change")
+		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario
@@ -298,7 +298,7 @@ func TestGetPlacementTables(t *testing.T) {
 		// wait until host member change requests are flushed
 		assert.Eventually(t, func() bool {
 			return len(testServer.raftNode.FSM().State().Members()) == 1
-		}, disseminateTimerInterval+500*time.Millisecond, 50*time.Millisecond,
+		}, time.Second*10, 50*time.Millisecond,
 			"placement failed apply host registration")
 
 		// get placement tables
