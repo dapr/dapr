@@ -370,6 +370,8 @@ github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuA
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/dapr/components-contrib v1.10.6-0.20230502160920-7d24bfa0000e h1:Yrp/DuLYX7MoK7r20ldXtBwb7aK6GWigD9xd8/8mcIE=
 github.com/dapr/components-contrib v1.10.6-0.20230502160920-7d24bfa0000e/go.mod h1:5XKKc/yrvMFhtdRgxduQnNGU/m/6WlXg2A8WkBpnuIM=
+github.com/dapr/components-contrib v1.10.6-0.20230503220750-9f4086fbb00c h1:Foxv3ZGjsbmRiMUEL8JusPSyr09ctoG+XOCzWj1DMmQ=
+github.com/dapr/components-contrib v1.10.6-0.20230503220750-9f4086fbb00c/go.mod h1:5XKKc/yrvMFhtdRgxduQnNGU/m/6WlXg2A8WkBpnuIM=
 github.com/dapr/kit v0.0.5-0.20230418193628-15a7040dec41 h1:G55KmJAn2UsJm2+T0Vyz8gPcbphDe1PvjrES18JxfHQ=
 github.com/dapr/kit v0.0.5-0.20230418193628-15a7040dec41/go.mod h1:VTWiX6nk5RWZ/kqEJD/EGjJU8hdwHZ73r75K510OHBY=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
