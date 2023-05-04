@@ -27,6 +27,57 @@ env:
   DAPR_CLI_VER: 1.10.0
 
 jobs:
+  python-sdk:
+    if: ${{ github.event_name == 'schedule' }} || contains(github.event.comment.body, '/test-sdk-python') || contains(github.event.comment.body, '/test-sdk-all')
+    name: "Python SDK verification tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+      - name: "Set up Go"
+        id: setup-go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: "go.mod"
+      - name: Checkout p repo to run tests.
+        uses: actions/checkout@v3
+        with:
+          repository: dapr/python-sdk
+          path: python-sdk
+      - name: Set up Dapr CLI
+        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_CLI_VER }}
+      - name: Initialize Dapr runtime
+        run: |
+          dapr init
+      - name: Build and override daprd with HEAD.
+        run: |
+          make
+          mkdir -p $HOME/.dapr/bin/
+          cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
+      - name: Override placement service.
+        run: |
+          docker stop dapr_placement
+          ./dist/linux_amd64/release/placement --healthz-port 9091 &
+      - name: Install python-sdk kafka using docker-compose
+        run: |
+          docker-compose -f ./python-sdk/sdk-tests/deploy/local-test-kafka.yml up -d
+          docker ps
+      - name: Install Local mongo database using docker-compose
+        run: |
+          docker-compose -f ./python-sdk/sdk-tests/deploy/local-test-mongo.yml up -d
+          docker ps
+      - name: Install dependencies
+        run: |
+          cd python-sdk
+          python -m pip install --upgrade pip
+          pip install setuptools wheel twine tox
+      - name: Check Python Examples
+        run: |
+          cd python-sdk || true
+          tox -e examples
   java-sdk:
     if: ${{ github.event_name == 'schedule' }} || contains(github.event.comment.body, '/test-sdk-java') || contains(github.event.comment.body, '/test-sdk-all')
     name: "Java SDK verification tests jdk:${{ matrix.java }} sb:${{ matrix.spring-boot-version }} exp:${{ matrix.experimental }}"
@@ -34,96 +85,82 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        java: [ 11, 13, 15, 16 ]
         java: [ 16 ]
         spring-boot-version: [ 2.7.8 ]
         experimental: [ false ]
-        include:
-        - java: 11
-          spring-boot-version: 2.6.14
-          experimental: false
-        - java: 11
-          spring-boot-version: 2.5.7
-          experimental: false
-        - java: 11
-          spring-boot-version: 2.4.0
-          experimental: false
-        - java: 11
-          spring-boot-version: 2.3.6.RELEASE
-          experimental: false
     env:
       JDK_VER: ${{ matrix.java }}
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up OpenJDK ${{ env.JDK_VER }}
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'adopt'
-        java-version: ${{ env.JDK_VER }}
-    - name: "Set up Go"
-      id: setup-go
-      uses: actions/setup-go@v3
-      with:
-        go-version-file: "go.mod"
-    - name: Checkout java-sdk repo to run tests.
-      uses: actions/checkout@v3
-      with:
-        repository: dapr/java-sdk
-        path: java-sdk
-    - name: Set up Dapr CLI
-      run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_CLI_VER }}
-    - name: Initialize Dapr runtime
-      run: |
-        dapr init
-    - name: Build and override daprd with HEAD.
-      run: |
-        make
-        mkdir -p $HOME/.dapr/bin/
-        cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-    - name: Override placement service.
-      run: |
-        docker stop dapr_placement
-        ./dist/linux_amd64/release/placement &
-    - name: Install java-sdk kafka using docker-compose
-      run: |
-        docker-compose -f ./java-sdk/sdk-tests/deploy/local-test-kafka.yml up -d
-        docker ps
-    - name: Install Local mongo database using docker-compose
-      run: |
-        docker-compose -f ./java-sdk/sdk-tests/deploy/local-test-mongo.yml up -d
-        docker ps
-    - name: Clean up files
-      run: cd java-sdk && mvn clean -B
-    - name: Build sdk
-      run: cd java-sdk && mvn compile -B -q
-    - name: Unit tests
-      run: cd java-sdk && mvn -B test -q
-    - name: Codecov
-      uses: codecov/codecov-action@v3.1.1
-    - name: Install jars
-      run: cd java-sdk && mvn install -q -B -DskipTests
-    - name: Integration tests using spring boot version ${{ matrix.spring-boot-version }}
-      id: integration_tests
-      run: cd java-sdk && PRODUCT_SPRING_BOOT_VERSION=${{ matrix.spring-boot-version }} mvn -B -f sdk-tests/pom.xml verify
-    - name: Upload test report for sdk
-      uses: actions/upload-artifact@master
-      with:
-        name: report-dapr-java-sdk
-        path: java-sdk/sdk/target/jacoco-report/
-    - name: Upload test report for sdk-actors
-      uses: actions/upload-artifact@master
-      with:
-        name: report-dapr-java-sdk-actors
-        path: java-sdk/sdk-actors/target/jacoco-report/
-    - name: Upload failsafe test report for sdk-tests on failure
-      if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
-      uses: actions/upload-artifact@master
-      with:
-        name: failsafe-report-sdk-tests
-        path: java-sdk/sdk-tests/target/failsafe-reports
-    - name: Upload surefire test report for sdk-tests on failure
-      if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
-      uses: actions/upload-artifact@master
-      with:
-        name: surefire-report-sdk-tests
-        path: java-sdk/sdk-tests/target/surefire-reports
+      - uses: actions/checkout@v3
+      - name: Set up OpenJDK ${{ env.JDK_VER }}
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: ${{ env.JDK_VER }}
+      - name: "Set up Go"
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+      - name: Checkout java-sdk repo to run tests.
+        uses: actions/checkout@v3
+        with:
+          repository: dapr/java-sdk
+          path: java-sdk
+      - name: Set up Dapr CLI
+        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_CLI_VER }}
+      - name: Initialize Dapr runtime
+        run: |
+          dapr init
+      - name: Build and override daprd with HEAD.
+        run: |
+          make
+          mkdir -p $HOME/.dapr/bin/
+          cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
+      - name: Override placement service.
+        run: |
+          docker stop dapr_placement
+          ./dist/linux_amd64/release/placement &
+      - name: Install java-sdk kafka using docker-compose
+        run: |
+          docker-compose -f ./java-sdk/sdk-tests/deploy/local-test-kafka.yml up -d
+          docker ps
+      - name: Install Local mongo database using docker-compose
+        run: |
+          docker-compose -f ./java-sdk/sdk-tests/deploy/local-test-mongo.yml up -d
+          docker ps
+      - name: Clean up files
+        run: cd java-sdk && mvn clean -B
+      - name: Build sdk
+        run: cd java-sdk && mvn compile -B -q
+      - name: Unit tests
+        run: cd java-sdk && mvn -B test -q
+      - name: Codecov
+        uses: codecov/codecov-action@v3.1.1
+      - name: Install jars
+        run: cd java-sdk && mvn install -q -B -DskipTests
+      - name: Integration tests using spring boot version ${{ matrix.spring-boot-version }}
+        id: integration_tests
+        run: cd java-sdk && PRODUCT_SPRING_BOOT_VERSION=${{ matrix.spring-boot-version }} mvn -B -f sdk-tests/pom.xml verify
+      - name: Upload test report for sdk
+        uses: actions/upload-artifact@master
+        with:
+          name: report-dapr-java-sdk
+          path: java-sdk/sdk/target/jacoco-report/
+      - name: Upload test report for sdk-actors
+        uses: actions/upload-artifact@master
+        with:
+          name: report-dapr-java-sdk-actors
+          path: java-sdk/sdk-actors/target/jacoco-report/
+      - name: Upload failsafe test report for sdk-tests on failure
+        if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
+        uses: actions/upload-artifact@master
+        with:
+          name: failsafe-report-sdk-tests
+          path: java-sdk/sdk-tests/target/failsafe-reports
+      - name: Upload surefire test report for sdk-tests on failure
+        if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
+        uses: actions/upload-artifact@master
+        with:
+          name: surefire-report-sdk-tests
+          path: java-sdk/sdk-tests/target/surefire-reports
