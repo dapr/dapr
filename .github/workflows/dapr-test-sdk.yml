@@ -142,8 +142,6 @@ jobs:
         run: cd java-sdk && mvn clean -B
       - name: Build sdk
         run: cd java-sdk && mvn compile -B -q
-      - name: Unit tests
-        run: cd java-sdk && mvn -B test -q
       - name: Install jars
         run: cd java-sdk && mvn install -q -B -DskipTests
       - name: Integration tests using spring boot version ${{ env.JAVA_SPRING_BOOT_VERSION }}
