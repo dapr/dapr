@@ -28,6 +28,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/utils"
 )
 
 var ErrDuplicateInvocation = errors.New("duplicate invocation")
@@ -146,7 +147,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 		return err
 	}
 
-	endIndex := strings.LastIndex(actorID, "::")
+	endIndex := strings.LastIndex(actorID, utils.WFActivityIdDelimiter)
 	if endIndex < 0 {
 		return fmt.Errorf("invalid activity actor ID: %s", actorID)
 	}

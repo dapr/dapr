@@ -27,7 +27,8 @@ import (
 )
 
 const (
-	DotDelimiter = "."
+	DotDelimiter          = "."
+	WFActivityIdDelimiter = "::" // Delimiter between workflow id and activity id
 )
 
 var (
