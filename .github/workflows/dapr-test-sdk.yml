@@ -11,6 +11,9 @@
 # limitations under the License.
 #
 
+## Required secrets:
+# - DAPR_BOT_TOKEN: Token for the Dapr bot
+
 name: dapr-test-sdk
 
 on:
@@ -38,7 +41,7 @@ jobs:
   python-sdk:
     if: |
       github.event_name == 'schedule' ||
-      (github.event_name == 'issue_comment' &&
+      (github.event.issue.pull_request &&
         (
           contains(format(fromJSON('"\r\n{0}\r\n"'), github.event.comment.body), fromJSON('"\r\n/test-sdk-all\r\n"')) ||
           contains(format(fromJSON('"\r\n{0}\r\n"'), github.event.comment.body), fromJSON('"\r\n/test-sdk-python\r\n"'))
@@ -47,6 +50,19 @@ jobs:
     name: "Python SDK verification tests"
     runs-on: ubuntu-latest
     steps:
+      - name: Create PR comment
+        if: ${{ github.event.issue.pull_request }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ github.event.issue.number }}
+          hide: true
+          hide_classify: OUTDATED
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            # Dapr SDK Python test
+
+            🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
       - uses: actions/checkout@v3
       - name: Set up Python 3.9
         uses: actions/setup-python@v4
@@ -85,10 +101,45 @@ jobs:
         run: |
           cd python-sdk || true
           tox -e examples
+      - name: Update PR comment for success
+        if: ${{ success() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ github.event.issue.number }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Python SDK tests passed
+      - name: Update PR comment for failure
+        if: ${{ failure() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ github.event.issue.number }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Python SDK tests failed
+
+            Please check the logs for details on the error.
+      - name: Update PR comment for cancellation
+        if: ${{ cancelled() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ github.event.issue.number }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Python SDK tests cancelled
+
+            The Action has been canceled
+
   java-sdk:
     if: |
       github.event_name == 'schedule' ||
-      (github.event_name == 'issue_comment' &&
+      (github.event.issue.pull_request &&
         (
           contains(format(fromJSON('"\r\n{0}\r\n"'), github.event.comment.body), fromJSON('"\r\n/test-sdk-all\r\n"')) ||
           contains(format(fromJSON('"\r\n{0}\r\n"'), github.event.comment.body), fromJSON('"\r\n/test-sdk-java\r\n"'))
@@ -100,6 +151,19 @@ jobs:
       JDK_VER: 11
       JAVA_SPRING_BOOT_VERSION: 2.7.8
     steps:
+      - name: Create PR comment
+        if: ${{ github.event.issue.pull_request }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ github.event.issue.number }}
+          hide: true
+          hide_classify: OUTDATED
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            # Dapr SDK Java test
+
+            🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
       - uses: actions/checkout@v3
       - name: Set up OpenJDK ${{ env.JDK_VER }}
         uses: actions/setup-java@v3
@@ -169,3 +233,37 @@ jobs:
         with:
           name: surefire-report-sdk-tests
           path: java-sdk/sdk-tests/target/surefire-reports
+      - name: Update PR comment for success
+        if: ${{ success() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ github.event.issue.number }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Java SDK tests passed
+      - name: Update PR comment for failure
+        if: ${{ failure() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ github.event.issue.number }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Java SDK tests failed
+
+            Please check the logs for details on the error.
+      - name: Update PR comment for cancellation
+        if: ${{ cancelled() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ github.event.issue.number }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Java SDK tests cancelled
+
+            The Action has been canceled
