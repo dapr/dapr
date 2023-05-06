@@ -224,8 +224,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	var resp *http.Response
 	if len(h.pipeline.Handlers) > 0 {
 		// Exec pipeline only if at least one handler is specified
-		rw := &rwRecorder{
-			w: &bytes.Buffer{},
+		rw := &RWRecorder{
+			W: &bytes.Buffer{},
 		}
 		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
 			// Send request to user application
