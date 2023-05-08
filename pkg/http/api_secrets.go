@@ -76,7 +76,8 @@ func (a *api) onBulkGetSecretHandler() fasthttp.RequestHandler {
 					return nil, nil
 				}
 
-				secrets := map[string]map[string]string{}
+				var secrets map[string]map[string]string
+				secrets = make(map[string]map[string]string, len(out.Data))
 				// Return just the secrets as map
 				for secretKey, secret := range out.Data {
 					secrets[secretKey] = secret.Secrets
