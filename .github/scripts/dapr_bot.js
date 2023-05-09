@@ -399,7 +399,7 @@ async function cmdTestSDK(github, issue, isFromPulls, command, args) {
         const testSDKPayload = {
             pull_head_ref: pull.data.head.sha,
             pull_head_repo: pull.data.head.repo.full_name,
-            command: command.replace(/\/$/, ''),
+            command: command.substring(1),
             args,
             issue: issue,
         }
@@ -408,7 +408,7 @@ async function cmdTestSDK(github, issue, isFromPulls, command, args) {
         await github.repos.createDispatchEvent({
             owner: issue.owner,
             repo: issue.repo,
-            event_type: command.replace(/\/$/, ''),
+            event_type: command.substring(1),
             client_payload: testSDKPayload,
         })
 

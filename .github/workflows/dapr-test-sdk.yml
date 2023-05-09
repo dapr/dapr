@@ -33,19 +33,14 @@ env:
   # /test-sdk-all
   # /test-sdk-python
   # /test-sdk-java
-# Because of the way the GitHub handles string litterals, we need to use
-# `fromJSON` so that we only match on commands which are on their own line
-# with no space text.
-# Janky, but this is produces better UX for maintainers and prevents accidental
-# runs.
 jobs:
   python-sdk:
     if: |
       github.event_name == 'schedule' ||
       ( github.event_name == 'repository_dispatch' &&
         (
-          github.event_type == 'test-sdk-all' ||
-          github.event_type == 'test-sdk-python'
+          github.event.action == 'test-sdk-all' ||
+          github.event.action == 'test-sdk-python'
         )
       )
     name: "Python SDK verification tests"
@@ -64,7 +59,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if testPayload {
+            if (testPayload) {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
@@ -168,8 +163,8 @@ jobs:
       github.event_name == 'schedule' ||
       ( github.event_name == 'repository_dispatch' &&
         (
-          github.event_type == 'test-sdk-all' ||
-          github.event_type == 'test-sdk-java'
+          github.event.action == 'test-sdk-all' ||
+          github.event.action == 'test-sdk-java'
         )
       )
     name: "Java SDK verification tests"
@@ -191,7 +186,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if testPayload {
+            if (testPayload) {
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
