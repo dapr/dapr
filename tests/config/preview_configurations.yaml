@@ -11,18 +11,6 @@
 # limitations under the License.
 #
 
-# TODO: Remove once AppHealthCheck feature is finalized
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: healthcheckconfig
-spec:
-  features:
-    - name: AppHealthCheck
-      enabled: true
-
----
-
 # TODO: Remove once ServiceInvocationStreaming feature is finalized
 apiVersion: dapr.io/v1alpha1
 kind: Configuration

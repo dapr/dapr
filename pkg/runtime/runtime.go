@@ -545,8 +545,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 
-	a.initDirectMessaging(a.nameResolver)
-
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
 
