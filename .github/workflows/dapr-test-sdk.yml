@@ -110,9 +110,6 @@ jobs:
           make
           mkdir -p $HOME/.dapr/bin/
           cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Initialize Dapr runtime
-        run: |
-          dapr init
       - name: Override placement service.
         run: |
           docker stop dapr_placement
@@ -240,9 +237,6 @@ jobs:
           make
           mkdir -p $HOME/.dapr/bin/
           cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Initialize Dapr runtime
-        run: |
-          dapr init
       - name: Override placement service.
         run: |
           docker stop dapr_placement
