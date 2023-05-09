@@ -997,38 +997,35 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 // Executes a reminder or timer
 func (a *actorsRuntime) executeReminder(reminder *reminders.Reminder, isTimer bool) (err error) {
 	var (
-		b            []byte
+		data         any
 		logName      string
 		invokeMethod string
 	)
+
 	if isTimer {
 		logName = "timer"
 		invokeMethod = "timer/" + reminder.Name
-		b, err = json.Marshal(TimerResponse{
+		data = &TimerResponse{
 			Callback: reminder.Callback,
 			Data:     reminder.Data,
 			DueTime:  reminder.DueTime,
 			Period:   reminder.Period.String(),
-		})
+		}
 	} else {
 		logName = "reminder"
 		invokeMethod = "remind/" + reminder.Name
-		b, err = json.Marshal(ReminderResponse{
+		data = &ReminderResponse{
 			DueTime: reminder.DueTime,
 			Period:  reminder.Period.String(),
 			Data:    reminder.Data,
-		})
+		}
 	}
-	if err != nil {
-		return err
-	}
-
 	policyDef := a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
 
 	log.Debug("Executing " + logName + " for actor " + reminder.Key())
 	req := invokev1.NewInvokeMethodRequest(invokeMethod).
 		WithActor(reminder.ActorType, reminder.ActorID).
-		WithRawDataBytes(b).
+		WithDataObject(data).
 		WithContentType(invokev1.JSONContentType)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
