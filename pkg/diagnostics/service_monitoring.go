@@ -142,19 +142,19 @@ func newServiceMetrics() *serviceMetrics {
 			stats.UnitDimensionless),
 		actorTimers: stats.Int64(
 			"runtime/actor/timers",
-			"The number of the actor timer requests.",
+			"The number of actor timer requests.",
 			stats.UnitDimensionless),
 		actorReminders: stats.Int64(
 			"runtime/actor/reminders",
-			"The number of the actor reminder requests.",
+			"The number of actor reminder requests.",
 			stats.UnitDimensionless),
 		actorReminderFiredTotal: stats.Int64(
 			"runtime/actor/reminders_fired_total",
-			"The number of the actor reminder fired requests.",
+			"The number of actor reminders fired requests.",
 			stats.UnitDimensionless),
 		actorTimerFiredTotal: stats.Int64(
 			"runtime/actor/timers_fired_total",
-			"The number of the actor timer fired requests.",
+			"The number of actor timers fired requests.",
 			stats.UnitDimensionless),
 
 		// Access Control Lists for service invocation
