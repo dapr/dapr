@@ -27,6 +27,11 @@ BINARIES    ?= daprd placement operator injector sentry
 HA_MODE     ?= false
 # Force in-memory log for placement
 FORCE_INMEM ?= true
+# Go's build tags:
+# all_components - includes all components in Dapr sidecar
+# stable_components - includes all stable components in Dapr sidecar
+DAPR_SIDECAR_FLAVOR ?= all
+DAPR_GO_BUILD_TAGS = $(DAPR_SIDECAR_FLAVOR)_components
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -176,7 +181,7 @@ build: $(DAPR_BINS)
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
-	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) -tags=$(DAPR_GO_BUILD_TAGS) \
 	-o $(5)/$(1) $(2)/;
 endef
 
@@ -199,8 +204,10 @@ endif
 ################################################################################
 ARCHIVE_OUT_DIR ?= $(DAPR_OUT_DIR)
 ARCHIVE_FILE_EXTS:=$(foreach ITEM,$(BINARIES),archive-$(ITEM)$(ARCHIVE_EXT))
+ARCHIVE_FILE_FLAVOR_EXTS:=$(foreach ITEM,$(BINARIES),archive-$(ITEM)-$(DAPR_SIDECAR_FLAVOR)$(ARCHIVE_EXT))
 
 archive: $(ARCHIVE_FILE_EXTS)
+archive-flavor: $(ARCHIVE_FILE_FLAVOR_EXTS)
 
 # Generate archive files for each binary
 # $(1): the binary name to be archived
@@ -209,14 +216,18 @@ define genArchiveBinary
 ifeq ($(GOOS),windows)
 archive-$(1).zip:
 	7z.exe a -tzip "$(2)\\$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" "$(DAPR_OUT_DIR)\\$(1)$(BINARY_EXT)"
+archive-$(1)-$(3).zip:
+	7z.exe a -tzip "$(2)\\$(1)_$(GOOS)_$(GOARCH)-$(3)$(ARCHIVE_EXT)" "$(DAPR_OUT_DIR)\\$(1)$(BINARY_EXT)"
 else
 archive-$(1).tar.gz:
 	tar czf "$(2)/$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" -C "$(DAPR_OUT_DIR)" "$(1)$(BINARY_EXT)"
+archive-$(1)-$(3).tar.gz:
+	tar czf "$(2)/$(1)_$(GOOS)_$(GOARCH)-$(3)$(ARCHIVE_EXT)" -C "$(DAPR_OUT_DIR)" "$(1)$(BINARY_EXT)"
 endif
 endef
 
 # Generate archive-*.[zip|tar.gz] targets
-$(foreach ITEM,$(BINARIES),$(eval $(call genArchiveBinary,$(ITEM),$(ARCHIVE_OUT_DIR))))
+$(foreach ITEM,$(BINARIES),$(eval $(call genArchiveBinary,$(ITEM),$(ARCHIVE_OUT_DIR),$(DAPR_SIDECAR_FLAVOR))))
 
 
 ################################################################################
@@ -276,6 +287,7 @@ docker-deploy-k8s: check-docker-env check-arch
 # Target: archive                                                              #
 ################################################################################
 release: build archive
+release-flavor: build archive-flavor
 
 ################################################################################
 # Target: test                                                                 #
@@ -288,9 +300,9 @@ test: test-deps
 			--format standard-quiet \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
-				$(COVERAGE_OPTS) --tags=unit
+				$(COVERAGE_OPTS) --tags=unit,all_components
 	CGO_ENABLED=$(CGO) \
-		go test ./tests/...
+		go test --tags=all_components ./tests/...
 
 ################################################################################
 # Target: test-race                                                            #
@@ -329,7 +341,7 @@ TEST_WITH_RACE=./pkg/acl/... \
 .PHONY: test-race
 test-race:
 	echo "$(TEST_WITH_RACE)" | xargs \
-		go test -tags=unit -race
+		go test -tags="all_components unit" -race
 
 ################################################################################
 # Target: lint                                                                 #
@@ -338,7 +350,7 @@ test-race:
 # You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
 .PHONY: lint
 lint:
-	$(GOLANGCI_LINT) run --timeout=20m
+	$(GOLANGCI_LINT) run --build-tags=all_components --timeout=20m
 
 ################################################################################
 # Target: modtidy-all                                                          #

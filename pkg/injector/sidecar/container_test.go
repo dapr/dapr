@@ -172,6 +172,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -246,6 +247,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -320,6 +322,154 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
+			"--log-as-json",
+			"--enable-mtls",
+		}
+
+		// Command should be empty, image's entrypoint to be used.
+		assert.Equal(t, 0, len(container.Command))
+		// NAMESPACE
+		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// DAPR_API_TOKEN
+		assert.Equal(t, defaultAPITokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
+		// DAPR_APP_TOKEN
+		assert.Equal(t, defaultAppTokenSecret, container.Env[7].ValueFrom.SecretKeyRef.Name)
+		// default image
+		assert.Equal(t, "daprio/dapr", container.Image)
+		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
+	})
+
+	t.Run("get sidecar container with SkipPlacement=true", func(t *testing.T) {
+		an := map[string]string{}
+		an[annotations.KeyConfig] = defaultTestConfig
+		an[annotations.KeyAppPort] = "5000"
+		an[annotations.KeyLogAsJSON] = "true"
+		an[annotations.KeyAPITokenSecret] = defaultAPITokenSecret
+		an[annotations.KeyAppTokenSecret] = defaultAppTokenSecret
+		an[annotations.KeyEnableDebug] = "true"
+
+		container, _ := GetSidecarContainer(ContainerConfig{
+			AppID:                   "app_id",
+			Annotations:             an,
+			DaprSidecarImage:        "daprio/dapr",
+			ImagePullPolicy:         "Always",
+			Namespace:               "dapr-system",
+			ControlPlaneAddress:     "controlplane:9000",
+			PlacementServiceAddress: "placement:50000",
+			SentryAddress:           "sentry:50000",
+			MTLSEnabled:             true,
+			Identity:                "pod_identity",
+			SkipPlacement:           true,
+		})
+
+		expectedArgs := []string{
+			"/dlv",
+			"--listen=:40000",
+			"--accept-multiclient",
+			"--headless=true",
+			"--log",
+			"--api-version=2",
+			"exec",
+			"/daprd",
+			"--",
+			"--mode", "kubernetes",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "50001",
+			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
+			"--app-port", "5000",
+			"--app-id", "app_id",
+			"--control-plane-address", "controlplane:9000",
+			"--app-protocol", "http",
+			"--placement-host-address", "",
+			"--config", defaultTestConfig,
+			"--log-level", "info",
+			"--app-max-concurrency", "-1",
+			"--sentry-address", "sentry:50000",
+			"--enable-metrics=true",
+			"--metrics-port", "9090",
+			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "-1",
+			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
+			"--log-as-json",
+			"--enable-mtls",
+		}
+
+		// Command should be empty, image's entrypoint to be used.
+		assert.Equal(t, 0, len(container.Command))
+		// NAMESPACE
+		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// DAPR_API_TOKEN
+		assert.Equal(t, defaultAPITokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
+		// DAPR_APP_TOKEN
+		assert.Equal(t, defaultAppTokenSecret, container.Env[7].ValueFrom.SecretKeyRef.Name)
+		// default image
+		assert.Equal(t, "daprio/dapr", container.Image)
+		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
+	})
+
+	t.Run("get sidecar container with SkipPlacement=true and explicit placement address annotation", func(t *testing.T) {
+		an := map[string]string{}
+		an[annotations.KeyConfig] = defaultTestConfig
+		an[annotations.KeyAppPort] = "5000"
+		an[annotations.KeyLogAsJSON] = "true"
+		an[annotations.KeyAPITokenSecret] = defaultAPITokenSecret
+		an[annotations.KeyAppTokenSecret] = defaultAppTokenSecret
+		an[annotations.KeyEnableDebug] = "true"
+		an[annotations.KeyPlacementHostAddresses] = "some-host:50000"
+
+		container, _ := GetSidecarContainer(ContainerConfig{
+			AppID:                   "app_id",
+			Annotations:             an,
+			DaprSidecarImage:        "daprio/dapr",
+			ImagePullPolicy:         "Always",
+			Namespace:               "dapr-system",
+			ControlPlaneAddress:     "controlplane:9000",
+			PlacementServiceAddress: "placement:50000",
+			SentryAddress:           "sentry:50000",
+			MTLSEnabled:             true,
+			Identity:                "pod_identity",
+			SkipPlacement:           true,
+		})
+
+		expectedArgs := []string{
+			"/dlv",
+			"--listen=:40000",
+			"--accept-multiclient",
+			"--headless=true",
+			"--log",
+			"--api-version=2",
+			"exec",
+			"/daprd",
+			"--",
+			"--mode", "kubernetes",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "50001",
+			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
+			"--app-port", "5000",
+			"--app-id", "app_id",
+			"--control-plane-address", "controlplane:9000",
+			"--app-protocol", "http",
+			"--placement-host-address", "some-host:50000",
+			"--config", defaultTestConfig,
+			"--log-level", "info",
+			"--app-max-concurrency", "-1",
+			"--sentry-address", "sentry:50000",
+			"--enable-metrics=true",
+			"--metrics-port", "9090",
+			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "-1",
+			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -375,6 +525,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--enable-mtls",
 		}
 
@@ -418,6 +569,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--enable-mtls",
 		}
 
@@ -461,6 +613,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "5",
 			"--disable-builtin-k8s-secret-store=false",
+			"--app-channel-address", "",
 			"--enable-mtls",
 		}
 
@@ -548,6 +701,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=true",
+			"--app-channel-address", "",
 			"--enable-mtls",
 		}
 
@@ -594,6 +748,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--app-channel-address", "",
 				"--enable-mtls",
 			}
 
@@ -628,6 +783,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--app-channel-address", "",
 				"--enable-api-logging=true",
 				"--enable-mtls",
 			}
@@ -663,6 +819,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--app-channel-address", "",
 				"--enable-api-logging=false",
 				"--enable-mtls",
 			}

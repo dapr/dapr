@@ -38,12 +38,14 @@ type actorBackend struct {
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 	startedOnce               sync.Once
+	config                    wfConfig
 }
 
 func NewActorBackend(engine *WorkflowEngine) *actorBackend {
 	return &actorBackend{
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem),
+		config:                    engine.config,
 	}
 }
 
@@ -99,7 +101,7 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
 	req := invokev1.
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
-		WithActor(WorkflowActorType, workflowInstanceID).
+		WithActor(be.config.workflowActorType, workflowInstanceID).
 		WithRawDataBytes(eventData).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -117,7 +119,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
 	req := invokev1.
 		NewInvokeMethodRequest(GetWorkflowMetadataMethod).
-		WithActor(WorkflowActorType, string(id)).
+		WithActor(be.config.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
@@ -144,7 +146,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
 func (*actorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	wfLogger.Warnf("%s: aborting activity execution (#%d)", wi.InstanceID, wi.NewEvent.EventId)
+	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.EventId)
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
 	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
@@ -175,7 +177,7 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(WorkflowActorType, string(id)).
+		WithActor(be.config.workflowActorType, string(id)).
 		WithRawDataBytes(data).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -237,6 +239,21 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 	case wi := <-be.orchestrationWorkItemChan:
 		return wi, nil
 	}
+}
+
+// PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
+func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
+	req := invokev1.
+		NewInvokeMethodRequest(PurgeWorkflowStateMethod).
+		WithActor(be.config.workflowActorType, string(id))
+	defer req.Close()
+
+	resp, err := be.actors.Call(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Close()
+	return nil
 }
 
 // Start implements backend.Backend

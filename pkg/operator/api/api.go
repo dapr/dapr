@@ -33,6 +33,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
@@ -55,24 +56,28 @@ type Server interface {
 	Run(ctx context.Context, certChain *daprCredentials.CertChain) error
 	Ready(context.Context) error
 	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
+	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
 }
 
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client client.Client
 	// notify all dapr runtime
-	connLock          sync.Mutex
-	allConnUpdateChan map[string]chan *componentsapi.Component
-	readyCh           chan struct{}
-	running           atomic.Bool
+	connLock               sync.Mutex
+	endpointLock           sync.Mutex
+	allConnUpdateChan      map[string]chan *componentsapi.Component
+	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
+	readyCh                chan struct{}
+	running                atomic.Bool
 }
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(client client.Client) Server {
 	return &apiServer{
-		Client:            client,
-		allConnUpdateChan: make(map[string]chan *componentsapi.Component),
-		readyCh:           make(chan struct{}),
+		Client:                 client,
+		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
+		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
+		readyCh:                make(chan struct{}),
 	}
 }
 
@@ -127,6 +132,16 @@ func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsa
 		connUpdateChan <- component
 	}
 	a.connLock.Unlock()
+}
+
+func (a *apiServer) OnHTTPEndpointUpdated(_ context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
+	a.endpointLock.Lock()
+	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
+		go func(endpointUpdateChan chan *httpendpointsapi.HTTPEndpoint) {
+			endpointUpdateChan <- endpoint
+		}(endpointUpdateChan)
+	}
+	a.endpointLock.Unlock()
 }
 
 func (a *apiServer) Ready(ctx context.Context) error {
@@ -202,14 +217,50 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 			}
 
 			val, ok := secret.Data[key]
-			enc := b64.StdEncoding.EncodeToString(val)
-			jsonEnc, err := json.Marshal(enc)
+			if ok {
+				enc := b64.StdEncoding.EncodeToString(val)
+				jsonEnc, err := json.Marshal(enc)
+				if err != nil {
+					return err
+				}
+				component.Spec.Metadata[i].Value = componentsapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: jsonEnc,
+					},
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint, namespace string, kubeClient client.Client) error {
+	for i, header := range endpoint.Spec.Headers {
+		if header.SecretKeyRef.Name != "" && (endpoint.Auth.SecretStore == kubernetesSecretStore || endpoint.Auth.SecretStore == "") {
+			var secret corev1.Secret
+
+			err := kubeClient.Get(ctx, types.NamespacedName{
+				Name:      header.SecretKeyRef.Name,
+				Namespace: namespace,
+			}, &secret)
 			if err != nil {
 				return err
 			}
 
+			key := header.SecretKeyRef.Key
+			if key == "" {
+				key = header.SecretKeyRef.Name
+			}
+
+			val, ok := secret.Data[key]
 			if ok {
-				component.Spec.Metadata[i].Value = componentsapi.DynamicValue{
+				enc := b64.StdEncoding.EncodeToString(val)
+				jsonEnc, err := json.Marshal(enc)
+				if err != nil {
+					return err
+				}
+				endpoint.Spec.Headers[i].Value = httpendpointsapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: jsonEnc,
 					},
@@ -358,6 +409,113 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			go func() {
 				defer wg.Done()
 				updateComponentFunc(srv.Context(), c)
+			}()
+		}
+	}
+}
+
+// GetHTTPEndpoint returns a specified http endpoint object.
+func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
+	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
+	var endpointConfig httpendpointsapi.HTTPEndpoint
+	if err := a.Client.Get(ctx, key, &endpointConfig); err != nil {
+		return nil, fmt.Errorf("error getting http endpoint: %w", err)
+	}
+	b, err := json.Marshal(&endpointConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling http endpoint: %w", err)
+	}
+	return &operatorv1pb.GetHTTPEndpointResponse{
+		HttpEndpoint: b,
+	}, nil
+}
+
+// ListHTTPEndpoints gets the list of applied http endpoints.
+func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
+	resp := &operatorv1pb.ListHTTPEndpointsResponse{
+		HttpEndpoints: [][]byte{},
+	}
+
+	var endpoints httpendpointsapi.HTTPEndpointList
+	if err := a.Client.List(ctx, &endpoints, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
+		return nil, fmt.Errorf("error listing http endpoints: %w", err)
+	}
+
+	for _, item := range endpoints.Items {
+		b, err := json.Marshal(item)
+		if err != nil {
+			log.Warnf("Error unmarshalling http endpoints: %s", err)
+			continue
+		}
+		resp.HttpEndpoints = append(resp.HttpEndpoints, b)
+	}
+
+	return resp, nil
+}
+
+// HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
+func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
+	log.Info("sidecar connected for http endpoint updates")
+	keyObj, err := uuid.NewRandom()
+	if err != nil {
+		return err
+	}
+	key := keyObj.String()
+
+	a.endpointLock.Lock()
+	a.allEndpointsUpdateChan[key] = make(chan *httpendpointsapi.HTTPEndpoint, 1)
+	updateChan := a.allEndpointsUpdateChan[key]
+	a.endpointLock.Unlock()
+
+	defer func() {
+		a.endpointLock.Lock()
+		defer a.endpointLock.Unlock()
+		delete(a.allEndpointsUpdateChan, key)
+	}()
+
+	updateHTTPEndpointFunc := func(ctx context.Context, e *httpendpointsapi.HTTPEndpoint) {
+		if e.Namespace != in.Namespace {
+			return
+		}
+
+		err := processHTTPEndpointSecrets(ctx, e, in.Namespace, a.Client)
+		if err != nil {
+			log.Warnf("error processing http endpoint %s secrets from pod %s/%s: %s", e.Name, in.Namespace, in.PodName, err)
+			return
+		}
+		b, err := json.Marshal(&e)
+		if err != nil {
+			log.Warnf("error serializing  http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			return
+		}
+
+		err = srv.Send(&operatorv1pb.HTTPEndpointUpdateEvent{
+			HttpEndpoints: b,
+		})
+		if err != nil {
+			log.Warnf("error updating sidecar with http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			return
+		}
+
+		log.Infof("updated sidecar with http endpoint %s from pod %s/%s", e.GetName(), in.Namespace, in.PodName)
+	}
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	for {
+		select {
+		case <-srv.Context().Done():
+			return nil
+		case c, ok := <-updateChan:
+			if !ok {
+				return nil
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				updateHTTPEndpointFunc(srv.Context(), c)
 			}()
 		}
 	}

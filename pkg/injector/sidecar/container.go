@@ -51,6 +51,7 @@ type ContainerConfig struct {
 	TrustAnchors                 string
 	VolumeMounts                 []corev1.VolumeMount
 	ComponentsSocketsVolumeMount *corev1.VolumeMount
+	SkipPlacement                bool
 	RunAsNonRoot                 bool
 	ReadOnlyRootFilesystem       bool
 	SidecarDropALLCapabilities   bool
@@ -97,8 +98,11 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		log.Warn(err)
 	}
 
+	// We still include PlacementServiceAddress if explicitly set as annotation
 	if cfg.Annotations.Exist(annotations.KeyPlacementHostAddresses) {
 		cfg.PlacementServiceAddress = cfg.Annotations.GetString(annotations.KeyPlacementHostAddresses)
+	} else if cfg.SkipPlacement {
+		cfg.PlacementServiceAddress = ""
 	}
 
 	ports := []corev1.ContainerPort{
@@ -144,6 +148,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
 		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(disableBuiltinK8sSecretStore),
+		"--app-channel-address", cfg.Annotations.GetString(annotations.KeyAppChannel),
 	}
 
 	// --enable-api-logging is set only if there's an explicit annotation (true or false) for that
