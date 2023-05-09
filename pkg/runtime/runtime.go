@@ -100,6 +100,7 @@ import (
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -1700,12 +1701,12 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 	err = binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return NewInitError(InitComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -1726,14 +1727,14 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	if binding != nil {
 		err := binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-			return NewInitError(InitComponentFailure, fName, err)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
 		log.Infof("successful init for output binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		a.compStore.AddOutputBinding(c.ObjectMeta.Name, binding)
@@ -1747,13 +1748,13 @@ func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 	if store != nil {
 		err := store.Init(context.TODO(), configuration.Metadata{Base: a.toBaseMetadata(s)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			return NewInitError(InitComponentFailure, fName, err)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
 
 		a.compStore.AddConfiguration(s.ObjectMeta.Name, store)
@@ -1769,7 +1770,7 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 	if store == nil {
 		return nil
@@ -1780,7 +1781,7 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	err = store.InitLockStore(context.TODO(), lock.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		return NewInitError(InitComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 	// save lock related configuration
 	a.compStore.AddLock(s.ObjectMeta.Name, store)
@@ -1788,7 +1789,7 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
-		return NewInitError(InitComponentFailure, fName, wrapError)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
 	}
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 
@@ -1814,7 +1815,7 @@ func (a *DaprRuntime) initWorkflowComponent(s componentsV1alpha1.Component) erro
 	err = workflowComp.Init(wfs.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		return NewInitError(InitComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 	// save workflow related configuration
 	a.compStore.AddWorkflow(s.ObjectMeta.Name, workflowComp)
@@ -1829,7 +1830,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 	if store != nil {
 		secretStoreName := a.authSecretStoreOrDefault(s)
@@ -1838,7 +1839,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
 		if encErr != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-			return NewInitError(CreateComponentFailure, fName, err)
+			return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 		}
 
 		if encKeys.Primary.Key != "" {
@@ -1853,7 +1854,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		err = store.Init(context.TODO(), state.Metadata{Base: baseMetadata})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			return NewInitError(InitComponentFailure, fName, err)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
 
 		a.compStore.AddStateStore(s.ObjectMeta.Name, store)
@@ -1861,7 +1862,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
-			return NewInitError(InitComponentFailure, fName, wrapError)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
 		}
 
 		// when placement address list is not empty, set specified actor store.
@@ -2032,7 +2033,7 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	baseMetadata := a.toBaseMetadata(c)
@@ -2046,7 +2047,7 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	err = pubSub.Init(context.TODO(), pubsub.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return NewInitError(InitComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	pubsubName := c.ObjectMeta.Name
@@ -2199,7 +2200,7 @@ func (a *DaprRuntime) initNameResolution() error {
 			resolverName = "mdns"
 		default:
 			fName := utils.ComponentLogName(resolverName, "nameResolution", resolverVersion)
-			return NewInitError(InitComponentFailure, fName, fmt.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode)))
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, fmt.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode)))
 		}
 	}
 
@@ -2221,12 +2222,12 @@ func (a *DaprRuntime) initNameResolution() error {
 
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "creation", resolverName)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	if err = resolver.Init(resolverMetadata); err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "init", resolverName)
-		return NewInitError(InitComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	a.nameResolver = resolver
@@ -2497,7 +2498,7 @@ func extractCloudEventProperty(cloudEvent map[string]interface{}, property strin
 func (a *DaprRuntime) initActors() error {
 	err := actors.ValidateHostEnvironment(a.runtimeConfig.mtlsEnabled, a.runtimeConfig.Mode, a.namespace)
 	if err != nil {
-		return NewInitError(InitFailure, "actors", err)
+		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 	}
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
@@ -2531,7 +2532,7 @@ func (a *DaprRuntime) initActors() error {
 		a.actor = act
 		return nil
 	}
-	return NewInitError(InitFailure, "actors", err)
+	return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 }
 
 func (a *DaprRuntime) namespaceComponentAuthorizer(component componentsV1alpha1.Component) bool {
@@ -2709,7 +2710,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	case <-time.After(timeout):
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		err := fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
-		return NewInitError(InitComponentFailure, comp.LogName(), err)
+		return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
 	}
 
 	log.Info("Component loaded: " + comp.LogName())
@@ -3337,13 +3338,13 @@ func (a *DaprRuntime) initCryptoProvider(c componentsV1alpha1.Component) error {
 	component, err := a.cryptoProviderRegistry.Create(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	err = component.Init(context.TODO(), contribCrypto.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return NewInitError(InitComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	a.compStore.AddCryptoProvider(c.ObjectMeta.Name, component)
@@ -3356,13 +3357,13 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return NewInitError(CreateComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	err = secretStore.Init(context.TODO(), secretstores.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return NewInitError(InitComponentFailure, fName, err)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	a.compStore.AddSecretStore(c.ObjectMeta.Name, secretStore)

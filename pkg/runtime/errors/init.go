@@ -11,27 +11,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package runtime
+package errors
 
 import (
 	"fmt"
 )
 
-type InitErrorKind string
+type InitKind string
 
 const (
-	InitFailure            InitErrorKind = "INIT_FAILURE"
-	InitComponentFailure   InitErrorKind = "INIT_COMPONENT_FAILURE"
-	CreateComponentFailure InitErrorKind = "CREATE_COMPONENT_FAILURE"
+	InitFailure            InitKind = "INIT_FAILURE"
+	InitComponentFailure   InitKind = "INIT_COMPONENT_FAILURE"
+	CreateComponentFailure InitKind = "CREATE_COMPONENT_FAILURE"
 )
 
-type InitError struct {
+type Init struct {
 	err    error
-	kind   InitErrorKind
+	kind   InitKind
 	entity string
 }
 
-func (e *InitError) Error() string {
+func (e *Init) Error() string {
 	if e.entity == "" {
 		return fmt.Sprintf("[%s]: %s", e.kind, e.err)
 	}
@@ -39,13 +39,13 @@ func (e *InitError) Error() string {
 	return fmt.Sprintf("[%s]: initialization error occurred for %s: %s", e.kind, e.entity, e.err)
 }
 
-func (e *InitError) Unwrap() error {
+func (e *Init) Unwrap() error {
 	return e.err
 }
 
-// NewInitError returns an InitError wrapping an existing context error.
-func NewInitError(kind InitErrorKind, entity string, err error) *InitError {
-	return &InitError{
+// NewInit returns an Init wrapping an existing context error.
+func NewInit(kind InitKind, entity string, err error) *Init {
+	return &Init{
 		err:    err,
 		kind:   kind,
 		entity: entity,
