@@ -16,6 +16,7 @@ package v1
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -469,6 +470,31 @@ func TestWithCustomHTTPMetadata(t *testing.T) {
 	}
 }
 
+func TestWithDataObject(t *testing.T) {
+	type testData struct {
+		Str string `json:"str"`
+		Int int    `json:"int"`
+	}
+	const expectJSON = `{"str":"mystring","int":42}`
+
+	req := NewInvokeMethodRequest("test_method").
+		WithDataObject(&testData{
+			Str: "mystring",
+			Int: 42,
+		})
+
+	got := req.GetDataObject()
+	require.NotNil(t, got)
+
+	gotEnc, err := json.Marshal(got)
+	require.NoError(t, err)
+	assert.Equal(t, []byte(expectJSON), compactJSON(t, gotEnc))
+
+	data, err := req.RawDataFull()
+	require.NoError(t, err)
+	assert.Equal(t, []byte(expectJSON), compactJSON(t, data))
+}
+
 func TestRequestReplayable(t *testing.T) {
 	const message = "Nel mezzo del cammin di nostra vita mi ritrovai per una selva oscura, che' la diritta via era smarrita."
 	newReplayable := func() *InvokeMethodRequest {
@@ -679,4 +705,11 @@ func TestRequestReplayable(t *testing.T) {
 			assert.Nil(t, req.replay)
 		})
 	})
+}
+
+func compactJSON(t *testing.T, data []byte) []byte {
+	out := &bytes.Buffer{}
+	err := json.Compact(out, data)
+	require.NoError(t, err)
+	return out.Bytes()
 }
