@@ -80,14 +80,15 @@ jobs:
           path: python-sdk
       - name: Set up Dapr CLI
         run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+      - name: Initialize Dapr runtime
+        run: |
+          dapr unintall --all
+          dapr init
       - name: Build and override daprd with HEAD.
         run: |
           make
           mkdir -p $HOME/.dapr/bin/
           cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Initialize Dapr runtime
-        run: |
-          dapr init
       - name: Override placement service.
         run: |
           docker stop dapr_placement
@@ -182,14 +183,15 @@ jobs:
           path: java-sdk
       - name: Set up Dapr CLI
         run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+      - name: Initialize Dapr runtime
+        run: |
+          dapr unintall --all
+          dapr init
       - name: Build and override daprd with HEAD.
         run: |
           make
           mkdir -p $HOME/.dapr/bin/
           cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Initialize Dapr runtime
-        run: |
-          dapr init
       - name: Override placement service.
         run: |
           docker stop dapr_placement
