@@ -17,17 +17,17 @@ import (
 	"fmt"
 )
 
-type InitKind string
+type InitErrorKind string
 
 const (
-	InitFailure            InitKind = "INIT_FAILURE"
-	InitComponentFailure   InitKind = "INIT_COMPONENT_FAILURE"
-	CreateComponentFailure InitKind = "CREATE_COMPONENT_FAILURE"
+	InitFailure            InitErrorKind = "INIT_FAILURE"
+	InitComponentFailure   InitErrorKind = "INIT_COMPONENT_FAILURE"
+	CreateComponentFailure InitErrorKind = "CREATE_COMPONENT_FAILURE"
 )
 
 type InitError struct {
 	err    error
-	kind   InitKind
+	kind   InitErrorKind
 	entity string
 }
 
@@ -43,8 +43,8 @@ func (e *InitError) Unwrap() error {
 	return e.err
 }
 
-// NewInit returns an Init wrapping an existing context error.
-func NewInit(kind InitKind, entity string, err error) *InitError {
+// NewInit returns an InitError wrapping an existing context error.
+func NewInit(kind InitErrorKind, entity string, err error) *InitError {
 	return &InitError{
 		err:    err,
 		kind:   kind,
