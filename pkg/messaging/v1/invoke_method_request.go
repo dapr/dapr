@@ -15,6 +15,7 @@ package v1
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -37,7 +38,8 @@ const (
 type InvokeMethodRequest struct {
 	replayableRequest
 
-	r *internalv1pb.InternalInvokeRequest
+	r          *internalv1pb.InternalInvokeRequest
+	dataObject any
 }
 
 // NewInvokeMethodRequest creates InvokeMethodRequest object for method.
@@ -92,6 +94,7 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 
 // WithRawData sets message data from a readable stream.
 func (imr *InvokeMethodRequest) WithRawData(data io.Reader) *InvokeMethodRequest {
+	imr.dataObject = nil
 	imr.ResetMessageData()
 	imr.replayableRequest.WithRawData(data)
 	return imr
@@ -105,6 +108,14 @@ func (imr *InvokeMethodRequest) WithRawDataBytes(data []byte) *InvokeMethodReque
 // WithRawDataString sets message data from a string.
 func (imr *InvokeMethodRequest) WithRawDataString(data string) *InvokeMethodRequest {
 	return imr.WithRawData(strings.NewReader(data))
+}
+
+// WithDataObject sets message from an object which will be serialized as JSON
+func (imr *InvokeMethodRequest) WithDataObject(data any) *InvokeMethodRequest {
+	enc, _ := json.Marshal(data)
+	res := imr.WithRawDataBytes(enc)
+	res.dataObject = data
+	return res
 }
 
 // WithContentType sets the content type.
@@ -278,6 +289,11 @@ func (imr *InvokeMethodRequest) RawDataFull() ([]byte, error) {
 		return nil, nil
 	}
 	return io.ReadAll(r)
+}
+
+// GetDataObject returns the data object stored in the object
+func (imr *InvokeMethodRequest) GetDataObject() any {
+	return imr.dataObject
 }
 
 // Adds a new header to the existing set.
