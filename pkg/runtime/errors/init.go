@@ -25,13 +25,13 @@ const (
 	CreateComponentFailure InitKind = "CREATE_COMPONENT_FAILURE"
 )
 
-type Init struct {
+type InitError struct {
 	err    error
 	kind   InitKind
 	entity string
 }
 
-func (e *Init) Error() string {
+func (e *InitError) Error() string {
 	if e.entity == "" {
 		return fmt.Sprintf("[%s]: %s", e.kind, e.err)
 	}
@@ -39,13 +39,13 @@ func (e *Init) Error() string {
 	return fmt.Sprintf("[%s]: initialization error occurred for %s: %s", e.kind, e.entity, e.err)
 }
 
-func (e *Init) Unwrap() error {
+func (e *InitError) Unwrap() error {
 	return e.err
 }
 
 // NewInit returns an Init wrapping an existing context error.
-func NewInit(kind InitKind, entity string, err error) *Init {
-	return &Init{
+func NewInit(kind InitKind, entity string, err error) *InitError {
+	return &InitError{
 		err:    err,
 		kind:   kind,
 		entity: entity,

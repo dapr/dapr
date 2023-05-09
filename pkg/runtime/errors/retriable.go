@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package runtime
+package errors
 
 type RetriableError struct {
 	err error
@@ -32,8 +32,8 @@ func (e *RetriableError) Unwrap() error {
 	return e.err
 }
 
-// NewRetriableError returns a RetriableError wrapping an existing context error.
-func NewRetriableError(err error) *RetriableError {
+// NewRetriable returns a RetriableError wrapping an existing context error.
+func NewRetriable(err error) *RetriableError {
 	return &RetriableError{
 		err: err,
 	}
