@@ -2471,12 +2471,12 @@ func extractCloudEventExtensions(cloudEvent map[string]interface{}) (*structpb.S
 	extensionsStruct := structpb.Struct{}
 	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
 	if jsonMarshalErr != nil {
-		return &extensionsStruct, fmt.Errorf("Error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
+		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
 	}
 
 	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, &extensionsStruct)
 	if protoUnmarshalErr != nil {
-		return &extensionsStruct, fmt.Errorf("Error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", protoUnmarshalErr)
+		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", protoUnmarshalErr)
 	}
 	return &extensionsStruct, nil
 }
