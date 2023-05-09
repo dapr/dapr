@@ -69,7 +69,7 @@ module.exports = async ({ github, context }) => {
 async function handleIssueCommentCreate({ github, context }) {
     const payload = context.payload
     const issue = context.issue
-    const username = context.actor
+    const username = context.actor.toLowerCase()
     const isFromPulls = !!payload.issue.pull_request
     const commentBody = payload.comment.body
 
