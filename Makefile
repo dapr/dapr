@@ -299,7 +299,7 @@ test: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
 			--format standard-quiet \
 			-- \
-				./pkg/... ./utils/... ./cmd/... \
+				./pkg/... ./utils/... ./cmd/... ./tests/integration/... \
 				$(COVERAGE_OPTS) --tags=unit,all_components
 	CGO_ENABLED=$(CGO) \
 		go test --tags=all_components ./tests/...
@@ -336,7 +336,8 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/proto/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
-./pkg/signals/...
+./pkg/signals/... \
+./tests/integration/...
 
 .PHONY: test-race
 test-race:
