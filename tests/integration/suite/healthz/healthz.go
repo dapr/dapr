@@ -45,10 +45,8 @@ func (h *Healthz) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
 		return err == nil
 	}, time.Second*5, time.Millisecond)
 
-	var resp *http.Response
-	var err error
 	assert.Eventually(t, func() bool {
-		resp, err = http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/healthz", cmd.PublicPort))
+		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/healthz", cmd.PublicPort))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return http.StatusNoContent == resp.StatusCode
