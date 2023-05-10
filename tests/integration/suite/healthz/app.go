@@ -104,6 +104,8 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", a.daprd.HTTPPort, a.daprd.AppID)
 
+	a.healthy.Store(true)
+
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)

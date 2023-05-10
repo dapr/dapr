@@ -20,12 +20,13 @@ const (
 	kubernetesServiceHostEnvVar = "KUBERNETES_SERVICE_HOST"
 	kubernetesConfig            = "kubernetes"
 	selfHostedConfig            = "selfhosted"
-	defaultPort                 = 50001
 	defaultWorkloadCertTTL      = time.Hour * 24
 	defaultAllowedClockSkew     = time.Minute * 15
 
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
+
+	DefaultPort = 50001
 )
 
 var log = logger.NewLogger("dapr.sentry.config")
@@ -58,8 +59,8 @@ func (c SentryConfig) String() string {
 		caStore = c.CAStore
 	}
 
-	return fmt.Sprintf("Configuration: port:'%v' ca store:'%s', allowed clock skew:'%s', workload cert ttl:'%s'",
-		c.Port, caStore, c.AllowedClockSkew.String(), c.WorkloadCertTTL.String())
+	return fmt.Sprintf("Configuration: ca store:'%s', allowed clock skew:'%s', workload cert ttl:'%s'",
+		caStore, c.AllowedClockSkew.String(), c.WorkloadCertTTL.String())
 }
 
 var configGetters = map[string]func(string) (SentryConfig, error){
@@ -94,7 +95,7 @@ func IsKubernetesHosted() bool {
 
 func getDefaultConfig() SentryConfig {
 	return SentryConfig{
-		Port:             defaultPort,
+		Port:             DefaultPort,
 		WorkloadCertTTL:  defaultWorkloadCertTTL,
 		AllowedClockSkew: defaultAllowedClockSkew,
 	}
