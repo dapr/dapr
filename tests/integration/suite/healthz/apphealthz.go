@@ -26,11 +26,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
 	// TODO: disable the app healthz tests for now because they are failing.
-	// suite.Register(new(AppHealthz))
+	suite.Register(new(AppHealthz))
 }
 
 // AppHealthz tests that Dapr responds to healthz requests for the app.
@@ -47,9 +48,9 @@ func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprd
 	mux := http.NewServeMux()
 	// TODO: @joshvanl there is currently a bug where the health check path is
 	// not being set correctly.
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/health", r.URL.Path)
+		require.Equal(t, "/healthz", r.URL.Path)
 
 		if a.healthy.Load() {
 			w.WriteHeader(http.StatusOK)
@@ -73,12 +74,12 @@ func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprd
 
 	go func() {
 		defer close(a.done)
-		require.NoError(t, a.server.Serve(listener))
+		require.ErrorIs(t, a.server.Serve(listener), http.ErrServerClosed)
 	}()
 
 	return []framework.RunDaprdOption{
 		framework.WithAppHealthCheck(true),
-		framework.WithAppHealthCheckPath("/health"),
+		framework.WithAppHealthCheckPath("/healthz"),
 		framework.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
 		framework.WithAppHealthProbeInterval(1),
 		framework.WithAppHealthProbeThreshold(1),
