@@ -20,7 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 )
 
-var MessageDroppedError = errors.New("pubsub message dropped")
+var ErrMessageDropped = errors.New("pubsub message dropped")
 
 // pubsub.NotFoundError is returned by the runtime when the pubsub does not exist.
 type NotFoundError struct {

@@ -435,10 +435,8 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
 					addBulkResponseEntry(bulkResponses, response.EntryId, nil)
 					if deadLetterTopic != "" {
-						//needSendsToDeadLetterIdxs = append(needSendsToDeadLetterIdxs, (*bscData.entryIdIndexMap)[response.EntryId])
 						message := psm.pubSubMessages[(*bscData.entryIdIndexMap)[response.EntryId]]
 						_ = a.sendToDeadLetter(bscData.psName, &pubsub.NewMessage{
-							//Data:        message.Event,
 							Data:        message.entry.Event,
 							Topic:       bscData.topic,
 							Metadata:    message.entry.Metadata,
