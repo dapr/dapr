@@ -27,16 +27,19 @@ func Test_Integration(t *testing.T) {
 	if _, ok := os.LookupEnv("DAPR_INTEGRATION_DAPRD_PATH"); !ok {
 		t.Log("DAPR_INTEGRATION_DAPRD_PATH not set, building daprd binary")
 
-		_, file, _, ok := runtime.Caller(0)
+		_, tfile, _, ok := runtime.Caller(0)
 		require.True(t, ok)
+		rootDir := filepath.Join(filepath.Dir(tfile), "../..")
 
 		// Use a consistent temp dir for the binary so that the binary is cached on
 		// subsequent runs.
 		daprdPath := filepath.Join(os.TempDir(), "dapr_integration_tests/daprd")
-		rootDir := filepath.Join(filepath.Dir(file), "../..")
+		if runtime.GOOS == "windows" {
+			daprdPath += ".exe"
+		}
 
-		t.Logf("Building daprd binary at: %q", daprdPath)
 		t.Logf("Root dir: %q", rootDir)
+		t.Logf("Building daprd binary to: %q", daprdPath)
 		cmd := exec.Command("go", "build", "-tags=all_components", "-v", "-o", daprdPath, filepath.Join(rootDir, "cmd/daprd"))
 		cmd.Dir = rootDir
 		cmd.Stdout = os.Stdout
