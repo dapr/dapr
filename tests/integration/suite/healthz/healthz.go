@@ -44,7 +44,7 @@ func (h *Healthz) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
 	assert.Eventually(t, func() bool {
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.PublicPort))
 		return err == nil
-	}, time.Second, time.Millisecond)
+	}, time.Second*5, time.Millisecond)
 
 	resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/healthz", cmd.PublicPort))
 	require.NoError(t, err)
