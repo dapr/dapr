@@ -14,6 +14,7 @@ limitations under the License.
 package healthz
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -21,10 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
@@ -34,11 +36,11 @@ func init() {
 // Healthz tests that Dapr responds to healthz requests.
 type Healthz struct{}
 
-func (h *Healthz) Setup(t *testing.T) []framework.RunDaprdOption {
+func (h *Healthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOption {
 	return nil
 }
 
-func (h *Healthz) Run(t *testing.T, cmd *framework.Command) {
+func (h *Healthz) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
 	assert.Eventually(t, func() bool {
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.PublicPort))
 		return err == nil
@@ -49,5 +51,6 @@ func (h *Healthz) Run(t *testing.T, cmd *framework.Command) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	assert.Empty(t, b)
 }

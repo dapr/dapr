@@ -24,7 +24,6 @@ import (
 )
 
 func Test_Integration(t *testing.T) {
-
 	if _, ok := os.LookupEnv("DAPR_INTEGRATION_DAPRD_PATH"); !ok {
 		t.Log("DAPR_INTEGRATION_DAPRD_PATH not set, building daprd binary")
 

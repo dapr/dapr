@@ -14,14 +14,16 @@ limitations under the License.
 package ports
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -31,15 +33,15 @@ func init() {
 // Ports tests that the ports are available when the app is running.
 type Ports struct{}
 
-func (p *Ports) Setup(t *testing.T) []framework.RunDaprdOption {
+func (p *Ports) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOption {
 	return nil
 }
 
-func (p *Ports) Run(t *testing.T, cmd *framework.Command) {
+func (p *Ports) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
 	for name, port := range map[string]int{
 		"app":           cmd.AppPort,
-		"grpc":          cmd.GrpcPort,
-		"http":          cmd.HttpPort,
+		"grpc":          cmd.GRPCPort,
+		"http":          cmd.HTTPPort,
 		"metrics":       cmd.MetricsPort,
 		"internal-grpc": cmd.InternalGRPCPort,
 		"public":        cmd.PublicPort,

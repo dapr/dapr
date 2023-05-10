@@ -14,6 +14,7 @@ limitations under the License.
 package healthz
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -21,39 +22,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework"
 )
 
 func init() {
 	// TODO: disable the app healthz tests for now because they are failing.
-	//suite.Register(new(AppHealthz))
+	// suite.Register(new(AppHealthz))
 }
 
 // AppHealthz tests that Dapr responds to healthz requests for the app.
 type AppHealthz struct {
-	lis        net.Listener
-	returnCode int
+	healthy atomic.Bool
+	server  http.Server
+	done    chan struct{}
 }
 
-func (a *AppHealthz) Setup(t *testing.T) []framework.RunDaprdOption {
-	var err error
-	a.lis, err = net.Listen("tcp", ":0")
-	require.NoError(t, err)
-
-	return []framework.RunDaprdOption{
-		framework.WithAppHealthCheck(true),
-		framework.WithAppHealthCheckPath("/health"),
-		framework.WithAppPort(int(a.lis.Addr().(*net.TCPAddr).Port)),
-		framework.WithAppHealthProbeInterval(1),
-		framework.WithAppHealthProbeThreshold(1),
-	}
-}
-
-func (a *AppHealthz) Run(t *testing.T, cmd *framework.Command) {
-	var healthy atomic.Bool
-	healthy.Store(true)
+func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOption {
+	a.healthy.Store(true)
+	a.done = make(chan struct{})
 
 	mux := http.NewServeMux()
 	// TODO: @joshvanl there is currently a bug where the health check path is
@@ -62,7 +51,7 @@ func (a *AppHealthz) Run(t *testing.T, cmd *framework.Command) {
 		require.Equal(t, http.MethodGet, r.Method)
 		require.Equal(t, "/health", r.URL.Path)
 
-		if healthy.Load() {
+		if a.healthy.Load() {
 			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -75,36 +64,56 @@ func (a *AppHealthz) Run(t *testing.T, cmd *framework.Command) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	done := make(chan struct{})
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	a.server = http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
 	go func() {
-		defer close(done)
-		require.NoError(t, http.Serve(a.lis, mux))
+		defer close(a.done)
+		require.NoError(t, a.server.Serve(listener))
 	}()
 
+	return []framework.RunDaprdOption{
+		framework.WithAppHealthCheck(true),
+		framework.WithAppHealthCheckPath("/health"),
+		framework.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
+		framework.WithAppHealthProbeInterval(1),
+		framework.WithAppHealthProbeThreshold(1),
+	}
+}
+
+func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Command) {
 	assert.Eventually(t, func() bool {
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.InternalGRPCPort))
 		return err == nil
 	}, time.Second, time.Millisecond)
 
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HttpPort, cmd.AppID))
+		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID))
 		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK
 	}, time.Second*5, 100*time.Millisecond)
 
-	healthy.Store(false)
+	a.healthy.Store(false)
 
 	// TODO: The timeout for this eventually here is too large because the
 	// healthz probe interval and threshold are bugged and not being set
 	// correctly.
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HttpPort, cmd.AppID))
+		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID))
 		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError
 	}, time.Second*30, time.Second)
 
+	require.NoError(t, a.server.Shutdown(ctx))
+
 	select {
-	case <-done:
+	case <-a.done:
 	case <-time.After(5 * time.Second):
 		t.Error("timed out waiting for healthz server to close")
 	}
