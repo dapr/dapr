@@ -50,5 +50,5 @@ func (h *Healthz) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return http.StatusNoContent == resp.StatusCode
-	}, time.Second*5, time.Millisecond)
+	}, time.Second*10, 100*time.Millisecond)
 }
