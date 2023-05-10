@@ -41,14 +41,16 @@ func (a *DaprRuntime) ApplyBulkSubscribeResiliency(ctx context.Context, bulkSubC
 		if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
 			pErr = a.publishBulkMessageHTTP(ctx, &bscData, &psm, &bsre, envelope, deadLetterTopic)
 		} else {
-			pErr = a.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsre, rawPayload)
+			pErr = a.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsre, rawPayload, deadLetterTopic)
 		}
 		return &bsre, pErr
 	})
 	// setting error if any entry has not been yet touched - only use case that seems possible is of timeout
-	for eId, ind := range *bscData.entryIdIndexMap { //nolint:stylecheck
+	// since this bulk call handles messages in `psm`, we only need check messages in `psm`
+	for _, msg := range psm.pubSubMessages {
+		ind := (*bscData.entryIdIndexMap)[msg.entry.EntryId]
 		if (*bscData.bulkResponses)[ind].EntryId == "" {
-			(*bscData.bulkResponses)[ind].EntryId = eId
+			(*bscData.bulkResponses)[ind].EntryId = msg.entry.EntryId
 			(*bscData.bulkResponses)[ind].Error = err
 		}
 	}

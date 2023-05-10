@@ -33,12 +33,14 @@ import (
 )
 
 const (
-	appPort               = 3000
-	pubsubRawSubTopic     = "pubsub-raw-sub-topic-http"
-	pubsubCESubTopic      = "pubsub-ce-sub-topic-http"
-	pubsubRawBulkSubTopic = "pubsub-raw-bulk-sub-topic-http"
-	pubsubCEBulkSubTopic  = "pubsub-ce-bulk-sub-topic-http"
-	PubSubEnvVar          = "DAPR_TEST_PUBSUB_NAME"
+	appPort                      = 3000
+	pubsubRawSubTopic            = "pubsub-raw-sub-topic-http"
+	pubsubCESubTopic             = "pubsub-ce-sub-topic-http"
+	pubsubRawBulkSubTopic        = "pubsub-raw-bulk-sub-topic-http"
+	pubsubCEBulkSubTopic         = "pubsub-ce-bulk-sub-topic-http"
+	pubsubDeadBulkSubTopic       = "pubsub-dead-bulk-sub-topic-http"
+	pubsubDeadLetterBulkSubTopic = "pubsub-deadletter-bulk-sub-topic-http"
+	PubSubEnvVar                 = "DAPR_TEST_PUBSUB_NAME"
 )
 
 var pubsubkafkaName = "kafka-messagebus"
@@ -62,6 +64,8 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicCESub      []string `json:"pubsub-ce-sub-topic"`
 	ReceivedByTopicRawBulkSub []string `json:"pubsub-raw-bulk-sub-topic"`
 	ReceivedByTopicCEBulkSub  []string `json:"pubsub-ce-bulk-sub-topic"`
+	ReceivedByTopicDead       []string `json:"pubsub-dead-bulk-topic"`
+	ReceivedByTopicDeadLetter []string `json:"pubsub-deadletter-bulk-topic"`
 }
 
 type subscription struct {
@@ -134,6 +138,8 @@ const (
 	respondWithError
 	// respond with retry
 	respondWithRetry
+	// respond with drop
+	respondWithDrop
 	// respond with invalid status
 	respondWithInvalidStatus
 	// respond with success for all messages in bulk
@@ -142,12 +148,14 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesSubRaw  sets.Set[string]
-	receivedMessagesSubCE   sets.Set[string]
-	receivedMessagesBulkRaw sets.Set[string]
-	receivedMessagesBulkCE  sets.Set[string]
-	desiredResponse         respondWith
-	lock                    sync.Mutex
+	receivedMessagesSubRaw         sets.Set[string]
+	receivedMessagesSubCE          sets.Set[string]
+	receivedMessagesBulkRaw        sets.Set[string]
+	receivedMessagesBulkCE         sets.Set[string]
+	receivedMessagesBulkDead       sets.Set[string]
+	receivedMessagesBulkDeadLetter sets.Set[string]
+	desiredResponse                respondWith
+	lock                           sync.Mutex
 )
 
 // indexHandler is the handler for root path
@@ -197,6 +205,17 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 				MaxMessagesCount:   60,
 				MaxAwaitDurationMs: 1000,
 			},
+		},
+		{
+			PubsubName:      pubsubkafkaName,
+			Topic:           pubsubDeadBulkSubTopic,
+			Route:           pubsubDeadBulkSubTopic,
+			DeadLetterTopic: pubsubDeadLetterBulkSubTopic,
+		},
+		{
+			PubsubName: pubsubkafkaName,
+			Topic:      pubsubDeadLetterBulkSubTopic,
+			Route:      pubsubDeadLetterBulkSubTopic,
 		},
 	}
 
@@ -362,18 +381,27 @@ func bulkSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	returnStatus := "SUCCESS"
+	if desiredResponse == respondWithDrop {
+		returnStatus = "DROP"
+	}
+
 	for i, msg := range msgs {
 		entryResponse := BulkSubscribeResponseEntry{}
 		log.Printf("(%s) bulkSubscribeHandler called %s.Index: %d, Message: %s", reqID, r.URL, i, msg)
 		log.Printf("(%s) Responding with SUCCESS for entryId %s", reqID, msg.EntryId)
 		entryResponse.EntryId = msg.EntryId
-		entryResponse.Status = "SUCCESS"
+		entryResponse.Status = returnStatus
 		bulkResponseEntries[i] = entryResponse
 
 		if strings.HasSuffix(r.URL.String(), pubsubRawBulkSubTopic) && !receivedMessagesBulkRaw.Has(msg.EventStr) {
 			receivedMessagesBulkRaw.Insert(msg.EventStr)
 		} else if strings.HasSuffix(r.URL.String(), pubsubCEBulkSubTopic) && !receivedMessagesBulkCE.Has(msg.EventStr) {
 			receivedMessagesBulkCE.Insert(msg.EventStr)
+		} else if strings.HasSuffix(r.URL.String(), pubsubDeadBulkSubTopic) && !receivedMessagesBulkDead.Has(msg.EventStr) {
+			receivedMessagesBulkDead.Insert(msg.EventStr)
+		} else if strings.HasSuffix(r.URL.String(), pubsubDeadLetterBulkSubTopic) && !receivedMessagesBulkDeadLetter.Has(msg.EventStr) {
+			receivedMessagesBulkDeadLetter.Insert(msg.EventStr)
 		} else {
 			// This case is triggered when there is multiple redelivery of same message or a message
 			// is thre for an unknown URL path
@@ -504,6 +532,8 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 		ReceivedByTopicCESub:      unique(sets.List(receivedMessagesSubCE)),
 		ReceivedByTopicRawBulkSub: unique(sets.List(receivedMessagesBulkRaw)),
 		ReceivedByTopicCEBulkSub:  unique(sets.List(receivedMessagesBulkCE)),
+		ReceivedByTopicDead:       unique(sets.List(receivedMessagesBulkDead)),
+		ReceivedByTopicDeadLetter: unique(sets.List(receivedMessagesBulkDeadLetter)),
 	}
 
 	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
@@ -538,6 +568,8 @@ func initializeSets() {
 	receivedMessagesSubCE = sets.New[string]()
 	receivedMessagesBulkRaw = sets.New[string]()
 	receivedMessagesBulkCE = sets.New[string]()
+	receivedMessagesBulkDead = sets.New[string]()
+	receivedMessagesBulkDeadLetter = sets.New[string]()
 }
 
 // appRouter initializes restful api router
@@ -559,6 +591,8 @@ func appRouter() *mux.Router {
 		setDesiredResponse(respondWithError, "set respond with error")).Methods("POST")
 	router.HandleFunc("/set-respond-retry",
 		setDesiredResponse(respondWithRetry, "set respond with retry")).Methods("POST")
+	router.HandleFunc("/set-respond-drop",
+		setDesiredResponse(respondWithDrop, "set respond with drop")).Methods("POST")
 	router.HandleFunc("/set-respond-empty-json",
 		setDesiredResponse(respondWithEmptyJSON, "set respond with empty json"))
 	router.HandleFunc("/set-respond-invalid-status",
@@ -571,6 +605,8 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/"+pubsubCESubTopic, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubRawBulkSubTopic, bulkSubscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubCEBulkSubTopic, bulkSubscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubDeadBulkSubTopic, bulkSubscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubDeadLetterBulkSubTopic, bulkSubscribeHandler).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 

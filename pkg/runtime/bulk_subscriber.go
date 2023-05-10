@@ -287,7 +287,7 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, bul
 	bscData := *bulkSubCallData
 	var id string
 	idObj, err := uuid.NewRandom()
-	if err != nil {
+	if err == nil {
 		id = idObj.String()
 	}
 	psm.pubSubMessages = psm.pubSubMessages[:psm.length]
@@ -380,7 +380,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	if err != nil {
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
 	}
 	defer resp.Close()
@@ -402,7 +402,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 		if err != nil {
 			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 			bscData.bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+			populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 			return fmt.Errorf("failed unmarshalling app response for bulk subscribe: %w", err)
 		}
 
@@ -434,6 +434,17 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 					entryRespReceived[response.EntryId] = true
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
 					addBulkResponseEntry(bulkResponses, response.EntryId, nil)
+					if deadLetterTopic != "" {
+						//needSendsToDeadLetterIdxs = append(needSendsToDeadLetterIdxs, (*bscData.entryIdIndexMap)[response.EntryId])
+						message := psm.pubSubMessages[(*bscData.entryIdIndexMap)[response.EntryId]]
+						_ = a.sendToDeadLetter(bscData.psName, &pubsub.NewMessage{
+							//Data:        message.Event,
+							Data:        message.entry.Event,
+							Topic:       bscData.topic,
+							Metadata:    message.entry.Metadata,
+							ContentType: &message.entry.ContentType,
+						}, deadLetterTopic)
+					}
 				default:
 					// Consider unknown status field as error and retry
 					a.bulkSubLock.Lock()
@@ -474,7 +485,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, nil)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
 		return nil
 	}
 
@@ -484,7 +495,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	log.Warn(retriableErrorStr)
 	bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 	bscData.bulkSubDiag.elapsed = elapsed
-	populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, retriableError)
+	populateBulkSubscribeResponsesWithError(psm, bulkResponses, retriableError)
 	return retriableError
 }
 
@@ -545,7 +556,7 @@ func fetchEntry(rawPayload bool, entry *pubsub.BulkMessageEntry, cloudEvent map[
 
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
 func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *pubsubBulkSubscribedMessage,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, rawPayload bool,
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, rawPayload bool, deadLetterTopic string,
 ) error {
 	bscData := *bulkSubCallData
 	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(psm.pubSubMessages))
@@ -623,7 +634,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
 			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(psm.pubSubMessages))
 			bscData.bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, nil)
+			populateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
 			return nil
 		}
 
@@ -631,7 +642,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 		log.Debug(err)
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(psm.pubSubMessages))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 		// on error from application, return error for redelivery of event
 		return nil
 	}
@@ -663,6 +674,15 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 				a.bulkSubLock.Unlock()
 				entryRespReceived[response.EntryId] = true
 				addBulkResponseEntry(bulkResponses, response.EntryId, nil)
+				if deadLetterTopic != "" {
+					message := psm.pubSubMessages[(*bscData.entryIdIndexMap)[response.EntryId]]
+					_ = a.sendToDeadLetter(bscData.psName, &pubsub.NewMessage{
+						Data:        message.entry.Event,
+						Topic:       bscData.topic,
+						Metadata:    message.entry.Metadata,
+						ContentType: &message.entry.ContentType,
+					}, deadLetterTopic)
+				}
 			default:
 				// Consider unknown status field as error and retry
 				a.bulkSubLock.Lock()

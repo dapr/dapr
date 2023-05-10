@@ -867,6 +867,15 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			var rErr *RetriableError
 			if errors.As(pErr, &rErr) {
 				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, rErr.Unwrap())
+			} else if pErr == runtimePubsub.MessageDroppedError {
+				// send dropped message to dead letter queue if configured
+				if route.DeadLetterTopic != "" {
+					derr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic)
+					if derr != nil {
+						log.Warnf("failed to send dropped message to dead letter queue for topic %s: %v", msgTopic, derr)
+					}
+				}
+				return nil, nil
 			} else if pErr != nil {
 				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
 			}
@@ -2159,7 +2168,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		case pubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-			return nil
+			return runtimePubsub.MessageDroppedError
 		}
 		// Consider unknown status field as error and retry
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
@@ -2308,7 +2317,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 
-		return nil
+		return runtimePubsub.MessageDroppedError
 	}
 
 	// Consider unknown status field as error and retry

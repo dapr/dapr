@@ -86,6 +86,8 @@ type receivedBulkMessagesResponse struct {
 	ReceivedByTopicCESub      []string `json:"pubsub-ce-sub-topic"`
 	ReceivedByTopicRawBulkSub []string `json:"pubsub-raw-bulk-sub-topic"`
 	ReceivedByTopicCEBulkSub  []string `json:"pubsub-ce-bulk-sub-topic"`
+	ReceivedByTopicDead       []string `json:"pubsub-dead-bulk-topic"`
+	ReceivedByTopicDeadLetter []string `json:"pubsub-deadletter-bulk-topic"`
 }
 
 type cloudEvent struct {
@@ -212,12 +214,32 @@ func postSingleMessage(url string, data []byte) (int, error) {
 
 func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, bulkSubscriberAppName, protocol string) string {
 	callInitialize(t, bulkSubscriberAppName, publisherExternalURL, protocol)
+	setDesiredResponse(t, bulkSubscriberAppName, "success", publisherExternalURL, protocol)
 
 	log.Printf("Test publish bulk subscribe success flow\n")
 	sentMessages := testPublishForBulkSubscribe(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
 	validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t, publisherExternalURL, bulkSubscriberAppName, protocol, false, sentMessages)
+	return subscriberExternalURL
+}
+
+func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternalURL, _, bulkSubscriberAppName, protocol string) string {
+	setDesiredResponse(t, bulkSubscriberAppName, "drop", publisherExternalURL, protocol)
+
+	// send messages to topic that has dead lettering enabled
+	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-bulk-sub-topic-http", protocol, nil, "")
+	require.NoError(t, err)
+	offset += numberOfMessagesToPublish + 1
+
+	// send messages to topic that has no dead letter, messages should be dropped
+	sentTopicCEMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-ce-bulk-sub-topic", protocol, nil, "")
+	require.NoError(t, err)
+	offset += numberOfMessagesToPublish + 1
+
+	time.Sleep(5 * time.Second)
+	validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t, publisherExternalURL, bulkSubscriberAppName, protocol, true,
+		receivedBulkMessagesResponse{ReceivedByTopicDeadLetter: sentTopicDeadMessages, ReceivedByTopicCEBulkSub: sentTopicCEMessages})
 	return subscriberExternalURL
 }
 
@@ -376,6 +398,9 @@ var pubsubTests = []struct {
 	{
 		name:    "publish and bulk subscribe messages successfully",
 		handler: testPublishBulkSubscribeSuccessfully,
+	}, {
+		name:    "drop message will be published to dlq if configured",
+		handler: testDropToDeadLetter,
 	},
 }
 

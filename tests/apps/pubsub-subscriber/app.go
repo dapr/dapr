@@ -101,6 +101,8 @@ const (
 	respondWithError
 	// respond with retry
 	respondWithRetry
+	// respond with drop
+	respondWithDrop
 	// respond with invalid status
 	respondWithInvalidStatus
 )
@@ -264,6 +266,15 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(appResponse{
 			Message: "retry later",
 			Status:  "RETRY",
+		})
+		return
+	case respondWithDrop:
+		log.Printf("(%s) Responding with DROP", reqID)
+		// do not store received messages, respond with success but a drop status
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: "drop message",
+			Status:  "DROP",
 		})
 		return
 	case respondWithError:
@@ -465,6 +476,8 @@ func appRouter() *mux.Router {
 		setDesiredResponse(respondWithError, "set respond with error")).Methods("POST")
 	router.HandleFunc("/set-respond-retry",
 		setDesiredResponse(respondWithRetry, "set respond with retry")).Methods("POST")
+	router.HandleFunc("/set-respond-drop",
+		setDesiredResponse(respondWithDrop, "set respond with drop")).Methods("POST")
 	router.HandleFunc("/set-respond-empty-json",
 		setDesiredResponse(respondWithEmptyJSON, "set respond with empty json"))
 	router.HandleFunc("/set-respond-invalid-status",
