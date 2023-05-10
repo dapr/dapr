@@ -41,14 +41,14 @@ func (c *Command) interrupt(t *testing.T) {
 	require.NoError(t, err)
 
 	r1, _, err = f.Call(0, 1)
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "The operation completed successfully")
 
 	f, err = dll.FindProc("GenerateConsoleCtrlEvent")
 	require.NoError(t, err)
 
 	r1, _, err = f.Call(windows.CTRL_BREAK_EVENT, uintptr(c.cmd.Process.Pid))
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "The operation completed successfully")
 
 	r1, _, err = f.Call(windows.CTRL_C_EVENT, uintptr(c.cmd.Process.Pid))
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "The operation completed successfully")
 }
