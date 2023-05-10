@@ -25,7 +25,7 @@ func newStdWriter() *stdwriter {
 }
 
 func (w *stdwriter) Write(p []byte) (n int, err error) {
-	return fmt.Fprintf(os.Stdout, string(p))
+	return fmt.Fprint(os.Stdout, string(p))
 }
 
 func (w *stdwriter) Close() error {

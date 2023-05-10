@@ -40,13 +40,13 @@ func RunIntegrationTests(t *testing.T) {
 			defer cancel()
 
 			t.Log("setting up test case")
-			options := tcase.Setup(t)
+			options := tcase.Setup(t, ctx)
 
 			t.Log("running daprd")
 			daprd := framework.RunDaprd(t, ctx, options...)
 
 			t.Log("running test case")
-			tcase.Run(t, daprd)
+			tcase.Run(t, ctx, daprd)
 
 			t.Log("cleaning up test case")
 			daprd.Cleanup(t)

@@ -58,9 +58,8 @@ type daprdOptions struct {
 type RunDaprdOption func(*daprdOptions)
 
 type Command struct {
-	lock        sync.Mutex
-	cmd         *exec.Cmd
-	appListener net.Listener
+	lock sync.Mutex
+	cmd  *exec.Cmd
 
 	runError   func(error)
 	exitCode   int
@@ -69,8 +68,8 @@ type Command struct {
 
 	AppID            string
 	AppPort          int
-	GrpcPort         int
-	HttpPort         int
+	GRPCPort         int
+	HTTPPort         int
 	InternalGRPCPort int
 	PublicPort       int
 	MetricsPort      int
@@ -83,7 +82,7 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 	uid, err := uuid.NewUUID()
 	require.NoError(t, err)
 
-	appListener, err := net.Listen("tcp", ":0")
+	appListener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		assert.NoError(t, appListener.Close())
@@ -137,6 +136,7 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		"--app-health-threshold", strconv.Itoa(options.appHealthProbeThreshold),
 	}
 	t.Logf("Running daprd with args: %s %s", options.binPath, strings.Join(args, " "))
+	//nolint:gosec
 	cmd := exec.CommandContext(ctx, options.binPath, args...)
 
 	cmd.Stdout = options.stdout
@@ -148,8 +148,8 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		stderrpipe:       options.stderr,
 		AppID:            options.appID,
 		AppPort:          options.appPort,
-		GrpcPort:         options.grpcPort,
-		HttpPort:         options.httpPort,
+		GRPCPort:         options.grpcPort,
+		HTTPPort:         options.httpPort,
 		InternalGRPCPort: options.internalGRPCPort,
 		PublicPort:       options.publicPort,
 		MetricsPort:      options.metricsPort,
@@ -211,7 +211,7 @@ func (c *Command) checkExit(t *testing.T) {
 }
 
 func freeport(t *testing.T) int {
-	n, err := net.Listen("tcp", ":0")
+	n, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer n.Close()
 	return n.Addr().(*net.TCPAddr).Port
