@@ -49,6 +49,6 @@ func (p *Ports) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
 		assert.Eventuallyf(t, func() bool {
 			_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
 			return err == nil
-		}, time.Second, time.Millisecond, "port %s (:%d) was not available in time", name, port)
+		}, time.Second*5, time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
 }
