@@ -65,7 +65,6 @@ type Command struct {
 	lock sync.Mutex
 	cmd  *exec.Cmd
 
-	cmdcancel    context.CancelFunc
 	runErrorFnFn func(error)
 	exitCode     int
 	stdoutpipe   io.WriteCloser
@@ -156,7 +155,6 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 	}
 
 	t.Logf("Running daprd with args: %s %s", options.binPath, strings.Join(args, " "))
-	ctx, cancel := context.WithCancel(ctx)
 	//nolint:gosec
 	cmd := exec.CommandContext(ctx, options.binPath, args...)
 
@@ -164,7 +162,6 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 	cmd.Stderr = options.stderr
 
 	daprd := &Command{
-		cmdcancel:        cancel,
 		cmd:              cmd,
 		stdoutpipe:       options.stdout,
 		stderrpipe:       options.stderr,
