@@ -16,7 +16,6 @@ package healthz
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -54,8 +53,4 @@ func (h *Healthz) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
 		require.NoError(t, resp.Body.Close())
 		return http.StatusNoContent == resp.StatusCode
 	}, time.Second*5, time.Millisecond)
-	b, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-	assert.Empty(t, b)
 }
