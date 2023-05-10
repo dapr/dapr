@@ -20,12 +20,10 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -179,31 +177,6 @@ func (c *Command) PID(t *testing.T) int {
 	defer c.lock.Unlock()
 	assert.NotNil(t, c.cmd.Process, "PID called but process is nil")
 	return c.cmd.Process.Pid
-}
-
-func (c *Command) Kill(t *testing.T) {
-	t.Helper()
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	t.Log("killing daprd process")
-
-	if c.cmd == nil || c.cmd.ProcessState != nil {
-		return
-	}
-
-	assert.NoError(t, c.stderrpipe.Close())
-	assert.NoError(t, c.stdoutpipe.Close())
-
-	if runtime.GOOS == "windows" {
-		c.cmdcancel()
-	} else {
-		// TODO: daprd does not currently gracefully exit on a single interrupt
-		// signal. Remove once fixed.
-		assert.NoError(t, c.cmd.Process.Signal(os.Interrupt))
-		time.Sleep(time.Millisecond * 300)
-		assert.NoError(t, c.cmd.Process.Signal(os.Interrupt))
-	}
 }
 
 func (c *Command) checkExit(t *testing.T) {
