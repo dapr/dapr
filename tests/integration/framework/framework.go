@@ -20,6 +20,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,6 +62,7 @@ type Command struct {
 	lock sync.Mutex
 	cmd  *exec.Cmd
 
+	cmdcancel  context.CancelFunc
 	runError   func(error)
 	exitCode   int
 	stdoutpipe io.WriteCloser
@@ -136,6 +138,7 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		"--app-health-threshold", strconv.Itoa(options.appHealthProbeThreshold),
 	}
 	t.Logf("Running daprd with args: %s %s", options.binPath, strings.Join(args, " "))
+	ctx, cancel := context.WithCancel(ctx)
 	//nolint:gosec
 	cmd := exec.CommandContext(ctx, options.binPath, args...)
 
@@ -143,6 +146,7 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 	cmd.Stderr = options.stderr
 
 	daprd := &Command{
+		cmdcancel:        cancel,
 		cmd:              cmd,
 		stdoutpipe:       options.stdout,
 		stderrpipe:       options.stderr,
@@ -190,12 +194,16 @@ func (c *Command) Kill(t *testing.T) {
 
 	assert.NoError(t, c.stderrpipe.Close())
 	assert.NoError(t, c.stdoutpipe.Close())
-	assert.NoError(t, c.cmd.Process.Signal(os.Interrupt))
 
-	// TODO: daprd does not currently gracefully exit on a single interrupt
-	// signal. Remove once fixed.
-	time.Sleep(time.Millisecond * 300)
-	assert.NoError(t, c.cmd.Process.Signal(os.Interrupt))
+	if runtime.GOOS == "windows" {
+		c.cmdcancel()
+	} else {
+		// TODO: daprd does not currently gracefully exit on a single interrupt
+		// signal. Remove once fixed.
+		assert.NoError(t, c.cmd.Process.Signal(os.Interrupt))
+		time.Sleep(time.Millisecond * 300)
+		assert.NoError(t, c.cmd.Process.Signal(os.Interrupt))
+	}
 }
 
 func (c *Command) checkExit(t *testing.T) {

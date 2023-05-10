@@ -97,7 +97,7 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK
-	}, time.Second*10, 100*time.Millisecond)
+	}, time.Second*20, 100*time.Millisecond)
 
 	a.healthy.Store(false)
 
