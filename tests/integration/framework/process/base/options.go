@@ -11,27 +11,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package base
 
-import (
-	"testing"
+import "io"
 
-	"github.com/stretchr/testify/assert"
-)
-
-func (c *Command) Kill(t *testing.T) {
-	t.Helper()
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if c.cmd == nil || c.cmd.ProcessState != nil {
-		return
+func WithStdout(stdout io.WriteCloser) Option {
+	return func(o *options) {
+		o.stdout = stdout
 	}
+}
 
-	t.Log("interrupting daprd process")
+func WithStderr(stderr io.WriteCloser) Option {
+	return func(o *options) {
+		o.stderr = stderr
+	}
+}
 
-	assert.NoError(t, c.stderrpipe.Close())
-	assert.NoError(t, c.stdoutpipe.Close())
+func WithRunError(ferr func(error)) Option {
+	return func(o *options) {
+		o.runErrorFn = ferr
+	}
+}
 
-	c.interrupt(t)
+func WithExitCode(code int) Option {
+	return func(o *options) {
+		o.exitCode = code
+	}
 }

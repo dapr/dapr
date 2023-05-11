@@ -15,199 +15,47 @@ package framework
 
 import (
 	"context"
-	"errors"
-	"io"
-	"net"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
-	"sync"
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/dapr/tests/integration/framework/freeport"
-	"github.com/dapr/dapr/tests/integration/framework/iowriter"
-	"github.com/dapr/dapr/tests/integration/framework/kill"
+	"github.com/dapr/dapr/tests/integration/framework/process"
 )
 
-// daprdOptions contains the options for running Daprd in integration tests.
-type daprdOptions struct {
-	stdout io.WriteCloser
-	stderr io.WriteCloser
-
-	binPath string
-	appID   string
-
-	appPort                 int
-	grpcPort                int
-	httpPort                int
-	internalGRPCPort        int
-	publicPort              int
-	metricsPort             int
-	profilePort             int
-	runErrorFn              func(error)
-	exitCode                int
-	appHealthCheck          bool
-	appHealthCheckPath      string
-	appHealthProbeInterval  int
-	appHealthProbeThreshold int
+type options struct {
+	procs []process.Interface
 }
 
-// RunDaprdOption is a function that configures the DaprdOptions.
-type RunDaprdOption func(*daprdOptions)
+// Option is a function that configures the Framework's options.
+type Option func(*options)
 
-type Command struct {
-	lock sync.Mutex
-	cmd  *exec.Cmd
-
-	runErrorFnFn func(error)
-	exitCode     int
-	stdoutpipe   io.WriteCloser
-	stderrpipe   io.WriteCloser
-
-	AppID            string
-	AppPort          int
-	GRPCPort         int
-	HTTPPort         int
-	InternalGRPCPort int
-	PublicPort       int
-	MetricsPort      int
-	ProfilePort      int
+type Framework struct {
+	procs []process.Interface
 }
 
-func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Command {
+func Run(t *testing.T, ctx context.Context, opts ...Option) *Framework {
 	t.Helper()
 
-	uid, err := uuid.NewUUID()
-	require.NoError(t, err)
-
-	appListener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		assert.NoError(t, appListener.Close())
-	})
-
-	go func() {
-		for {
-			conn, err := appListener.Accept()
-			if errors.Is(err, net.ErrClosed) {
-				return
-			}
-			conn.Close()
-		}
-	}()
-
-	defaultExitCode := 0
-	if runtime.GOOS == "windows" {
-		// Windows returns 1 when we kill the process.
-		defaultExitCode = 1
-	}
-
-	fp := freeport.New(t, 6)
-	options := daprdOptions{
-		stdout:           iowriter.New(t),
-		stderr:           iowriter.New(t),
-		binPath:          os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"),
-		appID:            uid.String(),
-		appPort:          appListener.Addr().(*net.TCPAddr).Port,
-		grpcPort:         fp.Port(t, 0),
-		httpPort:         fp.Port(t, 1),
-		internalGRPCPort: fp.Port(t, 2),
-		publicPort:       fp.Port(t, 3),
-		metricsPort:      fp.Port(t, 4),
-		profilePort:      fp.Port(t, 5),
-		runErrorFn: func(err error) {
-			if runtime.GOOS == "windows" {
-				// Windows returns 1 when we kill the process.
-				assert.ErrorContains(t, err, "exit status 1")
-			} else {
-				assert.NoError(t, err, "expected daprd to run without error")
-			}
-		},
-		exitCode: defaultExitCode,
-	}
-
+	o := options{}
 	for _, opt := range opts {
-		opt(&options)
+		opt(&o)
 	}
 
-	args := []string{
-		"--log-level=" + "debug",
-		"--app-id=" + options.appID,
-		"--app-port=" + strconv.Itoa(options.appPort),
-		"--dapr-grpc-port=" + strconv.Itoa(options.grpcPort),
-		"--dapr-http-port=" + strconv.Itoa(options.httpPort),
-		"--dapr-internal-grpc-port=" + strconv.Itoa(options.internalGRPCPort),
-		"--dapr-public-port=" + strconv.Itoa(options.publicPort),
-		"--metrics-port=" + strconv.Itoa(options.metricsPort),
-		"--profile-port=" + strconv.Itoa(options.profilePort),
-		"--enable-app-health-check=" + strconv.FormatBool(options.appHealthCheck),
-		"--app-health-probe-interval=" + strconv.Itoa(options.appHealthProbeInterval),
-		"--app-health-threshold=" + strconv.Itoa(options.appHealthProbeThreshold),
-	}
-	if options.appHealthCheckPath != "" {
-		args = append(args, "--app-health-check-path="+options.appHealthCheckPath)
+	t.Logf("starting %d processes", len(o.procs))
+
+	for _, proc := range o.procs {
+		proc.Run(t, ctx)
 	}
 
-	t.Logf("Running daprd with args: %s %s", options.binPath, strings.Join(args, " "))
-	//nolint:gosec
-	cmd := exec.CommandContext(ctx, options.binPath, args...)
-
-	cmd.Stdout = options.stdout
-	cmd.Stderr = options.stderr
-
-	daprd := &Command{
-		cmd:              cmd,
-		stdoutpipe:       options.stdout,
-		stderrpipe:       options.stderr,
-		AppID:            options.appID,
-		AppPort:          options.appPort,
-		GRPCPort:         options.grpcPort,
-		HTTPPort:         options.httpPort,
-		InternalGRPCPort: options.internalGRPCPort,
-		PublicPort:       options.publicPort,
-		MetricsPort:      options.metricsPort,
-		ProfilePort:      options.profilePort,
-		runErrorFnFn:     options.runErrorFn,
-		exitCode:         options.exitCode,
+	return &Framework{
+		procs: o.procs,
 	}
-
-	fp.Free(t)
-	require.NoError(t, cmd.Start())
-
-	return daprd
 }
 
-func (c *Command) Cleanup(t *testing.T) {
-	t.Helper()
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	assert.NoError(t, c.stderrpipe.Close())
-	assert.NoError(t, c.stdoutpipe.Close())
-
-	kill.Kill(t, c.cmd)
-	c.checkExit(t)
-}
-
-func (c *Command) PID(t *testing.T) int {
-	t.Helper()
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	assert.NotNil(t, c.cmd.Process, "PID called but process is nil")
-	return c.cmd.Process.Pid
-}
-
-func (c *Command) checkExit(t *testing.T) {
+func (f *Framework) Cleanup(t *testing.T) {
 	t.Helper()
 
-	t.Log("waiting for daprd process to exit")
+	t.Logf("stopping %d processes", len(f.procs))
 
-	c.runErrorFnFn(c.cmd.Wait())
-	assert.NotNil(t, c.cmd.ProcessState, "process state should not be nil")
-	assert.Equalf(t, c.exitCode, c.cmd.ProcessState.ExitCode(), "expected exit code to be %d", c.exitCode)
+	for _, proc := range f.procs {
+		proc.Cleanup(t)
+	}
 }

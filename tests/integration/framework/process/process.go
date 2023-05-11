@@ -1,6 +1,3 @@
-//go:build !windows
-// +build !windows
-
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,20 +11,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package process
 
 import (
-	"os"
+	"context"
+	"net"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func (c *Command) interrupt(t *testing.T) {
-	// TODO: daprd does not currently gracefully exit on a single interrupt
-	// signal. Remove once fixed.
-	assert.NoError(t, c.cmd.Process.Signal(os.Interrupt))
-	time.Sleep(time.Millisecond * 300)
-	assert.NoError(t, c.cmd.Process.Signal(os.Interrupt))
+// Interface is an interface for running and cleaning up a process.
+type Interface interface {
+	Run(*testing.T, context.Context)
+	Cleanup(*testing.T)
+}
+
+func FreePort(t *testing.T) int {
+	t.Helper()
+	n, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer n.Close()
+	return n.Addr().(*net.TCPAddr).Port
 }
