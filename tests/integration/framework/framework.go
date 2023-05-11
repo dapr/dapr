@@ -20,6 +20,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,6 +99,12 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		}
 	}()
 
+	defaultExitCode := 0
+	if runtime.GOOS == "windows" {
+		// Windows returns 1 when we kill the process.
+		defaultExitCode = 1
+	}
+
 	options := daprdOptions{
 		stdout:           newStdWriter(),
 		stderr:           newStdWriter(),
@@ -113,7 +120,7 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		runError: func(err error) {
 			assert.NoError(t, err, "expected daprd to run without error")
 		},
-		exitCode: 0,
+		exitCode: defaultExitCode,
 	}
 
 	for _, opt := range opts {
