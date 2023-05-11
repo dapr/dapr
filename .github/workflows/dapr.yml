@@ -177,7 +177,7 @@ jobs:
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
   integration-tests:
     name: Integration tests
-    needs: unit-tests
+    needs: lint
     runs-on: "${{ matrix.os }}"
     strategy:
       fail-fast: false
@@ -252,7 +252,7 @@ jobs:
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
-    needs: integration-tests
+    needs: [unit-tests, integration-tests]
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
