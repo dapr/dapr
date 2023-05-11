@@ -106,8 +106,8 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 	}
 
 	options := daprdOptions{
-		stdout:           newStdWriter(),
-		stderr:           newStdWriter(),
+		stdout:           newStdWriter(t),
+		stderr:           newStdWriter(t),
 		binPath:          os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"),
 		appID:            uid.String(),
 		appPort:          appListener.Addr().(*net.TCPAddr).Port,

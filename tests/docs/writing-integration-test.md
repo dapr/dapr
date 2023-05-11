@@ -11,7 +11,7 @@ always built from source within the test.
 
 ## Invoking the test
 
-`go test -v --race ./tests/integration`
+`go test -v -race -tags="integration" ./tests/integration`
 
 Rather than building from source, you can also set a custom daprd binary path
 with the environment variable `DAPR_INTEGRATION_DAPRD_PATH`.
