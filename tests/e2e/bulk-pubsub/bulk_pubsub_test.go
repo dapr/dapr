@@ -226,6 +226,7 @@ func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, su
 
 func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternalURL, _, bulkSubscriberAppName, protocol string) string {
 	setDesiredResponse(t, bulkSubscriberAppName, "drop", publisherExternalURL, protocol)
+	callInitialize(t, bulkSubscriberAppName, publisherExternalURL, protocol)
 
 	// send messages to topic that has dead lettering enabled
 	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-bulk-sub-topic-http", protocol, nil, "")
@@ -239,7 +240,7 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 
 	time.Sleep(5 * time.Second)
 	validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t, publisherExternalURL, bulkSubscriberAppName, protocol, true,
-		receivedBulkMessagesResponse{ReceivedByTopicDeadLetter: sentTopicDeadMessages, ReceivedByTopicCEBulkSub: sentTopicCEMessages})
+		receivedBulkMessagesResponse{ReceivedByTopicDead: sentTopicDeadMessages, ReceivedByTopicDeadLetter: sentTopicDeadMessages, ReceivedByTopicCEBulkSub: sentTopicCEMessages})
 	return subscriberExternalURL
 }
 

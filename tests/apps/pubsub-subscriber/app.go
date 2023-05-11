@@ -268,15 +268,6 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 			Status:  "RETRY",
 		})
 		return
-	case respondWithDrop:
-		log.Printf("(%s) Responding with DROP", reqID)
-		// do not store received messages, respond with success but a drop status
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(appResponse{
-			Message: "drop message",
-			Status:  "DROP",
-		})
-		return
 	case respondWithError:
 		log.Printf("(%s) Responding with ERROR", reqID)
 		// do not store received messages, respond with error
@@ -343,6 +334,17 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// notice that dropped messages are also counted into received messages set
+	if desiredResponse == respondWithDrop {
+		log.Printf("(%s) Responding with DROP", reqID)
+		// Return success with DROP status to drop message
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: "consumed",
+			Status:  "DROP",
+		})
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	if desiredResponse == respondWithEmptyJSON {
 		log.Printf("(%s) Responding with {}", reqID)
