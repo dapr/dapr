@@ -74,6 +74,10 @@ func (f *FakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteReque
 	return nil
 }
 
+func (f *FakeStateStore) BulkDeleteWithOptions(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
+	return nil
+}
+
 func (f *FakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
@@ -122,6 +126,10 @@ func (f *FakeStateStore) GetComponentMetadata() map[string]string {
 }
 
 func (f *FakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
+	return nil
+}
+
+func (f *FakeStateStore) BulkSetWithOptions(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 	return nil
 }
 
