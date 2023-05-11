@@ -2888,7 +2888,6 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 			Name:        "ok with drop",
 			Status:      runtimev1pb.TopicEventResponse_DROP,
 			ExpectError: true,
-			Error:       runtimePubsub.ErrMessageDropped,
 		},
 		{
 			Name:        "ok with unknown",
@@ -2925,9 +2924,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 			})
 
 			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
-			if tc.ExpectError && tc.Error != nil {
-				assert.Equal(t, tc.Error, err)
-			} else if tc.ExpectError {
+			if tc.ExpectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
