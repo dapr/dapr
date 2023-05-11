@@ -38,6 +38,9 @@ func Test_Integration(t *testing.T) {
 			daprdPath += ".exe"
 		}
 
+		// Ensure CGO is disabled to avoid linking against system libraries.
+		os.Setenv("CGO_ENABLED", "0")
+
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Building daprd binary to: %q", daprdPath)
 		cmd := exec.Command("go", "build", "-tags=all_components", "-v", "-o", daprdPath, filepath.Join(rootDir, "cmd/daprd"))
