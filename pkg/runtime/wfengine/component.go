@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/workflows"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
 	"github.com/dapr/kit/logger"
 )
 
@@ -65,7 +65,6 @@ func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflow
 }
 
 type workflowEngineComponent struct {
-	workflows.Workflow
 	logger logger.Logger
 	client backend.TaskHubClient
 }
@@ -119,7 +118,7 @@ func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.Star
 
 func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.TerminateRequest) error {
 	if req.InstanceID == "" {
-		return fmt.Errorf("a workflow instance ID is required")
+		return errors.New("a workflow instance ID is required")
 	}
 
 	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
@@ -127,6 +126,18 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 	}
 
 	c.logger.Infof("scheduled termination for workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
+	if req.InstanceID == "" {
+		return errors.New("a workflow instance ID is required")
+	}
+
+	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
+	}
+
 	return nil
 }
 
@@ -155,7 +166,7 @@ func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows
 
 func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
 	if req.InstanceID == "" {
-		return nil, fmt.Errorf("a workflow instance ID is required")
+		return nil, errors.New("a workflow instance ID is required")
 	}
 
 	if metadata, err := c.client.FetchOrchestrationMetadata(ctx, api.InstanceID(req.InstanceID)); err != nil {
@@ -187,7 +198,7 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 	}
 }
 
-func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workflows.PauseRequest) error {
+func (c *workflowEngineComponent) Pause(ctx context.Context, req *workflows.PauseRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -200,7 +211,7 @@ func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workfl
 	return nil
 }
 
-func (c *workflowEngineComponent) ResumeWorkflow(ctx context.Context, req *workflows.ResumeRequest) error {
+func (c *workflowEngineComponent) Resume(ctx context.Context, req *workflows.ResumeRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -210,6 +221,23 @@ func (c *workflowEngineComponent) ResumeWorkflow(ctx context.Context, req *workf
 	}
 
 	c.logger.Infof("resuming workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workflows.PurgeRequest) error {
+	if req.InstanceID == "" {
+		return errors.New("a workflow instance ID is required")
+	}
+
+	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		return fmt.Errorf("failed to purge workflow %s: %w", req.InstanceID, err)
+	}
+
+	c.logger.Infof("purging workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) GetComponentMetadata() map[string]string {
 	return nil
 }
 

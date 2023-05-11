@@ -34,3 +34,8 @@ type AppChannel interface {
 	HealthProbe(ctx context.Context) (bool, error)
 	SetAppHealth(ah *apphealth.AppHealth)
 }
+
+// HTTPEndpointAppChannel is an abstraction over communications with http endpoint resources.
+type HTTPEndpointAppChannel interface {
+	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error)
+}
