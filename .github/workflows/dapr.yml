@@ -175,16 +175,10 @@ jobs:
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
-<<<<<<< HEAD
 
   integration-tests:
     name: Integration tests
     needs: lint
-=======
-  integration-tests:
-    name: Integration tests
-    needs: unit-tests
->>>>>>> f2b1d6f71 (Move integration tests to separate make target and run in new github)
     runs-on: "${{ matrix.os }}"
     strategy:
       fail-fast: false
