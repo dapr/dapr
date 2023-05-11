@@ -26,12 +26,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	// TODO: disable the app healthz tests for now because they are failing
-	// because the CLI flags are not being set correctly.
-	// suite.Register(new(AppHealthz))
+	suite.Register(new(AppHealthz))
 }
 
 // AppHealthz tests that Dapr responds to healthz requests for the app.
@@ -46,11 +45,9 @@ func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprd
 	a.done = make(chan struct{})
 
 	mux := http.NewServeMux()
-	// TODO: @joshvanl there is currently a bug where the health check path is
-	// not being set correctly.
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/healthz", r.URL.Path)
+		require.Equal(t, "/foo", r.URL.Path)
 
 		if a.healthy.Load() {
 			w.WriteHeader(http.StatusOK)
@@ -79,7 +76,7 @@ func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprd
 
 	return []framework.RunDaprdOption{
 		framework.WithAppHealthCheck(true),
-		framework.WithAppHealthCheckPath("/healthz"),
+		framework.WithAppHealthCheckPath("/foo"),
 		framework.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
 		framework.WithAppHealthProbeInterval(1),
 		framework.WithAppHealthProbeThreshold(1),
@@ -97,19 +94,16 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK
-	}, time.Second*20, 100*time.Millisecond)
+	}, time.Second*5, 100*time.Millisecond)
 
 	a.healthy.Store(false)
 
-	// TODO: The timeout for this eventually here is too large because the
-	// healthz probe interval and threshold are bugged and not being set
-	// correctly.
 	assert.Eventually(t, func() bool {
 		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*30, time.Second)
+	}, time.Second*5, time.Second)
 
 	require.NoError(t, a.server.Shutdown(ctx))
 

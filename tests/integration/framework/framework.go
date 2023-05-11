@@ -133,20 +133,23 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 	}
 
 	args := []string{
-		"--log-level", "debug",
-		"--app-id", options.appID,
-		"--app-port", strconv.Itoa(options.appPort),
-		"--dapr-grpc-port", strconv.Itoa(options.grpcPort),
-		"--dapr-http-port", strconv.Itoa(options.httpPort),
-		"--dapr-internal-grpc-port", strconv.Itoa(options.internalGRPCPort),
-		"--dapr-public-port", strconv.Itoa(options.publicPort),
-		"--metrics-port", strconv.Itoa(options.metricsPort),
-		"--profile-port", strconv.Itoa(options.profilePort),
-		"--enable-app-health-check", strconv.FormatBool(options.appHealthCheck),
-		"--app-health-check-path", options.appHealthCheckPath,
-		"--app-health-check-interval", strconv.Itoa(options.appHealthProbeInterval),
-		"--app-health-threshold", strconv.Itoa(options.appHealthProbeThreshold),
+		"--log-level=" + "debug",
+		"--app-id=" + options.appID,
+		"--app-port=" + strconv.Itoa(options.appPort),
+		"--dapr-grpc-port=" + strconv.Itoa(options.grpcPort),
+		"--dapr-http-port=" + strconv.Itoa(options.httpPort),
+		"--dapr-internal-grpc-port=" + strconv.Itoa(options.internalGRPCPort),
+		"--dapr-public-port=" + strconv.Itoa(options.publicPort),
+		"--metrics-port=" + strconv.Itoa(options.metricsPort),
+		"--profile-port=" + strconv.Itoa(options.profilePort),
+		"--enable-app-health-check=" + strconv.FormatBool(options.appHealthCheck),
+		"--app-health-probe-interval=" + strconv.Itoa(options.appHealthProbeInterval),
+		"--app-health-threshold=" + strconv.Itoa(options.appHealthProbeThreshold),
 	}
+	if options.appHealthCheckPath != "" {
+		args = append(args, "--app-health-check-path="+options.appHealthCheckPath)
+	}
+
 	t.Logf("Running daprd with args: %s %s", options.binPath, strings.Join(args, " "))
 	ctx, cancel := context.WithCancel(ctx)
 	//nolint:gosec
