@@ -11,27 +11,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package kill
 
 import (
+	"os/exec"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
-func (c *Command) Kill(t *testing.T) {
+func Kill(t *testing.T, cmd *exec.Cmd) {
 	t.Helper()
-	c.lock.Lock()
-	defer c.lock.Unlock()
 
-	if c.cmd == nil || c.cmd.ProcessState != nil {
+	if cmd == nil || cmd.ProcessState != nil {
 		return
 	}
 
 	t.Log("interrupting daprd process")
 
-	assert.NoError(t, c.stderrpipe.Close())
-	assert.NoError(t, c.stdoutpipe.Close())
-
-	c.interrupt(t)
+	interrupt(t, cmd)
 }

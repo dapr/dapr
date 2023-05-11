@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package kill
 
 import (
+	"os/exec"
 	"syscall"
 	"testing"
 
@@ -24,7 +25,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func (c *Command) interrupt(t *testing.T) {
+func interrupt(t *testing.T, cmd *exec.Cmd) {
 	dll, err := windows.LoadDLL("kernel32.dll")
 	require.NoError(t, err)
 	defer dll.Release()
@@ -32,7 +33,7 @@ func (c *Command) interrupt(t *testing.T) {
 	f, err := dll.FindProc("AttachConsole")
 	require.NoError(t, err)
 
-	r1, _, err := f.Call(uintptr(c.cmd.Process.Pid))
+	r1, _, err := f.Call(uintptr(cmd.Process.Pid))
 	if r1 == 0 && err != syscall.ERROR_ACCESS_DENIED {
 		require.NoError(t, err)
 	}
@@ -46,9 +47,9 @@ func (c *Command) interrupt(t *testing.T) {
 	f, err = dll.FindProc("GenerateConsoleCtrlEvent")
 	require.NoError(t, err)
 
-	r1, _, err = f.Call(windows.CTRL_BREAK_EVENT, uintptr(c.cmd.Process.Pid))
+	r1, _, err = f.Call(windows.CTRL_BREAK_EVENT, uintptr(cmd.Process.Pid))
 	require.ErrorContains(t, err, "The operation completed successfully")
 
-	r1, _, err = f.Call(windows.CTRL_C_EVENT, uintptr(c.cmd.Process.Pid))
+	r1, _, err = f.Call(windows.CTRL_C_EVENT, uintptr(cmd.Process.Pid))
 	require.ErrorContains(t, err, "The operation completed successfully")
 }

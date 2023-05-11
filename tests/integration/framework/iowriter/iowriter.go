@@ -11,9 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package iowriter
 
 import (
+	"io"
 	"testing"
 )
 
@@ -21,7 +22,7 @@ type stdwriter struct {
 	t *testing.T
 }
 
-func newStdWriter(t *testing.T) *stdwriter {
+func New(t *testing.T) io.WriteCloser {
 	return &stdwriter{t}
 }
 
