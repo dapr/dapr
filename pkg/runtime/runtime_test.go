@@ -2766,7 +2766,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Equal(t, runtimePubsub.ErrMessageDropped, err)
+		assert.Equal(t, nil, err)
 	})
 
 	t.Run("ok with retry", func(t *testing.T) {
@@ -3103,7 +3103,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err)
+		assert.Equal(t, runtimePubsub.ErrMessageDropped, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -3324,6 +3324,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			name:           "succeeded to publish message to user app with drop",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_DROP,
+			expectedError:  runtimePubsub.ErrMessageDropped,
 		},
 		{
 			name:           "succeeded to publish message to user app with invalid response",
