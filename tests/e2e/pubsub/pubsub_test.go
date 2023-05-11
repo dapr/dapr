@@ -324,9 +324,12 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 
 	time.Sleep(5 * time.Second)
 	received := receivedMessagesResponse{
+		ReceivedByTopicA:          sentTopicNormal,
+		ReceivedByTopicB:          []string{},
+		ReceivedByTopicC:          []string{},
+		ReceivedByTopicRaw:        []string{},
 		ReceivedByTopicDead:       sentTopicDeadMessages,
 		ReceivedByTopicDeadLetter: sentTopicDeadMessages,
-		ReceivedByTopicA:          sentTopicNormal,
 	}
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, received)
 	return subscriberExternalURL
