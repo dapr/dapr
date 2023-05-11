@@ -89,12 +89,14 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 		return err == nil
 	}, time.Second*5, time.Millisecond)
 
+	a.healthy.Store(true)
+
 	assert.Eventually(t, func() bool {
 		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK
-	}, time.Second*20, 100*time.Millisecond)
+	}, time.Second*20, 50*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
 
 	a.healthy.Store(false)
 
@@ -103,7 +105,7 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*20, time.Second)
+	}, time.Second*20, 50*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
 
 	require.NoError(t, a.server.Shutdown(ctx))
 

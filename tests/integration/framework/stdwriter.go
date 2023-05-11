@@ -14,18 +14,20 @@ limitations under the License.
 package framework
 
 import (
-	"fmt"
-	"os"
+	"testing"
 )
 
-type stdwriter struct{}
+type stdwriter struct {
+	t *testing.T
+}
 
-func newStdWriter() *stdwriter {
-	return &stdwriter{}
+func newStdWriter(t *testing.T) *stdwriter {
+	return &stdwriter{t}
 }
 
 func (w *stdwriter) Write(p []byte) (n int, err error) {
-	return fmt.Fprint(os.Stdout, string(p))
+	w.t.Log(w.t.Name() + ": " + string(p))
+	return len(p), nil
 }
 
 func (w *stdwriter) Close() error {
