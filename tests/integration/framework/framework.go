@@ -29,6 +29,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
+	"github.com/dapr/dapr/tests/integration/framework/kill"
 )
 
 // daprdOptions contains the options for running Daprd in integration tests.
@@ -106,8 +109,8 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 	}
 
 	options := daprdOptions{
-		stdout:           newStdWriter(t),
-		stderr:           newStdWriter(t),
+		stdout:           iowriter.New(t),
+		stderr:           iowriter.New(t),
 		binPath:          os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"),
 		appID:            uid.String(),
 		appPort:          appListener.Addr().(*net.TCPAddr).Port,
@@ -182,7 +185,13 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 
 func (c *Command) Cleanup(t *testing.T) {
 	t.Helper()
-	c.Kill(t)
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	assert.NoError(t, c.stderrpipe.Close())
+	assert.NoError(t, c.stdoutpipe.Close())
+
+	kill.Kill(t, c.cmd)
 	c.checkExit(t)
 }
 
@@ -196,8 +205,6 @@ func (c *Command) PID(t *testing.T) int {
 
 func (c *Command) checkExit(t *testing.T) {
 	t.Helper()
-	c.lock.Lock()
-	defer c.lock.Unlock()
 
 	t.Log("waiting for daprd process to exit")
 
