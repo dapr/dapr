@@ -118,7 +118,12 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		metricsPort:      freeport(t),
 		profilePort:      freeport(t),
 		runError: func(err error) {
-			assert.NoError(t, err, "expected daprd to run without error")
+			if runtime.GOOS == "windows" {
+				// Windows returns 1 when we kill the process.
+				assert.ErrorContains(t, err, "exit status 1")
+			} else {
+				assert.NoError(t, err, "expected daprd to run without error")
+			}
 		},
 		exitCode: defaultExitCode,
 	}
