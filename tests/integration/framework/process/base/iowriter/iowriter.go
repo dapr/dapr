@@ -19,15 +19,16 @@ import (
 )
 
 type stdwriter struct {
-	t *testing.T
+	t    *testing.T
+	name string
 }
 
-func New(t *testing.T) io.WriteCloser {
-	return &stdwriter{t}
+func New(t *testing.T, name string) io.WriteCloser {
+	return &stdwriter{t, name}
 }
 
 func (w *stdwriter) Write(p []byte) (n int, err error) {
-	w.t.Log(w.t.Name() + ": " + string(p))
+	w.t.Log(w.t.Name() + "/" + w.name + ": " + string(p))
 	return len(p), nil
 }
 

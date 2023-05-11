@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -35,12 +36,13 @@ func init() {
 
 // AppHealthz tests that Dapr responds to healthz requests for the app.
 type AppHealthz struct {
+	daprd   *daprd.Daprd
 	healthy atomic.Bool
 	server  http.Server
 	done    chan struct{}
 }
 
-func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOption {
+func (a *AppHealthz) Setup(t *testing.T) []framework.Option {
 	a.healthy.Store(true)
 	a.done = make(chan struct{})
 
@@ -74,25 +76,29 @@ func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprd
 		require.ErrorIs(t, a.server.Serve(listener), http.ErrServerClosed)
 	}()
 
-	return []framework.RunDaprdOption{
-		framework.WithAppHealthCheck(true),
-		framework.WithAppHealthCheckPath("/foo"),
-		framework.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
-		framework.WithAppHealthProbeInterval(1),
-		framework.WithAppHealthProbeThreshold(1),
+	a.daprd = daprd.New(t,
+		daprd.WithAppHealthCheck(true),
+		daprd.WithAppHealthCheckPath("/foo"),
+		daprd.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
+		daprd.WithAppHealthProbeInterval(1),
+		daprd.WithAppHealthProbeThreshold(1),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(a.daprd),
 	}
 }
 
-func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Command) {
+func (a *AppHealthz) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool {
-		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.InternalGRPCPort))
+		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", a.daprd.InternalGRPCPort))
 		return err == nil
 	}, time.Second*5, time.Millisecond)
 
 	a.healthy.Store(true)
 
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID))
+		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", a.daprd.HTTPPort, a.daprd.AppID))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK
@@ -101,7 +107,7 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 	a.healthy.Store(false)
 
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID))
+		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", a.daprd.HTTPPort, a.daprd.AppID))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError

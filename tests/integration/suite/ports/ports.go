@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -30,21 +31,26 @@ func init() {
 	suite.Register(new(Ports))
 }
 
-// Ports tests that the ports are available when the app is running.
-type Ports struct{}
-
-func (p *Ports) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOption {
-	return nil
+// Ports tests that the ports are available when daprd is running.
+type Ports struct {
+	daprd *daprd.Daprd
 }
 
-func (p *Ports) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
+func (p *Ports) Setup(t *testing.T) []framework.Option {
+	p.daprd = daprd.New(t)
+	return []framework.Option{
+		framework.WithProcesses(p.daprd),
+	}
+}
+
+func (p *Ports) Run(t *testing.T, _ context.Context) {
 	for name, port := range map[string]int{
-		"app":           cmd.AppPort,
-		"grpc":          cmd.GRPCPort,
-		"http":          cmd.HTTPPort,
-		"metrics":       cmd.MetricsPort,
-		"internal-grpc": cmd.InternalGRPCPort,
-		"public":        cmd.PublicPort,
+		"app":           p.daprd.AppPort,
+		"grpc":          p.daprd.GRPCPort,
+		"http":          p.daprd.HTTPPort,
+		"metrics":       p.daprd.MetricsPort,
+		"internal-grpc": p.daprd.InternalGRPCPort,
+		"public":        p.daprd.PublicPort,
 	} {
 		assert.Eventuallyf(t, func() bool {
 			_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))

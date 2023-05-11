@@ -11,12 +11,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package base
 
-import "github.com/dapr/dapr/tests/integration/framework/process"
+import "io"
 
-func WithProcesses(procs ...process.Interface) Option {
+func WithStdout(stdout io.WriteCloser) Option {
 	return func(o *options) {
-		o.procs = procs
+		o.stdout = stdout
+	}
+}
+
+func WithStderr(stderr io.WriteCloser) Option {
+	return func(o *options) {
+		o.stderr = stderr
+	}
+}
+
+func WithRunError(ferr func(error)) Option {
+	return func(o *options) {
+		o.runErrorFn = ferr
+	}
+}
+
+func WithExitCode(code int) Option {
+	return func(o *options) {
+		o.exitCode = code
 	}
 }

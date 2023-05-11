@@ -24,8 +24,8 @@ var cases []Case
 
 // Case is a test case for the integration test suite.
 type Case interface {
-	Setup(*testing.T, context.Context) []framework.RunDaprdOption
-	Run(*testing.T, context.Context, *framework.Command)
+	Setup(*testing.T) []framework.Option
+	Run(*testing.T, context.Context)
 }
 
 // Register registers a test case.
