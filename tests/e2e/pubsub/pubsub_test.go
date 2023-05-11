@@ -310,7 +310,7 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	}
 }
 
-func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
+func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
 	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol)
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 
