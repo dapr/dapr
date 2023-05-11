@@ -336,7 +336,7 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/proto/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
-./pkg/signals/... \
+./pkg/signals/...
 
 .PHONY: test-race
 test-race:
