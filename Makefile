@@ -299,7 +299,7 @@ test: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
 			--format standard-quiet \
 			-- \
-				./pkg/... ./utils/... ./cmd/... ./tests/integration/... \
+				./pkg/... ./utils/... ./cmd/... \
 				$(COVERAGE_OPTS) --tags=unit,all_components
 	CGO_ENABLED=$(CGO) \
 		go test --tags=all_components ./tests/...
@@ -337,12 +337,19 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
 ./pkg/signals/... \
-./tests/integration/...
 
 .PHONY: test-race
 test-race:
 	echo "$(TEST_WITH_RACE)" | xargs \
 		go test -tags="all_components unit" -race
+
+################################################################################
+# Target: test-integration                                                                 #
+################################################################################
+.PHONY: test-integration
+test-integration: test-deps
+		gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json -- \
+			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #
