@@ -545,8 +545,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 
-	a.initDirectMessaging(a.nameResolver)
-
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
 
@@ -1376,6 +1374,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		conn, err := a.grpc.GetAppClient()
+		defer a.grpc.ReleaseAppClient(conn)
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
@@ -1646,6 +1645,7 @@ func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() ([]string, error) {
 	conn, err := a.grpc.GetAppClient()
+	defer a.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting app client: %w", err)
 	}
@@ -1945,6 +1945,7 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	} else {
 		var conn gogrpc.ClientConnInterface
 		conn, err = a.grpc.GetAppClient()
+		defer a.grpc.ReleaseAppClient(conn)
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
@@ -2400,6 +2401,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
 	conn, err := a.grpc.GetAppClient()
+	defer a.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
