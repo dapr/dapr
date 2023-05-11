@@ -337,7 +337,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
 ./pkg/signals/... \
-./tests/integration/...
 
 .PHONY: test-race
 test-race:
@@ -353,6 +352,14 @@ test-integration: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format standard-verbose \
 			-- \
+			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
+
+################################################################################
+# Target: test-integration                                                                 #
+################################################################################
+.PHONY: test-integration
+test-integration: test-deps
+		gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json -- \
 			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
 
 ################################################################################
