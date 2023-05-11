@@ -116,7 +116,6 @@ type actorsRuntime struct {
 	activeReminders       *sync.Map
 	remindersLock         sync.RWMutex
 	remindersStoringLock  sync.Mutex
-	activeRemindersLock   sync.RWMutex
 	reminders             map[string][]actorReminderReference
 	evaluationLock        sync.RWMutex
 	evaluationChan        chan struct{}
@@ -1202,8 +1201,12 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		return err
 	}
 
-	a.activeRemindersLock.Lock()
-	defer a.activeRemindersLock.Unlock()
+	if !a.waitForEvaluationChan() {
+		return errors.New("error creating reminder: timed out after 5s")
+	}
+
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
 
 	existing, ok := a.getReminder(req.Name, req.ActorType, req.ActorID)
 	if ok {
@@ -1215,10 +1218,6 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		} else {
 			return nil
 		}
-	}
-
-	if !a.waitForEvaluationChan() {
-		return errors.New("error creating reminder: timed out after 5s")
 	}
 
 	stop := make(chan struct{})
@@ -1616,8 +1615,13 @@ func (a *actorsRuntime) saveRemindersInPartitionRequest(stateKey string, reminde
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
-	a.activeRemindersLock.Lock()
-	defer a.activeRemindersLock.Unlock()
+	if !a.waitForEvaluationChan() {
+		return errors.New("error deleting reminder: timed out after 5s")
+	}
+
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
+
 	return a.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
 }
 
@@ -1626,13 +1630,6 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 	if err != nil {
 		return err
 	}
-
-	if !a.waitForEvaluationChan() {
-		return errors.New("error deleting reminder: timed out after 5s")
-	}
-
-	a.remindersStoringLock.Lock()
-	defer a.remindersStoringLock.Unlock()
 
 	reminderKey := constructCompositeKey(actorType, actorID, name)
 
@@ -1728,8 +1725,12 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 		return err
 	}
 
-	a.activeRemindersLock.Lock()
-	defer a.activeRemindersLock.Unlock()
+	if !a.waitForEvaluationChan() {
+		return errors.New("error renaming reminder: timed out after 5s")
+	}
+
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
 
 	oldReminder, exists := a.getReminder(req.OldName, req.ActorType, req.ActorID)
 	if !exists {
@@ -1740,10 +1741,6 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 	err = a.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.OldName)
 	if err != nil {
 		return err
-	}
-
-	if !a.waitForEvaluationChan() {
-		return errors.New("error renaming reminder: timed out after 5s")
 	}
 
 	reminder := &reminders.Reminder{
@@ -1768,9 +1765,6 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 }
 
 func (a *actorsRuntime) storeReminder(ctx context.Context, store transactionalStateStore, reminder *reminders.Reminder, stopChannel chan struct{}) error {
-	a.remindersStoringLock.Lock()
-	defer a.remindersStoringLock.Unlock()
-
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
