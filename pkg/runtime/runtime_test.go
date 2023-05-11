@@ -2766,7 +2766,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err)
+		assert.Equal(t, runtimePubsub.ErrMessageDropped, err)
 	})
 
 	t.Run("ok with retry", func(t *testing.T) {
@@ -2806,7 +2806,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err)
+		assert.Equal(t, runtimePubsub.ErrMessageDropped, err)
 	})
 
 	t.Run("ok with unknown", func(t *testing.T) {
@@ -2885,8 +2885,10 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 			ExpectError: true,
 		},
 		{
-			Name:   "ok with drop",
-			Status: runtimev1pb.TopicEventResponse_DROP,
+			Name:        "ok with drop",
+			Status:      runtimev1pb.TopicEventResponse_DROP,
+			ExpectError: true,
+			Error:       runtimePubsub.ErrMessageDropped,
 		},
 		{
 			Name:        "ok with unknown",
@@ -2923,7 +2925,9 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 			})
 
 			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
-			if tc.ExpectError {
+			if tc.ExpectError && tc.Error != nil {
+				assert.Equal(t, tc.Error, err)
+			} else if tc.ExpectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)

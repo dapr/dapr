@@ -240,7 +240,13 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 
 	time.Sleep(5 * time.Second)
 	validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t, publisherExternalURL, bulkSubscriberAppName, protocol, true,
-		receivedBulkMessagesResponse{ReceivedByTopicDead: sentTopicDeadMessages, ReceivedByTopicDeadLetter: sentTopicDeadMessages, ReceivedByTopicCEBulkSub: sentTopicCEMessages})
+		receivedBulkMessagesResponse{
+			ReceivedByTopicRawSub:     []string{},
+			ReceivedByTopicRawBulkSub: []string{},
+			ReceivedByTopicCESub:      []string{},
+			ReceivedByTopicDead:       sentTopicDeadMessages,
+			ReceivedByTopicDeadLetter: sentTopicDeadMessages,
+			ReceivedByTopicCEBulkSub:  sentTopicCEMessages})
 	return subscriberExternalURL
 }
 
