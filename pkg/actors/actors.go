@@ -64,11 +64,6 @@ const (
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
 )
 
-var metricsSuccessStatusString = map[bool]string{
-	true:  "success",
-	false: "failure",
-}
-
 var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -402,7 +397,6 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	if lar == nil {
 		lar = &lookupActorRes{}
 	}
-
 	var resp *invokev1.InvokeMethodResponse
 	if a.isActorLocal(lar.targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(ctx, req)
@@ -949,11 +943,11 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 			}
 
 			err = a.executeReminder(reminder, false)
-			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, metricsSuccessStatusString[err == nil])
+			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 			if err != nil {
 				if errors.Is(err, ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
-					log.Info("Reminder " + reminderKey + " was canceled by the actor")
+					log.Debug("Reminder " + reminderKey + " was canceled by the actor")
 					break L
 				} else {
 					log.Errorf("Error while executing reminder %s: %v", reminderKey, err)
@@ -1003,38 +997,35 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 // Executes a reminder or timer
 func (a *actorsRuntime) executeReminder(reminder *reminders.Reminder, isTimer bool) (err error) {
 	var (
-		b            []byte
+		data         any
 		logName      string
 		invokeMethod string
 	)
+
 	if isTimer {
 		logName = "timer"
 		invokeMethod = "timer/" + reminder.Name
-		b, err = json.Marshal(TimerResponse{
+		data = &TimerResponse{
 			Callback: reminder.Callback,
 			Data:     reminder.Data,
 			DueTime:  reminder.DueTime,
 			Period:   reminder.Period.String(),
-		})
+		}
 	} else {
 		logName = "reminder"
 		invokeMethod = "remind/" + reminder.Name
-		b, err = json.Marshal(ReminderResponse{
+		data = &ReminderResponse{
 			DueTime: reminder.DueTime,
 			Period:  reminder.Period.String(),
 			Data:    reminder.Data,
-		})
+		}
 	}
-	if err != nil {
-		return err
-	}
-
 	policyDef := a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
 
 	log.Debug("Executing " + logName + " for actor " + reminder.Key())
 	req := invokev1.NewInvokeMethodRequest(invokeMethod).
 		WithActor(reminder.ActorType, reminder.ActorID).
-		WithRawDataBytes(b).
+		WithDataObject(data).
 		WithContentType(invokev1.JSONContentType)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
@@ -1307,7 +1298,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 			if _, exists := a.actorsTable.Load(actorKey); exists {
 				err = a.executeReminder(reminder, true)
-				diag.DefaultMonitoring.ActorTimerFired(req.ActorType, metricsSuccessStatusString[err == nil])
+				diag.DefaultMonitoring.ActorTimerFired(req.ActorType, err == nil)
 				if err != nil {
 					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 				}

@@ -67,6 +67,7 @@ const (
 	KeyPluggableComponentsSocketsFolder = "dapr.io/pluggable-components-sockets-folder"
 	KeyPluggableComponentContainer      = "dapr.io/component-container"
 	KeyPluggableComponentsInjection     = "dapr.io/inject-pluggable-components"
+	KeyAppChannel                       = "dapr.io/app-channel-address"
 )
 
 // Default values
@@ -89,7 +90,7 @@ const (
 	DefaultEnableProfiling                   = false
 	DefaultDisableBuiltinK8sSecretStore      = false
 	DefaultEnableAppHealthCheck              = false
-	DefaultAppCheckPath                      = "/health"
+	DefaultAppCheckPath                      = "/healthz"
 	DefaultAppHealthProbeIntervalSeconds     = 5
 	DefaultAppHealthProbeTimeoutMilliseconds = 500
 	DefaultAppHealthThreshold                = 3

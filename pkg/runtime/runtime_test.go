@@ -65,6 +65,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
@@ -76,6 +77,7 @@ import (
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
@@ -477,23 +479,31 @@ func TestDoProcessComponent(t *testing.T) {
 }
 
 // mockOperatorClient is a mock implementation of operatorv1pb.OperatorClient.
-// It is used to test `beginComponentsUpdates`.
+// It is used to test `beginComponentsUpdates` and `beginHTTPEndpointsUpdates`.
 type mockOperatorClient struct {
 	operatorv1pb.OperatorClient
 
-	lock                      sync.RWMutex
-	compsByName               map[string]*componentsV1alpha1.Component
-	clientStreams             []*mockOperatorComponentUpdateClientStream
-	clientStreamCreateWait    chan struct{}
-	clientStreamCreatedNotify chan struct{}
+	lock                              sync.RWMutex
+	compsByName                       map[string]*componentsV1alpha1.Component
+	endpointsByName                   map[string]*httpEndpointV1alpha1.HTTPEndpoint
+	clientStreams                     []*mockOperatorComponentUpdateClientStream
+	clientEndpointStreams             []*mockOperatorHTTPEndpointUpdateClientStream
+	clientStreamCreateWait            chan struct{}
+	clientStreamCreatedNotify         chan struct{}
+	clientEndpointStreamCreateWait    chan struct{}
+	clientEndpointStreamCreatedNotify chan struct{}
 }
 
 func newMockOperatorClient() *mockOperatorClient {
 	mockOpCli := &mockOperatorClient{
-		compsByName:               make(map[string]*componentsV1alpha1.Component),
-		clientStreams:             make([]*mockOperatorComponentUpdateClientStream, 0, 1),
-		clientStreamCreateWait:    make(chan struct{}, 1),
-		clientStreamCreatedNotify: make(chan struct{}, 1),
+		compsByName:                       make(map[string]*componentsV1alpha1.Component),
+		endpointsByName:                   make(map[string]*httpEndpointV1alpha1.HTTPEndpoint),
+		clientStreams:                     make([]*mockOperatorComponentUpdateClientStream, 0, 1),
+		clientEndpointStreams:             make([]*mockOperatorHTTPEndpointUpdateClientStream, 0, 1),
+		clientStreamCreateWait:            make(chan struct{}, 1),
+		clientStreamCreatedNotify:         make(chan struct{}, 1),
+		clientEndpointStreamCreateWait:    make(chan struct{}, 1),
+		clientEndpointStreamCreatedNotify: make(chan struct{}, 1),
 	}
 	return mockOpCli
 }
@@ -515,6 +525,23 @@ func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *operatorv1
 	return cs, nil
 }
 
+func (c *mockOperatorClient) HTTPEndpointUpdate(ctx context.Context, in *operatorv1pb.HTTPEndpointUpdateRequest, opts ...grpc.CallOption) (operatorv1pb.Operator_HTTPEndpointUpdateClient, error) {
+	// Used to block stream creation.
+	<-c.clientEndpointStreamCreateWait
+
+	cs := &mockOperatorHTTPEndpointUpdateClientStream{
+		updateCh: make(chan *operatorv1pb.HTTPEndpointUpdateEvent, 1),
+	}
+
+	c.lock.Lock()
+	c.clientEndpointStreams = append(c.clientEndpointStreams, cs)
+	c.lock.Unlock()
+
+	c.clientEndpointStreamCreatedNotify <- struct{}{}
+
+	return cs, nil
+}
+
 func (c *mockOperatorClient) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListComponentResponse, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -532,6 +559,23 @@ func (c *mockOperatorClient) ListComponents(ctx context.Context, in *operatorv1p
 	return resp, nil
 }
 
+func (c *mockOperatorClient) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	resp := &operatorv1pb.ListHTTPEndpointsResponse{
+		HttpEndpoints: [][]byte{},
+	}
+	for _, end := range c.endpointsByName {
+		b, err := json.Marshal(end)
+		if err != nil {
+			continue
+		}
+		resp.HttpEndpoints = append(resp.HttpEndpoints, b)
+	}
+	return resp, nil
+}
+
 func (c *mockOperatorClient) ClientStreamCount() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -539,13 +583,33 @@ func (c *mockOperatorClient) ClientStreamCount() int {
 	return len(c.clientStreams)
 }
 
+func (c *mockOperatorClient) ClientHTTPEndpointStreamCount() int {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	return len(c.clientEndpointStreams)
+}
+
 func (c *mockOperatorClient) AllowOneNewClientStreamCreate() {
 	c.clientStreamCreateWait <- struct{}{}
+}
+
+func (c *mockOperatorClient) AllowOneNewClientEndpointStreamCreate() {
+	c.clientEndpointStreamCreateWait <- struct{}{}
 }
 
 func (c *mockOperatorClient) WaitOneNewClientStreamCreated(ctx context.Context) error {
 	select {
 	case <-c.clientStreamCreatedNotify:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *mockOperatorClient) WaitOneNewClientHTTPEndpointStreamCreated(ctx context.Context) error {
+	select {
+	case <-c.clientEndpointStreamCreatedNotify:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -560,6 +624,16 @@ func (c *mockOperatorClient) CloseAllClientStreams() {
 		close(cs.updateCh)
 	}
 	c.clientStreams = []*mockOperatorComponentUpdateClientStream{}
+}
+
+func (c *mockOperatorClient) CloseAllClientHTTPEndpointStreams() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	for _, cs := range c.clientEndpointStreams {
+		close(cs.updateCh)
+	}
+	c.clientEndpointStreams = []*mockOperatorHTTPEndpointUpdateClientStream{}
 }
 
 func (c *mockOperatorClient) UpdateComponent(comp *componentsV1alpha1.Component) {
@@ -577,13 +651,42 @@ func (c *mockOperatorClient) UpdateComponent(comp *componentsV1alpha1.Component)
 	}
 }
 
+func (c *mockOperatorClient) UpdateHTTPEndpoint(endpoint *httpEndpointV1alpha1.HTTPEndpoint) {
+	b, err := json.Marshal(endpoint)
+	if err != nil {
+		return
+	}
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.endpointsByName[endpoint.Name] = endpoint
+	for _, cs := range c.clientEndpointStreams {
+		cs.updateCh <- &operatorv1pb.HTTPEndpointUpdateEvent{HttpEndpoints: b}
+	}
+}
+
 type mockOperatorComponentUpdateClientStream struct {
 	operatorv1pb.Operator_ComponentUpdateClient
 
 	updateCh chan *operatorv1pb.ComponentUpdateEvent
 }
 
+type mockOperatorHTTPEndpointUpdateClientStream struct {
+	operatorv1pb.Operator_HTTPEndpointUpdateClient
+
+	updateCh chan *operatorv1pb.HTTPEndpointUpdateEvent
+}
+
 func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operatorv1pb.ComponentUpdateEvent, error) {
+	e, ok := <-cs.updateCh
+	if !ok {
+		return nil, fmt.Errorf("stream closed")
+	}
+	return e, nil
+}
+
+func (cs *mockOperatorHTTPEndpointUpdateClientStream) Recv() (*operatorv1pb.HTTPEndpointUpdateEvent, error) {
 	e, ok := <-cs.updateCh
 	if !ok {
 		return nil, fmt.Errorf("stream closed")
@@ -4226,6 +4329,7 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int)
 		GracefulShutdownDuration:     time.Second,
 		EnableAPILogging:             true,
 		DisableBuiltinK8sSecretStore: false,
+		AppChannelAddress:            "127.0.0.1",
 	})
 }
 
@@ -4561,9 +4665,11 @@ func TestAuthorizedComponents(t *testing.T) {
 		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 1)
-		assert.Equal(t, testCompName, comps[0].Name)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(components))
+		assert.Equal(t, testCompName, components[0].Name)
 	})
 
 	t.Run("namespace mismatch", func(t *testing.T) {
@@ -4575,8 +4681,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("namespace match", func(t *testing.T) {
@@ -4588,8 +4696,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 1)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(components))
 	})
 
 	t.Run("in scope, namespace match", func(t *testing.T) {
@@ -4602,8 +4712,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{TestRuntimeConfigID}
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 1)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(components))
 	})
 
 	t.Run("not in scope, namespace match", func(t *testing.T) {
@@ -4616,8 +4728,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{"other"}
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("in scope, namespace mismatch", func(t *testing.T) {
@@ -4630,8 +4744,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{TestRuntimeConfigID}
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
@@ -4644,8 +4760,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("no authorizers", func(t *testing.T) {
@@ -4659,9 +4777,11 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 1)
-		assert.Equal(t, testCompName, comps[0].Name)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(components))
+		assert.Equal(t, testCompName, components[0].Name)
 	})
 
 	t.Run("only deny all", func(t *testing.T) {
@@ -4676,8 +4796,10 @@ func TestAuthorizedComponents(t *testing.T) {
 		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
@@ -4691,8 +4813,101 @@ func TestAuthorizedComponents(t *testing.T) {
 		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
-		assert.True(t, len(comps) == 0)
+		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
+		components, ok := componentObj.([]componentsV1alpha1.Component)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(components))
+	})
+}
+
+func TestAuthorizedHTTPEndpoints(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	defer stopRuntime(t, rt)
+	endpoint := createTestEndpoint("testEndpoint", "http://api.test.com")
+
+	t.Run("standalone mode, no namespace", func(t *testing.T) {
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(endpoints))
+		assert.Equal(t, endpoint.Name, endpoints[0].Name)
+	})
+
+	t.Run("namespace mismatch", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "b"
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(endpoints))
+	})
+
+	t.Run("namespace match", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "a"
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(endpoints))
+	})
+
+	t.Run("in scope, namespace match", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "a"
+		endpoint.Scopes = []string{TestRuntimeConfigID}
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(endpoints))
+	})
+
+	t.Run("not in scope, namespace match", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "a"
+		endpoint.Scopes = []string{"other"}
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(endpoints))
+	})
+
+	t.Run("in scope, namespace mismatch", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "b"
+		endpoint.Scopes = []string{TestRuntimeConfigID}
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(endpoints))
+	})
+
+	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "b"
+		endpoint.Scopes = []string{"other"}
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 0, len(endpoints))
+	})
+
+	t.Run("no authorizers", func(t *testing.T) {
+		rt.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{}
+		// Namespace mismatch, should be accepted anyways
+		rt.namespace = "a"
+		endpoint.ObjectMeta.Namespace = "b"
+
+		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(endpoints))
+		assert.Equal(t, endpoint.Name, endpoints[0].ObjectMeta.Name)
 	})
 }
 
@@ -5287,6 +5502,19 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 	}, nil
 }
 
+func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
+	rt.runtimeConfig.AppChannelAddress = "my.app"
+
+	defer stopRuntime(t, rt)
+
+	p, err := rt.buildAppHTTPPipeline()
+	assert.Nil(t, err)
+
+	c := rt.getAppHTTPChannelConfig(p)
+	assert.Equal(t, "http://my.app:0", c.Endpoint)
+}
+
 func TestComponentsCallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "OK")
@@ -5789,4 +6017,104 @@ func TestTraceShutdown(t *testing.T) {
 
 func sendSigterm(rt *DaprRuntime) {
 	rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+}
+
+func createTestEndpoint(name, baseURL string) httpEndpointV1alpha1.HTTPEndpoint {
+	return httpEndpointV1alpha1.HTTPEndpoint{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: name,
+		},
+		Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+			BaseURL: baseURL,
+		},
+	}
+}
+
+func TestHTTPEndpointsUpdate(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
+	defer stopRuntime(t, rt)
+
+	mockOpCli := newMockOperatorClient()
+	rt.operatorClient = mockOpCli
+
+	processedCh := make(chan struct{}, 1)
+	mockProcessHTTPEndpoints := func() {
+		for endpoint := range rt.pendingHTTPEndpoints {
+			if endpoint.Name == "" {
+				continue
+			}
+			rt.compStore.AddHTTPEndpoint(endpoint)
+			processedCh <- struct{}{}
+		}
+	}
+	go mockProcessHTTPEndpoints()
+	go rt.beginHTTPEndpointsUpdates()
+
+	endpoint1 := createTestEndpoint("mockEndpoint1", "http://testurl.com")
+	endpoint2 := createTestEndpoint("mockEndpoint2", "http://testurl2.com")
+	endpoint3 := createTestEndpoint("mockEndpoint3", "http://testurl3.com")
+
+	// Allow a new stream to create.
+	mockOpCli.AllowOneNewClientEndpointStreamCreate()
+
+	// Wait a new stream created.
+	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	if err := mockOpCli.WaitOneNewClientHTTPEndpointStreamCreated(waitCtx); err != nil {
+		t.Errorf("Wait new stream err: %s", err.Error())
+		t.FailNow()
+	}
+
+	// Wait endpoint1 received and processed.
+	mockOpCli.UpdateHTTPEndpoint(&endpoint1)
+	select {
+	case <-processedCh:
+	case <-time.After(time.Second * 10):
+		t.Errorf("Expect endpoint [endpoint1] processed.")
+		t.FailNow()
+	}
+	_, exists := rt.compStore.GetHTTPEndpoint(endpoint1.Name)
+	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint1.Name))
+
+	// Close all client streams to trigger a stream error in `beginHTTPEndpointsUpdates`
+	mockOpCli.CloseAllClientHTTPEndpointStreams()
+
+	// Update during stream error.
+	mockOpCli.UpdateHTTPEndpoint(&endpoint2)
+
+	// Assert no client stream created.
+	assert.Equal(t, mockOpCli.ClientHTTPEndpointStreamCount(), 0, "Expect 0 client stream")
+
+	// Allow a new stream to create.
+	mockOpCli.AllowOneNewClientEndpointStreamCreate()
+	// Wait a new stream created.
+	waitCtx, cancel = context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	// was failing here
+	if err := mockOpCli.WaitOneNewClientHTTPEndpointStreamCreated(waitCtx); err != nil {
+		t.Errorf("Wait new stream err: %s", err.Error())
+		t.FailNow()
+	}
+
+	// Wait endpoint2 received and processed.
+	select {
+	case <-processedCh:
+	case <-time.After(time.Second * 10):
+		t.Errorf("Expect http endpoint [endpoint2] processed.")
+		t.FailNow()
+	}
+	_, exists = rt.compStore.GetHTTPEndpoint(endpoint2.Name)
+	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint2.Name))
+
+	mockOpCli.UpdateHTTPEndpoint(&endpoint3)
+
+	// Wait endpoint3 received and processed.
+	select {
+	case <-processedCh:
+	case <-time.After(time.Second * 10):
+		t.Errorf("Expect endpoint [endpoint3] processed.")
+		t.FailNow()
+	}
+	_, exists = rt.compStore.GetHTTPEndpoint(endpoint3.Name)
+	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
 }
