@@ -123,8 +123,6 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 
 	require.NoError(t, a.server.Shutdown(ctx))
 
-	require.NoError(t, a.server.Shutdown(ctx))
-
 	select {
 	case <-a.done:
 	case <-time.After(5 * time.Second):
