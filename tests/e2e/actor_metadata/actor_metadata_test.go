@@ -116,10 +116,10 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:     appNameOne,
-			DaprEnabled: true,
-			ImageName:   "e2e-actorfeatures",
-			//SidecarImage:   "daprio/daprd:1.9.6",
+			AppName:        appNameOne,
+			DaprEnabled:    true,
+			ImageName:      "e2e-actorfeatures",
+			SidecarImage:   "ghcr.io/dapr/daprd:1.9.6",
 			Replicas:       1,
 			IngressEnabled: true,
 			Config:         "omithealthchecksconfig",
@@ -133,10 +133,10 @@ func TestMain(m *testing.M) {
 			},
 		},
 		{
-			AppName:     appNameTwo,
-			DaprEnabled: true,
-			ImageName:   "e2e-actorfeatures",
-			//SidecarImage:   "daprio/daprd:1.9.6",
+			AppName:        appNameTwo,
+			DaprEnabled:    true,
+			ImageName:      "e2e-actorfeatures",
+			SidecarImage:   "ghcr.io/dapr/daprd:1.9.6",
 			Replicas:       1,
 			IngressEnabled: true,
 			Config:         "omithealthchecksconfig",
