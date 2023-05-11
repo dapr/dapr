@@ -175,6 +175,7 @@ jobs:
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
+
   integration-tests:
     name: Integration tests
     needs: lint
@@ -240,7 +241,7 @@ jobs:
       - name: Run make test-integration
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
-        run: make integration-test
+        run: make test-integration
       - name: Codecov
         uses: codecov/codecov-action@v1
       - name: Upload test results
