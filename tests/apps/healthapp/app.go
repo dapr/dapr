@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -87,12 +89,19 @@ func main() {
 		startPublishing(ctx)
 	}()
 
-	if appProtocol == "grpc" {
+	switch appProtocol {
+	case "grpc":
+		log.Println("using gRPC")
 		// Blocking call
 		startGRPC()
-	} else {
+	case "http":
+		log.Println("using HTTP")
 		// Blocking call
 		startHTTP()
+	case "h2c":
+		log.Println("using H2C")
+		// Blocking call
+		startH2C()
 	}
 
 	cancel()
@@ -164,7 +173,7 @@ func (c *countAndLast) MarshalJSON() ([]byte, error) {
 
 func startControlServer() {
 	// Wait until the first health probe
-	log.Print("Waiting for signalto start control server…")
+	log.Print("Waiting for signal to start control server…")
 	<-ready
 
 	port, _ := strconv.Atoi(controlPort)
@@ -277,6 +286,37 @@ func startHTTP() {
 	port, _ := strconv.Atoi(appPort)
 	log.Printf("Health App HTTP server listening on http://:%d", port)
 	utils.StartServer(port, httpRouter, true, false)
+}
+
+func startH2C() {
+	log.Printf("Health App HTTP/2 Cleartext server listening on http://:%s", appPort)
+
+	h2s := &http2.Server{}
+	srv := &http.Server{
+		Addr:              ":" + appPort,
+		Handler:           h2c.NewHandler(httpRouter(), h2s),
+		ReadHeaderTimeout: 30 * time.Second,
+	}
+
+	// Stop the server when we get a termination signal
+	stopCh := make(chan os.Signal, 1)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT) //nolint:staticcheck
+	go func() {
+		// Wait for cancelation signal
+		<-stopCh
+		log.Println("Shutdown signal received")
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}()
+
+	// Blocking call
+	err := srv.ListenAndServe()
+	if err != http.ErrServerClosed {
+		log.Fatalf("Failed to run server: %v", err)
+	}
+
+	log.Println("Server shut down")
 }
 
 func httpRouter() *mux.Router {

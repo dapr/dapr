@@ -33,6 +33,7 @@ type Config struct {
 	AllowedServiceAccounts            string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 	AllowedServiceAccountsPrefixNames string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES"`
 	IgnoreEntrypointTolerations       string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
+	SkipPlacement                     string `envconfig:"SKIP_PLACEMENT"`
 	RunAsNonRoot                      string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
@@ -110,6 +111,11 @@ func (c *Config) GetReadOnlyRootFilesystem() bool {
 func (c *Config) GetDropCapabilities() bool {
 	// Default is false if empty
 	return utils.IsTruthy(c.SidecarDropALLCapabilities)
+}
+
+func (c *Config) GetSkipPlacement() bool {
+	// Default is false if empty
+	return utils.IsTruthy(c.SkipPlacement)
 }
 
 func (c *Config) parseTolerationsJSON() {

@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -24,63 +24,19 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
-
-var testLogger = logger.NewLogger("testlogger")
-
-var testResiliency = &v1alpha1.Resiliency{
-	Spec: v1alpha1.ResiliencySpec{
-		Policies: v1alpha1.Policies{
-			Retries: map[string]v1alpha1.Retry{
-				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
-					MaxInterval: "100ms",
-					Policy:      "constant",
-					Duration:    "10ms",
-				},
-				"tenRetries": {
-					MaxRetries:  ptr.Of(10),
-					MaxInterval: "100ms",
-					Policy:      "constant",
-					Duration:    "10ms",
-				},
-			},
-			Timeouts: map[string]string{
-				"fast": "100ms",
-			},
-			CircuitBreakers: map[string]v1alpha1.CircuitBreaker{
-				"simpleCB": {
-					MaxRequests: 1,
-					Timeout:     "1s",
-					Trip:        "consecutiveFailures > 4",
-				},
-			},
-		},
-		Targets: v1alpha1.Targets{
-			Components: map[string]v1alpha1.ComponentPolicyNames{
-				"failSecret": {
-					Outbound: v1alpha1.PolicyNames{
-						Retry:   "singleRetry",
-						Timeout: "fast",
-					},
-				},
-			},
-		},
-	},
-}
 
 func TestSecretStoreNotConfigured(t *testing.T) {
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
-		Logger: testLogger,
+		Logger:    testLogger,
+		CompStore: compstore.New(),
 	}
 
 	// act
@@ -197,12 +153,19 @@ func TestGetSecret(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, store := range fakeStores {
+		compStore.AddSecretStore(name, store)
+	}
+	for name, conf := range secretsConfiguration {
+		compStore.AddSecretsConfiguration(name, conf)
+	}
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:               testLogger,
-		Resiliency:           resiliency.New(nil),
-		SecretStores:         fakeStores,
-		SecretsConfiguration: secretsConfiguration,
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	// act
@@ -255,12 +218,19 @@ func TestGetBulkSecret(t *testing.T) {
 		},
 	}
 
+	compStore := compstore.New()
+	for name, store := range fakeStores {
+		compStore.AddSecretStore(name, store)
+	}
+	for name, conf := range secretsConfiguration {
+		compStore.AddSecretsConfiguration(name, conf)
+	}
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:               testLogger,
-		Resiliency:           resiliency.New(nil),
-		SecretStores:         fakeStores,
-		SecretsConfiguration: secretsConfiguration,
+		Logger:     testLogger,
+		Resiliency: resiliency.New(nil),
+		CompStore:  compStore,
 	}
 
 	// act
@@ -291,11 +261,14 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		),
 	}
 
+	compStore := compstore.New()
+	compStore.AddSecretStore("failSecret", failingStore)
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:       testLogger,
-		Resiliency:   resiliency.FromConfigurations(testLogger, testResiliency),
-		SecretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
+		Logger:     testLogger,
+		Resiliency: resiliency.FromConfigurations(testLogger, testResiliency),
+		CompStore:  compStore,
 	}
 
 	// act

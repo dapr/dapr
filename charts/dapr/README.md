@@ -98,6 +98,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
 | `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
 | `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
+| `global.actors.enabled`                   | Enables the Dapr actors building block. When "false", the Dapr Placement serice is not installed, and attempting to use Dapr actors will fail. | `true`                  |
 | `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
 | `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts         | `false` |
 
@@ -113,7 +114,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_operator.debug.enabled`             | Boolean value for enabling debug mode | `{}` |
 | `dapr_operator.serviceReconciler.enabled`| If false, disables the reconciler that creates Services for Dapr-enabled Deployments and StatefulSets.<br>Note: disabling this reconciler could prevent Dapr service invocation from working. | `true` |
-| `dapr_operator.watchNamespace`            | The namespace to watch for annoated Dapr resources in | `""` |
+| `dapr_operator.watchNamespace`            | The namespace to watch for annotated Dapr resources in | `""` |
 
 ### Dapr Placement options:
 | Parameter                                 | Description                                                             | Default                 |

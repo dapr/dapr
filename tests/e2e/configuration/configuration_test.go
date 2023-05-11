@@ -102,7 +102,7 @@ func TestMain(m *testing.M) {
 
 var configurationTests = []struct {
 	name    string
-	handler func(t *testing.T, appExternalUrl string, protocol string)
+	handler func(t *testing.T, appExternalUrl string, protocol string, endpointType string)
 }{
 	{
 		name:    "testGet",
@@ -161,7 +161,7 @@ func getKeys(mymap map[string]*Item) []string {
 	return keys
 }
 
-func testGet(t *testing.T, appExternalUrl string, protocol string) {
+func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
 	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
 	items := generateKeyValues(10, v1)
 	itemsInBytes, _ := json.Marshal(items)
@@ -171,7 +171,7 @@ func testGet(t *testing.T, appExternalUrl string, protocol string) {
 
 	keys := getKeys(items)
 	keysInBytes, _ := json.Marshal(keys)
-	url := fmt.Sprintf("http://%s/get-key-values/%s", appExternalUrl, protocol)
+	url := fmt.Sprintf("http://%s/get-key-values/%s/%s", appExternalUrl, protocol, endpointType)
 	resp, statusCode, err = utils.HTTPPostWithStatus(url, keysInBytes)
 	require.NoError(t, err, "error getting key values")
 
@@ -184,11 +184,11 @@ func testGet(t *testing.T, appExternalUrl string, protocol string) {
 	require.Equalf(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
 }
 
-func testSubscribe(t *testing.T, appExternalUrl string, protocol string) {
+func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
 	items := generateKeyValues(10, v1)
 	keys := getKeys(items)
 	keysInBytes, _ := json.Marshal(keys)
-	url := fmt.Sprintf("http://%s/subscribe/%s", appExternalUrl, protocol)
+	url := fmt.Sprintf("http://%s/subscribe/%s/%s", appExternalUrl, protocol, endpointType)
 	resp, statusCode, err := utils.HTTPPostWithStatus(url, keysInBytes)
 	require.NoError(t, err, "error subscribing to key values")
 	subscribedKeyValues = items
@@ -227,9 +227,16 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string) {
 	require.ElementsMatch(t, expectedUpdates, receivedMessages.ReceivedUpdates, "expected %s, got %s", expectedUpdates, receivedMessages.ReceivedUpdates)
 }
 
-func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string) {
-	url := fmt.Sprintf("http://%s/unsubscribe/%s/%s", appExternalUrl, subscriptionId, protocol)
-	_, err := utils.HTTPGet(url)
+func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
+	// Unsubscribe with incorrect subscriptionId
+	url := fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, "incorrect-id", protocol, endpointType)
+	resp, err := utils.HTTPGet(url)
+	require.NoError(t, err, "error unsubscribing to key values")
+	require.Contains(t, string(resp), "error subscriptionID not found")
+
+	// Unsubscribe with correct subscriptionId
+	url = fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, subscriptionId, protocol, endpointType)
+	_, err = utils.HTTPGet(url)
 	require.NoError(t, err, "error unsubscribing to key values")
 
 	items := updateKeyValues(subscribedKeyValues, v1)
@@ -266,6 +273,11 @@ var protocols []string = []string{
 	"grpc",
 }
 
+var endpointTypes []string = []string{
+	"stable",
+	"alpha1",
+}
+
 func TestConfiguration(t *testing.T) {
 	for _, app := range apps {
 		// Get the ingress external url of test app
@@ -283,10 +295,12 @@ func TestConfiguration(t *testing.T) {
 		require.NoError(t, err, "error initializing configuration updater")
 		require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
 		for _, protocol := range protocols {
-			for _, tt := range configurationTests {
-				t.Run(tt.name, func(t *testing.T) {
-					tt.handler(t, externalURL, protocol)
-				})
+			for _, endpointType := range endpointTypes {
+				for _, tt := range configurationTests {
+					t.Run(tt.name, func(t *testing.T) {
+						tt.handler(t, externalURL, protocol, endpointType)
+					})
+				}
 			}
 		}
 	}

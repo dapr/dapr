@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/workflows"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
 	"github.com/dapr/kit/logger"
 )
 
@@ -65,7 +65,6 @@ func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflow
 }
 
 type workflowEngineComponent struct {
-	workflows.Workflow
 	logger logger.Logger
 	client backend.TaskHubClient
 }
@@ -75,7 +74,7 @@ func (c *workflowEngineComponent) Init(metadata workflows.Metadata) error {
 	return nil
 }
 
-func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.StartRequest) (*workflows.WorkflowReference, error) {
+func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error) {
 	if req.WorkflowName == "" {
 		return nil, errors.New("a workflow name is required")
 	}
@@ -86,9 +85,9 @@ func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.Star
 		opts = append(opts, api.WithInstanceID(api.InstanceID(req.InstanceID)))
 	}
 
-	// Input is also optional. However, inputs are expected to be JSON-serializable.
-	if req.Input != nil {
-		opts = append(opts, api.WithInput(req.Input))
+	// Input is also optional. However, inputs are expected to be unprocessed string values (e.g. JSON text)
+	if len(req.WorkflowInput) > 0 {
+		opts = append(opts, api.WithRawInput(string(req.WorkflowInput)))
 	}
 
 	// Start time is also optional and must be in the RFC3339 format (e.g. 2009-11-10T23:00:00Z).
@@ -111,15 +110,15 @@ func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.Star
 	}
 
 	c.logger.Infof("created new workflow instance with ID '%s'", workflowID)
-	wfRef := &workflows.WorkflowReference{
+	res := &workflows.StartResponse{
 		InstanceID: string(workflowID),
 	}
-	return wfRef, nil
+	return res, nil
 }
 
-func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.WorkflowReference) error {
+func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.TerminateRequest) error {
 	if req.InstanceID == "" {
-		return fmt.Errorf("a workflow instance ID is required")
+		return errors.New("a workflow instance ID is required")
 	}
 
 	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
@@ -127,6 +126,18 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 	}
 
 	c.logger.Infof("scheduled termination for workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
+	if req.InstanceID == "" {
+		return errors.New("a workflow instance ID is required")
+	}
+
+	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
+	}
+
 	return nil
 }
 
@@ -139,7 +150,13 @@ func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows
 		return errors.New("an event name is required")
 	}
 
-	if err := c.client.RaiseEvent(ctx, api.InstanceID(req.InstanceID), req.EventName, req.Input); err != nil {
+	// Input is also optional. However, inputs are expected to be unprocessed string values (e.g. JSON text)
+	var opts []api.RaiseEventOptions
+	if len(req.EventData) > 0 {
+		opts = append(opts, api.WithRawEventData(string(req.EventData)))
+	}
+
+	if err := c.client.RaiseEvent(ctx, api.InstanceID(req.InstanceID), req.EventName, opts...); err != nil {
 		return fmt.Errorf("failed to raise event %s on workflow %s: %w", req.EventName, req.InstanceID, err)
 	}
 
@@ -147,41 +164,41 @@ func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows
 	return nil
 }
 
-func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.WorkflowReference) (*workflows.StateResponse, error) {
+func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
 	if req.InstanceID == "" {
-		return nil, fmt.Errorf("a workflow instance ID is required")
+		return nil, errors.New("a workflow instance ID is required")
 	}
 
 	if metadata, err := c.client.FetchOrchestrationMetadata(ctx, api.InstanceID(req.InstanceID)); err != nil {
 		return nil, fmt.Errorf("failed to get workflow metadata for '%s': %w", req.InstanceID, err)
 	} else {
 		res := &workflows.StateResponse{
-			WFInfo: workflows.WorkflowReference{
-				InstanceID: req.InstanceID,
-			},
-			StartTime: metadata.CreatedAt.Format(time.RFC3339),
-			Metadata: map[string]string{
-				"dapr.workflow.name":           metadata.Name,
-				"dapr.workflow.runtime_status": getStatusString(int32(metadata.RuntimeStatus)),
-				"dapr.workflow.input":          metadata.SerializedInput,
-				"dapr.workflow.custom_status":  metadata.SerializedCustomStatus,
-				"dapr.workflow.last_updated":   metadata.LastUpdatedAt.Format(time.RFC3339),
+			Workflow: &workflows.WorkflowState{
+				InstanceID:    req.InstanceID,
+				WorkflowName:  metadata.Name,
+				CreatedAt:     metadata.CreatedAt,
+				LastUpdatedAt: metadata.LastUpdatedAt,
+				RuntimeStatus: getStatusString(int32(metadata.RuntimeStatus)),
+				Properties: map[string]string{
+					"dapr.workflow.input":         metadata.SerializedInput,
+					"dapr.workflow.custom_status": metadata.SerializedCustomStatus,
+				},
 			},
 		}
 
 		// Status-specific fields
 		if metadata.FailureDetails != nil {
-			res.Metadata["dapr.workflow.failure.error_type"] = metadata.FailureDetails.ErrorType
-			res.Metadata["dapr.workflow.failure.error_message"] = metadata.FailureDetails.ErrorMessage
+			res.Workflow.Properties["dapr.workflow.failure.error_type"] = metadata.FailureDetails.ErrorType
+			res.Workflow.Properties["dapr.workflow.failure.error_message"] = metadata.FailureDetails.ErrorMessage
 		} else if metadata.IsComplete() {
-			res.Metadata["dapr.workflow.output"] = metadata.SerializedOutput
+			res.Workflow.Properties["dapr.workflow.output"] = metadata.SerializedOutput
 		}
 
 		return res, nil
 	}
 }
 
-func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workflows.WorkflowReference) error {
+func (c *workflowEngineComponent) Pause(ctx context.Context, req *workflows.PauseRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -194,7 +211,7 @@ func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workfl
 	return nil
 }
 
-func (c *workflowEngineComponent) ResumeWorkflow(ctx context.Context, req *workflows.WorkflowReference) error {
+func (c *workflowEngineComponent) Resume(ctx context.Context, req *workflows.ResumeRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -204,6 +221,23 @@ func (c *workflowEngineComponent) ResumeWorkflow(ctx context.Context, req *workf
 	}
 
 	c.logger.Infof("resuming workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workflows.PurgeRequest) error {
+	if req.InstanceID == "" {
+		return errors.New("a workflow instance ID is required")
+	}
+
+	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		return fmt.Errorf("failed to purge workflow %s: %w", req.InstanceID, err)
+	}
+
+	c.logger.Infof("purging workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) GetComponentMetadata() map[string]string {
 	return nil
 }
 

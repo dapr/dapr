@@ -16,15 +16,20 @@ package actors
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"go.opencensus.io/stats/view"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -42,6 +47,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/ptr"
 )
@@ -50,6 +56,11 @@ const (
 	TestAppID                       = "fakeAppID"
 	TestKeyName                     = "key0"
 	TestActorMetadataPartitionCount = 3
+
+	actorTimersLastValueViewName     = "runtime/actor/timers"
+	actorRemindersLastValueViewName  = "runtime/actor/reminders"
+	actorTimersFiredTotalViewName    = "runtime/actor/timers_fired_total"
+	actorRemindersFiredTotalViewName = "runtime/actor/reminders_fired_total"
 )
 
 var DefaultAppConfig = config.ApplicationConfig{
@@ -66,7 +77,7 @@ var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
 
 // testRequest is the request object that encapsulates the `data` field of a request.
 type testRequest struct {
-	Data json.RawMessage `json:"data"`
+	Data any `json:"data"`
 }
 
 type mockAppChannel struct {
@@ -119,6 +130,23 @@ func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeM
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
 }
 
+type mockAppChannelBadInvoke struct {
+	channel.AppChannel
+	requestC chan testRequest
+}
+
+func (m *mockAppChannelBadInvoke) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if m.requestC != nil {
+		var request testRequest
+		err := json.NewDecoder(req.RawData()).Decode(&request)
+		if err == nil {
+			m.requestC <- request
+		}
+	}
+
+	return invokev1.NewInvokeMethodResponse(http.StatusInternalServerError, "problems with server", nil), nil
+}
+
 type reentrantAppChannel struct {
 	channel.AppChannel
 	nextCall []*invokev1.InvokeMethodRequest
@@ -146,171 +174,6 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 	r.callLog = append(r.callLog, "Exiting "+req.Message().Method)
 
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
-}
-
-type fakeStateStoreItem struct {
-	data []byte
-	etag *string
-}
-
-func (i fakeStateStoreItem) String() string {
-	return "[etag=" + (*i.etag) + "] " + string(i.data)
-}
-
-type fakeStateStore struct {
-	items     map[string]*fakeStateStoreItem
-	lock      sync.RWMutex
-	noBulkGet bool
-}
-
-func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
-	return &fakeStateStoreItem{
-		data: data,
-		etag: ptr.Of(uuid.NewString()), // Panics if UUID generation fails - it's ok in a test
-	}
-}
-
-func (f *fakeStateStore) Init(ctx context.Context, metadata state.Metadata) error {
-	return nil
-}
-
-func (f *fakeStateStore) Ping() error {
-	return nil
-}
-
-func (f *fakeStateStore) Features() []state.Feature {
-	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
-}
-
-func (f *fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-
-	currentItem := f.items[req.Key]
-	if req.ETag != nil {
-		if currentItem != nil {
-			if currentItem.etag == nil || *req.ETag != *currentItem.etag {
-				return errors.New("etag does not match")
-			}
-		} else {
-			return errors.New("etag does not match for key not found")
-		}
-	}
-
-	delete(f.items, req.Key)
-
-	return nil
-}
-
-func (f *fakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
-	return nil
-}
-
-func (f *fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
-	f.lock.RLock()
-	defer f.lock.RUnlock()
-	item := f.items[req.Key]
-
-	if item == nil {
-		return &state.GetResponse{Data: nil, ETag: nil}, nil
-	}
-
-	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
-}
-
-func (f *fakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	if f.noBulkGet {
-		return false, nil, nil
-	}
-
-	res := []state.BulkGetResponse{}
-	for _, oneRequest := range req {
-		oneResponse, err := f.Get(ctx, &state.GetRequest{
-			Key:      oneRequest.Key,
-			Metadata: oneRequest.Metadata,
-			Options:  oneRequest.Options,
-		})
-		if err != nil {
-			return false, nil, err
-		}
-
-		res = append(res, state.BulkGetResponse{
-			Key:  oneRequest.Key,
-			Data: oneResponse.Data,
-			ETag: oneResponse.ETag,
-		})
-	}
-
-	return true, res, nil
-}
-
-func (f *fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
-	b, _ := json.Marshal(&req.Value)
-	f.lock.Lock()
-	defer f.lock.Unlock()
-
-	currentItem := f.items[req.Key]
-	if req.ETag != nil {
-		if currentItem != nil {
-			if currentItem.etag == nil || *req.ETag != *currentItem.etag {
-				return errors.New("etag does not match")
-			}
-		} else {
-			return errors.New("etag does not match for key not found")
-		}
-	}
-
-	f.items[req.Key] = f.newItem(b)
-
-	return nil
-}
-
-func (f *fakeStateStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
-func (f *fakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	return nil
-}
-
-func (f *fakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	// First we check all eTags
-	for _, o := range request.Operations {
-		var eTag *string
-		key := ""
-		if o.Operation == state.Upsert {
-			key = o.Request.(state.SetRequest).Key
-			eTag = o.Request.(state.SetRequest).ETag
-		} else if o.Operation == state.Delete {
-			key = o.Request.(state.DeleteRequest).Key
-			eTag = o.Request.(state.DeleteRequest).ETag
-		}
-		item := f.items[key]
-		if eTag != nil && item != nil {
-			if *eTag != *item.etag {
-				return fmt.Errorf("etag does not match for key %s", key)
-			}
-		}
-		if eTag != nil && item == nil {
-			return fmt.Errorf("etag does not match for key not found %s", key)
-		}
-	}
-
-	// Now we can perform the operation.
-	for _, o := range request.Operations {
-		if o.Operation == state.Upsert {
-			req := o.Request.(state.SetRequest)
-			b, _ := json.Marshal(req.Value)
-			f.items[req.Key] = f.newItem(b)
-		} else if o.Operation == state.Delete {
-			req := o.Request.(state.DeleteRequest)
-			delete(f.items, req.Key)
-		}
-	}
-
-	return nil
 }
 
 type runtimeBuilder struct {
@@ -351,8 +214,10 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		clock = mc
 	}
 
+	compStore := compstore.New()
+	compStore.AddStateStore(storeName, store)
 	a := newActorsWithClock(ActorsOpts{
-		StateStore:     store,
+		CompStore:      compStore,
 		AppChannel:     b.appChannel,
 		Config:         *b.config,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -372,8 +237,10 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 
 	clock := clocktesting.NewFakeClock(startOfTime)
 
+	compStore := compstore.New()
+	compStore.AddStateStore("actorStore", fakeStore())
 	a := newActorsWithClock(ActorsOpts{
-		StateStore:     fakeStore(),
+		CompStore:      compStore,
 		AppChannel:     appChannel,
 		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -394,6 +261,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 	clock := clocktesting.NewFakeClock(startOfTime)
 
 	a := newActorsWithClock(ActorsOpts{
+		CompStore:      compstore.New(),
 		AppChannel:     appChannel,
 		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -414,7 +282,7 @@ func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *acto
 	clock := clocktesting.NewFakeClock(startOfTime)
 
 	a := newActorsWithClock(ActorsOpts{
-		StateStore:     nil,
+		CompStore:      compstore.New(),
 		AppChannel:     appChannel,
 		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -444,8 +312,10 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 
 	clock := clocktesting.NewFakeClock(startOfTime)
 
+	compStore := compstore.New()
+	compStore.AddStateStore("actorStore", fakeStore())
 	a := newActorsWithClock(ActorsOpts{
-		StateStore:     fakeStore(),
+		CompStore:      compStore,
 		AppChannel:     appChannel,
 		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
@@ -468,6 +338,12 @@ func newTestActorsRuntime() *actorsRuntime {
 	return newTestActorsRuntimeWithMock(appChannel)
 }
 
+func newTestActorsRuntimeWithBadInvoke() *actorsRuntime {
+	appChannel := new(mockAppChannelBadInvoke)
+
+	return newTestActorsRuntimeWithMock(appChannel)
+}
+
 func newTestActorsRuntimeWithoutPlacement() *actorsRuntime {
 	appChannel := new(mockAppChannel)
 
@@ -479,9 +355,7 @@ func getTestActorTypeAndID() (string, string) {
 }
 
 func fakeStore() state.Store {
-	return &fakeStateStore{
-		items: map[string]*fakeStateStoreItem{},
-	}
+	return daprt.NewFakeStateStore()
 }
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorType, actorID string, clock kclock.WithTicker) {
@@ -661,7 +535,9 @@ func TestDeactivationTicker(t *testing.T) {
 func TestStoreIsNotInitialized(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
-	testActorsRuntime.store = nil
+	for name := range testActorsRuntime.compStore.ListStateStores() {
+		testActorsRuntime.compStore.DeleteStateStore(name)
+	}
 
 	t.Run("getReminderTrack", func(t *testing.T) {
 		r, e := testActorsRuntime.getReminderTrack(context.Background(), "foo||bar")
@@ -758,6 +634,107 @@ func TestReminderExecution(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func metricsCleanup() {
+	diagtestutils.CleanupRegisteredViews(
+		actorRemindersLastValueViewName,
+		actorTimersLastValueViewName,
+		actorRemindersFiredTotalViewName,
+		actorRemindersFiredTotalViewName)
+}
+
+func TestReminderCountFiring(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	defer testActorsRuntime.Stop()
+
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+	// init default service metrics where actor metrics are registered
+	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.config.AppID))
+	t.Cleanup(func() {
+		metricsCleanup()
+	})
+
+	numReminders := 10
+
+	for i := 0; i < numReminders; i++ {
+		require.NoError(t, testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("reminder%d", i),
+			Data:      json.RawMessage(`"data"`),
+			Period:    "10s",
+		}))
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	testActorsRuntime.clock.Sleep(500 * time.Millisecond)
+	numPeriods := 20
+	for i := 0; i < numPeriods; i++ {
+		testActorsRuntime.clock.Sleep(10 * time.Second)
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	rows, err := view.RetrieveData("runtime/actor/reminders")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
+
+	// check metrics recorded
+	rows, err = view.RetrieveData(actorRemindersFiredTotalViewName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
+	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
+	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
+}
+
+func TestReminderCountFiringBad(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntimeWithBadInvoke()
+	defer testActorsRuntime.Stop()
+
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+	// init default service metrics where actor metrics are registered
+	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.config.AppID))
+	t.Cleanup(func() {
+	})
+
+	numReminders := 2
+
+	for i := 0; i < numReminders; i++ {
+		require.NoError(t, testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("reminder%d", i),
+			Data:      json.RawMessage(`"data"`),
+			Period:    "10s",
+		}))
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	testActorsRuntime.clock.Sleep(500 * time.Millisecond)
+	numPeriods := 5
+	for i := 0; i < numPeriods; i++ {
+		testActorsRuntime.clock.Sleep(10 * time.Second)
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	rows, err := view.RetrieveData(actorRemindersLastValueViewName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
+
+	// check metrics recorded
+	rows, err = view.RetrieveData(actorRemindersFiredTotalViewName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
+	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
+	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
+}
+
 func TestReminderExecutionZeroDuration(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
@@ -792,7 +769,8 @@ func TestGetReminderTrack(t *testing.T) {
 		defer testActorsRuntime.Stop()
 
 		actorType, actorID := getTestActorTypeAndID()
-		r, _ := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
+		r, err := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
+		require.NoError(t, err)
 		assert.Empty(t, r.LastFiredTime)
 	})
 
@@ -804,7 +782,8 @@ func TestGetReminderTrack(t *testing.T) {
 		repetition := 10
 		now := testActorsRuntime.clock.Now()
 		testActorsRuntime.updateReminderTrack(context.Background(), constructCompositeKey(actorType, actorID), repetition, now, nil)
-		r, _ := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
+		r, err := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
+		require.NoError(t, err)
 		assert.NotEmpty(t, r.LastFiredTime)
 		assert.Equal(t, repetition, r.RepetitionLeft)
 		assert.Equal(t, now, r.LastFiredTime)
@@ -846,7 +825,7 @@ func TestCreateReminder(t *testing.T) {
 	testActorsRuntimeWithPartition := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
 	defer testActorsRuntimeWithPartition.Stop()
 
-	testActorsRuntimeWithPartition.store = testActorsRuntime.store
+	testActorsRuntimeWithPartition.compStore = testActorsRuntime.compStore
 	for i := 1; i < numReminders; i++ {
 		for _, reminderActorType := range []string{actorType, secondActorType} {
 			err = testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
@@ -891,12 +870,6 @@ func TestCreateReminder(t *testing.T) {
 	assert.Equal(t, TestActorMetadataPartitionCount, len(partitions))
 	assert.Equal(t, numReminders, len(reminderReferences))
 	assert.Equal(t, numReminders, len(reminders))
-
-	// For the rest of the test, we're disabling bulk get in the fake state store
-	testActorsRuntime.store.(*fakeStateStore).noBulkGet = true
-	defer func() {
-		testActorsRuntime.store.(*fakeStateStore).noBulkGet = false
-	}()
 
 	// Check for 2nd type.
 	secondReminderReferences, secondTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(context.Background(), secondActorType, true)
@@ -1000,7 +973,7 @@ func TestOverrideReminder(t *testing.T) {
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "2s", "", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(context.Background(), actorType, false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, testActorsRuntime.clock.Now().Add(2*time.Second), reminders[0].reminder.RegisteredTime)
 	})
 
@@ -1016,7 +989,7 @@ func TestOverrideReminder(t *testing.T) {
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(context.Background(), actorType, false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "2s", reminders[0].reminder.Period.String())
 	})
 
@@ -1035,7 +1008,7 @@ func TestOverrideReminder(t *testing.T) {
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", ttl, "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(context.Background(), actorType, false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotEmpty(t, reminders)
 		assert.LessOrEqual(t, reminders[0].reminder.ExpirationTime.Sub(origTime), 2*time.Second)
 	})
@@ -1062,7 +1035,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(context.Background(), actorType, false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		// Check reminder is updated
 		assert.Equal(t, "9s", reminders[0].reminder.Period.String())
 		assert.Equal(t, testActorsRuntime.clock.Now().Add(time.Second), reminders[0].reminder.RegisteredTime)
@@ -1084,7 +1057,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, reminders[0].reminder.Data, request.Data)
+			assert.Equal(t, string(reminders[0].reminder.Data), "\""+request.Data.(string)+"\"")
 		case <-time.After(1500 * time.Millisecond):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -1139,7 +1112,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, reminders[0].reminder.Data, request.Data)
+			assert.Equal(t, string(reminders[0].reminder.Data), "\""+request.Data.(string)+"\"")
 
 			// Check reminder is updated
 			assert.Equal(t, "7s", reminders[0].reminder.Period.String())
@@ -1338,7 +1311,7 @@ func TestReminderRepeats(t *testing.T) {
 				assert.ErrorContains(t, err, "has zero repetitions")
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			testActorsRuntime.remindersLock.RLock()
 			assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
@@ -1373,7 +1346,7 @@ func TestReminderRepeats(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, reminder.Data, request.Data)
+						assert.Equal(t, string(reminder.Data), "\""+request.Data.(string)+"\"")
 						count++
 					case <-ticker.C():
 					}
@@ -1465,8 +1438,9 @@ func Test_ReminderTTL(t *testing.T) {
 				TTL:       ttl,
 				Data:      json.RawMessage(`"data"`),
 			}
+
 			err := testActorsRuntime.CreateReminder(ctx, &reminder)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			count := 0
 
@@ -1485,7 +1459,7 @@ func Test_ReminderTTL(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, reminder.Data, request.Data)
+						assert.Equal(t, string(reminder.Data), "\""+request.Data.(string)+"\"")
 						count++
 					case <-ctx.Done():
 					case <-ticker.C():
@@ -1529,6 +1503,9 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 }
 
 func TestReminderValidation(t *testing.T) {
+	t.Run("empty period", reminderValidation("", "", "-2s", ""))
+	t.Run("period is JSON null", reminderValidation("", "null", "-2s", ""))
+	t.Run("period is empty JSON object", reminderValidation("", "{}", "-2s", ""))
 	t.Run("reminder dueTime invalid (1)", reminderValidation("invalid", "R5/PT2S", "1h", "unsupported time/duration format: invalid"))
 	t.Run("reminder dueTime invalid (2)", reminderValidation("R5/PT2S", "R5/PT2S", "1h", "repetitions are not allowed"))
 	t.Run("reminder period invalid", reminderValidation(time.Now().Add(time.Minute).Format(time.RFC3339), "invalid", "1h", "unsupported duration format: invalid"))
@@ -1576,6 +1553,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "2s", "", "callback", "testTimer")
 		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
 		assert.NoError(t, err)
+		assert.Equal(t, int64(1), atomic.LoadInt64(testActorsRuntime.activeTimersCount[actorType]))
 	})
 
 	t.Run("test create timer with 0 DueTime", func(t *testing.T) {
@@ -1599,6 +1577,78 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
 		assert.NoError(t, err)
 	})
+}
+
+func TestTimerCounter(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	defer testActorsRuntime.Stop()
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+	numberOfLongTimersToCreate := 755
+	numberOfOneTimeTimersToCreate := 220
+	numberOfTimersToDelete := 255
+
+	// init default service metrics where actor metrics are registered
+	metricsCleanup()
+	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.config.AppID))
+	t.Cleanup(func() {
+		metricsCleanup()
+	})
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < numberOfLongTimersToCreate; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			timer := createTimerData(actorID, actorType, fmt.Sprintf("positiveTimer%d", idx), "R10/PT1S", "500ms", "", "callback", "testTimer")
+			err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+			assert.NoError(t, err)
+		}(i)
+	}
+	for i := 0; i < numberOfOneTimeTimersToCreate; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			timer := createTimerData(actorID, actorType, fmt.Sprintf("positiveTimerOneTime%d", idx), "", "500ms", "", "callback", "testTimer")
+			err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+			assert.NoError(t, err)
+		}(i)
+	}
+	wg.Wait()
+	time.Sleep(1 * time.Second)
+	testActorsRuntime.clock.Sleep(1000 * time.Millisecond)
+
+	for i := 0; i < numberOfTimersToDelete; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			err := testActorsRuntime.DeleteTimer(context.Background(), &DeleteTimerRequest{
+				ActorID:   actorID,
+				ActorType: actorType,
+				Name:      fmt.Sprintf("positiveTimer%d", idx),
+			})
+			assert.NoError(t, err)
+		}(i)
+	}
+	wg.Wait()
+
+	time.Sleep(1 * time.Second)
+	assert.Equal(t, int64(numberOfLongTimersToCreate-numberOfTimersToDelete), atomic.LoadInt64(testActorsRuntime.activeTimersCount[actorType]))
+
+	// check metrics recorded
+	rows, err := view.RetrieveData(actorTimersFiredTotalViewName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numberOfLongTimersToCreate+numberOfOneTimeTimersToCreate), rows[0].Data.(*view.CountData).Value)
+	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
+	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
+
+	rows, err = view.RetrieveData(actorTimersLastValueViewName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numberOfLongTimersToCreate-numberOfTimersToDelete), int64(rows[0].Data.(*view.LastValueData).Value))
 }
 
 func TestDeleteTimer(t *testing.T) {
@@ -1663,7 +1713,7 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, timer3.Data, request.Data)
+			assert.Equal(t, string(timer3.Data), "\""+request.Data.(string)+"\"")
 		case <-time.After(1500 * time.Millisecond):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -1708,7 +1758,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, timer4.Data, request.Data)
+			assert.Equal(t, string(timer4.Data), "\""+request.Data.(string)+"\"")
 		case <-time.After(1500 * time.Millisecond):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -1869,7 +1919,7 @@ func Test_TimerRepeats(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, timer.Data, request.Data)
+						assert.Equal(t, string(timer.Data), "\""+request.Data.(string)+"\"")
 						count++
 					case <-ctx.Done():
 					case <-ticker.C():
@@ -1944,7 +1994,7 @@ func Test_TimerTTL(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, timer.Data, request.Data)
+						assert.Equal(t, string(timer.Data), "\""+request.Data.(string)+"\"")
 						count++
 					case <-ticker.C():
 						// nop
@@ -2244,7 +2294,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.Upsert, res.Operation)
+		require.Equal(t, state.OperationUpsert, res.Operation())
 
 		// Uses a pointer
 		op = TransactionalOperation{
@@ -2256,7 +2306,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err = op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.Upsert, res.Operation)
+		require.Equal(t, state.OperationUpsert, res.Operation())
 
 		// Missing key
 		op = TransactionalOperation{
@@ -2276,7 +2326,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.Delete, res.Operation)
+		require.Equal(t, state.OperationDelete, res.Operation())
 
 		// Uses a pointer
 		op = TransactionalOperation{
@@ -2287,7 +2337,7 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		res, err = op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
-		require.Equal(t, state.Delete, res.Operation)
+		require.Equal(t, state.OperationDelete, res.Operation())
 
 		// Missing key
 		op = TransactionalOperation{
@@ -2328,7 +2378,7 @@ func TestTransactionalOperation(t *testing.T) {
 		resI, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
 
-		res, ok := resI.Request.(state.SetRequest)
+		res, ok := resI.(state.SetRequest)
 		require.True(t, ok)
 		assert.Equal(t, "base||"+TestKeyName, res.Key)
 	})
@@ -3071,6 +3121,6 @@ func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
-		assert.Nil(t, testActorsRuntime.store)
+		assert.Empty(t, testActorsRuntime.compStore.ListStateStores())
 	})
 }

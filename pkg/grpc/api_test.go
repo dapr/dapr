@@ -20,13 +20,11 @@ import (
 	"io"
 	"net"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -37,6 +35,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -64,6 +63,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
@@ -77,6 +77,7 @@ const (
 	goodKey         = "good-key"
 	goodKey2        = "good-key2"
 	mockSubscribeID = "mockId"
+	bufconnBufSize  = 1 << 20 // 1MB
 )
 
 var testResiliency = &v1alpha1.Resiliency{
@@ -249,10 +250,10 @@ func configureTestTraceExporter(buffer *string) {
 	exporter.Register("fakeID")
 }
 
-func startTestServerWithTracing(port int) (*grpc.Server, *string) {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func startTestServerWithTracing() (*grpc.Server, *string, *bufconn.Listener) {
+	lis := bufconn.Listen(bufconnBufSize)
 
-	buffer := ""
+	var buffer string
 	configureTestTraceExporter(&buffer)
 
 	spec := config.TracingSpec{SamplingRate: "1"}
@@ -267,11 +268,11 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 		}
 	}()
 
-	return server, &buffer
+	return server, &buffer, lis
 }
 
-func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func startTestServerAPI(srv runtimev1pb.DaprServer) (*grpc.Server, *bufconn.Listener) {
+	lis := bufconn.Listen(bufconnBufSize)
 
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(metadata.SetMetadataInContextUnary),
@@ -283,11 +284,11 @@ func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 		}
 	}()
 
-	return server
+	return server, lis
 }
 
-func startInternalServer(port int, testAPIServer *api) *grpc.Server {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func startInternalServer(testAPIServer *api) (*grpc.Server, *bufconn.Listener) {
+	lis := bufconn.Listen(bufconnBufSize)
 
 	server := grpc.NewServer()
 	go func() {
@@ -297,11 +298,11 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 		}
 	}()
 
-	return server
+	return server, lis
 }
 
-func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func startDaprAPIServer(testAPIServer *api, token string) (*grpc.Server, *bufconn.Listener) {
+	lis := bufconn.Listen(bufconnBufSize)
 
 	interceptors := []grpc.UnaryServerInterceptor{
 		metadata.SetMetadataInContextUnary,
@@ -326,15 +327,17 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 		}
 	}()
 
-	return server
+	return server, lis
 }
 
-func createTestClient(port int) *grpc.ClientConn {
+func createTestClient(lis *bufconn.Listener) *grpc.ClientConn {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	conn, err := grpc.DialContext(
-		ctx,
-		fmt.Sprintf("localhost:%d", port),
+		ctx, "bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -378,12 +381,11 @@ func TestAPIToken(t *testing.T) {
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
 		// Run test server
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, fakeAPI, token)
+		server, lis := startDaprAPIServer(fakeAPI, token)
 		defer server.Stop()
 
 		// Create gRPC test client
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
@@ -448,12 +450,11 @@ func TestAPIToken(t *testing.T) {
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
 		// Run test server
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, fakeAPI, token)
+		server, lis := startDaprAPIServer(fakeAPI, token)
 		defer server.Stop()
 
 		// Create gRPC test client
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
@@ -514,12 +515,11 @@ func TestAPIToken(t *testing.T) {
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
 		// Run test server
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, fakeAPI, token)
+		server, lis := startDaprAPIServer(fakeAPI, token)
 		defer server.Stop()
 
 		// Create gRPC test client
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
@@ -631,12 +631,11 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 				mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
 			// Run test server
-			port, _ := freeport.GetFreePort()
-			server := startDaprAPIServer(port, fakeAPI, "")
+			server, lis := startDaprAPIServer(fakeAPI, "")
 			defer server.Stop()
 
 			// Create gRPC test client
-			clientConn := createTestClient(port)
+			clientConn := createTestClient(lis)
 			defer clientConn.Close()
 
 			// act
@@ -703,12 +702,11 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
 		// Run test server
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, fakeAPI, "")
+		server, lis := startDaprAPIServer(fakeAPI, "")
 		defer server.Stop()
 
 		// Create gRPC test client
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		// act
@@ -738,16 +736,16 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 }
 
 func TestSecretStoreNotConfigured(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{
+	server, lis := startDaprAPIServer(&api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger: logger.NewLogger("grpc.api.test"),
+			Logger:    logger.NewLogger("grpc.api.test"),
+			CompStore: compstore.New(),
 		},
 		id: "fakeAPI",
 	}, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -854,23 +852,30 @@ func TestGetSecret(t *testing.T) {
 			expectedError:    codes.InvalidArgument,
 		},
 	}
+
+	compStore := compstore.New()
+	for name, store := range fakeStores {
+		compStore.AddSecretStore(name, store)
+	}
+	for name, conf := range secretsConfiguration {
+		compStore.AddSecretsConfiguration(name, conf)
+	}
+
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:               logger.NewLogger("grpc.api.test"),
-			Resiliency:           resiliency.New(nil),
-			SecretStores:         fakeStores,
-			SecretsConfiguration: secretsConfiguration,
+			Logger:     logger.NewLogger("grpc.api.test"),
+			Resiliency: resiliency.New(nil),
+			CompStore:  compStore,
 		},
 		id: "fakeAPI",
 	}
 	// Run test server
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
 	// Create gRPC test client
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	// act
@@ -924,23 +929,30 @@ func TestGetBulkSecret(t *testing.T) {
 			expectedResponse: expectedResponse,
 		},
 	}
+
+	compStore := compstore.New()
+	for name, store := range fakeStores {
+		compStore.AddSecretStore(name, store)
+	}
+	for name, conf := range secretsConfiguration {
+		compStore.AddSecretsConfiguration(name, conf)
+	}
+
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:               logger.NewLogger("grpc.api.test"),
-			Resiliency:           resiliency.New(nil),
-			SecretStores:         fakeStores,
-			SecretsConfiguration: secretsConfiguration,
+			Logger:     logger.NewLogger("grpc.api.test"),
+			Resiliency: resiliency.New(nil),
+			CompStore:  compStore,
 		},
 		id: "fakeAPI",
 	}
 	// Run test server
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
 	// Create gRPC test client
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	// act
@@ -965,11 +977,17 @@ func TestGetBulkSecret(t *testing.T) {
 }
 
 func TestGetStateWhenStoreNotConfigured(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI", resiliency: resiliency.New(nil)}, "")
+	server, lis := startDaprAPIServer(&api{
+		id:         "fakeAPI",
+		resiliency: resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
+		},
+	}, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -979,31 +997,35 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
-		if len(reqs) == 0 {
-			return false
-		}
-		return reqs[0].Key == goodStoreKey
-	})).Return(nil)
-	fakeStore.On("BulkSet", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(reqs []state.SetRequest) bool {
-		if len(reqs) == 0 {
-			return false
-		}
-		return reqs[0].Key == errorStoreKey
-	})).Return(errors.New("failed to save state with error-key"))
+	fakeStore.On("Set",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *state.SetRequest) bool {
+			return req.Key == goodStoreKey
+		}),
+	).Return(nil)
+	fakeStore.On("Set",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *state.SetRequest) bool {
+			return req.Key == errorStoreKey
+		}),
+	).Return(errors.New("failed to save state with error-key"))
+
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStore)
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
-		resiliency:  resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
 	// create client
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -1082,16 +1104,21 @@ func TestGetState(t *testing.T) {
 		nil,
 		errors.New("failed to get state with error-key"))
 
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStore)
+
+	// Setup dapr api server
 	fakeAPI := &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
-		resiliency:  resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -1192,16 +1219,20 @@ func TestGetConfiguration(t *testing.T) {
 		})).Return(
 		nil,
 		errors.New("failed to get state with error-key"))
+
+	compStore := compstore.New()
+	compStore.AddConfiguration("store1", fakeConfigurationStore)
 	fakeAPI := &api{
-		id:                  "fakeAPI",
-		configurationStores: map[string]configuration.Store{"store1": fakeConfigurationStore},
-		resiliency:          resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -1267,13 +1298,30 @@ func TestGetConfiguration(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		t.Run(tt.testName, func(t *testing.T) {
+		// Testing alpha1 endpoint
+		t.Run(tt.testName+"-alpha1", func(t *testing.T) {
 			req := &runtimev1pb.GetConfigurationRequest{
 				StoreName: tt.storeName,
 				Keys:      tt.keys,
 			}
 
 			resp, err := client.GetConfigurationAlpha1(context.Background(), req)
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, resp.Items, tt.expectedResponse.Items, "Expected response items to be same")
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+		// Testing stable endpoint
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, err := client.GetConfiguration(context.Background(), req)
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
 				assert.Equal(t, resp.Items, tt.expectedResponse.Items, "Expected response items to be same")
@@ -1334,17 +1382,21 @@ func TestSubscribeConfiguration(t *testing.T) {
 		}),
 		mock.AnythingOfType("configuration.UpdateHandler")).Return(nil, errors.New("failed to get state with error-key"))
 
+	compStore := compstore.New()
+	compStore.AddConfiguration("store1", fakeConfigurationStore)
+
+	// Setup dapr api server
 	fakeAPI := &api{
-		configurationSubscribe: make(map[string]chan struct{}),
-		id:                     "fakeAPI",
-		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
-		resiliency:             resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -1403,13 +1455,45 @@ func TestSubscribeConfiguration(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		t.Run(tt.testName, func(t *testing.T) {
+		// Testing alpha1 endpoint
+		t.Run(tt.testName+"-alpha1", func(t *testing.T) {
 			req := &runtimev1pb.SubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Keys:      tt.keys,
 			}
 
 			resp, _ := client.SubscribeConfigurationAlpha1(context.Background(), req)
+			if !tt.errorExcepted {
+				rsp, err := resp.Recv()
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, rsp.Items, tt.expectedResponse, "Expected response items to be same")
+			} else {
+				retry := 3
+				count := 0
+				_, err := resp.Recv()
+				for {
+					if err != nil {
+						break
+					}
+					if count > retry {
+						break
+					}
+					count++
+					time.Sleep(time.Millisecond * 10)
+					_, err = resp.Recv()
+				}
+				assert.Equal(t, tt.expectedError, status.Code(err))
+				assert.Error(t, err, "Expected error")
+			}
+		})
+		// Testing stable endpoint
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.SubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, _ := client.SubscribeConfiguration(context.Background(), req)
 			if !tt.errorExcepted {
 				rsp, err := resp.Recv()
 				assert.NoError(t, err, "Expected no error")
@@ -1514,17 +1598,21 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return true
 		})).Return(mockSubscribeID, nil)
 
+	compStore := compstore.New()
+	compStore.AddConfiguration("store1", fakeConfigurationStore)
+
+	// Setup dapr api server
 	fakeAPI := &api{
-		configurationSubscribe: make(map[string]chan struct{}),
-		id:                     "fakeAPI",
-		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
-		resiliency:             resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -1564,7 +1652,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		t.Run(tt.testName, func(t *testing.T) {
+		// Testing alpha1 endpoint
+		t.Run(tt.testName+"-alpha1", func(t *testing.T) {
 			req := &runtimev1pb.SubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Keys:      tt.keys,
@@ -1611,6 +1700,54 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			}
 			assert.Error(t, err, "Unsubscribed channel should returns EOF")
 		})
+		// Testing stable endpoint
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.SubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, err := client.SubscribeConfiguration(context.Background(), req)
+			assert.Nil(t, err, "Error should be nil")
+			retry := 3
+			count := 0
+			var subscribeID string
+			for {
+				if count > retry {
+					break
+				}
+				count++
+				time.Sleep(time.Millisecond * 10)
+				rsp, recvErr := resp.Recv()
+				assert.NotNil(t, rsp)
+				assert.NoError(t, recvErr)
+				if rsp.Items != nil {
+					assert.Equal(t, tt.expectedResponse, rsp.Items)
+				} else {
+					assert.Equal(t, mockSubscribeID, rsp.Id)
+				}
+				subscribeID = rsp.Id
+			}
+			assert.Nil(t, err, "Error should be nil")
+			_, err = client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Id:        subscribeID,
+			})
+			assert.Nil(t, err, "Error should be nil")
+			count = 0
+			for {
+				if err != nil && err.Error() == "EOF" {
+					break
+				}
+				if count > retry {
+					break
+				}
+				count++
+				time.Sleep(time.Millisecond * 10)
+				_, err = resp.Recv()
+			}
+			assert.Error(t, err, "Unsubscribed channel should returns EOF")
+		})
 	}
 }
 
@@ -1622,17 +1759,21 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 			return req.ID == mockSubscribeID
 		})).Return(nil)
 
+	compStore := compstore.New()
+	compStore.AddConfiguration("store1", fakeConfigurationStore)
+
+	// Setup dapr api server
 	fakeAPI := &api{
-		configurationSubscribe: make(map[string]chan struct{}),
-		id:                     "fakeAPI",
-		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
-		resiliency:             resiliency.New(nil),
+		id:         "fakeAPI",
+		resiliency: resiliency.New(nil),
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -1661,13 +1802,23 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		t.Run(tt.testName, func(t *testing.T) {
+		t.Run(tt.testName+"-alpha1", func(t *testing.T) {
 			req := &runtimev1pb.UnsubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Id:        tt.id,
 			}
 
 			resp, err := client.UnsubscribeConfigurationAlpha1(context.Background(), req)
+			assert.Equal(t, tt.expectedResponse, resp != nil)
+			assert.Equal(t, tt.expectedError, err != nil)
+		})
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.UnsubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Id:        tt.id,
+			}
+
+			resp, err := client.UnsubscribeConfiguration(context.Background(), req)
 			assert.Equal(t, tt.expectedResponse, resp != nil)
 			assert.Equal(t, tt.expectedError, err != nil)
 		})
@@ -1693,16 +1844,21 @@ func TestGetBulkState(t *testing.T) {
 		nil,
 		errors.New("failed to get state with error-key"))
 
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStore)
+
+	// Setup dapr api server
 	fakeAPI := &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
-		resiliency:  resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -1809,16 +1965,22 @@ func TestDeleteState(t *testing.T) {
 			return req.Key == errorStoreKey
 		})).Return(errors.New("failed to delete state with key2"))
 
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStore)
+
+	// Setup dapr api server
 	fakeAPI := &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
-		resiliency:  resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:     "fakeAPI",
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -1872,8 +2034,6 @@ func TestDeleteState(t *testing.T) {
 }
 
 func TestPublishTopic(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
 	srv := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(req *pubsub.PublishRequest) error {
@@ -1911,10 +2071,10 @@ func TestPublishTopic(t *testing.T) {
 			},
 		},
 	}
-	server := startTestServerAPI(port, srv)
+	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2068,8 +2228,6 @@ func TestPublishTopic(t *testing.T) {
 }
 
 func TestBulkPublish(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
 	fakeAPI := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
@@ -2105,10 +2263,10 @@ func TestBulkPublish(t *testing.T) {
 		},
 	}
 
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2172,8 +2330,6 @@ func TestBulkPublish(t *testing.T) {
 }
 
 func TestShutdownEndpoints(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
 	shutdownCh := make(chan struct{})
 	m := mock.Mock{}
 	m.On("shutdown", mock.Anything).Return()
@@ -2183,10 +2339,10 @@ func TestShutdownEndpoints(t *testing.T) {
 			close(shutdownCh)
 		},
 	}
-	server := startTestServerAPI(port, srv)
+	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2205,7 +2361,6 @@ func TestShutdownEndpoints(t *testing.T) {
 }
 
 func TestInvokeBinding(t *testing.T) {
-	port, _ := freeport.GetFreePort()
 	srv := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "error-binding" {
@@ -2214,10 +2369,10 @@ func TestInvokeBinding(t *testing.T) {
 			return &bindings.InvokeResponse{Data: []byte("ok"), Metadata: req.Metadata}, nil
 		},
 	}
-	server := startTestServerAPI(port, srv)
+	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2237,11 +2392,16 @@ func TestInvokeBinding(t *testing.T) {
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	server, lis := startDaprAPIServer(&api{
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
+		},
+	}, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2250,15 +2410,18 @@ func TestTransactionStateStoreNotConfigured(t *testing.T) {
 }
 
 func TestTransactionStateStoreNotImplemented(t *testing.T) {
-	fakeStore := &daprt.MockStateStore{}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", &daprt.MockStateStore{})
+	server, lis := startDaprAPIServer(&api{
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:     "fakeAPI",
+			CompStore: compStore,
+		},
 	}, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2272,7 +2435,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore := &daprt.TransactionalStoreMock{}
 	matchKeyFn := func(ctx context.Context, req *state.TransactionalStateRequest, key string) bool {
 		if len(req.Operations) == 1 {
-			if rr, ok := req.Operations[0].Request.(state.SetRequest); ok {
+			if rr, ok := req.Operations[0].(state.SetRequest); ok {
 				if rr.Key == "fakeAPI||"+key {
 					return true
 				}
@@ -2293,16 +2456,21 @@ func TestExecuteStateTransaction(t *testing.T) {
 			return matchKeyFn(context.Background(), req, "error-key")
 		})).Return(errors.New("error to execute with key2"))
 
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStore)
+
+	// Setup dapr api server
 	fakeAPI := &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
-		resiliency:  resiliency.New(nil),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.New(nil),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2321,7 +2489,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "upsert operation",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           goodKey,
 			value:         []byte("1"),
 			errorExcepted: false,
@@ -2330,7 +2498,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "delete operation",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           goodKey,
 			errorExcepted: false,
 			expectedError: codes.OK,
@@ -2346,7 +2514,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		{
 			testName:      "error occurs when multi execute",
 			storeName:     "store1",
-			operation:     state.Upsert,
+			operation:     state.OperationUpsert,
 			key:           "error-key",
 			errorExcepted: true,
 			expectedError: codes.Internal,
@@ -2381,7 +2549,6 @@ func TestExecuteStateTransaction(t *testing.T) {
 }
 
 func TestGetMetadata(t *testing.T) {
-	port, _ := freeport.GetFreePort()
 	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 
@@ -2391,39 +2558,40 @@ func TestGetMetadata(t *testing.T) {
 		Type:  "abcd",
 	})
 
+	compStore := compstore.New()
+	compStore.AddComponent(fakeComponent)
+	compStore.SetSubscriptions([]runtimePubsub.Subscription{
+		{
+			PubsubName:      "test",
+			Topic:           "topic",
+			DeadLetterTopic: "dead",
+			Metadata:        map[string]string{},
+			Rules: []*runtimePubsub.Rule{
+				{
+					Match: &expr.Expr{},
+					Path:  "path",
+				},
+			},
+		},
+	})
+
 	fakeAPI := &api{
 		id:    "fakeAPI",
 		actor: mockActors,
-		getComponentsFn: func() []componentsV1alpha.Component {
-			return []componentsV1alpha.Component{fakeComponent}
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
 		},
 		getComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
-		getSubscriptionsFn: func() []runtimePubsub.Subscription {
-			return []runtimePubsub.Subscription{
-				{
-					PubsubName:      "test",
-					Topic:           "topic",
-					DeadLetterTopic: "dead",
-					Metadata:        map[string]string{},
-					Rules: []*runtimePubsub.Rule{
-						{
-							Match: &expr.Expr{},
-							Path:  "path",
-						},
-					},
-				},
-			}
-		},
 	}
 	fakeAPI.extendedMetadata.Store("testKey", "testValue")
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2449,16 +2617,15 @@ func TestGetMetadata(t *testing.T) {
 }
 
 func TestSetMetadata(t *testing.T) {
-	port, _ := freeport.GetFreePort()
 	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 	fakeAPI := &api{
 		id: "fakeAPI",
 	}
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2609,9 +2776,6 @@ const (
 )
 
 func TestQueryState(t *testing.T) {
-	port, err := freeport.GetFreePort()
-	require.NoError(t, err)
-
 	fakeStore := &mockStateStoreQuerier{}
 	// simulate full result
 	fakeStore.MockQuerier.On("Query",
@@ -2643,17 +2807,20 @@ func TestQueryState(t *testing.T) {
 			return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
 		})).Return(nil, errors.New("Query error"))
 
-	server := startTestServerAPI(port, &api{
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", fakeStore)
+	server, lis := startTestServerAPI(&api{
 		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:      logger.NewLogger("grpc.api.test"),
-			StateStores: map[string]state.Store{"store1": fakeStore},
-			Resiliency:  resiliency.New(nil),
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	})
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -2689,78 +2856,70 @@ func TestQueryState(t *testing.T) {
 }
 
 func TestStateStoreQuerierNotImplemented(t *testing.T) {
-	port, err := freeport.GetFreePort()
-	require.NoError(t, err)
+	compStore := compstore.New()
+	compStore.AddStateStore("store1", &daprt.MockStateStore{})
 
-	server := startDaprAPIServer(
-		port,
-		&api{
-			id: "fakeAPI",
-			UniversalAPI: &universalapi.UniversalAPI{
-				Logger:      logger.NewLogger("grpc.api.test"),
-				StateStores: map[string]state.Store{"store1": &daprt.MockStateStore{}},
-				Resiliency:  resiliency.New(nil),
-			},
+	server, lis := startDaprAPIServer(&api{
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		"")
+	}, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
-	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+	_, err := client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: "store1",
 	})
 	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestStateStoreQuerierEncrypted(t *testing.T) {
-	port, err := freeport.GetFreePort()
-	assert.NoError(t, err)
-
 	storeName := "encrypted-store1"
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
-
-	server := startDaprAPIServer(
-		port,
-		&api{
-			id: "fakeAPI",
-			UniversalAPI: &universalapi.UniversalAPI{
-				Logger:      logger.NewLogger("grpc.api.test"),
-				StateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
-				Resiliency:  resiliency.New(nil),
-			},
+	compStore := compstore.New()
+	compStore.AddStateStore(storeName, &mockStateStoreQuerier{})
+	server, lis := startDaprAPIServer(&api{
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		"")
+	}, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
-	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+	_, err := client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: storeName,
 	})
 	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
-func TestGetConfigurationAlpha1(t *testing.T) {
-	t.Run("get configuration item", func(t *testing.T) {
-		port, err := freeport.GetFreePort()
-		assert.NoError(t, err)
-
-		server := startDaprAPIServer(
-			port,
-			&api{
-				id:                  "fakeAPI",
-				configurationStores: map[string]configuration.Store{"store1": &mockConfigStore{}},
-				resiliency:          resiliency.New(nil),
+func TestGetConfigurationAPI(t *testing.T) {
+	t.Run("get configuration item - alpha1", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
 			},
-			"")
+			resiliency: resiliency.New(nil),
+		}, "")
 		defer server.Stop()
 
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
@@ -2776,26 +2935,53 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 		assert.Len(t, r.Items, 1)
 		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
-}
-
-func TestSubscribeConfigurationAlpha1(t *testing.T) {
 	t.Run("get configuration item", func(t *testing.T) {
-		port, err := freeport.GetFreePort()
-		assert.NoError(t, err)
-
-		server := startDaprAPIServer(
-			port,
-			&api{
-				id:                         "fakeAPI",
-				configurationStores:        map[string]configuration.Store{"store1": &mockConfigStore{}},
-				configurationSubscribe:     make(map[string]chan struct{}),
-				configurationSubscribeLock: sync.Mutex{},
-				resiliency:                 resiliency.New(nil),
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
 			},
-			"")
+			resiliency: resiliency.New(nil),
+		}, "")
 		defer server.Stop()
 
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		r, err := client.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
+			StoreName: "store1",
+			Keys: []string{
+				"key1",
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, r.Items)
+		assert.Len(t, r.Items, 1)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+	})
+}
+
+func TestSubscribeConfigurationAPI(t *testing.T) {
+	t.Run("get configuration item - alpha1", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
+
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
+			},
+			resiliency: resiliency.New(nil),
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		ctx := context.Background()
@@ -2828,23 +3014,67 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
 
-	t.Run("get all configuration item for empty list", func(t *testing.T) {
-		port, err := freeport.GetFreePort()
-		assert.NoError(t, err)
+	t.Run("get configuration item", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
 
-		server := startDaprAPIServer(
-			port,
-			&api{
-				id:                         "fakeAPI",
-				configurationStores:        map[string]configuration.Store{"store1": &mockConfigStore{}},
-				configurationSubscribe:     make(map[string]chan struct{}),
-				configurationSubscribeLock: sync.Mutex{},
-				resiliency:                 resiliency.New(nil),
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
 			},
-			"")
+			resiliency: resiliency.New(nil),
+		}, "")
 		defer server.Stop()
 
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		ctx := context.Background()
+		client := runtimev1pb.NewDaprClient(clientConn)
+		s, err := client.SubscribeConfiguration(ctx, &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "store1",
+			Keys: []string{
+				"key1",
+			},
+		})
+
+		assert.NoError(t, err)
+
+		r := &runtimev1pb.SubscribeConfigurationResponse{}
+
+		for {
+			update, err := s.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if update != nil {
+				r = update
+				break
+			}
+		}
+
+		assert.NotNil(t, r)
+		assert.Len(t, r.Items, 1)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+	})
+
+	t.Run("get all configuration item for empty list - alpha1", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
+			},
+			resiliency: resiliency.New(nil),
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		ctx := context.Background()
@@ -2854,7 +3084,51 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 			Keys:      []string{},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
+
+		r := &runtimev1pb.SubscribeConfigurationResponse{}
+
+		for {
+			update, err := s.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if update != nil {
+				r = update
+				break
+			}
+		}
+
+		assert.NotNil(t, r)
+		assert.Len(t, r.Items, 2)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+		assert.Equal(t, "val2", r.Items["key2"].Value)
+	})
+	t.Run("get all configuration item for empty list", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
+		server, lis := startDaprAPIServer(&api{
+			id: "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID:     "fakeAPI",
+				CompStore: compStore,
+			},
+			resiliency: resiliency.New(nil),
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		ctx := context.Background()
+		client := runtimev1pb.NewDaprClient(clientConn)
+		s, err := client.SubscribeConfiguration(ctx, &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "store1",
+			Keys:      []string{},
+		})
+
+		require.NoError(t, err)
 
 		r := &runtimev1pb.SubscribeConfigurationResponse{}
 
@@ -2907,21 +3181,23 @@ func TestStateAPIWithResiliency(t *testing.T) {
 
 	stateLoader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
 
+	compStore := compstore.New()
+	compStore.AddStateStore("failStore", failingStore)
+	res := resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency)
+
 	fakeAPI := &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"failStore": failingStore},
-		resiliency:  resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: res,
+		},
+		resiliency: res,
 	}
-	fakeAPI.UniversalAPI = &universalapi.UniversalAPI{
-		Logger:      logger.NewLogger("grpc.api.test"),
-		StateStores: fakeAPI.stateStores,
-		Resiliency:  fakeAPI.resiliency,
-	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
@@ -3002,8 +3278,8 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
-		// Adding this will make the bulk operation fail with a timeout, and Dapr should be able to recover nicely
+	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
+		// Adding this will make the bulk operation fail
 		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
 		t.Cleanup(func() {
 			failingStore.BulkFailKey = ""
@@ -3014,39 +3290,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Keys:      []string{"failingBulkGetKey", "goodBulkGetKey"},
 		})
 
-		assert.NoError(t, err)
-		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkGetKey"))
-	})
-
-	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
-		start := time.Now()
-		resp, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
-			StoreName: "failStore",
-			Keys:      []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey", "nilGetKey"},
-		})
-		end := time.Now()
-
-		assert.NoError(t, err)
-		assert.Len(t, resp.Items, 3)
-		for _, item := range resp.Items {
-			switch item.Key {
-			case "timeoutBulkGetKey":
-				assert.NotEmpty(t, item.Error)
-				assert.Contains(t, item.Error, "context deadline exceeded")
-			case "goodTimeoutBulkGetKey":
-				assert.Empty(t, item.Error)
-			case "nilGetKey":
-				assert.Empty(t, item.Error)
-				assert.Empty(t, item.Data)
-			default:
-				t.Fatalf("unexpected key: %s", item.Key)
-			}
-		}
-		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
-		assert.Equal(t, 1, failingStore.Failure.CallCount("nilGetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Error(t, err)
 	})
 
 	t.Run("bulk state set recovers from single key failure with resiliency", func(t *testing.T) {
@@ -3097,7 +3341,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			StoreName: "failStore",
 			Operations: []*runtimev1pb.TransactionalStateOperation{
 				{
-					OperationType: string(state.Delete),
+					OperationType: string(state.OperationDelete),
 					Request: &commonv1pb.StateItem{
 						Key: "failingMultiKey",
 					},
@@ -3114,7 +3358,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			StoreName: "failStore",
 			Operations: []*runtimev1pb.TransactionalStateOperation{
 				{
-					OperationType: string(state.Delete),
+					OperationType: string(state.OperationDelete),
 					Request: &commonv1pb.StateItem{
 						Key: "timeoutMultiKey",
 					},
@@ -3153,36 +3397,55 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	failingConfigStore := daprt.FailingConfigurationStore{
 		Failure: daprt.NewFailure(
 			map[string]int{
-				"failingGetKey":         1,
-				"failingSubscribeKey":   1,
-				"failingUnsubscribeKey": 1,
+				"failingGetKey":                1,
+				"failingSubscribeKey":          1,
+				"failingUnsubscribeKey":        1,
+				"failingGetKey-alpha1":         1,
+				"failingSubscribeKey-alpha1":   1,
+				"failingUnsubscribeKey-alpha1": 1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":         time.Second * 10,
-				"timeoutSubscribeKey":   time.Second * 10,
-				"timeoutUnsubscribeKey": time.Second * 10,
+				"timeoutGetKey":                time.Second * 10,
+				"timeoutSubscribeKey":          time.Second * 10,
+				"timeoutUnsubscribeKey":        time.Second * 10,
+				"timeoutGetKey-alpha1":         time.Second * 10,
+				"timeoutSubscribeKey-alpha1":   time.Second * 10,
+				"timeoutUnsubscribeKey-alpha1": time.Second * 10,
 			},
 			map[string]int{},
 		),
 	}
 
+	compStore := compstore.New()
+	compStore.AddConfiguration("failConfig", &failingConfigStore)
+
 	fakeAPI := &api{
-		id:                     "fakeAPI",
-		configurationStores:    map[string]configuration.Store{"failConfig": &failingConfigStore},
-		configurationSubscribe: map[string]chan struct{}{},
-		resiliency:             resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+		id: "fakeAPI",
+		UniversalAPI: &universalapi.UniversalAPI{
+			CompStore: compStore,
+		},
+		resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
 	}
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
-	t.Run("test get configuration retries with resiliency", func(t *testing.T) {
+	t.Run("test get configuration retries with resiliency - alpha1", func(t *testing.T) {
 		_, err := client.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
+			StoreName: "failConfig",
+			Keys:      []string{},
+			Metadata:  map[string]string{"key": "failingGetKey-alpha1"},
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingGetKey-alpha1"))
+	})
+	t.Run("test get configuration retries with resiliency", func(t *testing.T) {
+		_, err := client.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "failingGetKey"},
@@ -3191,9 +3454,18 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingGetKey"))
 	})
-
-	t.Run("test get configuration fails due to timeout with resiliency", func(t *testing.T) {
+	t.Run("test get configuration fails due to timeout with resiliency - alpha1", func(t *testing.T) {
 		_, err := client.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
+			StoreName: "failConfig",
+			Keys:      []string{},
+			Metadata:  map[string]string{"key": "timeoutGetKey-alpha1"},
+		})
+
+		assert.Error(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutGetKey-alpha1"))
+	})
+	t.Run("test get configuration fails due to timeout with resiliency", func(t *testing.T) {
+		_, err := client.GetConfiguration(context.Background(), &runtimev1pb.GetConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "timeoutGetKey"},
@@ -3203,8 +3475,21 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutGetKey"))
 	})
 
-	t.Run("test subscribe configuration retries with resiliency", func(t *testing.T) {
+	t.Run("test subscribe configuration retries with resiliency - alpha1", func(t *testing.T) {
 		resp, err := client.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "failConfig",
+			Keys:      []string{},
+			Metadata:  map[string]string{"key": "failingSubscribeKey-alpha1"},
+		})
+		assert.NoError(t, err)
+
+		_, err = resp.Recv()
+		assert.NoError(t, err)
+
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey-alpha1"))
+	})
+	t.Run("test subscribe configuration retries with resiliency", func(t *testing.T) {
+		resp, err := client.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "failingSubscribeKey"},
@@ -3217,8 +3502,20 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
 	})
 
-	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
+	t.Run("test subscribe configuration fails due to timeout with resiliency - alpha1", func(t *testing.T) {
 		resp, err := client.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "failConfig",
+			Keys:      []string{},
+			Metadata:  map[string]string{"key": "timeoutSubscribeKey-alpha1"},
+		})
+		assert.NoError(t, err)
+
+		_, err = resp.Recv()
+		assert.Error(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey-alpha1"))
+	})
+	t.Run("test subscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
+		resp, err := client.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "timeoutSubscribeKey"},
@@ -3230,12 +3527,21 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey"))
 	})
 
-	t.Run("test unsubscribe configuration retries with resiliency", func(t *testing.T) {
-		fakeAPI.configurationSubscribeLock.Lock()
-		fakeAPI.configurationSubscribe["failingUnsubscribeKey"] = make(chan struct{})
-		fakeAPI.configurationSubscribeLock.Unlock()
+	t.Run("test unsubscribe configuration retries with resiliency - alpha1", func(t *testing.T) {
+		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey-alpha1", make(chan struct{}))
 
 		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+			StoreName: "failConfig",
+			Id:        "failingUnsubscribeKey-alpha1",
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey-alpha1"))
+	})
+	t.Run("test unsubscribe configuration retries with resiliency", func(t *testing.T) {
+		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey", make(chan struct{}))
+
+		_, err := client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Id:        "failingUnsubscribeKey",
 		})
@@ -3244,12 +3550,21 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey"))
 	})
 
-	t.Run("test unsubscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
-		fakeAPI.configurationSubscribeLock.Lock()
-		fakeAPI.configurationSubscribe["timeoutUnsubscribeKey"] = make(chan struct{})
-		fakeAPI.configurationSubscribeLock.Unlock()
+	t.Run("test unsubscribe configuration fails due to timeout with resiliency - alpha1", func(t *testing.T) {
+		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey-alpha1", make(chan struct{}))
 
 		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+			StoreName: "failConfig",
+			Id:        "timeoutUnsubscribeKey-alpha1",
+		})
+
+		assert.Error(t, err)
+		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutUnsubscribeKey-alpha1"))
+	})
+	t.Run("test unsubscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
+		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey", make(chan struct{}))
+
+		_, err := client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
 			Id:        "timeoutUnsubscribeKey",
 		})
@@ -3268,22 +3583,24 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		),
 	}
 
+	compStore := compstore.New()
+	compStore.AddSecretStore("failSecret", failingStore)
+
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:       logger.NewLogger("grpc.api.test"),
-			Resiliency:   resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
-			SecretStores: map[string]secretstores.SecretStore{"failSecret": failingStore},
+			Logger:     logger.NewLogger("grpc.api.test"),
+			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			CompStore:  compStore,
 		},
 		id: "fakeAPI",
 	}
 	// Run test server
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
 	// Create gRPC test client
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	// act
@@ -3360,12 +3677,11 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 	}
 
 	// Run test server
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, fakeAPI, "")
+	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
 
 	// Create gRPC test client
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	// act
@@ -3512,6 +3828,7 @@ func TestTryLock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Resiliency: resiliencyConfig,
+			CompStore:  compstore.New(),
 		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "abc",
@@ -3525,10 +3842,11 @@ func TestTryLock(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
-		mockLockStore := daprt.NewMockStore(ctl)
+		compStore := compstore.New()
+		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
 			Resiliency: resiliencyConfig,
-			LockStores: map[string]lock.Store{"mock": mockLockStore},
+			CompStore:  compStore,
 		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "mock",
@@ -3542,10 +3860,11 @@ func TestTryLock(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
-		mockLockStore := daprt.NewMockStore(ctl)
+		compStore := compstore.New()
+		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
 			Resiliency:  resiliencyConfig,
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			CompStore:   compStore,
 			TracingSpec: config.TracingSpec{},
 		})
 		req := &runtimev1pb.TryLockRequest{
@@ -3561,10 +3880,11 @@ func TestTryLock(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
-		mockLockStore := daprt.NewMockStore(ctl)
+		compStore := compstore.New()
+		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
 			Resiliency:  resiliencyConfig,
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			CompStore:   compStore,
 			TracingSpec: config.TracingSpec{},
 		})
 
@@ -3582,10 +3902,11 @@ func TestTryLock(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
-		mockLockStore := daprt.NewMockStore(ctl)
+		compStore := compstore.New()
+		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
 			Resiliency:  resiliencyConfig,
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			CompStore:   compStore,
 			TracingSpec: config.TracingSpec{},
 		})
 
@@ -3613,9 +3934,11 @@ func TestTryLock(t *testing.T) {
 				Success: true,
 			}, nil
 		})
+		compStore := compstore.New()
+		compStore.AddLock("mock", mockLockStore)
 		api := NewAPI(APIOpts{
 			Resiliency:  resiliencyConfig,
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			CompStore:   compStore,
 			TracingSpec: config.TracingSpec{},
 		})
 		req := &runtimev1pb.TryLockRequest{
@@ -3638,6 +3961,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			Resiliency:  resiliencyConfig,
 			TracingSpec: config.TracingSpec{},
+			CompStore:   compstore.New(),
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -3651,10 +3975,11 @@ func TestUnlock(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
-		mockLockStore := daprt.NewMockStore(ctl)
+		compStore := compstore.New()
+		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
 			Resiliency: resiliencyConfig,
-			LockStores: map[string]lock.Store{"mock": mockLockStore},
+			CompStore:  compStore,
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -3668,10 +3993,11 @@ func TestUnlock(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
-		mockLockStore := daprt.NewMockStore(ctl)
+		compStore := compstore.New()
+		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
 			Resiliency: resiliencyConfig,
-			LockStores: map[string]lock.Store{"mock": mockLockStore},
+			CompStore:  compStore,
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
@@ -3685,10 +4011,11 @@ func TestUnlock(t *testing.T) {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
-		mockLockStore := daprt.NewMockStore(ctl)
+		compStore := compstore.New()
+		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
 			Resiliency: resiliencyConfig,
-			LockStores: map[string]lock.Store{"mock": mockLockStore},
+			CompStore:  compStore,
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -3713,9 +4040,11 @@ func TestUnlock(t *testing.T) {
 				Status: lock.Success,
 			}, nil
 		})
+		compStore := compstore.New()
+		compStore.AddLock("mock", mockLockStore)
 		api := NewAPI(APIOpts{
 			Resiliency: resiliencyConfig,
-			LockStores: map[string]lock.Store{"mock": mockLockStore},
+			CompStore:  compStore,
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "mock",

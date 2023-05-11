@@ -39,7 +39,9 @@ func TestCircuitBreaker(t *testing.T) {
 		Trip:    &trip,
 		Timeout: 100 * time.Millisecond,
 	}
+	assert.Equal(t, breaker.StateUnknown, cb.State())
 	cb.Initialize(log)
+	assert.Equal(t, breaker.StateClosed, cb.State())
 
 	for i := 0; i < 3; i++ {
 		cb.Execute(func() (any, error) {
@@ -50,10 +52,12 @@ func TestCircuitBreaker(t *testing.T) {
 	res, err := cb.Execute(func() (any, error) {
 		return "❌", nil
 	})
+	assert.Equal(t, breaker.StateOpen, cb.State())
 	assert.EqualError(t, err, "circuit breaker is open")
 	assert.Nil(t, res)
 
 	time.Sleep(500 * time.Millisecond)
+	assert.Equal(t, breaker.StateHalfOpen, cb.State())
 	res, err = cb.Execute(func() (any, error) {
 		return 42, nil
 	})

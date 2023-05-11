@@ -112,31 +112,33 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		}
 		methodName := methodURL[methodStartIndex+len("/method/"):]
 
-		var requestData []byte
-		requestData, err = req.RawDataFull()
-		if err != nil {
-			return nil, err
-		}
-
 		// Check for well-known method names; otherwise, just call InvokeMethod on the internal actor.
 		if strings.HasPrefix(methodName, "remind/") {
 			reminderName := strings.TrimPrefix(methodName, "remind/")
-			reminderInfo := new(ReminderResponse)
-			if err = json.Unmarshal(requestData, reminderInfo); err != nil {
-				return nil, fmt.Errorf("unexpected ReminderResponse JSON payload: %s", requestData)
+			reminderInfo, ok := req.GetDataObject().(*ReminderResponse)
+			if !ok {
+				return nil, fmt.Errorf("unexpected type for reminder object: %T", req.GetDataObject())
 			}
 
 			// Reminder payloads are always saved as JSON
-			var dataBytes []byte
-			if dataBytes, err = json.Marshal(reminderInfo.Data); err != nil {
-				return nil, fmt.Errorf("failed to convert reminderInfo.Data back to JSON: %w", err)
+			dataBytes, ok := reminderInfo.Data.(json.RawMessage)
+			if !ok {
+				return nil, fmt.Errorf("unexpected type for data object: %T", reminderInfo.Data)
 			}
 			err = actor.InvokeReminder(ctx, actorID, reminderName, dataBytes, reminderInfo.DueTime, reminderInfo.Period)
-		} else if strings.HasPrefix(methodName, "timer/") {
-			timerName := strings.TrimPrefix(methodName, "timer/")
-			err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
 		} else {
-			result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
+			var requestData []byte
+			requestData, err = req.RawDataFull()
+			if err != nil {
+				return nil, err
+			}
+
+			if strings.HasPrefix(methodName, "timer/") {
+				timerName := strings.TrimPrefix(methodName, "timer/")
+				err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
+			} else {
+				result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
+			}
 		}
 	}
 
@@ -187,7 +189,7 @@ func DecodeInternalActorData(data []byte, e any) error {
 // DecodeInternalActorReminderData decodes internal actor reminder data payloads and stores the result in e.
 func DecodeInternalActorReminderData(data []byte, e any) error {
 	if err := json.Unmarshal(data, e); err != nil {
-		return fmt.Errorf("unrecognized internal actor reminder payload '%v': %w", data, err)
+		return fmt.Errorf("unrecognized internal actor reminder payload: %w", err)
 	}
 	return nil
 }

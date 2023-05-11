@@ -1,5 +1,5 @@
 #
-# Copyright 2022 The Dapr Authors
+# Copyright 2023 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,12 +11,15 @@
 # limitations under the License.
 #
 
-# TODO: Remove once AppHealthCheck feature is finalized
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: healthcheckconfig
-spec:
-  features:
-    - name: AppHealthCheck
-      enabled: true
+name: pubsub performance test
+components:
+  - name: kafka-messagebus
+    topic: kafka-perf-test
+    route: kafka-perf-test
+    numHealthChecks: 60
+    testAppName: kafka-test-app
+    testLabel: pubsub_subscribe_kafka
+    subscribeHTTPThresholdMs: 1500
+    bulkSubscribeHTTPThresholdMs: 500
+    imageName: perf-pubsub_subscribe_http
+    operations: [bulk, normal]

@@ -28,18 +28,20 @@ import (
 )
 
 func (a *UniversalAPI) getStateStore(name string) (state.Store, error) {
-	if len(a.StateStores) == 0 {
+	if a.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
-	if a.StateStores[name] == nil {
+	state, ok := a.CompStore.GetStateStore(name)
+	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(name)
 		a.Logger.Debug(err)
 		return nil, err
 	}
-	return a.StateStores[name], nil
+
+	return state, nil
 }
 
 func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
@@ -89,7 +91,7 @@ func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.Que
 	}
 
 	if resp == nil || len(resp.Results) == 0 {
-		return nil, nil
+		return &runtimev1pb.QueryStateResponse{}, nil
 	}
 
 	ret := &runtimev1pb.QueryStateResponse{

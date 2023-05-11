@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -73,17 +73,36 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/SubscribeConfigurationAlpha1",
 		daprRuntimePrefix + "v1.Dapr/UnsubscribeConfigurationAlpha1",
 	},
+	"configuration.v1": {
+		daprRuntimePrefix + "v1.Dapr/GetConfiguration",
+		daprRuntimePrefix + "v1.Dapr/SubscribeConfiguration",
+		daprRuntimePrefix + "v1.Dapr/UnsubscribeConfiguration",
+	},
 	"lock.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/TryLockAlpha1",
 	},
 	"unlock.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/UnlockAlpha1",
 	},
+	"subtlecrypto.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/SubtleGetKeyAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleEncryptAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleDecryptAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleSignAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleVerifyAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleWrapKeyAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SubtleUnwrapKeyAlpha1",
+	},
+	"crypto.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/EncryptAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DecryptAlpha1",
+	},
 	"workflows.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/StartWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/GetWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/TerminateWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/RaiseEventWorkflowAlpha1",
+		daprRuntimePrefix + "v1.Dapr/PurgeWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/PauseWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/ResumeWorkflowAlpha1",
 	},
@@ -93,23 +112,12 @@ var endpoints = map[string][]string{
 }
 
 // Returns the middlewares (unary and stream) for supporting API allowlist
-func setAPIEndpointsMiddlewares(rules []config.APIAccessRule) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
-	allowed := map[string]struct{}{}
-
-	for _, rule := range rules {
-		if rule.Protocol != "grpc" {
-			continue
-		}
-
-		if list, ok := endpoints[rule.Name+"."+rule.Version]; ok {
-			for _, method := range list {
-				allowed[method] = struct{}{}
-			}
-		}
-	}
+func setAPIEndpointsMiddlewares(allowedRules config.APIAccessRules, deniedRules config.APIAccessRules) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
+	allowed := apiAccessRuleToMap(allowedRules)
+	denied := apiAccessRuleToMap(deniedRules)
 
 	// Passthrough if no gRPC rules
-	if len(allowed) == 0 {
+	if len(allowed) == 0 && len(denied) == 0 {
 		return nil, nil
 	}
 
@@ -117,9 +125,17 @@ func setAPIEndpointsMiddlewares(rules []config.APIAccessRule) (grpc.UnaryServerI
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			// Apply the allowlist only on methods that are part of the Dapr runtime, or it will interfere with gRPC proxying
 			if strings.HasPrefix(info.FullMethod, daprRuntimePrefix) {
-				_, ok := allowed[info.FullMethod]
-				if !ok {
-					return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+				if len(denied) > 0 {
+					_, ok := denied[info.FullMethod]
+					if ok {
+						return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+					}
+				}
+				if len(allowed) > 0 {
+					_, ok := allowed[info.FullMethod]
+					if !ok {
+						return nil, invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+					}
 				}
 			}
 
@@ -128,11 +144,40 @@ func setAPIEndpointsMiddlewares(rules []config.APIAccessRule) (grpc.UnaryServerI
 		func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 			// Apply the allowlist only on methods that are part of the Dapr runtime, or it will interfere with gRPC proxying
 			if strings.HasPrefix(info.FullMethod, daprRuntimePrefix) {
-				_, ok := allowed[info.FullMethod]
-				if !ok {
-					return invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+				if len(denied) > 0 {
+					_, ok := denied[info.FullMethod]
+					if ok {
+						return invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+					}
+				}
+				if len(allowed) > 0 {
+					_, ok := allowed[info.FullMethod]
+					if !ok {
+						return invokev1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+					}
 				}
 			}
+
 			return handler(srv, stream)
 		}
+}
+
+// Converts a slice of config.APIAccessRule into a map where the key is the gRPC full endpoint.
+// The keys in the returned map follow the pattern "<rule-name>.<rule-version>"
+func apiAccessRuleToMap(rules config.APIAccessRules) map[string]struct{} {
+	res := map[string]struct{}{}
+
+	for _, rule := range rules {
+		if rule.Protocol != "grpc" {
+			continue
+		}
+
+		if list, ok := endpoints[rule.Name+"."+rule.Version]; ok {
+			for _, method := range list {
+				res[method] = struct{}{}
+			}
+		}
+	}
+
+	return res
 }

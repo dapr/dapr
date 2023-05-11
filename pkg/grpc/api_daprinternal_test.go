@@ -17,7 +17,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -32,15 +31,13 @@ import (
 
 func TestCallLocal(t *testing.T) {
 	t.Run("appchannel is not ready", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: nil,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -52,16 +49,14 @@ func TestCallLocal(t *testing.T) {
 	})
 
 	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		mockAppChannel := new(channelt.MockAppChannel)
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -74,8 +69,6 @@ func TestCallLocal(t *testing.T) {
 	})
 
 	t.Run("invokemethod returns error", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.On("InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
@@ -85,9 +78,9 @@ func TestCallLocal(t *testing.T) {
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -101,15 +94,13 @@ func TestCallLocal(t *testing.T) {
 
 func TestCallLocalStream(t *testing.T) {
 	t.Run("appchannel is not ready", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: nil,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -130,16 +121,14 @@ func TestCallLocalStream(t *testing.T) {
 	})
 
 	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		mockAppChannel := new(channelt.MockAppChannel)
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -160,8 +149,6 @@ func TestCallLocalStream(t *testing.T) {
 	})
 
 	t.Run("invokemethod returns error", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.
 			On(
@@ -174,9 +161,9 @@ func TestCallLocalStream(t *testing.T) {
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -208,12 +195,10 @@ func TestCallLocalStream(t *testing.T) {
 }
 
 func TestCallRemoteAppWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
+	server, _, lis := startTestServerWithTracing()
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -226,12 +211,10 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 }
 
 func TestCallActorWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
+	server, _, lis := startTestServerWithTracing()
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)

@@ -35,13 +35,14 @@ import (
 )
 
 const (
-	daprHost        = "localhost"
-	daprHTTPPort    = "3500"
-	daprGRPCPort    = 50001
-	configStoreName = "configstore"
-	separator       = "||"
-	redisHost       = "dapr-redis-master.dapr-tests.svc.cluster.local:6379"
-	writeTimeout    = 5 * time.Second
+	daprGRPCPort               = 50001
+	configStore                = "configstore"
+	daprConfigurationURLStable = "http://localhost:3500/v1.0/configuration/"
+	daprConfigurationURLAlpha1 = "http://localhost:3500/v1.0-alpha1/configuration/"
+	separator                  = "||"
+	redisHost                  = "dapr-redis-master.dapr-tests.svc.cluster.local:6379"
+	writeTimeout               = 5 * time.Second
+	alpha1Endpoint             = "alpha1"
 )
 
 var (
@@ -52,6 +53,11 @@ var (
 	httpClient      = utils.NewHTTPClient()
 	grpcClient      runtimev1pb.DaprClient
 )
+
+type UnsubscribeConfigurationResponse struct {
+	Ok      bool   `json:"ok,omitempty"`
+	Message string `json:"message,omitempty"`
+}
 
 type appResponse struct {
 	Message   string `json:"message,omitempty"`
@@ -139,8 +145,12 @@ func getRedisValuesFromItems(items map[string]*Item) []interface{} {
 	return m
 }
 
-func getHTTP(keys []string) (string, error) {
-	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + buildQueryParams(keys)
+func getHTTP(keys []string, endpointType string) (string, error) {
+	daprConfigurationURL := daprConfigurationURLStable
+	if endpointType == alpha1Endpoint {
+		daprConfigurationURL = daprConfigurationURLAlpha1
+	}
+	url := daprConfigurationURL + configStore + buildQueryParams(keys)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("error getting key-values from config store. err: %w", err)
@@ -150,9 +160,13 @@ func getHTTP(keys []string) (string, error) {
 	return string(respInBytes), nil
 }
 
-func getGRPC(keys []string) (string, error) {
-	res, err := grpcClient.GetConfigurationAlpha1(context.Background(), &runtimev1pb.GetConfigurationRequest{
-		StoreName: configStoreName,
+func getGRPC(keys []string, endpointType string) (string, error) {
+	getConfigGRPC := grpcClient.GetConfiguration
+	if endpointType == alpha1Endpoint {
+		getConfigGRPC = grpcClient.GetConfigurationAlpha1
+	}
+	res, err := getConfigGRPC(context.Background(), &runtimev1pb.GetConfigurationRequest{
+		StoreName: configStore,
 		Keys:      keys,
 	})
 	if err != nil {
@@ -167,6 +181,7 @@ func getGRPC(keys []string) (string, error) {
 func getKeyValues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	protocol := vars["protocol"]
+	endpointType := vars["endpointType"]
 	var keys []string
 	err := json.NewDecoder(r.Body).Decode(&keys)
 	if err != nil {
@@ -175,9 +190,9 @@ func getKeyValues(w http.ResponseWriter, r *http.Request) {
 	}
 	var response string
 	if protocol == "http" {
-		response, err = getHTTP(keys)
+		response, err = getHTTP(keys, endpointType)
 	} else if protocol == "grpc" {
-		response, err = getGRPC(keys)
+		response, err = getGRPC(keys, endpointType)
 	} else {
 		err = fmt.Errorf("unknown protocol in Get call: %s", protocol)
 	}
@@ -199,11 +214,20 @@ func buildQueryParams(keys []string) string {
 	return ret
 }
 
-func subscribeGRPC(keys []string) (string, error) {
-	client, err := grpcClient.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
-		StoreName: configStoreName,
-		Keys:      keys,
-	})
+func subscribeGRPC(keys []string, endpointType string) (string, error) {
+	var client runtimev1pb.Dapr_SubscribeConfigurationClient
+	var err error
+	if endpointType == alpha1Endpoint {
+		client, err = grpcClient.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: configStore,
+			Keys:      keys,
+		})
+	} else {
+		client, err = grpcClient.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: configStore,
+			Keys:      keys,
+		})
+	}
 	if err != nil {
 		return "", fmt.Errorf("error subscribing config updates: %w", err)
 	}
@@ -220,7 +244,7 @@ func subscribeGRPC(keys []string) (string, error) {
 	return subscriptionID, nil
 }
 
-func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationAlpha1Client) {
+func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationClient) {
 	for {
 		rsp, err := client.Recv()
 		if errors.Is(err, io.EOF) || rsp == nil {
@@ -251,8 +275,12 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationAlpha1Cl
 	}
 }
 
-func subscribeHTTP(keys []string) (string, error) {
-	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/subscribe" + buildQueryParams(keys)
+func subscribeHTTP(keys []string, endpointType string) (string, error) {
+	daprConfigurationURL := daprConfigurationURLStable
+	if endpointType == alpha1Endpoint {
+		daprConfigurationURL = daprConfigurationURLAlpha1
+	}
+	url := daprConfigurationURL + configStore + "/subscribe" + buildQueryParams(keys)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("error subscribing config updates: %w", err)
@@ -278,6 +306,7 @@ func subscribeHTTP(keys []string) (string, error) {
 func startSubscription(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	protocol := vars["protocol"]
+	endpointType := vars["endpointType"]
 	var keys []string
 	err := json.NewDecoder(r.Body).Decode(&keys)
 	if err != nil {
@@ -286,9 +315,9 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	var subscriptionID string
 	if protocol == "http" {
-		subscriptionID, err = subscribeHTTP(keys)
+		subscriptionID, err = subscribeHTTP(keys, endpointType)
 	} else if protocol == "grpc" {
-		subscriptionID, err = subscribeGRPC(keys)
+		subscriptionID, err = subscribeGRPC(keys, endpointType)
 	} else {
 		err = fmt.Errorf("unknown protocol in Subscribe call: %s", protocol)
 	}
@@ -300,27 +329,43 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 	sendResponse(w, http.StatusOK, subscriptionID)
 }
 
-func unsubscribeHTTP(subscriptionID string) (string, error) {
-	url := "http://" + daprHost + ":" + daprHTTPPort + "/v1.0-alpha1/configuration/" + configStoreName + "/" + subscriptionID + "/unsubscribe"
+func unsubscribeHTTP(subscriptionID string, endpointType string) (string, error) {
+	daprConfigurationURL := daprConfigurationURLStable
+	if endpointType == alpha1Endpoint {
+		daprConfigurationURL = daprConfigurationURLAlpha1
+	}
+	url := daprConfigurationURL + configStore + "/" + subscriptionID + "/unsubscribe"
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
 	}
 	defer resp.Body.Close()
 	respInBytes, _ := io.ReadAll(resp.Body)
+	var unsubscribeResp UnsubscribeConfigurationResponse
+	err = json.Unmarshal(respInBytes, &unsubscribeResp)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling unsubscribe response: %s", err.Error())
+	}
+	if !unsubscribeResp.Ok {
+		return "", fmt.Errorf("error subscriptionID not found: %s", unsubscribeResp.Message)
+	}
 	return string(respInBytes), nil
 }
 
-func unsubscribeGRPC(subscriptionID string) (string, error) {
-	resp, err := grpcClient.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
-		StoreName: configStoreName,
+func unsubscribeGRPC(subscriptionID string, endpointType string) (string, error) {
+	unsubscribeConfigGRPC := grpcClient.UnsubscribeConfiguration
+	if endpointType == alpha1Endpoint {
+		unsubscribeConfigGRPC = grpcClient.UnsubscribeConfigurationAlpha1
+	}
+	resp, err := unsubscribeConfigGRPC(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
+		StoreName: configStore,
 		Id:        subscriptionID,
 	})
 	if err != nil {
 		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
 	}
 	if !resp.Ok {
-		return "", fmt.Errorf("error unsubscribing config updates: %s", resp.GetMessage())
+		return "", fmt.Errorf("error subscriptionID not found: %s", resp.GetMessage())
 	}
 	return resp.GetMessage(), nil
 }
@@ -330,12 +375,13 @@ func stopSubscription(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	subscriptionID := vars["subscriptionID"]
 	protocol := vars["protocol"]
+	endpointType := vars["endpointType"]
 	var response string
 	var err error
 	if protocol == "http" {
-		response, err = unsubscribeHTTP(subscriptionID)
+		response, err = unsubscribeHTTP(subscriptionID, endpointType)
 	} else if protocol == "grpc" {
-		response, err = unsubscribeGRPC(subscriptionID)
+		response, err = unsubscribeGRPC(subscriptionID, endpointType)
 	} else {
 		err = fmt.Errorf("unknown protocol in unsubscribe call: %s", protocol)
 	}
@@ -433,9 +479,9 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/initialize-updater", initializeUpdater).Methods("POST")
-	router.HandleFunc("/get-key-values/{protocol}", getKeyValues).Methods("POST")
-	router.HandleFunc("/subscribe/{protocol}", startSubscription).Methods("POST")
-	router.HandleFunc("/unsubscribe/{subscriptionID}/{protocol}", stopSubscription).Methods("GET")
+	router.HandleFunc("/get-key-values/{protocol}/{endpointType}", getKeyValues).Methods("POST")
+	router.HandleFunc("/subscribe/{protocol}/{endpointType}", startSubscription).Methods("POST")
+	router.HandleFunc("/unsubscribe/{subscriptionID}/{protocol}/{endpointType}", stopSubscription).Methods("GET")
 	router.HandleFunc("/configuration/{storeName}/{key}", configurationUpdateHandler).Methods("POST")
 	router.HandleFunc("/get-received-updates/{subscriptionID}", getReceivedUpdates).Methods("GET")
 	router.HandleFunc("/update-key-values", updateKeyValues).Methods("POST")

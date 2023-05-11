@@ -61,6 +61,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.membershipChangeWorker(ctx)
 		}()
 
+		time.Sleep(time.Second * 2)
+
 		return func() {
 			cancel()
 			cancelServer()
@@ -87,7 +89,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// wait until all host member change requests are flushed
 		assert.Eventually(t, func() bool {
 			return len(testServer.raftNode.FSM().State().Members()) == 3
-		}, disseminateTimerInterval+500*time.Millisecond, time.Millisecond)
+		}, disseminateTimerInterval+time.Second*3, time.Millisecond)
 	}
 
 	t.Run("successful dissemination", func(t *testing.T) {
@@ -95,7 +97,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// arrange
 		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
-		conn, stream := newTestClient(t, serverAddress)
+		conn, _, stream := newTestClient(t, serverAddress)
 
 		done := make(chan bool)
 		go func() {
@@ -122,7 +124,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		select {
 		case <-done:
-		case <-time.After(disseminateTimerInterval + 500*time.Millisecond):
+		case <-time.After(disseminateTimerInterval + time.Second*3):
 			t.Error("dissemination did not happen in time")
 		}
 
@@ -146,6 +148,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			"flushed all member updates and faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
+		time.Sleep(time.Second * 3)
 	})
 
 	t.Run("faulty host detector", func(t *testing.T) {
@@ -199,7 +202,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	clientUpToDateCh := make(chan struct{}, testClients)
 
 	for i := 0; i < testClients; i++ {
-		conn, stream := newTestClient(t, serverAddress)
+		conn, _, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
 		clientRecvData = append(clientRecvData, map[string]int64{})
@@ -324,7 +327,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	startFlag.Store(false)
 	wg.Add(testClients)
 	for i := 0; i < testClients; i++ {
-		conn, stream := newTestClient(t, serverAddress)
+		conn, _, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
 		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {

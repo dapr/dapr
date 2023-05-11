@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	env "github.com/dapr/dapr/pkg/config/env"
+
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,8 +41,6 @@ type Feature string
 const (
 	// Enable support for streaming in HTTP service invocation
 	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
-	// Enables the app health check feature, allowing the use of the CLI flags
-	AppHealthCheck Feature = "AppHealthCheck"
 	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
 	// TODO: Remove this feature flag in Dapr 1.13.
 	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"
@@ -58,8 +58,6 @@ const (
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
 	SpiffeIDPrefix      = "spiffe://"
-	HTTPProtocol        = "http"
-	GRPCProtocol        = "grpc"
 )
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
@@ -131,14 +129,42 @@ type PipelineSpec struct {
 
 // APISpec describes the configuration for Dapr APIs.
 type APISpec struct {
-	Allowed []APIAccessRule `json:"allowed,omitempty"`
+	// List of allowed APIs. Can be used in conjunction with denied.
+	Allowed APIAccessRules `json:"allowed,omitempty"`
+	// List of denied APIs. Can be used in conjunction with allowed.
+	Denied APIAccessRules `json:"denied,omitempty"`
 }
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
 type APIAccessRule struct {
-	Name     string `json:"name"`
-	Version  string `json:"version"`
-	Protocol string `json:"protocol"`
+	Name     string                `json:"name"`
+	Version  string                `json:"version"`
+	Protocol APIAccessRuleProtocol `json:"protocol"`
+}
+
+// APIAccessRules is a list of API access rules (allowlist or denylist).
+type APIAccessRules []APIAccessRule
+
+// APIAccessRuleProtocol is the type for the protocol in APIAccessRules
+type APIAccessRuleProtocol string
+
+const (
+	APIAccessRuleProtocolHTTP APIAccessRuleProtocol = "http"
+	APIAccessRuleProtocolGRPC APIAccessRuleProtocol = "grpc"
+)
+
+// GetRulesByProtocol returns a list of APIAccessRule objects filtered by protocol
+func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) []APIAccessRule {
+	res := make([]APIAccessRule, len(r))
+	n := 0
+	for _, v := range r {
+		//nolint:gocritic
+		if strings.ToLower(string(v.Protocol)) == string(protocol) {
+			res[n] = v
+			n++
+		}
+	}
+	return res[:n]
 }
 
 type HandlerSpec struct {
@@ -352,6 +378,38 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 
 	sortMetricsSpec(conf)
 	return conf, nil
+}
+
+// Update configuration from Otlp Environment Variables, if they exist.
+func SetTracingSpecFromEnv(conf *Configuration) {
+	// If Otel Endpoint is already set, then don't override.
+	if conf.Spec.TracingSpec.Otel.EndpointAddress != "" {
+		return
+	}
+
+	if endpoint := os.Getenv(env.OtlpExporterEndpoint); endpoint != "" {
+		// remove "http://" or "https://" from the endpoint
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+
+		conf.Spec.TracingSpec.Otel.EndpointAddress = endpoint
+
+		if conf.Spec.TracingSpec.SamplingRate == "" {
+			conf.Spec.TracingSpec.SamplingRate = "1"
+		}
+
+		// The OTLP attribute allows 'grpc', 'http/protobuf', or 'http/json'.
+		// Dapr setting can only be 'grpc' or 'http'.
+		if protocol := os.Getenv(env.OtlpExporterProtocol); strings.HasPrefix(protocol, "http") {
+			conf.Spec.TracingSpec.Otel.Protocol = "http"
+		} else {
+			conf.Spec.TracingSpec.Otel.Protocol = "grpc"
+		}
+
+		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
+			conf.Spec.TracingSpec.Otel.IsSecure = false
+		}
+	}
 }
 
 // Apply .metrics if set. If not, retain .metric.

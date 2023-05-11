@@ -224,8 +224,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	var resp *http.Response
 	if len(h.pipeline.Handlers) > 0 {
 		// Exec pipeline only if at least one handler is specified
-		rw := &rwRecorder{
-			w: &bytes.Buffer{},
+		rw := &RWRecorder{
+			W: &bytes.Buffer{},
 		}
 		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
 			// Send request to user application
@@ -301,7 +301,12 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Add)
-	channelReq.Header.Set("content-type", req.ContentType())
+
+	if ct := req.ContentType(); ct != "" {
+		channelReq.Header.Set("content-type", ct)
+	} else {
+		channelReq.Header.Del("content-type")
+	}
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
