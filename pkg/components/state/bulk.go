@@ -19,12 +19,13 @@ import (
 	"sync/atomic"
 
 	"github.com/cenkalti/backoff/v4"
+
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
-// PerformBulkStore performs a bulk set or delete using resiliency, retrying operations that fail only when they can be retried.
-func PerformBulkStore[T state.SetRequest | state.DeleteRequest](
+// PerformBulkStoreOperation performs a bulk set or delete using resiliency, retrying operations that fail only when they can be retried.
+func PerformBulkStoreOperation[T state.SetRequest | state.DeleteRequest](
 	ctx context.Context, reqs []T, policyDef *resiliency.PolicyDefinition, opts state.BulkStoreOpts,
 	execSingle func(ctx context.Context, req *T) error,
 	execMulti func(ctx context.Context, reqs []T, opts state.BulkStoreOpts) error,

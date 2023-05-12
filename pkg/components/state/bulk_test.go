@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-func TestPerformBulkStore(t *testing.T) {
+func TestPerformBulkStoreOperation(t *testing.T) {
 	simulatedErr := errors.New("simulated")
 	etagMismatchErr := state.NewETagError(state.ETagMismatch, simulatedErr)
 	etagInvalidErr := state.NewETagError(state.ETagInvalid, simulatedErr)
@@ -69,7 +69,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("no error", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				func(ctx context.Context, req *state.SetRequest) error {
 					count.Add(1)
 					return nil
@@ -82,7 +82,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("does not retry on etag error", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				func(ctx context.Context, req *state.SetRequest) error {
 					count.Add(1)
 					return etagInvalidErr
@@ -97,7 +97,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("retries on other errors", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				func(ctx context.Context, req *state.SetRequest) error {
 					count.Add(1)
 					return simulatedErr
@@ -110,7 +110,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("success on second attempt", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				func(ctx context.Context, req *state.SetRequest) error {
 					if count.Add(1) == 1 {
 						return simulatedErr
@@ -132,7 +132,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("all successful", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				nil, // The single method should not be invoked, so this will panic if it happens
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
@@ -145,7 +145,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("key1 successful, key2 etag mismatch", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				nil, // The single method should not be invoked, so this will panic if it happens
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
@@ -163,7 +163,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("key1 etag invalid, key2 etag mismatch", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				nil, // The single method should not be invoked, so this will panic if it happens
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
@@ -183,7 +183,7 @@ func TestPerformBulkStore(t *testing.T) {
 		t.Run("key1 successful, key2 fails and is retried", func(t *testing.T) {
 			count := atomic.Uint32{}
 			// This should retry, but the second time only key2 should be requested
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				func(ctx context.Context, req *state.SetRequest) error {
 					require.Equal(t, "key2", req.Key)
 					count.Add(1)
@@ -204,7 +204,7 @@ func TestPerformBulkStore(t *testing.T) {
 		t.Run("key1 fails and is retried, key2 has etag error", func(t *testing.T) {
 			count := atomic.Uint32{}
 			// This should retry, but the second time only key1 should be requested
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				func(ctx context.Context, req *state.SetRequest) error {
 					require.Equal(t, "key1", req.Key)
 					count.Add(1)
@@ -232,7 +232,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 			count := atomic.Uint32{}
 			// This should retry, but the second time only key1 should be requested
-			err := PerformBulkStore(context.Background(), reqs2, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs2, policyDef, state.BulkStoreOpts{},
 				func(ctx context.Context, req *state.SetRequest) error {
 					require.Equal(t, "key1", req.Key)
 					count.Add(1)
@@ -259,7 +259,7 @@ func TestPerformBulkStore(t *testing.T) {
 			}
 
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs2, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs2, policyDef, state.BulkStoreOpts{},
 				nil, // The single method should not be invoked, so this will panic if it happens
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					if count.Add(1) == 1 {
@@ -297,7 +297,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("retries when error is not a multierror", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				nil, // The single method should not be invoked, so this will panic if it happens
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
@@ -311,7 +311,7 @@ func TestPerformBulkStore(t *testing.T) {
 
 		t.Run("retries when multierror contains a non-BulkStoreError error", func(t *testing.T) {
 			count := atomic.Uint32{}
-			err := PerformBulkStore(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
+			err := PerformBulkStoreOperation(context.Background(), reqs, policyDef, state.BulkStoreOpts{},
 				nil, // The single method should not be invoked, so this will panic if it happens
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
