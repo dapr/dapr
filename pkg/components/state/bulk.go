@@ -25,9 +25,9 @@ import (
 
 // PerformBulkStore performs a bulk set or delete using resiliency, retrying operations that fail only when they can be retried.
 func PerformBulkStore[T state.SetRequest | state.DeleteRequest](
-	ctx context.Context, reqs []T, policyDef *resiliency.PolicyDefinition,
+	ctx context.Context, reqs []T, policyDef *resiliency.PolicyDefinition, opts state.BulkStoreOpts,
 	execSingle func(ctx context.Context, req *T) error,
-	execMulti func(ctx context.Context, reqs []T) error,
+	execMulti func(ctx context.Context, reqs []T, opts state.BulkStoreOpts) error,
 ) error {
 	var reqsAtomic atomic.Pointer[[]T]
 	reqsAtomic.Store(&reqs)
@@ -67,7 +67,7 @@ func PerformBulkStore[T state.SetRequest | state.DeleteRequest](
 		}
 
 		// Perform the request in bulk
-		rErr = execMulti(ctx, rReqs)
+		rErr = execMulti(ctx, rReqs, opts)
 
 		// If there's no error, short-circuit
 		if rErr == nil {
