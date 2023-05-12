@@ -74,6 +74,8 @@ import (
 const (
 	goodStoreKey    = "fakeAPI||good-key"
 	errorStoreKey   = "fakeAPI||error-key"
+	etagMismatchKey = "fakeAPI||etag-mismatch"
+	etagInvalidKey  = "fakeAPI||etag-invalid"
 	goodKey         = "good-key"
 	goodKey2        = "good-key2"
 	mockSubscribeID = "mockId"
@@ -978,11 +980,11 @@ func TestGetBulkSecret(t *testing.T) {
 
 func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	server, lis := startDaprAPIServer(&api{
-		id:         "fakeAPI",
-		resiliency: resiliency.New(nil),
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compstore.New(),
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compstore.New(),
+			Resiliency: resiliency.New(nil),
 		},
 	}, "")
 	defer server.Stop()
@@ -1015,21 +1017,21 @@ func TestSaveState(t *testing.T) {
 	fakeStore.On("Set",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.SetRequest) bool {
-			return req.Key == "fakeAPI||etag-mismatch"
+			return req.Key == etagMismatchKey
 		}),
 	).Return(etagMismatchErr)
 	fakeStore.On("Set",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.SetRequest) bool {
-			return req.Key == "fakeAPI||etag-invalid"
+			return req.Key == etagInvalidKey
 		}),
 	).Return(etagInvalidErr)
 	fakeStore.On("BulkSetWithOptions",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.SetRequest) bool {
 			return len(req) == 2 &&
-				req[0].Key == "fakeAPI||good-key" &&
-				req[1].Key == "fakeAPI||good-key2"
+				req[0].Key == goodStoreKey &&
+				req[1].Key == goodStoreKey+"2"
 		}),
 		mock.Anything,
 	).Return(nil)
@@ -1037,8 +1039,8 @@ func TestSaveState(t *testing.T) {
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.SetRequest) bool {
 			return len(req) == 2 &&
-				req[0].Key == "fakeAPI||good-key" &&
-				req[1].Key == "fakeAPI||etag-mismatch"
+				req[0].Key == goodStoreKey &&
+				req[1].Key == etagMismatchKey
 		}),
 		mock.Anything,
 	).Return(errors.Join(state.NewBulkStoreError(1, etagMismatchErr)))
@@ -1046,9 +1048,9 @@ func TestSaveState(t *testing.T) {
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.SetRequest) bool {
 			return len(req) == 3 &&
-				req[0].Key == "fakeAPI||good-key" &&
-				req[1].Key == "fakeAPI||etag-mismatch" &&
-				req[2].Key == "fakeAPI||etag-invalid"
+				req[0].Key == goodStoreKey &&
+				req[1].Key == etagMismatchKey &&
+				req[2].Key == etagInvalidKey
 		}),
 		mock.Anything,
 	).Return(errors.Join(
@@ -1061,11 +1063,12 @@ func TestSaveState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -1220,11 +1223,12 @@ func TestGetState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -1960,11 +1964,12 @@ func TestGetBulkState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -2083,13 +2088,13 @@ func TestDeleteState(t *testing.T) {
 	fakeStore.On("Delete",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.DeleteRequest) bool {
-			return req.Key == "fakeAPI||etag-mismatch"
+			return req.Key == etagMismatchKey
 		}),
 	).Return(etagMismatchErr)
 	fakeStore.On("Delete",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *state.DeleteRequest) bool {
-			return req.Key == "fakeAPI||etag-invalid"
+			return req.Key == etagInvalidKey
 		}),
 	).Return(etagInvalidErr)
 
@@ -2098,12 +2103,12 @@ func TestDeleteState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -2176,8 +2181,8 @@ func TestDeleteBulkState(t *testing.T) {
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.DeleteRequest) bool {
 			return len(req) == 2 &&
-				req[0].Key == "fakeAPI||good-key" &&
-				req[1].Key == "fakeAPI||good-key2"
+				req[0].Key == goodStoreKey &&
+				req[1].Key == goodStoreKey+"2"
 		}),
 		mock.Anything,
 	).Return(nil)
@@ -2185,8 +2190,8 @@ func TestDeleteBulkState(t *testing.T) {
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.DeleteRequest) bool {
 			return len(req) == 2 &&
-				req[0].Key == "fakeAPI||good-key" &&
-				req[1].Key == "fakeAPI||etag-mismatch"
+				req[0].Key == goodStoreKey &&
+				req[1].Key == etagMismatchKey
 		}),
 		mock.Anything,
 	).Return(errors.Join(state.NewBulkStoreError(1, etagMismatchErr)))
@@ -2194,9 +2199,9 @@ func TestDeleteBulkState(t *testing.T) {
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.DeleteRequest) bool {
 			return len(req) == 3 &&
-				req[0].Key == "fakeAPI||good-key" &&
-				req[1].Key == "fakeAPI||etag-mismatch" &&
-				req[2].Key == "fakeAPI||etag-invalid"
+				req[0].Key == goodStoreKey &&
+				req[1].Key == etagMismatchKey &&
+				req[2].Key == etagInvalidKey
 		}),
 		mock.Anything,
 	).Return(errors.Join(
@@ -2209,12 +2214,12 @@ func TestDeleteBulkState(t *testing.T) {
 
 	// Setup dapr api server
 	fakeAPI := &api{
-		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -2658,6 +2663,7 @@ func TestTransactionStateStoreNotConfigured(t *testing.T) {
 		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
 			AppID:     "fakeAPI",
+			Logger:    logger.NewLogger("grpc.api.test"),
 			CompStore: compstore.New(),
 		},
 	}, "")
@@ -2678,6 +2684,7 @@ func TestTransactionStateStoreNotImplemented(t *testing.T) {
 		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
 			AppID:     "fakeAPI",
+			Logger:    logger.NewLogger("grpc.api.test"),
 			CompStore: compStore,
 		},
 	}, "")
@@ -2725,6 +2732,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	fakeAPI := &api{
 		id: "fakeAPI",
 		UniversalAPI: &universalapi.UniversalAPI{
+			Logger:    logger.NewLogger("grpc.api.test"),
 			CompStore: compStore,
 		},
 		resiliency: resiliency.New(nil),
