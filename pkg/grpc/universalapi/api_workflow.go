@@ -204,6 +204,32 @@ func (a *UniversalAPI) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb
 	return emptyResponse, nil
 }
 
+func (a *UniversalAPI) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
+	emptyResponse := &emptypb.Empty{}
+	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+		a.Logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
+	if err != nil {
+		a.Logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	req := workflows.PurgeRequest{
+		InstanceID: in.InstanceId,
+	}
+
+	err = workflowComponent.Purge(ctx, &req)
+	if err != nil {
+		err = messages.ErrPurgeWorkflow.WithFormat(in.InstanceId)
+		a.Logger.Debug(err)
+		return emptyResponse, err
+	}
+	return emptyResponse, nil
+}
+
 func (a *UniversalAPI) validateInstanceID(instanceID string, isCreate bool) error {
 	if instanceID == "" {
 		return messages.ErrMissingOrEmptyInstance

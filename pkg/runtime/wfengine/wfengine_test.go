@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -564,6 +565,170 @@ func TestRaiseEvent(t *testing.T) {
 	}
 }
 
+// TestContinueAsNew_WithEvents verifies that a workflow can continue as new and process any received events
+// in subsequent iterations.
+func TestContinueAsNew_WithEvents(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ContinueAsNewTest", func(ctx *task.OrchestrationContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		var complete bool
+		if err := ctx.WaitForSingleEvent("MyEvent", -1).Await(&complete); err != nil {
+			return nil, err
+		}
+		if complete {
+			return input, nil
+		}
+		ctx.ContinueAsNew(input+1, task.WithKeepUnprocessedEvents())
+		return nil, nil
+	})
+
+	// Initialization
+	ctx := context.Background()
+	client, engine := startEngine(ctx, t, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			// Run the orchestration
+			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
+			require.NoError(t, err)
+			for i := 0; i < 10; i++ {
+				require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithJsonSerializableEventData(false)))
+			}
+			require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithJsonSerializableEventData(true)))
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
+		})
+	}
+}
+
+// TestPurge verifies that a workflow can have a series of activities created and then
+// verifies that all the metadata for those activities can be deleted from the statestore
+func TestPurge(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ActivityChainToPurge", func(ctx *task.OrchestrationContext) (any, error) {
+		val := 0
+		for i := 0; i < 10; i++ {
+			if err := ctx.CallActivity("PlusOne", val).Await(&val); err != nil {
+				return nil, err
+			}
+		}
+		return val, nil
+	})
+	r.AddActivityN("PlusOne", func(ctx task.ActivityContext) (any, error) {
+		var input int
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input + 1, nil
+	})
+
+	ctx := context.Background()
+	client, engine, stateStore := startEngineAndGetStore(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChainToPurge")
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.Equal(t, id, metadata.InstanceID)
+
+			// Get the number of keys that were stored from the activity and ensure that at least some keys were stored
+			keyCounter := 0
+			for key := range stateStore.(*daprt.FakeStateStore).Items {
+				if strings.Contains(key, string(id)) {
+					keyCounter += 1
+				}
+			}
+			assert.Greater(t, keyCounter, 10)
+
+			err = client.PurgeOrchestrationState(ctx, id)
+			assert.NoError(t, err)
+
+			// Check that no key from the statestore containing the actor id is still present in the statestore
+			keysPostPurge := []string{}
+			for key := range stateStore.(*daprt.FakeStateStore).Items {
+				keysPostPurge = append(keysPostPurge, key)
+			}
+
+			for _, item := range keysPostPurge {
+				if strings.Contains(item, string(id)) {
+					assert.True(t, false)
+				}
+			}
+		})
+	}
+}
+
+func TestPurgeContinueAsNew(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ContinueAsNewTest", func(ctx *task.OrchestrationContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+
+		if input < 10 {
+			if err := ctx.CreateTimer(0).Await(nil); err != nil {
+				return nil, err
+			}
+			var nextInput int32
+			if err := ctx.CallActivity("PlusOne", input).Await(&nextInput); err != nil {
+				return nil, err
+			}
+			ctx.ContinueAsNew(nextInput)
+		}
+		return input, nil
+	})
+	r.AddActivityN("PlusOne", func(ctx task.ActivityContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		return input + 1, nil
+	})
+	ctx := context.Background()
+	client, engine, stateStore := startEngineAndGetStore(ctx, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
+
+			// Purging
+			// Get the number of keys that were stored from the activity and ensure that at least some keys were stored
+			keyCounter := 0
+			for key := range stateStore.(*daprt.FakeStateStore).Items {
+				if strings.Contains(key, string(id)) {
+					keyCounter += 1
+				}
+			}
+			assert.Greater(t, keyCounter, 2)
+
+			err = client.PurgeOrchestrationState(ctx, id)
+			assert.NoError(t, err)
+
+			// Check that no key from the statestore containing the actor id is still present in the statestore
+			keysPostPurge := []string{}
+			for key := range stateStore.(*daprt.FakeStateStore).Items {
+				keysPostPurge = append(keysPostPurge, key)
+			}
+
+			for _, item := range keysPostPurge {
+				if strings.Contains(item, string(id)) {
+					assert.True(t, false)
+				}
+			}
+		})
+	}
+}
+
 func TestPauseResumeWorkflow(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("PauseWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
@@ -609,6 +774,19 @@ func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backe
 	return client, engine
 }
 
+func startEngineAndGetStore(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine, state.Store) {
+	var client backend.TaskHubClient
+	engine, store := getEngineAndStateStore()
+	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
+		client = backend.NewTaskHubClient(be)
+		return task.NewTaskExecutor(r)
+	})
+	if err := engine.Start(ctx); err != nil {
+		panic(err)
+	}
+	return client, engine, store
+}
+
 func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
 	store := fakeStore()
@@ -632,4 +810,30 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 	}
 	engine.SetActorRuntime(actors)
 	return engine
+}
+
+func getEngineAndStateStore() (*wfengine.WorkflowEngine, state.Store) {
+	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
+	store := fakeStore().(*daprt.FakeStateStore)
+	cfg := actors.NewConfig(actors.ConfigOpts{
+		AppID:              testAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		AppConfig:          config.ApplicationConfig{},
+	})
+	compStore := compstore.New()
+	compStore.AddStateStore("workflowStore", store)
+
+	actors := actors.NewActors(actors.ActorsOpts{
+		CompStore:      compStore,
+		Config:         cfg,
+		StateStoreName: "workflowStore",
+		MockPlacement:  NewMockPlacement(),
+		Resiliency:     resiliency.New(logger.NewLogger("test")),
+	})
+
+	if err := actors.Init(); err != nil {
+		panic(err)
+	}
+	engine.SetActorRuntime(actors)
+	return engine, store
 }

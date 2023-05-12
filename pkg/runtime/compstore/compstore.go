@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/workflows"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
@@ -49,6 +50,7 @@ type ComponentStore struct {
 	cryptoProviders         map[string]crypto.SubtleCrypto
 	components              []compsv1alpha1.Component
 	subscriptions           []rtpubsub.Subscription
+	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
 }
 
 func New() *ComponentStore {

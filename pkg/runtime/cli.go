@@ -393,16 +393,11 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Info("loading default configuration")
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
+	daprGlobalConfig.SetTracingSpecFromEnv(globalConfig)
 
 	globalConfig.LoadFeatures()
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
 		log.Info("Enabled features: " + strings.Join(enabledFeatures, " "))
-	}
-
-	// TODO: Remove once AppHealthCheck feature is finalized
-	if !globalConfig.IsFeatureEnabled(daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
-		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
-		runtimeConfig.AppHealthCheck = nil
 	}
 
 	// Initialize metrics only if MetricSpec is enabled.
