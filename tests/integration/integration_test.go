@@ -17,43 +17,9 @@ limitations under the License.
 package integration
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 func Test_Integration(t *testing.T) {
-	if _, ok := os.LookupEnv("DAPR_INTEGRATION_DAPRD_PATH"); !ok {
-		t.Log("DAPR_INTEGRATION_DAPRD_PATH not set, building daprd binary")
-
-		_, tfile, _, ok := runtime.Caller(0)
-		require.True(t, ok)
-		rootDir := filepath.Join(filepath.Dir(tfile), "../..")
-
-		// Use a consistent temp dir for the binary so that the binary is cached on
-		// subsequent runs.
-		daprdPath := filepath.Join(os.TempDir(), "dapr_integration_tests/daprd")
-		if runtime.GOOS == "windows" {
-			daprdPath += ".exe"
-		}
-
-		// Ensure CGO is disabled to avoid linking against system libraries.
-		os.Setenv("CGO_ENABLED", "0")
-
-		t.Logf("Root dir: %q", rootDir)
-		t.Logf("Building daprd binary to: %q", daprdPath)
-		cmd := exec.Command("go", "build", "-tags=all_components", "-v", "-o", daprdPath, filepath.Join(rootDir, "cmd/daprd"))
-		cmd.Dir = rootDir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		require.NoError(t, cmd.Run())
-
-		require.NoError(t, os.Setenv("DAPR_INTEGRATION_DAPRD_PATH", daprdPath))
-	}
-
 	RunIntegrationTests(t)
 }

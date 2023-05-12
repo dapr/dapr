@@ -20,15 +20,10 @@ import (
 	"os"
 	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func interrupt(t *testing.T, cmd *exec.Cmd) {
-	// TODO: daprd does not currently gracefully exit on a single interrupt
-	// signal. Remove once fixed.
-	assert.NoError(t, cmd.Process.Signal(os.Interrupt))
-	time.Sleep(time.Millisecond * 300)
 	assert.NoError(t, cmd.Process.Signal(os.Interrupt))
 }

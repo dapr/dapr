@@ -15,7 +15,14 @@ package integration
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,15 +30,19 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
+	"github.com/stretchr/testify/require"
 )
 
 func RunIntegrationTests(t *testing.T) {
 	// Parallelise the integration tests, but don't run more than 3 at once.
 	guard := make(chan struct{}, 3)
 
+	buildBinaries(t)
+
 	for _, tcase := range suite.All() {
 		tcase := tcase
-		t.Run(reflect.TypeOf(tcase).Elem().Name(), func(t *testing.T) {
+		tof := reflect.TypeOf(tcase).Elem()
+		t.Run(filepath.Base(tof.PkgPath())+"/"+tof.Name(), func(t *testing.T) {
 			t.Parallel()
 
 			guard <- struct{}{}
@@ -54,5 +65,53 @@ func RunIntegrationTests(t *testing.T) {
 			t.Log("done")
 			<-guard
 		})
+	}
+}
+
+func buildBinaries(t *testing.T) {
+	t.Helper()
+
+	binaryNames := []string{"daprd", "placement"}
+
+	var wg sync.WaitGroup
+	wg.Add(len(binaryNames))
+	for _, name := range binaryNames {
+		go func(name string) {
+			defer wg.Done()
+			buildBinary(t, name)
+		}(name)
+	}
+	wg.Wait()
+}
+
+func buildBinary(t *testing.T, name string) {
+	t.Helper()
+	env := fmt.Sprintf("DAPR_INTEGRATION_%s_PATH", strings.ToUpper(name))
+	if _, ok := os.LookupEnv(env); !ok {
+		t.Logf("%s not set, building %s binary", name, env)
+
+		_, tfile, _, ok := runtime.Caller(0)
+		require.True(t, ok)
+		rootDir := filepath.Join(filepath.Dir(tfile), "../..")
+
+		// Use a consistent temp dir for the binary so that the binary is cached on
+		// subsequent runs.
+		binPath := filepath.Join(os.TempDir(), "dapr_integration_tests/"+name)
+		if runtime.GOOS == "windows" {
+			binPath += ".exe"
+		}
+
+		// Ensure CGO is disabled to avoid linking against system libraries.
+		os.Setenv("CGO_ENABLED", "0")
+
+		t.Logf("Root dir: %q", rootDir)
+		t.Logf("Building %s binary to: %q", name, binPath)
+		cmd := exec.Command("go", "build", "-tags=all_components", "-v", "-o", binPath, filepath.Join(rootDir, "cmd/"+name))
+		cmd.Dir = rootDir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		require.NoError(t, cmd.Run())
+
+		require.NoError(t, os.Setenv(env, binPath))
 	}
 }

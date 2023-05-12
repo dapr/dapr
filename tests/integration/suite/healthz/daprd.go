@@ -25,34 +25,38 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(Healthz))
+	suite.Register(new(daprd))
 }
 
-// Healthz tests that Dapr responds to healthz requests.
-type Healthz struct {
-	daprd *daprd.Daprd
+// daprd tests that Dapr responds to healthz requests.
+type daprd struct {
+	proc *procdaprd.Daprd
 }
 
-func (h *Healthz) Setup(t *testing.T) []framework.Option {
-	h.daprd = daprd.New(t)
+func (d *daprd) Setup(t *testing.T) []framework.Option {
+	d.proc = procdaprd.New(t)
 	return []framework.Option{
-		framework.WithProcesses(h.daprd),
+		framework.WithProcesses(d.proc),
 	}
 }
 
-func (h *Healthz) Run(t *testing.T, _ context.Context) {
+func (d *daprd) Run(t *testing.T, _ context.Context) {
 	assert.Eventually(t, func() bool {
-		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", h.daprd.PublicPort))
-		return err == nil
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", d.proc.PublicPort))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
 	}, time.Second*5, time.Millisecond)
 
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.daprd.PublicPort))
+		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.proc.PublicPort))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return http.StatusNoContent == resp.StatusCode

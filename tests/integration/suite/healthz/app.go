@@ -26,23 +26,23 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(AppHealthz))
+	suite.Register(new(app))
 }
 
-// AppHealthz tests that Dapr responds to healthz requests for the app.
-type AppHealthz struct {
-	daprd   *daprd.Daprd
+// app tests that Dapr responds to healthz requests for the app.
+type app struct {
+	daprd   *procdaprd.Daprd
 	healthy atomic.Bool
 	server  http.Server
 	done    chan struct{}
 }
 
-func (a *AppHealthz) Setup(t *testing.T) []framework.Option {
+func (a *app) Setup(t *testing.T) []framework.Option {
 	a.healthy.Store(true)
 	a.done = make(chan struct{})
 
@@ -76,12 +76,12 @@ func (a *AppHealthz) Setup(t *testing.T) []framework.Option {
 		require.ErrorIs(t, a.server.Serve(listener), http.ErrServerClosed)
 	}()
 
-	a.daprd = daprd.New(t,
-		daprd.WithAppHealthCheck(true),
-		daprd.WithAppHealthCheckPath("/foo"),
-		daprd.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
-		daprd.WithAppHealthProbeInterval(1),
-		daprd.WithAppHealthProbeThreshold(1),
+	a.daprd = procdaprd.New(t,
+		procdaprd.WithAppHealthCheck(true),
+		procdaprd.WithAppHealthCheckPath("/foo"),
+		procdaprd.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
+		procdaprd.WithAppHealthProbeInterval(1),
+		procdaprd.WithAppHealthProbeThreshold(1),
 	)
 
 	return []framework.Option{
@@ -89,10 +89,14 @@ func (a *AppHealthz) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (a *AppHealthz) Run(t *testing.T, ctx context.Context) {
+func (a *app) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool {
-		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", a.daprd.InternalGRPCPort))
-		return err == nil
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", a.daprd.InternalGRPCPort))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
 	}, time.Second*5, time.Millisecond)
 
 	a.healthy.Store(true)
