@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"os"
 	"strconv"
 	"testing"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -122,7 +122,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 
 	return &Daprd{
-		exec:             exec.New(t, os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"), args, opts.execOpts...),
+		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
 		AppID:            opts.appID,
 		AppPort:          opts.appPort,
