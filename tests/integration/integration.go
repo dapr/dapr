@@ -45,10 +45,10 @@ func RunIntegrationTests(t *testing.T) {
 		tof := reflect.TypeOf(tcase).Elem()
 		testName := filepath.Base(tof.PkgPath()) + "/" + tof.Name()
 
-		t.Logf("%s: setting up test case", testName)
-		options := tcase.Setup(t)
-
 		t.Run(testName, func(t *testing.T) {
+			t.Logf("%s: setting up test case", testName)
+			options := tcase.Setup(t)
+
 			t.Parallel()
 
 			// Wait for a slot to become available.

@@ -11,27 +11,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package iowriter
+package exec
 
-import (
-	"io"
-	"testing"
-)
+import "io"
 
-type stdwriter struct {
-	t    *testing.T
-	name string
+func WithStdout(stdout io.WriteCloser) Option {
+	return func(o *options) {
+		o.stdout = stdout
+	}
 }
 
-func New(t *testing.T, name string) io.WriteCloser {
-	return &stdwriter{t, name}
+func WithStderr(stderr io.WriteCloser) Option {
+	return func(o *options) {
+		o.stderr = stderr
+	}
 }
 
-func (w *stdwriter) Write(p []byte) (n int, err error) {
-	w.t.Log(w.t.Name() + "/" + w.name + ": " + string(p))
-	return len(p), nil
+func WithRunError(ferr func(error)) Option {
+	return func(o *options) {
+		o.runErrorFn = ferr
+	}
 }
 
-func (w *stdwriter) Close() error {
-	return nil
+func WithExitCode(code int) Option {
+	return func(o *options) {
+		o.exitCode = code
+	}
 }

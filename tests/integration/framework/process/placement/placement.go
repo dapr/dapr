@@ -24,12 +24,12 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
-	"github.com/dapr/dapr/tests/integration/framework/process/base"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
 // options contains the options for running Placement in integration tests.
 type options struct {
-	baseOpts []base.Option
+	execOpts []exec.Option
 
 	id                  string
 	port                int
@@ -43,7 +43,7 @@ type options struct {
 type Option func(*options)
 
 type Placement struct {
-	base     process.Interface
+	exec     process.Interface
 	freeport *freeport.FreePort
 
 	ID                  string
@@ -84,7 +84,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 
 	return &Placement{
-		base:                base.New(t, os.Getenv("DAPR_INTEGRATION_PLACEMENT_PATH"), args, opts.baseOpts...),
+		exec:                exec.New(t, os.Getenv("DAPR_INTEGRATION_PLACEMENT_PATH"), args, opts.execOpts...),
 		freeport:            fp,
 		ID:                  opts.id,
 		Port:                opts.port,
@@ -97,9 +97,9 @@ func New(t *testing.T, fopts ...Option) *Placement {
 
 func (p *Placement) Run(t *testing.T, ctx context.Context) {
 	p.freeport.Free(t)
-	p.base.Run(t, ctx)
+	p.exec.Run(t, ctx)
 }
 
 func (p *Placement) Cleanup(t *testing.T) {
-	p.base.Cleanup(t)
+	p.exec.Cleanup(t)
 }

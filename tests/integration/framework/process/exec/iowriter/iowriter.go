@@ -11,30 +11,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package base
+package iowriter
 
-import "io"
+import (
+	"bytes"
+	"io"
+	"testing"
+)
 
-func WithStdout(stdout io.WriteCloser) Option {
-	return func(o *options) {
-		o.stdout = stdout
-	}
+type stdwriter struct {
+	t    *testing.T
+	name string
 }
 
-func WithStderr(stderr io.WriteCloser) Option {
-	return func(o *options) {
-		o.stderr = stderr
-	}
+func New(t *testing.T, name string) io.WriteCloser {
+	return &stdwriter{t, name}
 }
 
-func WithRunError(ferr func(error)) Option {
-	return func(o *options) {
-		o.runErrorFn = ferr
+func (w *stdwriter) Write(p []byte) (n int, err error) {
+	for _, line := range bytes.Split(p, []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		w.t.Log(w.t.Name() + "/" + w.name + ": " + string(line))
 	}
+	return len(p), nil
 }
 
-func WithExitCode(code int) Option {
-	return func(o *options) {
-		o.exitCode = code
-	}
+func (w *stdwriter) Close() error {
+	return nil
 }

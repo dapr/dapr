@@ -11,12 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package base
+package exec
 
 import (
 	"context"
 	"io"
-	"os/exec"
+	oexec "os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/tests/integration/framework/process/base/iowriter"
-	"github.com/dapr/dapr/tests/integration/framework/process/base/kill"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec/iowriter"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 )
 
 type options struct {
@@ -40,9 +40,9 @@ type options struct {
 
 type Option func(*options)
 
-type base struct {
+type exec struct {
 	lock sync.Mutex
-	cmd  *exec.Cmd
+	cmd  *oexec.Cmd
 
 	args       []string
 	binPath    string
@@ -52,7 +52,7 @@ type base struct {
 	stderrpipe io.WriteCloser
 }
 
-func New(t *testing.T, binPath string, args []string, fopts ...Option) *base {
+func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	t.Helper()
 
 	defaultExitCode := 0
@@ -80,7 +80,7 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *base {
 		fopt(&opts)
 	}
 
-	return &base{
+	return &exec{
 		binPath:    binPath,
 		args:       args,
 		stdoutpipe: opts.stdout,
@@ -90,40 +90,40 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *base {
 	}
 }
 
-func (b *base) Run(t *testing.T, ctx context.Context) {
+func (e *exec) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
-	b.lock.Lock()
-	defer b.lock.Unlock()
+	e.lock.Lock()
+	defer e.lock.Unlock()
 
-	t.Logf("Running %q with args: %s %s", filepath.Base(b.binPath), b.binPath, strings.Join(b.args, " "))
+	t.Logf("Running %q with args: %s %s", filepath.Base(e.binPath), e.binPath, strings.Join(e.args, " "))
 
 	//nolint:gosec
-	b.cmd = exec.CommandContext(ctx, b.binPath, b.args...)
+	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
-	b.cmd.Stdout = b.stdoutpipe
-	b.cmd.Stderr = b.stderrpipe
+	e.cmd.Stdout = e.stdoutpipe
+	e.cmd.Stderr = e.stderrpipe
 
-	require.NoError(t, b.cmd.Start())
+	require.NoError(t, e.cmd.Start())
 }
 
-func (b *base) Cleanup(t *testing.T) {
+func (e *exec) Cleanup(t *testing.T) {
 	t.Helper()
-	b.lock.Lock()
-	defer b.lock.Unlock()
+	e.lock.Lock()
+	defer e.lock.Unlock()
 
-	assert.NoError(t, b.stderrpipe.Close())
-	assert.NoError(t, b.stdoutpipe.Close())
+	assert.NoError(t, e.stderrpipe.Close())
+	assert.NoError(t, e.stdoutpipe.Close())
 
-	kill.Kill(t, b.cmd)
-	b.checkExit(t)
+	kill.Kill(t, e.cmd)
+	e.checkExit(t)
 }
 
-func (b *base) checkExit(t *testing.T) {
+func (e *exec) checkExit(t *testing.T) {
 	t.Helper()
 
-	t.Logf("waiting for %q process to exit", filepath.Base(b.binPath))
+	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))
 
-	b.runErrorFn(b.cmd.Wait())
-	assert.NotNil(t, b.cmd.ProcessState, "process state should not be nil")
-	assert.Equalf(t, b.exitCode, b.cmd.ProcessState.ExitCode(), "expected exit code to be %d", b.exitCode)
+	e.runErrorFn(e.cmd.Wait())
+	assert.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
+	assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
 }
