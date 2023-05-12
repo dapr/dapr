@@ -87,9 +87,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
 	require.NoError(t, os.WriteFile(configPath, nil, 0o600))
 
-	caPath := filepath.Join(t.TempDir(), "ca.crt")
-	issuerKeyPath := filepath.Join(t.TempDir(), "issuer.key")
-	issuerCertPath := filepath.Join(t.TempDir(), "issuer.crt")
+	tmpDir := t.TempDir()
+	caPath := filepath.Join(tmpDir, "ca.crt")
+	issuerKeyPath := filepath.Join(tmpDir, "issuer.key")
+	issuerCertPath := filepath.Join(tmpDir, "issuer.crt")
 
 	for _, pair := range []struct {
 		path string
@@ -106,13 +107,12 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-log-level=" + "debug",
 		"-port=" + strconv.Itoa(opts.port),
 		"-config=" + configPath,
-		"-issuer-ca-filename=" + caPath,
-		"-issuer-certificate-filename=" + issuerCertPath,
-		"-issuer-key-filename=" + issuerKeyPath,
+		"-issuer-ca-filename=ca.crt",
+		"-issuer-certificate-filename=issuer.crt",
+		"-issuer-key-filename=issuer.key",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
-		// Disable issuer credentials prefix.
-		"-issuer-credentials=/",
+		"-issuer-credentials=" + tmpDir,
 	}
 
 	return &Sentry{
