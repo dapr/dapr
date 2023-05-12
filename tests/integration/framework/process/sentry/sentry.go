@@ -85,7 +85,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	}
 
 	configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
-	require.NoError(t, os.WriteFile(configPath, nil, 0o644))
+	require.NoError(t, os.WriteFile(configPath, nil, 0o600))
 
 	caPath := filepath.Join(t.TempDir(), "ca.crt")
 	issuerKeyPath := filepath.Join(t.TempDir(), "issuer.key")
@@ -99,7 +99,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		{issuerKeyPath, opts.keyPEM},
 		{issuerCertPath, opts.certPEM},
 	} {
-		require.NoError(t, os.WriteFile(pair.path, pair.data, 0o644))
+		require.NoError(t, os.WriteFile(pair.path, pair.data, 0o600))
 	}
 
 	args := []string{
