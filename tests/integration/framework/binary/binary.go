@@ -45,7 +45,7 @@ func BuildAll(t *testing.T) {
 func Build(t *testing.T, name string) {
 	t.Helper()
 	if _, ok := os.LookupEnv(EnvKey(name)); !ok {
-		t.Logf("%s not set, building %s binary", name, EnvKey(name))
+		t.Logf("%q not set, building %q binary", EnvKey(name), name)
 
 		_, tfile, _, ok := runtime.Caller(0)
 		require.True(t, ok)
@@ -62,7 +62,7 @@ func Build(t *testing.T, name string) {
 		os.Setenv("CGO_ENABLED", "0")
 
 		t.Logf("Root dir: %q", rootDir)
-		t.Logf("Building %s binary to: %q", name, binPath)
+		t.Logf("Compiling %q binary to: %q", name, binPath)
 		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, filepath.Join(rootDir, "cmd/"+name))
 		cmd.Dir = rootDir
 		cmd.Stdout = os.Stdout
