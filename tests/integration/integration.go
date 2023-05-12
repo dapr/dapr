@@ -55,19 +55,23 @@ func RunIntegrationTests(t *testing.T) {
 	for _, tcase := range suite.All() {
 		tcase := tcase
 		tof := reflect.TypeOf(tcase).Elem()
-		t.Run(filepath.Base(tof.PkgPath())+"/"+tof.Name(), func(t *testing.T) {
+		testName := filepath.Base(tof.PkgPath()) + "/" + tof.Name()
+
+		t.Logf("%s: setting up test case", testName)
+		options := tcase.Setup(t)
+
+		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
 
+			// Wait for a slot to become available.
 			guard <- struct{}{}
 			t.Cleanup(func() {
+				// Release the slot.
 				<-guard
 			})
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-
-			t.Log("setting up test case")
-			options := tcase.Setup(t)
 
 			t.Log("running framework")
 			f := framework.Run(t, ctx, options...)

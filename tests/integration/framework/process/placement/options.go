@@ -50,3 +50,9 @@ func WithInitialCluster(initialCluster string) Option {
 		o.initialCluster = initialCluster
 	}
 }
+
+func WithInitialClusterPorts(ports []int) Option {
+	return func(o *options) {
+		o.initialClusterPorts = ports
+	}
+}

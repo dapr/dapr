@@ -31,11 +31,12 @@ import (
 type options struct {
 	baseOpts []base.Option
 
-	id             string
-	port           int
-	healthzPort    int
-	metricsPort    int
-	initialCluster string
+	id                  string
+	port                int
+	healthzPort         int
+	metricsPort         int
+	initialCluster      string
+	initialClusterPorts []int
 }
 
 // Option is a function that configures the process.
@@ -45,11 +46,12 @@ type Placement struct {
 	base     process.Interface
 	freeport *freeport.FreePort
 
-	ID             string
-	Port           int
-	HealthzPort    int
-	MetricsPort    int
-	InitialCluster string
+	ID                  string
+	Port                int
+	HealthzPort         int
+	MetricsPort         int
+	InitialCluster      string
+	InitialClusterPorts []int
 }
 
 func New(t *testing.T, fopts ...Option) *Placement {
@@ -60,11 +62,12 @@ func New(t *testing.T, fopts ...Option) *Placement {
 
 	fp := freeport.New(t, 4)
 	opts := options{
-		id:             uid.String(),
-		port:           fp.Port(t, 0),
-		healthzPort:    fp.Port(t, 1),
-		metricsPort:    fp.Port(t, 2),
-		initialCluster: uid.String() + "=localhost:" + strconv.Itoa(fp.Port(t, 3)),
+		id:                  uid.String(),
+		port:                fp.Port(t, 0),
+		healthzPort:         fp.Port(t, 1),
+		metricsPort:         fp.Port(t, 2),
+		initialCluster:      uid.String() + "=localhost:" + strconv.Itoa(fp.Port(t, 3)),
+		initialClusterPorts: []int{fp.Port(t, 3)},
 	}
 
 	for _, fopt := range fopts {
@@ -81,13 +84,14 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 
 	return &Placement{
-		base:           base.New(t, os.Getenv("DAPR_INTEGRATION_PLACEMENT_PATH"), args, opts.baseOpts...),
-		freeport:       fp,
-		ID:             opts.id,
-		Port:           opts.port,
-		HealthzPort:    opts.healthzPort,
-		MetricsPort:    opts.metricsPort,
-		InitialCluster: opts.initialCluster,
+		base:                base.New(t, os.Getenv("DAPR_INTEGRATION_PLACEMENT_PATH"), args, opts.baseOpts...),
+		freeport:            fp,
+		ID:                  opts.id,
+		Port:                opts.port,
+		HealthzPort:         opts.healthzPort,
+		MetricsPort:         opts.metricsPort,
+		InitialCluster:      opts.initialCluster,
+		InitialClusterPorts: opts.initialClusterPorts,
 	}
 }
 
