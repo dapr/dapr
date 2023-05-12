@@ -15,12 +15,15 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,7 +40,6 @@ const (
 	defaultConcurrency = 3
 
 	envConcurrency = "DAPR_INTEGRATION_CONCURRENCY"
-	envDaprdPath   = "DAPR_INTEGRATION_DAPRD_PATH"
 )
 
 func RunIntegrationTests(t *testing.T) {
@@ -46,13 +48,14 @@ func RunIntegrationTests(t *testing.T) {
 	conc := concurrency(t)
 	t.Logf("running integration tests with concurrency: %d", conc)
 
-	buildDaprd(t)
+	buildBinaries(t)
 
 	guard := make(chan struct{}, conc)
 
 	for _, tcase := range suite.All() {
 		tcase := tcase
-		t.Run(reflect.TypeOf(tcase).Elem().Name(), func(t *testing.T) {
+		tof := reflect.TypeOf(tcase).Elem()
+		t.Run(filepath.Base(tof.PkgPath())+"/"+tof.Name(), func(t *testing.T) {
 			t.Parallel()
 
 			guard <- struct{}{}
@@ -97,9 +100,27 @@ func concurrency(t *testing.T) int {
 	return conc
 }
 
-func buildDaprd(t *testing.T) {
-	if _, ok := os.LookupEnv(envDaprdPath); !ok {
-		t.Logf("%q not set, building daprd binary", envDaprdPath)
+func buildBinaries(t *testing.T) {
+	t.Helper()
+
+	binaryNames := []string{"daprd", "placement"}
+
+	var wg sync.WaitGroup
+	wg.Add(len(binaryNames))
+	for _, name := range binaryNames {
+		go func(name string) {
+			defer wg.Done()
+			buildBinary(t, name)
+		}(name)
+	}
+	wg.Wait()
+}
+
+func buildBinary(t *testing.T, name string) {
+	t.Helper()
+	env := fmt.Sprintf("DAPR_INTEGRATION_%s_PATH", strings.ToUpper(name))
+	if _, ok := os.LookupEnv(env); !ok {
+		t.Logf("%s not set, building %s binary", name, env)
 
 		_, tfile, _, ok := runtime.Caller(0)
 		require.True(t, ok)
@@ -107,22 +128,22 @@ func buildDaprd(t *testing.T) {
 
 		// Use a consistent temp dir for the binary so that the binary is cached on
 		// subsequent runs.
-		daprdPath := filepath.Join(os.TempDir(), "dapr_integration_tests/daprd")
+		binPath := filepath.Join(os.TempDir(), "dapr_integration_tests/"+name)
 		if runtime.GOOS == "windows" {
-			daprdPath += ".exe"
+			binPath += ".exe"
 		}
 
 		// Ensure CGO is disabled to avoid linking against system libraries.
-		t.Setenv("CGO_ENABLED", "0")
+		os.Setenv("CGO_ENABLED", "0")
 
 		t.Logf("Root dir: %q", rootDir)
-		t.Logf("Building daprd binary to: %q", daprdPath)
-		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", daprdPath, filepath.Join(rootDir, "cmd/daprd"))
+		t.Logf("Building %q binary to: %q", name, binPath)
+		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, filepath.Join(rootDir, "cmd/"+name))
 		cmd.Dir = rootDir
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		require.NoError(t, cmd.Run())
 
-		t.Setenv(envDaprdPath, daprdPath)
+		require.NoError(t, os.Setenv(env, binPath))
 	}
 }

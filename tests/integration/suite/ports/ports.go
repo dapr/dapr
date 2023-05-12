@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -53,8 +54,12 @@ func (p *Ports) Run(t *testing.T, _ context.Context) {
 		"public":        p.daprd.PublicPort,
 	} {
 		assert.Eventuallyf(t, func() bool {
-			_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
-			return err == nil
+			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+			if err != nil {
+				return false
+			}
+			require.NoError(t, conn.Close())
+			return true
 		}, time.Second*5, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
 }

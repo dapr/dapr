@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/base"
 )
@@ -47,11 +48,12 @@ type options struct {
 	appHealthProbeThreshold int
 }
 
-// Option is a function that configures the DaprdOptions.
+// Option is a function that configures the dapr process.
 type Option func(*options)
 
 type Daprd struct {
-	base process.Interface
+	base     process.Interface
+	freeport *freeport.FreePort
 
 	AppID            string
 	AppPort          int
@@ -85,15 +87,16 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		}
 	}()
 
+	fp := freeport.New(t, 6)
 	opts := options{
 		appID:            uid.String(),
 		appPort:          appListener.Addr().(*net.TCPAddr).Port,
-		grpcPort:         process.FreePort(t),
-		httpPort:         process.FreePort(t),
-		internalGRPCPort: process.FreePort(t),
-		publicPort:       process.FreePort(t),
-		metricsPort:      process.FreePort(t),
-		profilePort:      process.FreePort(t),
+		grpcPort:         fp.Port(t, 0),
+		httpPort:         fp.Port(t, 1),
+		internalGRPCPort: fp.Port(t, 2),
+		publicPort:       fp.Port(t, 3),
+		metricsPort:      fp.Port(t, 4),
+		profilePort:      fp.Port(t, 5),
 	}
 
 	for _, fopt := range fopts {
@@ -120,6 +123,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	return &Daprd{
 		base:             base.New(t, os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"), args, opts.baseOpts...),
+		freeport:         fp,
 		AppID:            opts.appID,
 		AppPort:          opts.appPort,
 		GRPCPort:         opts.grpcPort,
@@ -132,6 +136,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 }
 
 func (d *Daprd) Run(t *testing.T, ctx context.Context) {
+	d.freeport.Free(t)
 	d.base.Run(t, ctx)
 }
 
