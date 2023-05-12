@@ -13,11 +13,11 @@ limitations under the License.
 
 package placement
 
-import "github.com/dapr/dapr/tests/integration/framework/process/base"
+import "github.com/dapr/dapr/tests/integration/framework/process/exec"
 
-func WithBaseOptions(baseOptions ...base.Option) Option {
+func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
-		o.baseOpts = baseOptions
+		o.execOpts = execOptions
 	}
 }
 

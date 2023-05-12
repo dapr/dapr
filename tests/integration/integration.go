@@ -57,10 +57,10 @@ func RunIntegrationTests(t *testing.T) {
 		tof := reflect.TypeOf(tcase).Elem()
 		testName := filepath.Base(tof.PkgPath()) + "/" + tof.Name()
 
-		t.Logf("%s: setting up test case", testName)
-		options := tcase.Setup(t)
-
 		t.Run(testName, func(t *testing.T) {
+			t.Logf("%s: setting up test case", testName)
+			options := tcase.Setup(t)
+
 			t.Parallel()
 
 			// Wait for a slot to become available.
@@ -124,7 +124,7 @@ func buildBinary(t *testing.T, name string) {
 	t.Helper()
 	env := fmt.Sprintf("DAPR_INTEGRATION_%s_PATH", strings.ToUpper(name))
 	if _, ok := os.LookupEnv(env); !ok {
-		t.Logf("%s not set, building %s binary", name, env)
+		t.Logf("%q not set, building %s binary", env, name)
 
 		_, tfile, _, ok := runtime.Caller(0)
 		require.True(t, ok)
@@ -141,7 +141,7 @@ func buildBinary(t *testing.T, name string) {
 		os.Setenv("CGO_ENABLED", "0")
 
 		t.Logf("Root dir: %q", rootDir)
-		t.Logf("Building %q binary to: %q", name, binPath)
+		t.Logf("Compiling %q binary to: %q", name, binPath)
 		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, filepath.Join(rootDir, "cmd/"+name))
 		cmd.Dir = rootDir
 		cmd.Stdout = os.Stdout

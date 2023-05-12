@@ -27,12 +27,12 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
-	"github.com/dapr/dapr/tests/integration/framework/process/base"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
 // options contains the options for running Daprd in integration tests.
 type options struct {
-	baseOpts []base.Option
+	execOpts []exec.Option
 
 	appID                   string
 	appPort                 int
@@ -52,7 +52,7 @@ type options struct {
 type Option func(*options)
 
 type Daprd struct {
-	base     process.Interface
+	exec     process.Interface
 	freeport *freeport.FreePort
 
 	AppID            string
@@ -122,7 +122,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 
 	return &Daprd{
-		base:             base.New(t, os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"), args, opts.baseOpts...),
+		exec:             exec.New(t, os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"), args, opts.execOpts...),
 		freeport:         fp,
 		AppID:            opts.appID,
 		AppPort:          opts.appPort,
@@ -137,9 +137,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 func (d *Daprd) Run(t *testing.T, ctx context.Context) {
 	d.freeport.Free(t)
-	d.base.Run(t, ctx)
+	d.exec.Run(t, ctx)
 }
 
 func (d *Daprd) Cleanup(t *testing.T) {
-	d.base.Cleanup(t)
+	d.exec.Cleanup(t)
 }

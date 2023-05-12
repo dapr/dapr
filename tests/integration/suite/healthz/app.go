@@ -38,15 +38,14 @@ func init() {
 
 // app tests that Dapr responds to healthz requests for the app.
 type app struct {
-	daprd   *procdaprd.Daprd
-	healthy atomic.Bool
-	server  http.Server
-	done    chan struct{}
+	daprd    *procdaprd.Daprd
+	healthy  atomic.Bool
+	server   http.Server
+	listener net.Listener
 }
 
 func (a *app) Setup(t *testing.T) []framework.Option {
 	a.healthy.Store(true)
-	a.done = make(chan struct{})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
@@ -63,22 +62,18 @@ func (a *app) Setup(t *testing.T) []framework.Option {
 		fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var err error
+	a.listener, err = net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	a.server = http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	go func() {
-		defer close(a.done)
-		require.ErrorIs(t, a.server.Serve(listener), http.ErrServerClosed)
-	}()
-
 	a.daprd = procdaprd.New(t,
 		procdaprd.WithAppHealthCheck(true),
 		procdaprd.WithAppHealthCheckPath("/foo"),
-		procdaprd.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
+		procdaprd.WithAppPort(a.listener.Addr().(*net.TCPAddr).Port),
 		procdaprd.WithAppHealthProbeInterval(1),
 		procdaprd.WithAppHealthProbeThreshold(1),
 	)
@@ -89,6 +84,13 @@ func (a *app) Setup(t *testing.T) []framework.Option {
 }
 
 func (a *app) Run(t *testing.T, ctx context.Context) {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		require.ErrorIs(t, a.server.Serve(a.listener), http.ErrServerClosed)
+	}()
+
 	assert.Eventually(t, func() bool {
 		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", a.daprd.InternalGRPCPort))
 		if err != nil {
@@ -134,7 +136,7 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, a.server.Shutdown(ctx))
 
 	select {
-	case <-a.done:
+	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Error("timed out waiting for healthz server to close")
 	}
