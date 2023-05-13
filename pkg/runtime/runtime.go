@@ -1290,19 +1290,19 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
-			state, ok := a.compStore.GetStateStore(response.StoreName)
+			store, ok := a.compStore.GetStateStore(response.StoreName)
 			if !ok {
 				return
 			}
 
-			policyRunner := resiliency.NewRunner[any](a.ctx,
+			err := stateLoader.PerformBulkStoreOperation(a.ctx, reqs,
 				a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
+				state.BulkStoreOpts{},
+				store.Set,
+				store.BulkSetWithOptions,
 			)
-			_, err := policyRunner(func(ctx context.Context) (any, error) {
-				return nil, state.BulkSet(ctx, reqs)
-			})
 			if err != nil {
-				log.Errorf("error saving state from app response: %s", err)
+				log.Errorf("error saving state from app response: %v", err)
 			}
 		}(response.State)
 	}
