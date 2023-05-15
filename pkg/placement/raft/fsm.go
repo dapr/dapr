@@ -154,7 +154,7 @@ func (c *FSM) Apply(log *raft.Log) interface{} {
 	}
 
 	if len(log.Data) < 2 {
-		logging.Warnf("too short log data in raft logs")
+		logging.Warnf("too short log data in raft logs: %v", log.Data)
 		return false
 	}
 
