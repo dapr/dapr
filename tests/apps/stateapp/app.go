@@ -80,6 +80,7 @@ type appState struct {
 type daprState struct {
 	Key           string            `json:"key,omitempty"`
 	Value         *appState         `json:"value,omitempty"`
+	Etag          string            `json:"etag,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
 	OperationType string            `json:"operationType,omitempty"`
 }
@@ -93,9 +94,9 @@ type bulkGetRequest struct {
 
 // bulkGetResponse is the response object from Dapr for a bulk get operation.
 type bulkGetResponse struct {
-	Key  string      `json:"key"`
-	Data interface{} `json:"data"`
-	ETag string      `json:"etag"`
+	Key  string `json:"key"`
+	Data any    `json:"data"`
+	ETag string `json:"etag"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
@@ -131,7 +132,7 @@ func load(data []byte, statestore string, meta map[string]string) (int, error) {
 		stateURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(data), stateURL)
-	res, err := httpClient.Post(stateURL, "application/json", bytes.NewBuffer(data))
+	res, err := httpClient.Post(stateURL, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -212,6 +213,7 @@ func getAll(states []daprState, statestore string, meta map[string]string) ([]da
 		output = append(output, daprState{
 			Key:   state.Key,
 			Value: value,
+			Etag:  state.Etag,
 		})
 	}
 
@@ -240,7 +242,7 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 		return nil, err
 	}
 
-	res, err := httpClient.Post(url, "application/json", bytes.NewBuffer(b))
+	res, err := httpClient.Post(url, "application/json", bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -260,17 +262,18 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 		return nil, fmt.Errorf("could not unmarshal bulk get response from Dapr: %s", err.Error())
 	}
 
-	for _, i := range resp {
+	for _, state := range resp {
 		var as appState
-		b, err := json.Marshal(i.Data)
+		b, err := json.Marshal(state.Data)
 		if err != nil {
 			return nil, fmt.Errorf("could not marshal return data: %s", err)
 		}
 		json.Unmarshal(b, &as)
 
 		output = append(output, daprState{
-			Key:   i.Key,
+			Key:   state.Key,
 			Value: &as,
+			Etag:  state.ETag,
 		})
 	}
 
@@ -279,7 +282,7 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 }
 
 func delete(key, statestore string, meta map[string]string) error {
-	log.Printf("Processing delete request for %s.", key)
+	log.Printf("Processing delete request for %s", key)
 	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
 		return err
@@ -340,7 +343,7 @@ func executeTransaction(states []daprState, statestore string) error {
 	}
 
 	log.Printf("Posting state to %s with '%s'", stateTransactionURL, jsonValue)
-	res, err := httpClient.Post(stateTransactionURL, "application/json", bytes.NewBuffer(jsonValue))
+	res, err := httpClient.Post(stateTransactionURL, "application/json", bytes.NewReader(jsonValue))
 	if err != nil {
 		return err
 	}
@@ -358,7 +361,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 		queryURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(query), queryURL)
-	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query))
+	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewReader(query))
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +398,8 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 
 func parseRequestBody(w http.ResponseWriter, r *http.Request) (*requestResponse, error) {
 	req := &requestResponse{}
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(req)
+	if err != nil {
 		log.Printf("Could not parse request body: %s", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(requestResponse{
@@ -411,7 +415,8 @@ func parseRequestBody(w http.ResponseWriter, r *http.Request) (*requestResponse,
 }
 
 func getRequestBody(w http.ResponseWriter, r *http.Request) (data []byte, err error) {
-	if data, err = io.ReadAll(r.Body); err != nil {
+	data, err = io.ReadAll(r.Body)
+	if err != nil {
 		log.Printf("Could not read request body: %s", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(requestResponse{
@@ -571,7 +576,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		res.States = states
 	case "get":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		states, err = getAllGRPC(req.States, statestore, meta)
@@ -580,7 +586,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		res.States = states
 	case "delete":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		statusCode = http.StatusNoContent
@@ -589,7 +596,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 			statusCode, res.Message = setErrorMessage("DeleteState", err.Error())
 		}
 	case "transact":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		_, err = grpcClient.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
@@ -601,7 +609,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 			statusCode, res.Message = setErrorMessage("ExecuteStateTransaction", err.Error())
 		}
 	case "query":
-		if data, err = getRequestBody(w, r); err != nil {
+		data, err = getRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		resp, err := grpcClient.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
@@ -659,30 +668,42 @@ func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, erro
 		result[i] = daprState{
 			Key:   state.Key,
 			Value: daprStateItem,
+			Etag:  state.Etag,
 		}
 	}
 
 	return result, nil
 }
 
-func deleteAllGRPC(states []daprState, statestore string, meta map[string]string) error {
-	m := map[string]string{metadataPartitionKey: partitionKey}
-	for k, v := range meta {
-		m[k] = v
-	}
-	for _, state := range states {
-		log.Printf("deleting sate for key %s\n", state.Key)
-		_, err := grpcClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
-			StoreName: statestore,
-			Key:       state.Key,
-			Metadata:  m,
-		})
-		if err != nil {
-			return err
-		}
+func deleteAllGRPC(states []daprState, statestore string, meta map[string]string) (err error) {
+	if len(states) == 0 {
+		return nil
 	}
 
-	return nil
+	if len(states) == 1 {
+		log.Print("deleting sate for key", states[0].Key)
+		m := map[string]string{metadataPartitionKey: partitionKey}
+		for k, v := range meta {
+			m[k] = v
+		}
+		_, err = grpcClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
+			StoreName: statestore,
+			Key:       states[0].Key,
+			Metadata:  m,
+		})
+		return err
+	}
+
+	keys := make([]string, len(states))
+	for i, state := range states {
+		keys[i] = state.Key
+	}
+	log.Print("deleting bulk sates for keys", keys)
+	_, err = grpcClient.DeleteBulkState(context.Background(), &runtimev1pb.DeleteBulkStateRequest{
+		StoreName: statestore,
+		States:    daprState2StateItems(states, meta),
+	})
+	return err
 }
 
 func getAllGRPC(states []daprState, statestore string, meta map[string]string) ([]daprState, error) {
@@ -716,8 +737,7 @@ func getAllGRPC(states []daprState, statestore string, meta map[string]string) (
 }
 
 func setErrorMessage(method, errorString string) (int, string) {
-	log.Printf("GRPC %s had error %s\n", method, errorString)
-
+	log.Printf("GRPC %s had error %s", method, errorString)
 	return http.StatusInternalServerError, errorString
 }
 
@@ -733,6 +753,11 @@ func daprState2StateItems(daprStates []daprState, meta map[string]string) []*com
 			Key:      daprState.Key,
 			Value:    val,
 			Metadata: m,
+		}
+		if daprState.Etag != "" {
+			stateItems[i].Etag = &commonv1pb.Etag{
+				Value: daprState.Etag,
+			}
 		}
 	}
 
