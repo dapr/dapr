@@ -90,7 +90,7 @@ const (
 	DefaultEnableProfiling                   = false
 	DefaultDisableBuiltinK8sSecretStore      = false
 	DefaultEnableAppHealthCheck              = false
-	DefaultAppCheckPath                      = "/health"
+	DefaultAppCheckPath                      = "/healthz"
 	DefaultAppHealthProbeIntervalSeconds     = 5
 	DefaultAppHealthProbeTimeoutMilliseconds = 500
 	DefaultAppHealthThreshold                = 3
