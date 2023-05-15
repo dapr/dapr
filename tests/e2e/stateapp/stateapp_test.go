@@ -153,15 +153,10 @@ func generateTestCases(isHTTP bool) []testCase {
 	if isHTTP {
 		protocol = "http"
 	}
-	// Just for readability
-	emptyRequest := requestResponse{
-		nil,
-	}
 
 	// Just for readability
-	emptyResponse := requestResponse{
-		nil,
-	}
+	emptyRequest := requestResponse{}
+	emptyResponse := requestResponse{}
 
 	testCase1Key := guuid.New().String()
 	testCase1Value := "The best song ever is 'Highwayman' by 'The Highwaymen'."
@@ -307,10 +302,9 @@ func generateStateTransactionCases(protocolType string) testStateTransactionCase
 	testCase1Key, testCase2Key := guuid.New().String()+protocolType, guuid.New().String()+protocolType
 	testCase1Value := "The best song ever is 'Highwayman' by 'The Highwaymen'."
 	testCase2Value := "Hello World"
+
 	// Just for readability
-	emptyResponse := requestResponse{
-		nil,
-	}
+	emptyResponse := requestResponse{}
 
 	testStateTransactionCase := testStateTransactionCase{
 		[]stateTransactionTestStep{
