@@ -909,6 +909,40 @@ func etagTestHTTPHandler(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("etag is empty or invalid for updated state 1: %s", newEtag)
 		}
 
+		// Bulk update with all valid etags
+		_, err = save([]daprState{
+			{Key: keys[0], Value: &appState{Data: []byte("3")}, Metadata: pkMetadata, Etag: etags[0]},
+			{Key: keys[1], Value: &appState{Data: []byte("3")}, Metadata: pkMetadata, Etag: etags[1]},
+		}, statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to update bulk values: %w", err)
+		}
+
+		// Retrieve the two values to confirm they're updated
+		newValue, newEtag, err = get(keys[0], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve updated value 0: %w", err)
+		}
+		if newValue == nil || string(newValue.Data) != "3" {
+			return fmt.Errorf("invalid value for state 0 updated value: %#v", newValue)
+		}
+		if newEtag == "" || newEtag == etags[0] {
+			return fmt.Errorf("etag is empty or invalid for updated state 0: %s", newEtag)
+		}
+		etags[0] = newEtag
+
+		newValue, newEtag, err = get(keys[1], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve updated value 1: %w", err)
+		}
+		if newValue == nil || string(newValue.Data) != "3" {
+			return fmt.Errorf("invalid value for state 1 updated value: %#v", newValue)
+		}
+		if newEtag == "" || newEtag == etags[1] {
+			return fmt.Errorf("etag is empty or invalid for updated state 1: %s", newEtag)
+		}
+		etags[1] = newEtag
+
 		return nil
 	}()
 
