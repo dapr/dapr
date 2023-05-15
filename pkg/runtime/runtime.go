@@ -1034,6 +1034,7 @@ func (a *DaprRuntime) initProxy() {
 		AppID:             a.runtimeConfig.ID,
 		ACL:               a.accessControlList,
 		Resiliency:        a.resiliency,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
 	})
 
 	log.Info("gRPC proxy enabled")

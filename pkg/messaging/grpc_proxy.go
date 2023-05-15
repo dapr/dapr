@@ -48,6 +48,7 @@ type proxy struct {
 	telemetryFn       func(context.Context) context.Context
 	acl               *config.AccessControlList
 	resiliency        resiliency.Provider
+	maxRequestBodySize int
 }
 
 // ProxyOpts is the struct with options for NewProxy.
@@ -57,6 +58,7 @@ type ProxyOpts struct {
 	AppID             string
 	ACL               *config.AccessControlList
 	Resiliency        resiliency.Provider
+	MaxRequestBodySize int
 }
 
 // NewProxy returns a new proxy.
@@ -67,6 +69,7 @@ func NewProxy(opts ProxyOpts) Proxy {
 		connectionFactory: opts.ConnectionFactory,
 		acl:               opts.ACL,
 		resiliency:        opts.Resiliency,
+		maxRequestBodySize: opts.MaxRequestBodySize,
 	}
 }
 
@@ -82,6 +85,7 @@ func (p *proxy) Handler() grpc.StreamHandler {
 			return resiliency.NoOp{}.EndpointPolicy("", "")
 		},
 		grpcProxy.DirectorConnectionFactory(p.connectionFactory),
+		p.maxRequestBodySize,
 	)
 }
 
