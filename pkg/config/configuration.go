@@ -258,6 +258,7 @@ type MTLSSpec struct {
 	Enabled          bool   `json:"enabled" yaml:"enabled"`
 	WorkloadCertTTL  string `json:"workloadCertTTL" yaml:"workloadCertTTL"`
 	AllowedClockSkew string `json:"allowedClockSkew" yaml:"allowedClockSkew"`
+	SentryAddress    string `json:"sentryAddress" yaml:"sentryAddress"`
 }
 
 // SpiffeID represents the separated fields in a spiffe id.

@@ -30,6 +30,7 @@ import (
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
+	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -44,7 +45,7 @@ import (
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
-func FromFlags() (*DaprRuntime, error) {
+func FromFlags(args []string) (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", strconv.Itoa(DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
@@ -92,7 +93,8 @@ func FromFlags() (*DaprRuntime, error) {
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	// Finally parse the CLI flags!
-	flag.Parse()
+	// Ignore errors; CommandLine is set for ExitOnError.
+	_ = flag.CommandLine.Parse(args)
 
 	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
 	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
@@ -295,6 +297,64 @@ func FromFlags() (*DaprRuntime, error) {
 		healthThreshold = int32(*appHealthThreshold)
 	}
 
+	var certChain *credentials.CertChain
+
+	// Config and resiliency need the operator client
+	var operatorClient operatorV1.OperatorClient
+	if *mode == string(modes.KubernetesMode) {
+		log.Info("Initializing the operator client")
+		certChain, err = security.GetCertChain()
+		if err != nil {
+			return nil, err
+		}
+		client, conn, clientErr := client.GetOperatorClient(context.TODO(), *controlPlaneAddress, security.TLSServerName, certChain)
+		if clientErr != nil {
+			return nil, clientErr
+		}
+		defer conn.Close()
+		operatorClient = client
+	}
+
+	// parse global config
+	var globalConfig *daprGlobalConfig.Configuration
+	var configErr error
+	namespace := os.Getenv("NAMESPACE")
+	podName := os.Getenv("POD_NAME")
+	if *config != "" {
+		switch modes.DaprMode(*mode) {
+		case modes.KubernetesMode:
+			log.Debug("Loading Kubernetes config resource: " + *config)
+			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
+		case modes.StandaloneMode:
+			log.Debug("Loading config from file: " + *config)
+			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
+		}
+	}
+
+	if configErr != nil {
+		log.Fatalf("error loading configuration: %s", configErr)
+	}
+	if globalConfig == nil {
+		log.Info("loading default configuration")
+		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
+	}
+
+	// if enableMTLS or sentryAddress is not set from flag, then uses the value from global config
+	if !*enableMTLS {
+		*enableMTLS = globalConfig.Spec.MTLSSpec.Enabled
+	}
+	if *sentryAddress == "" {
+		*sentryAddress = globalConfig.Spec.MTLSSpec.SentryAddress
+	}
+
+	// if tls is enabled but certChain hasn't loaded, then load it
+	if *enableMTLS && certChain == nil {
+		certChain, err = security.GetCertChain()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	runtimeConfig := NewRuntimeConfig(NewRuntimeConfigOpts{
 		ID:                           *appID,
 		PlacementAddresses:           placementAddresses,
@@ -326,6 +386,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AppHealthThreshold:           healthThreshold,
 		AppChannelAddress:            *appChannelAddress,
 	})
+	runtimeConfig.CertChain = certChain
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
@@ -349,50 +410,6 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	var globalConfig *daprGlobalConfig.Configuration
-	var configErr error
-
-	if *enableMTLS || *mode == string(modes.KubernetesMode) {
-		runtimeConfig.CertChain, err = security.GetCertChain()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Config and resiliency need the operator client
-	var operatorClient operatorV1.OperatorClient
-	if *mode == string(modes.KubernetesMode) {
-		log.Info("Initializing the operator client")
-		client, conn, clientErr := client.GetOperatorClient(context.TODO(), *controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
-		if clientErr != nil {
-			return nil, clientErr
-		}
-		defer conn.Close()
-		operatorClient = client
-	}
-
-	var accessControlList *daprGlobalConfig.AccessControlList
-	namespace := os.Getenv("NAMESPACE")
-	podName := os.Getenv("POD_NAME")
-
-	if *config != "" {
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
-			log.Debug("Loading Kubernetes config resource: " + *config)
-			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
-		case modes.StandaloneMode:
-			log.Debug("Loading config from file: " + *config)
-			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
-		}
-	}
-
-	if configErr != nil {
-		log.Fatalf("error loading configuration: %s", configErr)
-	}
-	if globalConfig == nil {
-		log.Info("loading default configuration")
-		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
-	}
 	daprGlobalConfig.SetTracingSpecFromEnv(globalConfig)
 
 	globalConfig.LoadFeatures()
@@ -425,6 +442,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 	log.Info("Resiliency configuration loaded")
 
+	var accessControlList *daprGlobalConfig.AccessControlList
 	accessControlList, err = acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
 		runtimeConfig.ApplicationProtocol.IsHTTP(),

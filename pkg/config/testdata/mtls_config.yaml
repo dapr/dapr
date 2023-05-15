@@ -8,3 +8,4 @@ spec:
     enabled: true
     workloadCertTTL: "25s"
     allowedClockSkew: "1h"
+    sentryAddress: "localhost:50001"

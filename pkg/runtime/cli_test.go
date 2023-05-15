@@ -14,9 +14,12 @@ limitations under the License.
 package runtime
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 )
 
 func TestParsePlacementAddr(t *testing.T) {
@@ -43,4 +46,19 @@ func TestParsePlacementAddr(t *testing.T) {
 			assert.EqualValues(t, tc.out, parsePlacementAddr(tc.addr))
 		})
 	}
+}
+
+func TestFromFlagsForMTLSConfig(t *testing.T) {
+	os.Setenv(sentryConsts.TrustAnchorsEnvVar, "testdata")
+	os.Setenv(sentryConsts.CertChainEnvVar, "testdata")
+	os.Setenv(sentryConsts.CertKeyEnvVar, "testdata")
+
+	runtime, err := FromFlags([]string{"--config", "../config/testdata/mtls_config.yaml", "--app-id", "test-app"})
+	assert.NoError(t, err)
+	// verify the global config value
+	assert.True(t, runtime.globalConfig.Spec.MTLSSpec.Enabled)
+	assert.Equal(t, runtime.globalConfig.Spec.MTLSSpec.SentryAddress, "localhost:50001")
+	// verify the runtime config value
+	assert.True(t, runtime.runtimeConfig.mtlsEnabled)
+	assert.Equal(t, runtime.runtimeConfig.SentryServiceAddress, "localhost:50001")
 }
