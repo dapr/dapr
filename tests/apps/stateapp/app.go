@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -26,8 +27,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 
 	daprhttp "github.com/dapr/dapr/pkg/http"
@@ -101,10 +102,8 @@ type bulkGetResponse struct {
 
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
-	StartTime int         `json:"start_time,omitempty"`
-	EndTime   int         `json:"end_time,omitempty"`
-	States    []daprState `json:"states,omitempty"`
-	Message   string      `json:"message,omitempty"`
+	States  []daprState `json:"states,omitempty"`
+	Message string      `json:"message,omitempty"`
 }
 
 // indexHandler is the handler for root path
@@ -140,16 +139,21 @@ func load(data []byte, statestore string, meta map[string]string) (int, error) {
 
 	// Save must return 204
 	if res.StatusCode != http.StatusNoContent {
-		err = fmt.Errorf("expected status code 204, got %d", res.StatusCode)
+		body, _ := io.ReadAll(res.Body)
+		err = fmt.Errorf("expected status code 204, got %d; response: %s", res.StatusCode, string(body))
 	}
+
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, res.Body)
+
 	return res.StatusCode, err
 }
 
-func get(key, statestore string, meta map[string]string) (*appState, error) {
+func get(key string, statestore string, meta map[string]string) (*appState, string, error) {
 	log.Printf("Processing get request for %s.", key)
 	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	log.Printf("Fetching state from %s", url)
@@ -157,27 +161,27 @@ func get(key, statestore string, meta map[string]string) (*appState, error) {
 	/* #nosec */
 	res, err := httpClient.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
+		return nil, "", fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
 
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
+		return nil, "", fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return nil, fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
+		return nil, "", fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
 	}
 
 	log.Printf("Found state for key %s: %s", key, body)
 
 	state, err := parseState(key, body)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return state, nil
+	return state, res.Header.Get("etag"), nil
 }
 
 func parseState(key string, body []byte) (*appState, error) {
@@ -204,7 +208,7 @@ func getAll(states []daprState, statestore string, meta map[string]string) ([]da
 
 	output := make([]daprState, 0, len(states))
 	for _, state := range states {
-		value, err := get(state.Key, statestore, meta)
+		value, etag, err := get(state.Key, statestore, meta)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +217,7 @@ func getAll(states []daprState, statestore string, meta map[string]string) ([]da
 		output = append(output, daprState{
 			Key:   state.Key,
 			Value: value,
-			Etag:  state.Etag,
+			Etag:  etag,
 		})
 	}
 
@@ -299,6 +303,9 @@ func delete(key, statestore string, meta map[string]string) error {
 		return fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
 	}
 	defer res.Body.Close()
+
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, res.Body)
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		return fmt.Errorf("failed to delete key %s in Dapr: %s", key, err.Error())
@@ -458,14 +465,13 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	uri := r.URL.RequestURI()
 	statusCode := http.StatusOK
 
-	res.StartTime = epoch()
-
 	cmd := mux.Vars(r)["command"]
 	statestore := mux.Vars(r)["statestore"]
 	meta := getMetadata(r.URL.Query())
 	switch cmd {
 	case "save":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		_, err = save(req.States, statestore, meta)
@@ -475,33 +481,39 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 			statusCode = http.StatusNoContent
 		}
 	case "load":
-		if data, err = getRequestBody(w, r); err != nil {
+		data, err = getRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		statusCode, err = load(data, statestore, meta)
 	case "get":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		res.States, err = getAll(req.States, statestore, meta)
 	case "getbulk":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		res.States, err = getBulk(req.States, statestore)
 	case "delete":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		err = deleteAll(req.States, statestore, meta)
 		statusCode = http.StatusNoContent
 	case "transact":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		err = executeTransaction(req.States, statestore)
 	case "query":
-		if data, err = getRequestBody(w, r); err != nil {
+		data, err = getRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		res.States, err = executeQuery(data, statestore, meta)
@@ -516,8 +528,6 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusInternalServerError
 		res.Message = err.Error()
 	}
-
-	res.EndTime = epoch()
 
 	if !statusCheck {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
@@ -537,7 +547,6 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var res requestResponse
 	var response *runtimev1pb.GetBulkStateResponse
-	res.StartTime = epoch()
 	statusCode := http.StatusOK
 
 	cmd := mux.Vars(r)["command"]
@@ -637,7 +646,6 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		res.Message = unsupportedCommandMessage
 	}
 
-	res.EndTime = epoch()
 	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
 	}
@@ -808,9 +816,112 @@ func createBulkStateURL(statestore string) (string, error) {
 	return url.String(), nil
 }
 
-// epoch returns the current unix epoch timestamp
-func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+// Handles the etag test for HTTP
+func etagTestHTTPHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing request for %s", r.URL.RequestURI())
+
+	statestore := mux.Vars(r)["statestore"]
+
+	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
+
+	testErr := func() error {
+		// Use two random keys for testing
+		var (
+			value, newValue *appState
+			newEtag         string
+			etags           [2]string
+		)
+		keys := [2]string{
+			uuid.NewString(),
+			uuid.NewString(),
+		}
+
+		// First, write two values
+		_, err := save([]daprState{
+			{Key: keys[0], Value: &appState{Data: []byte("1")}, Metadata: pkMetadata},
+			{Key: keys[1], Value: &appState{Data: []byte("1")}, Metadata: pkMetadata},
+		}, statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to store initial values: %w", err)
+		}
+
+		// Retrieve the two values to get the etag
+		value, etags[0], err = get(keys[0], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve initial value 0: %w", err)
+		}
+		if value == nil || string(value.Data) != "1" {
+			return fmt.Errorf("invalid value for state 0 initial value: %#v", value)
+		}
+		if etags[0] == "" {
+			return errors.New("etag is empty for state 0 initial value")
+		}
+
+		value, etags[1], err = get(keys[1], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve initial value 1: %w", err)
+		}
+		if value == nil || string(value.Data) != "1" {
+			return fmt.Errorf("invalid value for state 1 initial value: %#v", value)
+		}
+		if etags[1] == "" {
+			return errors.New("etag is empty for state 1 initial value")
+		}
+
+		// Update the first state using the correct etag
+		_, err = save([]daprState{
+			{Key: keys[0], Value: &appState{Data: []byte("2")}, Metadata: pkMetadata, Etag: etags[0]},
+		}, statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to update value 0: %w", err)
+		}
+
+		// Check the first state
+		newValue, newEtag, err = get(keys[0], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve updated value 0: %w", err)
+		}
+		if newValue == nil || string(newValue.Data) != "2" {
+			return fmt.Errorf("invalid value for state 0 updated value: %#v", value)
+		}
+		if newEtag == "" || newEtag == etags[0] {
+			return fmt.Errorf("etag is empty or invalid for updated state 0: %s", newEtag)
+		}
+		etags[0] = newEtag
+
+		// Updating with wrong etag should fail with 409 status code
+		statusCode, _ := save([]daprState{
+			{Key: keys[1], Value: &appState{Data: []byte("2")}, Metadata: pkMetadata, Etag: "99999"},
+		}, statestore, pkMetadata)
+		if statusCode != http.StatusConflict {
+			return fmt.Errorf("expected update with invalid etag to fail with status code 409, but got: %d", statusCode)
+		}
+
+		// Value should not have changed
+		newValue, newEtag, err = get(keys[1], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve (not) updated value 1: %w", err)
+		}
+		if newValue == nil || string(newValue.Data) != "1" {
+			return fmt.Errorf("invalid value for state 1 (not) updated value: %#v", value)
+		}
+		if newEtag == "" || newEtag != etags[1] {
+			return fmt.Errorf("etag is empty or invalid for updated state 1: %s", newEtag)
+		}
+
+		return nil
+	}()
+
+	w.Header().Add("content-type", "application/json")
+	if testErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": testErr.Error(),
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // appRouter initializes restful api router
@@ -823,6 +934,8 @@ func appRouter() http.Handler {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/http/{command}/{statestore}", httpHandler).Methods("POST")
 	router.HandleFunc("/test/grpc/{command}/{statestore}", grpcHandler).Methods("POST")
+	router.HandleFunc("/test-etag/http/{statestore}", etagTestHTTPHandler).Methods("POST")
+	//router.HandleFunc("/test-etag/grpc/{statestore}", etagTestHTTPHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

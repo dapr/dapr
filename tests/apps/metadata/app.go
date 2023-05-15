@@ -125,7 +125,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 // epoch returns the current unix epoch timestamp
 func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+	return int(time.Now().UnixMilli())
 }
 
 // appRouter initializes restful api router
