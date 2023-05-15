@@ -27,6 +27,8 @@ const (
 	SidecarDebugPortName           = "dapr-debug"
 	SidecarHealthzPath             = "healthz"
 	SidecarInjectedLabel           = "dapr.io/sidecar-injected"
+	SidecarAppIDLabel              = "dapr.io/app-id"
+	SidecarMetricsEnabledLabel     = "dapr.io/metrics-enabled"
 	APIVersionV1                   = "v1.0"
 	UnixDomainSocketVolume         = "dapr-unix-domain-socket" // Name of the Unix domain socket volume.
 	UserContainerDaprHTTPPortName  = "DAPR_HTTP_PORT"          // Name of the variable exposed to the app containing the Dapr HTTP port.
