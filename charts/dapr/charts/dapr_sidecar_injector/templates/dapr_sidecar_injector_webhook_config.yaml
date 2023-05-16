@@ -37,6 +37,7 @@ metadata:
     {{- end }}
 webhooks:
 - name: sidecar-injector.dapr.io
+  reinvocationPolicy: IfNeeded
   clientConfig:
     service:
       namespace: {{ .Release.Namespace }}
