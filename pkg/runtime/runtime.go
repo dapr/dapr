@@ -1299,7 +1299,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 				a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
 				state.BulkStoreOpts{},
 				store.Set,
-				store.BulkSetWithOptions,
+				store.BulkSet,
 			)
 			if err != nil {
 				log.Errorf("error saving state from app response: %v", err)

@@ -26,8 +26,7 @@ type MockStateStore struct {
 	mock.Mock
 }
 
-// BulkDelete provides a mock function with given fields: req
-func (_m *MockStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
+func (_m *MockStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
 	ret := _m.Called(ctx, req)
 
 	var r0 error
@@ -40,34 +39,7 @@ func (_m *MockStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequ
 	return r0
 }
 
-func (_m *MockStateStore) BulkDeleteWithOptions(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
-	ret := _m.Called(ctx, req)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, []state.DeleteRequest) error); ok {
-		r0 = rf(ctx, req)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// BulkSet provides a mock function with given fields: req
-func (_m *MockStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	ret := _m.Called(ctx, req)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, []state.SetRequest) error); ok {
-		r0 = rf(ctx, req)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-func (_m *MockStateStore) BulkSetWithOptions(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
+func (_m *MockStateStore) BulkSet(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 	ret := _m.Called(ctx, req)
 
 	var r0 error
@@ -174,11 +146,7 @@ func (f *FailingStatestore) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
 
-func (f *FailingStatestore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
-	return f.BulkDeleteWithOptions(ctx, req, state.BulkStoreOpts{})
-}
-
-func (f *FailingStatestore) BulkDeleteWithOptions(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
+func (f *FailingStatestore) BulkDelete(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
 	for _, val := range req {
 		err := f.Failure.PerformFailure(val.Key)
 		if err != nil {
@@ -188,11 +156,7 @@ func (f *FailingStatestore) BulkDeleteWithOptions(ctx context.Context, req []sta
 	return nil
 }
 
-func (f *FailingStatestore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	return f.BulkSetWithOptions(ctx, req, state.BulkStoreOpts{})
-}
-
-func (f *FailingStatestore) BulkSetWithOptions(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
+func (f *FailingStatestore) BulkSet(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 	for _, val := range req {
 		err := f.Failure.PerformFailure(val.Key)
 		if err != nil {

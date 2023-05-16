@@ -1250,7 +1250,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 		state.BulkStoreOpts{},
 		store.Set,
-		store.BulkSetWithOptions,
+		store.BulkSet,
 	)
 	elapsed := diag.ElapsedSince(start)
 

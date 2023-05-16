@@ -1026,7 +1026,7 @@ func TestSaveState(t *testing.T) {
 			return req.Key == etagInvalidKey
 		}),
 	).Return(etagInvalidErr)
-	fakeStore.On("BulkSetWithOptions",
+	fakeStore.On("BulkSet",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.SetRequest) bool {
 			return len(req) == 2 &&
@@ -1035,7 +1035,7 @@ func TestSaveState(t *testing.T) {
 		}),
 		mock.Anything,
 	).Return(nil)
-	fakeStore.On("BulkSetWithOptions",
+	fakeStore.On("BulkSet",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.SetRequest) bool {
 			return len(req) == 2 &&
@@ -1044,7 +1044,7 @@ func TestSaveState(t *testing.T) {
 		}),
 		mock.Anything,
 	).Return(errors.Join(state.NewBulkStoreError(1, etagMismatchErr)))
-	fakeStore.On("BulkSetWithOptions",
+	fakeStore.On("BulkSet",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.SetRequest) bool {
 			return len(req) == 3 &&
@@ -2177,7 +2177,7 @@ func TestDeleteBulkState(t *testing.T) {
 	etagInvalidErr := state.NewETagError(state.ETagInvalid, errors.New("simulated"))
 
 	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("BulkDeleteWithOptions",
+	fakeStore.On("BulkDelete",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.DeleteRequest) bool {
 			return len(req) == 2 &&
@@ -2186,7 +2186,7 @@ func TestDeleteBulkState(t *testing.T) {
 		}),
 		mock.Anything,
 	).Return(nil)
-	fakeStore.On("BulkDeleteWithOptions",
+	fakeStore.On("BulkDelete",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.DeleteRequest) bool {
 			return len(req) == 2 &&
@@ -2195,7 +2195,7 @@ func TestDeleteBulkState(t *testing.T) {
 		}),
 		mock.Anything,
 	).Return(errors.Join(state.NewBulkStoreError(1, etagMismatchErr)))
-	fakeStore.On("BulkDeleteWithOptions",
+	fakeStore.On("BulkDelete",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.DeleteRequest) bool {
 			return len(req) == 3 &&

@@ -223,12 +223,7 @@ func (ss *grpcStateStore) Set(ctx context.Context, req *state.SetRequest) error 
 }
 
 // BulkDelete performs a delete operation for many keys at once.
-func (ss *grpcStateStore) BulkDelete(ctx context.Context, reqs []state.DeleteRequest) error {
-	return ss.BulkDeleteWithOptions(ctx, reqs, state.BulkStoreOpts{})
-}
-
-// BulkDeleteWithOptions performs a delete operation for many keys at once.
-func (ss *grpcStateStore) BulkDeleteWithOptions(ctx context.Context, reqs []state.DeleteRequest, opts state.BulkStoreOpts) error {
+func (ss *grpcStateStore) BulkDelete(ctx context.Context, reqs []state.DeleteRequest, opts state.BulkStoreOpts) error {
 	protoRequests := make([]*proto.DeleteRequest, len(reqs))
 
 	for idx := range reqs {
@@ -280,12 +275,7 @@ func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest, o
 }
 
 // BulkSet performs a set operation for many keys at once.
-func (ss *grpcStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
-	return ss.BulkSetWithOptions(ctx, req, state.BulkStoreOpts{})
-}
-
-// BulkSetWithOptions performs a set operation for many keys at once.
-func (ss *grpcStateStore) BulkSetWithOptions(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
+func (ss *grpcStateStore) BulkSet(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 	requests := []*proto.SetRequest{}
 	for idx := range req {
 		protoRequest, err := toSetRequest(&req[idx])

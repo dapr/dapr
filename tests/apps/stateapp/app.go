@@ -1035,7 +1035,7 @@ func appRouter() http.Handler {
 	router.HandleFunc("/test/http/{command}/{statestore}", httpHandler).Methods("POST")
 	router.HandleFunc("/test/grpc/{command}/{statestore}", grpcHandler).Methods("POST")
 	router.HandleFunc("/test-etag/http/{statestore}", etagTestHTTPHandler).Methods("POST")
-	//router.HandleFunc("/test-etag/grpc/{statestore}", etagTestHTTPHandler).Methods("POST")
+	// router.HandleFunc("/test-etag/grpc/{statestore}", etagTestHTTPHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

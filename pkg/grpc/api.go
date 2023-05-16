@@ -710,7 +710,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 		state.BulkStoreOpts{},
 		store.Set,
-		store.BulkSetWithOptions,
+		store.BulkSet,
 	)
 	elapsed := diag.ElapsedSince(start)
 
@@ -821,7 +821,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 		state.BulkStoreOpts{},
 		store.Delete,
-		store.BulkDeleteWithOptions,
+		store.BulkDelete,
 	)
 	elapsed := diag.ElapsedSince(start)
 
