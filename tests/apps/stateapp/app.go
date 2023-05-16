@@ -46,6 +46,7 @@ const (
 
 	metadataPartitionKey = "partitionKey"
 	partitionKey         = "e2etest"
+	badEtag              = "99999" // Must be numeric because of Redis
 )
 
 var (
@@ -285,40 +286,44 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 	return output, nil
 }
 
-func delete(key, statestore string, meta map[string]string) error {
+func delete(key, statestore string, meta map[string]string, etag string) (int, error) {
 	log.Printf("Processing delete request for %s", key)
 	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
-		return fmt.Errorf("could not create delete request for key %s in Dapr: %s", key, err.Error())
+		return 0, fmt.Errorf("could not create delete request for key %s in Dapr: %s", key, err.Error())
+	}
+	if etag != "" {
+		req.Header.Set("If-Match", etag)
 	}
 
 	log.Printf("Deleting state for %s", url)
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
+		return 0, fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		body, _ := io.ReadAll(res.Body)
+		return res.StatusCode, fmt.Errorf("failed to delete key %s in Dapr: %s", key, string(body))
+	}
 
 	// Drain before closing
 	_, _ = io.Copy(io.Discard, res.Body)
 
-	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return fmt.Errorf("failed to delete key %s in Dapr: %s", key, err.Error())
-	}
-
-	return nil
+	return res.StatusCode, nil
 }
 
 func deleteAll(states []daprState, statestore string, meta map[string]string) error {
 	log.Printf("Processing delete request for %d states.", len(states))
 
 	for _, state := range states {
-		err := delete(state.Key, statestore, meta)
+		_, err := delete(state.Key, statestore, meta, "")
 		if err != nil {
 			return err
 		}
@@ -891,7 +896,7 @@ func etagTestHTTPHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Updating with wrong etag should fail with 409 status code
 		statusCode, _ := save([]daprState{
-			{Key: keys[1], Value: &appState{Data: []byte("2")}, Metadata: pkMetadata, Etag: "99999"},
+			{Key: keys[1], Value: &appState{Data: []byte("2")}, Metadata: pkMetadata, Etag: badEtag},
 		}, statestore, pkMetadata)
 		if statusCode != http.StatusConflict {
 			return fmt.Errorf("expected update with invalid etag to fail with status code 409, but got: %d", statusCode)
@@ -942,6 +947,67 @@ func etagTestHTTPHandler(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("etag is empty or invalid for updated state 1: %s", newEtag)
 		}
 		etags[1] = newEtag
+
+		// Bulk update with one etag incorrect
+		statusCode, _ = save([]daprState{
+			{Key: keys[0], Value: &appState{Data: []byte("4")}, Metadata: pkMetadata, Etag: badEtag},
+			{Key: keys[1], Value: &appState{Data: []byte("4")}, Metadata: pkMetadata, Etag: etags[1]},
+		}, statestore, pkMetadata)
+		if statusCode != http.StatusConflict {
+			return fmt.Errorf("expected update with invalid etag to fail with status code 409, but got: %d", statusCode)
+		}
+
+		// Retrieve the two values to confirm only the second is updated
+		newValue, newEtag, err = get(keys[0], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve (not) updated value 0: %w", err)
+		}
+		if newValue == nil || string(newValue.Data) != "3" {
+			return fmt.Errorf("invalid value for state 0 (not) updated value: %#v", value)
+		}
+		if newEtag == "" || newEtag != etags[0] {
+			return fmt.Errorf("etag is empty or invalid for (not) updated state 0: %s", newEtag)
+		}
+
+		newValue, newEtag, err = get(keys[1], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve updated value 1: %w", err)
+		}
+		if newValue == nil || string(newValue.Data) != "4" {
+			return fmt.Errorf("invalid value for state 1 updated value: %#v", newValue)
+		}
+		if newEtag == "" || newEtag == etags[1] {
+			return fmt.Errorf("etag is empty or invalid for updated state 1: %s", newEtag)
+		}
+		etags[1] = newEtag
+
+		// Delete single item with incorrect etag
+		statusCode, _ = delete(keys[0], statestore, pkMetadata, badEtag)
+		if statusCode != http.StatusConflict {
+			return fmt.Errorf("expected delete with invalid etag to fail with status code 409, but got: %d", statusCode)
+		}
+
+		// Value should not have changed
+		newValue, newEtag, err = get(keys[0], statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve (not) updated value 0: %w", err)
+		}
+		if newValue == nil || string(newValue.Data) != "3" {
+			return fmt.Errorf("invalid value for state 0 (not) updated value: %#v", value)
+		}
+		if newEtag == "" || newEtag != etags[0] {
+			return fmt.Errorf("etag is empty or invalid for (not) updated state 0: %s", newEtag)
+		}
+
+		// TODO: There's no "Bulk Delete" API in HTTP right now, so we can't test that
+		// Create a test here when the API is implemented
+		err = deleteAll([]daprState{
+			{Key: keys[0], Metadata: pkMetadata},
+			{Key: keys[1], Metadata: pkMetadata},
+		}, statestore, pkMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to delete all data at the end of the test: %w", err)
+		}
 
 		return nil
 	}()
