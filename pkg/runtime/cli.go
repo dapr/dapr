@@ -45,7 +45,7 @@ import (
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
-func FromFlags(args []string) (*DaprRuntime, error) {
+func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", strconv.Itoa(DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
@@ -93,8 +93,7 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	// Finally parse the CLI flags!
-	// Ignore errors; CommandLine is set for ExitOnError.
-	_ = flag.CommandLine.Parse(args)
+	flag.Parse()
 
 	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
 	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
@@ -307,6 +306,7 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Timeout is set to 30 seconds inside the `GetOperatorClient` function to avoid blocking the app.
 		client, conn, clientErr := client.GetOperatorClient(context.TODO(), *controlPlaneAddress, security.TLSServerName, certChain)
 		if clientErr != nil {
 			return nil, clientErr
@@ -442,8 +442,7 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 	}
 	log.Info("Resiliency configuration loaded")
 
-	var accessControlList *daprGlobalConfig.AccessControlList
-	accessControlList, err = acl.ParseAccessControlSpec(
+	accessControlList, err := acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
 		runtimeConfig.ApplicationProtocol.IsHTTP(),
 	)
