@@ -142,7 +142,7 @@ jobs:
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            ## ✅ Python SDK tests failed
+            ## ❌ Python SDK tests failed
 
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
@@ -299,7 +299,7 @@ jobs:
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            ## ✅ Java SDK tests failed
+            ## ❌ Java SDK tests failed
 
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
