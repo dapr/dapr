@@ -42,7 +42,7 @@ func Test_Integration(t *testing.T) {
 		}
 
 		// Ensure CGO is disabled to avoid linking against system libraries.
-		os.Setenv("CGO_ENABLED", "0")
+		t.Setenv("CGO_ENABLED", "0")
 
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Building daprd binary to: %q", daprdPath)
@@ -52,7 +52,7 @@ func Test_Integration(t *testing.T) {
 		cmd.Stderr = os.Stderr
 		require.NoError(t, cmd.Run())
 
-		require.NoError(t, os.Setenv("DAPR_INTEGRATION_DAPRD_PATH", daprdPath))
+		t.Setenv("DAPR_INTEGRATION_DAPRD_PATH", daprdPath)
 	}
 
 	RunIntegrationTests(t)
