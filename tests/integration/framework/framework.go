@@ -49,7 +49,7 @@ type daprdOptions struct {
 	publicPort              int
 	metricsPort             int
 	profilePort             int
-	runError                func(error)
+	runErrorFn              func(error)
 	exitCode                int
 	appHealthCheck          bool
 	appHealthCheckPath      string
@@ -64,11 +64,11 @@ type Command struct {
 	lock sync.Mutex
 	cmd  *exec.Cmd
 
-	cmdcancel  context.CancelFunc
-	runError   func(error)
-	exitCode   int
-	stdoutpipe io.WriteCloser
-	stderrpipe io.WriteCloser
+	cmdcancel    context.CancelFunc
+	runErrorFnFn func(error)
+	exitCode     int
+	stdoutpipe   io.WriteCloser
+	stderrpipe   io.WriteCloser
 
 	AppID            string
 	AppPort          int
@@ -120,7 +120,7 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		publicPort:       freeport(t),
 		metricsPort:      freeport(t),
 		profilePort:      freeport(t),
-		runError: func(err error) {
+		runErrorFn: func(err error) {
 			if runtime.GOOS == "windows" {
 				// Windows returns 1 when we kill the process.
 				assert.ErrorContains(t, err, "exit status 1")
@@ -174,7 +174,7 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		PublicPort:       options.publicPort,
 		MetricsPort:      options.metricsPort,
 		ProfilePort:      options.profilePort,
-		runError:         options.runError,
+		runErrorFnFn:     options.runErrorFn,
 		exitCode:         options.exitCode,
 	}
 
@@ -208,7 +208,7 @@ func (c *Command) checkExit(t *testing.T) {
 
 	t.Log("waiting for daprd process to exit")
 
-	c.runError(c.cmd.Wait())
+	c.runErrorFnFn(c.cmd.Wait())
 	assert.NotNil(t, c.cmd.ProcessState, "process state should not be nil")
 	assert.Equalf(t, c.exitCode, c.cmd.ProcessState.ExitCode(), "expected exit code to be %d", c.exitCode)
 }

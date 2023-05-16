@@ -83,7 +83,7 @@ func WithProfilePort(port int) RunDaprdOption {
 
 func WithRunError(ferr func(error)) RunDaprdOption {
 	return func(o *daprdOptions) {
-		o.runError = ferr
+		o.runErrorFn = ferr
 	}
 }
 
