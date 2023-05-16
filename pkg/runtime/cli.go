@@ -83,6 +83,8 @@ func FromFlags() (*DaprRuntime, error) {
 	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(apphealth.DefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	appHealthThreshold := flag.Int("app-health-threshold", int(apphealth.DefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 
+	appChannelAddress := flag.String("app-channel-address", DefaultChannelAddress, "The network address the application listens on")
+
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
@@ -323,6 +325,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AppHealthProbeInterval:       healthProbeInterval,
 		AppHealthProbeTimeout:        healthProbeTimeout,
 		AppHealthThreshold:           healthThreshold,
+		AppChannelAddress:            *appChannelAddress,
 	})
 
 	// set environment variables
@@ -391,16 +394,11 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Info("loading default configuration")
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
+	daprGlobalConfig.SetTracingSpecFromEnv(globalConfig)
 
 	globalConfig.LoadFeatures()
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
 		log.Info("Enabled features: " + strings.Join(enabledFeatures, " "))
-	}
-
-	// TODO: Remove once AppHealthCheck feature is finalized
-	if !globalConfig.IsFeatureEnabled(daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
-		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
-		runtimeConfig.AppHealthCheck = nil
 	}
 
 	// Initialize metrics only if MetricSpec is enabled.

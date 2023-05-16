@@ -1,0 +1,9 @@
+apiVersion: dapr.io/v1alpha1
+kind: HTTPEndpoint
+metadata:
+  name: "external-http-endpoint"
+spec:
+  baseUrl: http://service-invocation-external:80
+  headers:
+  - name: "Accept-Language"
+    value: "en-US"

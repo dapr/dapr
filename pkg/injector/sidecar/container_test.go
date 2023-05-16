@@ -383,7 +383,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -393,6 +392,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -456,7 +456,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "some-host:50000",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -466,6 +465,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--log-as-json",
 			"--enable-mtls",
 		}

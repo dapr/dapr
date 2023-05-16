@@ -16,49 +16,78 @@ package testing
 import (
 	"context"
 	"errors"
-
-	mock "github.com/stretchr/testify/mock"
+	"time"
 
 	workflowContrib "github.com/dapr/components-contrib/workflows"
 )
 
-type MockWorkflow struct {
-	mock.Mock
-}
+type MockWorkflow struct{}
+
+const ErrorInstanceID = "errorInstanceID"
+
+var ErrFakeWorkflowComponentError = errors.New("fake workflow error")
 
 func (w *MockWorkflow) Init(metadata workflowContrib.Metadata) error {
 	return nil
 }
 
-func (w *MockWorkflow) Start(ctx context.Context, req *workflowContrib.StartRequest) (*workflowContrib.WorkflowReference, error) {
-	return nil, nil
+func (w *MockWorkflow) Start(ctx context.Context, req *workflowContrib.StartRequest) (*workflowContrib.StartResponse, error) {
+	if req.InstanceID == ErrorInstanceID {
+		return nil, ErrFakeWorkflowComponentError
+	}
+	res := &workflowContrib.StartResponse{
+		InstanceID: req.InstanceID,
+	}
+	return res, nil
 }
 
-func (w *MockWorkflow) Terminate(ctx context.Context, req *workflowContrib.WorkflowReference) error {
-	if req.InstanceID == "errorInstanceId" {
-		return errors.New("error encountered in terminate")
+func (w *MockWorkflow) Terminate(ctx context.Context, req *workflowContrib.TerminateRequest) error {
+	if req.InstanceID == ErrorInstanceID {
+		return ErrFakeWorkflowComponentError
 	}
 	return nil
 }
 
-func (w *MockWorkflow) Get(ctx context.Context, req *workflowContrib.WorkflowReference) (*workflowContrib.StateResponse, error) {
-	return nil, nil
+func (w *MockWorkflow) Get(ctx context.Context, req *workflowContrib.GetRequest) (*workflowContrib.StateResponse, error) {
+	if req.InstanceID == ErrorInstanceID {
+		return nil, ErrFakeWorkflowComponentError
+	}
+	res := &workflowContrib.StateResponse{
+		Workflow: &workflowContrib.WorkflowState{
+			InstanceID:    req.InstanceID,
+			WorkflowName:  "mockWorkflowName",
+			CreatedAt:     time.Now(),
+			LastUpdatedAt: time.Now(),
+			RuntimeStatus: "TESTING",
+		},
+	}
+	return res, nil
 }
 
 func (w *MockWorkflow) RaiseEvent(ctx context.Context, req *workflowContrib.RaiseEventRequest) error {
-	return nil
-}
-
-func (w *MockWorkflow) Pause(ctx context.Context, req *workflowContrib.WorkflowReference) error {
-	if req.InstanceID == "errorInstanceId" {
-		return errors.New("error encountered in pause")
+	if req.InstanceID == ErrorInstanceID {
+		return ErrFakeWorkflowComponentError
 	}
 	return nil
 }
 
-func (w *MockWorkflow) Resume(ctx context.Context, req *workflowContrib.WorkflowReference) error {
-	if req.InstanceID == "errorInstanceId" {
-		return errors.New("error encountered in resume")
+func (w *MockWorkflow) Pause(ctx context.Context, req *workflowContrib.PauseRequest) error {
+	if req.InstanceID == ErrorInstanceID {
+		return ErrFakeWorkflowComponentError
+	}
+	return nil
+}
+
+func (w *MockWorkflow) Resume(ctx context.Context, req *workflowContrib.ResumeRequest) error {
+	if req.InstanceID == ErrorInstanceID {
+		return ErrFakeWorkflowComponentError
+	}
+	return nil
+}
+
+func (w *MockWorkflow) Purge(ctx context.Context, req *workflowContrib.PurgeRequest) error {
+	if req.InstanceID == ErrorInstanceID {
+		return ErrFakeWorkflowComponentError
 	}
 	return nil
 }

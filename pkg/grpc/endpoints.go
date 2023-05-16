@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -93,11 +93,16 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/SubtleWrapKeyAlpha1",
 		daprRuntimePrefix + "v1.Dapr/SubtleUnwrapKeyAlpha1",
 	},
+	"crypto.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/EncryptAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DecryptAlpha1",
+	},
 	"workflows.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/StartWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/GetWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/TerminateWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/RaiseEventWorkflowAlpha1",
+		daprRuntimePrefix + "v1.Dapr/PurgeWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/PauseWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/ResumeWorkflowAlpha1",
 	},

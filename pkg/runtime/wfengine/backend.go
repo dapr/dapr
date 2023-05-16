@@ -146,7 +146,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
 func (*actorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	wfLogger.Warnf("%s: aborting activity execution (#%d)", wi.InstanceID, wi.NewEvent.EventId)
+	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.EventId)
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
 	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
@@ -239,6 +239,21 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 	case wi := <-be.orchestrationWorkItemChan:
 		return wi, nil
 	}
+}
+
+// PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
+func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
+	req := invokev1.
+		NewInvokeMethodRequest(PurgeWorkflowStateMethod).
+		WithActor(be.config.workflowActorType, string(id))
+	defer req.Close()
+
+	resp, err := be.actors.Call(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Close()
+	return nil
 }
 
 // Start implements backend.Backend

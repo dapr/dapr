@@ -452,6 +452,35 @@ func TestFeatureEnabled(t *testing.T) {
 	assert.EqualValues(t, actual, expect)
 }
 
+func TestSetTracingSpecFromEnv(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otlpendpoint:1234")
+	t.Setenv("OTEL_EXPORTER_OTLP_INSECURE", "true")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json")
+
+	// get default configuration
+	conf := LoadDefaultConfiguration()
+
+	// set tracing spec from env
+	SetTracingSpecFromEnv(conf)
+
+	assert.Equal(t, "otlpendpoint:1234", conf.Spec.TracingSpec.Otel.EndpointAddress)
+	assert.Equal(t, "http", conf.Spec.TracingSpec.Otel.Protocol)
+	require.False(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
+
+	// Spec from config file should not be overridden
+	conf = LoadDefaultConfiguration()
+	conf.Spec.TracingSpec.Otel.EndpointAddress = "configfileendpoint:4321"
+	conf.Spec.TracingSpec.Otel.Protocol = "grpc"
+	conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(true)
+
+	// set tracing spec from env
+	SetTracingSpecFromEnv(conf)
+
+	assert.Equal(t, "configfileendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
+	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
+	require.True(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
+}
+
 func TestSortMetrics(t *testing.T) {
 	t.Run("metrics overrides metric - enabled false", func(t *testing.T) {
 		config := &Configuration{

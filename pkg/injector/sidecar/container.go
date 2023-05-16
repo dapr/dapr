@@ -161,6 +161,10 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		}
 	}
 
+	if v, ok := cfg.Annotations[annotations.KeyAppChannel]; ok && v != "" {
+		args = append(args, "--app-channel-address", v)
+	}
+
 	// --enable-api-logging is set only if there's an explicit annotation (true or false) for that
 	// This is because if this CLI flag is missing, the default specified in the Config CRD is used
 	if v, ok := cfg.Annotations[annotations.KeyEnableAPILogging]; ok {
