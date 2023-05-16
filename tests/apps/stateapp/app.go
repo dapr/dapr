@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -828,14 +827,43 @@ func etagTestHTTP(statestore string) error {
 	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	// Use two random keys for testing
-	var (
-		value, newValue *appState
-		newEtag         string
-		etags           [2]string
-	)
+	var etags [2]string
 	keys := [2]string{
 		uuid.NewString(),
 		uuid.NewString(),
+	}
+
+	type retrieveStateOpts struct {
+		expectNotFound     bool
+		expectValue        string
+		expectEtagEqual    string
+		expectEtagNotEqual string
+	}
+	retrieveState := func(stateId int, opts retrieveStateOpts) (string, error) {
+		value, etag, err := get(keys[stateId], statestore, pkMetadata)
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve value %d: %w", stateId, err)
+		}
+
+		if opts.expectNotFound {
+			if value != nil && len(value.Data) != 0 {
+				return "", fmt.Errorf("invalid value for state %d: %#v (expected empty)", stateId, value)
+			}
+			return "", nil
+		}
+		if value == nil || string(value.Data) != opts.expectValue {
+			return "", fmt.Errorf("invalid value for state %d: %#v (expected: %q)", stateId, value, opts.expectValue)
+		}
+		if etag == "" {
+			return "", fmt.Errorf("etag is empty for state %d", stateId)
+		}
+		if opts.expectEtagEqual != "" && etag != opts.expectEtagEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected: %q)", stateId, etag, opts.expectEtagEqual)
+		}
+		if opts.expectEtagNotEqual != "" && etag == opts.expectEtagNotEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected different value)", stateId, etag)
+		}
+		return etag, nil
 	}
 
 	// First, write two values
@@ -848,26 +876,13 @@ func etagTestHTTP(statestore string) error {
 	}
 
 	// Retrieve the two values to get the etag
-	value, etags[0], err = get(keys[0], statestore, pkMetadata)
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "1"})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve initial value 0: %w", err)
+		return fmt.Errorf("failed to check initial value for state 0: %w", err)
 	}
-	if value == nil || string(value.Data) != "1" {
-		return fmt.Errorf("invalid value for state 0 initial value: %#v", value)
-	}
-	if etags[0] == "" {
-		return errors.New("etag is empty for state 0 initial value")
-	}
-
-	value, etags[1], err = get(keys[1], statestore, pkMetadata)
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "1"})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve initial value 1: %w", err)
-	}
-	if value == nil || string(value.Data) != "1" {
-		return fmt.Errorf("invalid value for state 1 initial value: %#v", value)
-	}
-	if etags[1] == "" {
-		return errors.New("etag is empty for state 1 initial value")
+		return fmt.Errorf("failed to check initial value for state 1: %w", err)
 	}
 
 	// Update the first state using the correct etag
@@ -879,17 +894,10 @@ func etagTestHTTP(statestore string) error {
 	}
 
 	// Check the first state
-	newValue, newEtag, err = get(keys[0], statestore, pkMetadata)
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "2", expectEtagNotEqual: etags[0]})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve updated value 0: %w", err)
+		return fmt.Errorf("failed to check initial value for state 0: %w", err)
 	}
-	if newValue == nil || string(newValue.Data) != "2" {
-		return fmt.Errorf("invalid value for state 0 updated value: %#v", value)
-	}
-	if newEtag == "" || newEtag == etags[0] {
-		return fmt.Errorf("etag is empty or invalid for updated state 0: %s", newEtag)
-	}
-	etags[0] = newEtag
 
 	// Updating with wrong etag should fail with 409 status code
 	statusCode, _ := save([]daprState{
@@ -900,15 +908,9 @@ func etagTestHTTP(statestore string) error {
 	}
 
 	// Value should not have changed
-	newValue, newEtag, err = get(keys[1], statestore, pkMetadata)
+	_, err = retrieveState(1, retrieveStateOpts{expectValue: "1", expectEtagEqual: etags[1]})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve (not) updated value 1: %w", err)
-	}
-	if newValue == nil || string(newValue.Data) != "1" {
-		return fmt.Errorf("invalid value for state 1 (not) updated value: %#v", value)
-	}
-	if newEtag == "" || newEtag != etags[1] {
-		return fmt.Errorf("etag is empty or invalid for updated state 1: %s", newEtag)
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
 	}
 
 	// Bulk update with all valid etags
@@ -921,29 +923,14 @@ func etagTestHTTP(statestore string) error {
 	}
 
 	// Retrieve the two values to confirm they're updated
-	newValue, newEtag, err = get(keys[0], statestore, pkMetadata)
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[0]})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve updated value 0: %w", err)
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
 	}
-	if newValue == nil || string(newValue.Data) != "3" {
-		return fmt.Errorf("invalid value for state 0 updated value: %#v", newValue)
-	}
-	if newEtag == "" || newEtag == etags[0] {
-		return fmt.Errorf("etag is empty or invalid for updated state 0: %s", newEtag)
-	}
-	etags[0] = newEtag
-
-	newValue, newEtag, err = get(keys[1], statestore, pkMetadata)
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[1]})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve updated value 1: %w", err)
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
 	}
-	if newValue == nil || string(newValue.Data) != "3" {
-		return fmt.Errorf("invalid value for state 1 updated value: %#v", newValue)
-	}
-	if newEtag == "" || newEtag == etags[1] {
-		return fmt.Errorf("etag is empty or invalid for updated state 1: %s", newEtag)
-	}
-	etags[1] = newEtag
 
 	// Bulk update with one etag incorrect
 	statusCode, _ = save([]daprState{
@@ -955,28 +942,14 @@ func etagTestHTTP(statestore string) error {
 	}
 
 	// Retrieve the two values to confirm only the second is updated
-	newValue, newEtag, err = get(keys[0], statestore, pkMetadata)
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve (not) updated value 0: %w", err)
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
 	}
-	if newValue == nil || string(newValue.Data) != "3" {
-		return fmt.Errorf("invalid value for state 0 (not) updated value: %#v", value)
-	}
-	if newEtag == "" || newEtag != etags[0] {
-		return fmt.Errorf("etag is empty or invalid for (not) updated state 0: %s", newEtag)
-	}
-
-	newValue, newEtag, err = get(keys[1], statestore, pkMetadata)
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "4", expectEtagNotEqual: etags[1]})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve updated value 1: %w", err)
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
 	}
-	if newValue == nil || string(newValue.Data) != "4" {
-		return fmt.Errorf("invalid value for state 1 updated value: %#v", newValue)
-	}
-	if newEtag == "" || newEtag == etags[1] {
-		return fmt.Errorf("etag is empty or invalid for updated state 1: %s", newEtag)
-	}
-	etags[1] = newEtag
 
 	// Delete single item with incorrect etag
 	statusCode, _ = delete(keys[0], statestore, pkMetadata, badEtag)
@@ -985,15 +958,9 @@ func etagTestHTTP(statestore string) error {
 	}
 
 	// Value should not have changed
-	newValue, newEtag, err = get(keys[0], statestore, pkMetadata)
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve (not) updated value 0: %w", err)
-	}
-	if newValue == nil || string(newValue.Data) != "3" {
-		return fmt.Errorf("invalid value for state 0 (not) updated value: %#v", value)
-	}
-	if newEtag == "" || newEtag != etags[0] {
-		return fmt.Errorf("etag is empty or invalid for (not) updated state 0: %s", newEtag)
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
 	}
 
 	// TODO: There's no "Bulk Delete" API in HTTP right now, so we can't test that
@@ -1013,7 +980,7 @@ func etagTestHTTP(statestore string) error {
 func etagTestGRPC(statestore string) error {
 	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
 
-	// Use two random keys for testing
+	// Use three random keys for testing
 	var etags [3]string
 	keys := [3]string{
 		uuid.NewString(),
