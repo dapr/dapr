@@ -151,6 +151,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.InjectPluggableComponents {
 		annotationObject["dapr.io/inject-pluggable-components"] = "true"
 	}
+	if appDesc.SidecarImage != "" {
+		annotationObject["dapr.io/sidecar-image"] = appDesc.SidecarImage
+	}
 
 	return annotationObject
 }
