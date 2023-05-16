@@ -145,6 +145,99 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	}
 }
 
+func TestAddDaprAppIDLabel(t *testing.T) {
+	testCases := []struct {
+		testName  string
+		mockPod   coreV1.Pod
+		expLabels map[string]string
+	}{
+		{
+			testName: "empty labels",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{},
+			},
+			expLabels: map[string]string{SidecarAppIDLabel: "my-app"},
+		},
+		{
+			testName: "with some previous labels",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "my-app"},
+				},
+			},
+			expLabels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+		},
+		{
+			testName: "with dapr app-id label already present",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+				},
+			},
+			expLabels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // closure copy
+		t.Run(tc.testName, func(t *testing.T) {
+			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarAppIDLabel("my-app", tc.mockPod.Labels)})
+			newPod := coreV1.Pod{}
+			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
+			assert.Equal(t, tc.expLabels, newPod.Labels)
+		})
+	}
+}
+
+func TestAddDaprMetricsEnabledLabel(t *testing.T) {
+	testCases := []struct {
+		testName       string
+		mockPod        coreV1.Pod
+		expLabels      map[string]string
+		metricsEnabled bool
+	}{
+		{
+			testName: "metrics annotation not present, fallback to default",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{},
+			},
+			expLabels:      map[string]string{SidecarMetricsEnabledLabel: strconv.FormatBool(annotations.DefaultEnableMetric)},
+			metricsEnabled: annotations.DefaultEnableMetric,
+		},
+		{
+			testName: "metrics annotation present and explicitly enabled, with existing labels",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{SidecarMetricsEnabledLabel: "true"},
+					Labels:      map[string]string{"app": "my-app"},
+				},
+			},
+			expLabels:      map[string]string{SidecarMetricsEnabledLabel: "true", "app": "my-app"},
+			metricsEnabled: true,
+		},
+		{
+			testName: "metrics annotation present and explicitly disabled",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{SidecarMetricsEnabledLabel: "false"},
+				},
+			},
+			expLabels:      map[string]string{SidecarMetricsEnabledLabel: "false"},
+			metricsEnabled: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // closure copy
+		t.Run(tc.testName, func(t *testing.T) {
+			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarMetricsEnabledLabel(tc.metricsEnabled, tc.mockPod.Labels)})
+			newPod := coreV1.Pod{}
+			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
+			assert.Equal(t, tc.expLabels, newPod.Labels)
+		})
+	}
+}
+
 func TestAddDaprInjectedLabel(t *testing.T) {
 	testCases := []struct {
 		testName  string
