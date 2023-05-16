@@ -370,6 +370,12 @@ var grpcProxyTests = []struct {
 		"",
 		"success",
 	},
+	{
+		"Test grpc proxy",
+		"grpcproxyclient",
+		"maxsize",
+		"success",
+	},
 }
 
 func TestServiceInvocation(t *testing.T) {
