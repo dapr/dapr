@@ -220,7 +220,6 @@ func TestActorMetadataEtagRace(t *testing.T) {
 			t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
 			time.Sleep(secondsToCheckReminderResult * time.Second)
 
-			// Checks that apps are available
 			err = backoff.RetryNotify(
 				func() error {
 					_, rerr := utils.HTTPGetNTimes(externalURLOne, numHealthChecks)
@@ -231,6 +230,33 @@ func TestActorMetadataEtagRace(t *testing.T) {
 					if rerr != nil {
 						return rerr
 					}
+
+					t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURLOne)
+					respOne, rerr := utils.HTTPGet(logsURLOne)
+					if rerr != nil {
+						return rerr
+					}
+					t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURLTwo)
+					respTwo, rerr := utils.HTTPGet(logsURLTwo)
+					if rerr != nil {
+						return rerr
+					}
+
+					t.Logf("Checking if all reminders did trigger with partition count as %d ...", newPartitionCount)
+					// Errors below should NOT be considered flakyness and must be investigated.
+					// If there was no other error until now, there should be reminders triggered.
+					for actorIDint := 0; actorIDint < numActors; actorIDint++ {
+						actorID := strconv.Itoa(actorIDint)
+						count := countActorAction(respOne, actorID, reminderName)
+						count += countActorAction(respTwo, actorID, reminderName)
+						// Due to possible load stress, we do not expect all reminders to be called at the same frequency.
+						// There are other E2E tests that validate the correct frequency of reminders in a happy path.
+						if count == 0 {
+							return fmt.Errorf("Reminder %s for Actor %s was invoked %d times with partion count as %d.",
+								reminderName, actorID, count, newPartitionCount)
+						}
+					}
+					t.Logf("All reminders triggerred with partition count as %d!", newPartitionCount)
 					return nil
 				},
 				backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10),
@@ -239,27 +265,6 @@ func TestActorMetadataEtagRace(t *testing.T) {
 				},
 			)
 			require.NoError(t, err)
-
-			t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURLOne)
-			respOne, err := utils.HTTPGet(logsURLOne)
-			require.NoError(t, err)
-			t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURLTwo)
-			respTwo, err := utils.HTTPGet(logsURLTwo)
-			require.NoError(t, err)
-
-			t.Logf("Checking if all reminders did trigger with partition count as %d ...", newPartitionCount)
-			// Errors below should NOT be considered flakyness and must be investigated.
-			// If there was no other error until now, there should be reminders triggered.
-			for actorIDint := 0; actorIDint < numActors; actorIDint++ {
-				actorID := strconv.Itoa(actorIDint)
-				count := countActorAction(respOne, actorID, reminderName)
-				count += countActorAction(respTwo, actorID, reminderName)
-				// Due to possible load stress, we do not expect all reminders to be called at the same frequency.
-				// There are other E2E tests that validate the correct frequency of reminders in a happy path.
-				require.True(t, count >= 1, "Reminder %s for Actor %s was invoked %d times with partion count as %d.",
-					reminderName, actorID, count, newPartitionCount)
-			}
-			t.Logf("All reminders triggerred with partition count as %d!", newPartitionCount)
 		}
 
 		for actorIDint := 0; actorIDint < numActors; actorIDint++ {
