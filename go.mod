@@ -110,7 +110,7 @@ require (
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
-	github.com/Shopify/sarama v1.38.1 // indirect
+	github.com/Shopify/sarama v1.37.2 // indirect
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
 	github.com/aerospike/aerospike-client-go/v6 v6.10.0 // indirect
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5 // indirect

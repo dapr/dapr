@@ -69,6 +69,42 @@ func AddDaprSideCarInjectedLabel(labels map[string]string) patcher.PatchOperatio
 	}
 }
 
+// AddDaprSideCarAppIDLabel adds Dapr app-id label which can be handy for metric labels
+func AddDaprSideCarAppIDLabel(appID string, labels map[string]string) patcher.PatchOperation {
+	if len(labels) == 0 { // empty labels
+		return patcher.PatchOperation{
+			Op:   "add",
+			Path: PatchPathLabels,
+			Value: map[string]string{
+				SidecarAppIDLabel: appID,
+			},
+		}
+	}
+	return patcher.PatchOperation{
+		Op:    "add",
+		Path:  PatchPathLabels + "/dapr.io~1app-id",
+		Value: appID,
+	}
+}
+
+// AddDaprSideCarMetricsEnabledLabel adds Dapr metrics-enabled label which can be handy for scraping metrics
+func AddDaprSideCarMetricsEnabledLabel(metricsEnabled bool, labels map[string]string) patcher.PatchOperation {
+	if len(labels) == 0 { // empty labels
+		return patcher.PatchOperation{
+			Op:   "add",
+			Path: PatchPathLabels,
+			Value: map[string]string{
+				SidecarMetricsEnabledLabel: strconv.FormatBool(metricsEnabled),
+			},
+		}
+	}
+	return patcher.PatchOperation{
+		Op:    "add",
+		Path:  PatchPathLabels + "/dapr.io~1metrics-enabled",
+		Value: strconv.FormatBool(metricsEnabled),
+	}
+}
+
 // AddSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
 func AddSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) []patcher.PatchOperation {
 	if socketVolumeMount == nil {
