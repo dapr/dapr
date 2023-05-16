@@ -344,6 +344,22 @@ func TestNewNetHTTPHandlerFuncRequests(t *testing.T) {
 				}
 			},
 		},
+		{
+			"http request path is normalized",
+			func() *http.Request {
+				req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://localhost:8080//foo//bar/123/?hello=world", nil)
+				return req
+			},
+			func(t *testing.T) func(ctx *fasthttp.RequestCtx) {
+				return func(ctx *fasthttp.RequestCtx) {
+					assert.Equal(t, "/foo/bar/123/", string(ctx.Request.URI().Path()))
+					assert.Equal(t, "localhost:8080", string(ctx.Request.URI().Host()))
+					assert.Equal(t, "https", string(ctx.Request.URI().Scheme()))
+					assert.Equal(t, "hello=world", string(ctx.Request.URI().QueryString()))
+					assert.Equal(t, "https://localhost:8080/foo/bar/123/?hello=world", string(ctx.Request.URI().FullURI()))
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
