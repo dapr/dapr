@@ -56,6 +56,21 @@ jobs:
           go-version-file: "go.mod"
       - name: Build Dapr's sidecar
         run: make ./dist/${GOOS}_${GOARCH}/release/daprd
+      - name: Check out code at master branch for PR validation
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: master
+          path: .master
+      - name: Build and override daprd with master version
+        if: github.event_name == 'pull_request'
+        run: |
+          cd .master
+          make ./dist/${GOOS}_${GOARCH}/release/daprd
+          mkdir -p $HOME/.dapr/bin/
+          cp dist/${GOOS}_${GOARCH}/release/daprd $HOME/.dapr/bin/daprd
+          cd ..
       - name: Validate sidecar's basic resource utilization
         env:
           SECONDS_FOR_PROCESS_TO_RUN: 30
