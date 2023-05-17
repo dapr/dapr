@@ -32,6 +32,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -176,7 +177,11 @@ func TestPoliciesForTargets(t *testing.T) {
 	ctx := context.Background()
 	configs := LoadLocalResiliency(log, "default", "./testdata")
 	assert.Len(t, configs, 1)
-	r := FromConfigurations(log, configs...)
+
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics, configs...)
 
 	tests := []struct {
 		name   string
@@ -305,7 +310,10 @@ func TestParseMaxRetries(t *testing.T) {
 	require.Len(t, configs, 2)
 	require.NotNil(t, configs[0])
 
-	r := FromConfigurations(log, configs[0])
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics, configs[0])
 	require.True(t, len(r.retries) > 0)
 	require.NotNil(t, r.retries["noRetry"])
 	require.NotNil(t, r.retries["retryForever"])
@@ -351,7 +359,10 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 }
 
 func TestBuiltInPoliciesAreCreated(t *testing.T) {
-	r := FromConfigurations(log)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics)
 	assert.NotNil(t, r.retries[string(BuiltInServiceRetries)])
 	retry := r.retries[string(BuiltInServiceRetries)]
 	assert.Equal(t, int64(3), retry.MaxRetries)
@@ -415,7 +426,11 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 			},
 		},
 	}
-	config := FromConfigurations(log, r)
+
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	config := FromConfigurations(log, metrics, r)
 
 	assert.False(t, config.PolicyDefined("badApp", EndpointPolicy{}))
 	assert.False(t, config.PolicyDefined("badActor", ActorPolicy{}))
@@ -430,7 +445,10 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 }
 
 func TestResiliencyHasBuiltInPolicy(t *testing.T) {
-	r := FromConfigurations(log)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics)
 	assert.NotNil(t, r)
 
 	builtins := []BuiltInPolicyName{
@@ -460,7 +478,10 @@ func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
 			},
 		},
 	}
-	r := FromConfigurations(log, config)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics, config)
 	assert.NotNil(t, r)
 	assert.Equal(t, int64(3), r.retries[string(BuiltInServiceRetries)].MaxRetries)
 }
@@ -479,13 +500,19 @@ func TestResiliencyProtectedPolicyCannotBeChanged(t *testing.T) {
 			},
 		},
 	}
-	r := FromConfigurations(log, config)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics, config)
 	assert.NotNil(t, r)
 	assert.Equal(t, int64(5), r.retries[string(BuiltInActorNotFoundRetries)].MaxRetries)
 }
 
 func TestResiliencyIsBuiltInPolicy(t *testing.T) {
-	r := FromConfigurations(log)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics)
 	assert.NotNil(t, r)
 	assert.True(t, r.isBuiltInPolicy(string(BuiltInServiceRetries)))
 	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorRetries)))
@@ -496,14 +523,20 @@ func TestResiliencyIsBuiltInPolicy(t *testing.T) {
 }
 
 func TestResiliencyIsProtectedPolicy(t *testing.T) {
-	r := FromConfigurations(log)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics)
 	assert.True(t, r.isProtectedPolicy(string(BuiltInActorNotFoundRetries)))
 	assert.False(t, r.isProtectedPolicy(string(BuiltInActorRetries)))
 	assert.False(t, r.isProtectedPolicy("Random name"))
 }
 
 func TestDefaultPolicyInterpolation(t *testing.T) {
-	r := FromConfigurations(log)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics)
 
 	// Retry
 	typePolicies, topPolicy := r.expandPolicyTemplate(&EndpointPolicy{}, DefaultRetryTemplate)
@@ -566,7 +599,10 @@ func TestGetDefaultPolicy(t *testing.T) {
 		},
 	}
 
-	r := FromConfigurations(log, config)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics, config)
 
 	retryName := r.getDefaultRetryPolicy(&EndpointPolicy{})
 	assert.Equal(t, "DefaultAppRetryPolicy", retryName)
@@ -644,7 +680,10 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 		},
 	}
 
-	r := FromConfigurations(log, config)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	r := FromConfigurations(log, metrics, config)
 
 	// Targeted App
 	policy := NewRunner[any](context.Background(),
@@ -673,7 +712,7 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	)
 	count.Store(0)
 	start := time.Now()
-	_, err := policy(func(ctx context.Context) (any, error) {
+	_, err = policy(func(ctx context.Context) (any, error) {
 		count.Add(1)
 		time.Sleep(time.Second * 5)
 		return nil, errors.New("Forced failure")

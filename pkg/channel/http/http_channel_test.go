@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/utils"
@@ -143,6 +144,9 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 	server := httptest.NewServer(th)
 	ctx := context.Background()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	t.Run("pipeline should be called when handlers are not empty", func(t *testing.T) {
 		called := 0
 		middleware := func(next http.Handler) http.Handler {
@@ -160,6 +164,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			pipeline:    pipeline,
+			metrics:     metrics,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
@@ -192,6 +197,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			pipeline:    pipeline,
+			metrics:     metrics,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
@@ -221,6 +227,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			pipeline:    pipeline,
+			metrics:     metrics,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -252,6 +259,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			pipeline:    pipeline,
+			metrics:     metrics,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -283,6 +291,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			pipeline:    pipeline,
+			metrics:     metrics,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -315,6 +324,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			pipeline:    pipeline,
+			metrics:     metrics,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -341,8 +351,12 @@ func TestInvokeMethodHeaders(t *testing.T) {
 	server := httptest.NewServer(th)
 	defer server.Close()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	t.Run("content-type is included", func(t *testing.T) {
 		c := Channel{
+			metrics:     metrics,
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			tracingSpec: config.TracingSpec{
@@ -370,6 +384,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 
 	t.Run("content-type is omitted when empty", func(t *testing.T) {
 		c := Channel{
+			metrics:     metrics,
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			tracingSpec: config.TracingSpec{
@@ -401,8 +416,12 @@ func TestInvokeMethod(t *testing.T) {
 	server := httptest.NewServer(th)
 	defer server.Close()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	t.Run("query string", func(t *testing.T) {
 		c := Channel{
+			metrics:     metrics,
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			tracingSpec: config.TracingSpec{
@@ -426,6 +445,7 @@ func TestInvokeMethod(t *testing.T) {
 
 	t.Run("tracing is enabled", func(t *testing.T) {
 		c := Channel{
+			metrics:     metrics,
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			tracingSpec: config.TracingSpec{
@@ -450,6 +470,8 @@ func TestInvokeMethod(t *testing.T) {
 
 func TestInvokeMethodMaxConcurrency(t *testing.T) {
 	ctx := context.Background()
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	t.Run("single concurrency", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls:     1,
@@ -457,6 +479,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{
+			metrics:     metrics,
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			ch:          make(chan struct{}, 1),
@@ -491,6 +514,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{
+			metrics:     metrics,
 			baseAddress: server.URL,
 			client:      &http.Client{},
 			ch:          make(chan struct{}, 1),
@@ -525,6 +549,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{
+			metrics: metrics,
 			// False address to make first calls fail
 			baseAddress: "http://0.0.0.0:0",
 			client:      &http.Client{},
@@ -560,7 +585,9 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 func TestInvokeWithHeaders(t *testing.T) {
 	ctx := context.Background()
 	testServer := httptest.NewServer(&testHandlerHeaders{})
-	c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+	c := Channel{baseAddress: testServer.URL, client: &http.Client{}, metrics: metrics}
 
 	req := invokev1.NewInvokeMethodRequest("method").
 		WithMetadata(map[string][]string{
@@ -590,12 +617,16 @@ func TestInvokeWithHeaders(t *testing.T) {
 func TestContentType(t *testing.T) {
 	ctx := context.Background()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	t.Run("no default content type", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
 		c := Channel{
 			baseAddress: testServer.URL,
 			client:      &http.Client{},
+			metrics:     metrics,
 		}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodGet, "")
@@ -616,7 +647,7 @@ func TestContentType(t *testing.T) {
 	t.Run("application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+		c := Channel{baseAddress: testServer.URL, client: &http.Client{}, metrics: metrics}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithContentType("application/json").
 			WithHTTPExtension(http.MethodPost, "")
@@ -637,7 +668,7 @@ func TestContentType(t *testing.T) {
 	t.Run("text/plain", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+		c := Channel{baseAddress: testServer.URL, client: &http.Client{}, metrics: metrics}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithContentType("text/plain").
 			WithHTTPExtension(http.MethodPost, "")
@@ -657,10 +688,12 @@ func TestContentType(t *testing.T) {
 }
 
 func TestAppToken(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	t.Run("token present", func(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
-		c := Channel{baseAddress: testServer.URL, client: &http.Client{}, appHeaderToken: "token1"}
+		c := Channel{baseAddress: testServer.URL, client: &http.Client{}, appHeaderToken: "token1", metrics: metrics}
 
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
@@ -686,7 +719,7 @@ func TestAppToken(t *testing.T) {
 	t.Run("token not present", func(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
-		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+		c := Channel{baseAddress: testServer.URL, client: &http.Client{}, metrics: metrics}
 
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
@@ -714,12 +747,11 @@ func TestHealthProbe(t *testing.T) {
 	ctx := context.Background()
 	h := &testStatusCodeHandler{}
 	testServer := httptest.NewServer(h)
-	c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+	c := Channel{baseAddress: testServer.URL, client: &http.Client{}, metrics: metrics}
 
-	var (
-		success bool
-		err     error
-	)
+	var success bool
 
 	// OK response
 	success, err = c.HealthProbe(ctx)

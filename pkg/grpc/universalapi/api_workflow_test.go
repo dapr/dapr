@@ -18,8 +18,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/workflows"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -108,11 +110,13 @@ func TestStartWorkflowAPI(t *testing.T) {
 	for name, wf := range fakeWorkflows {
 		compStore.AddWorkflow(name, wf)
 	}
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
+		Resiliency: resiliency.New(nil, metrics),
 		CompStore:  compStore,
 	}
 
@@ -181,10 +185,13 @@ func TestGetWorkflowAPI(t *testing.T) {
 		compStore.AddWorkflow(name, wf)
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
+		Resiliency: resiliency.New(nil, metrics),
 		CompStore:  compStore,
 	}
 
@@ -252,10 +259,13 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 		compStore.AddWorkflow(name, wf)
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
+		Resiliency: resiliency.New(nil, metrics),
 		CompStore:  compStore,
 	}
 
@@ -338,10 +348,13 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 		compStore.AddWorkflow(name, wf)
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
+		Resiliency: resiliency.New(nil, metrics),
 		CompStore:  compStore,
 	}
 
@@ -411,10 +424,13 @@ func TestPauseWorkflowApi(t *testing.T) {
 		compStore.AddWorkflow(name, wf)
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
+		Resiliency: resiliency.New(nil, metrics),
 		CompStore:  compStore,
 	}
 
@@ -482,10 +498,13 @@ func TestResumeWorkflowApi(t *testing.T) {
 		compStore.AddWorkflow(name, wf)
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
+		Resiliency: resiliency.New(nil, metrics),
 		CompStore:  compStore,
 	}
 

@@ -32,6 +32,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/fasthttputil"
@@ -144,7 +145,11 @@ var testResiliency = &v1alpha1.Resiliency{
 
 func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
+		metrics: metrics,
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(req *pubsub.PublishRequest) error {
 				if req.PubsubName == "errorpubsub" {
@@ -306,8 +311,12 @@ func TestPubSubEndpoints(t *testing.T) {
 }
 
 func TestBulkPubSubEndpoints(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		metrics: metrics,
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				switch req.PubsubName {
@@ -831,7 +840,11 @@ func TestGetMetadataFromRequest(t *testing.T) {
 
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
+		metrics: metrics,
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "testbinding" {
 				return nil, nil
@@ -919,7 +932,11 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 	createExporters(&buffer)
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
+		metrics:               metrics,
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
 		tracingSpec:           spec,
 	}
@@ -982,13 +999,18 @@ func getFakeDirectMessageResponseWithStatusCode(code int) *invokev1.InvokeMethod
 func TestV1DirectMessagingEndpoints(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	compStore := compstore.New()
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		resiliency:      resiliency.New(nil),
+		resiliency:      resiliency.New(nil, metrics),
+		metrics:         metrics,
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
@@ -1668,6 +1690,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
@@ -1679,9 +1704,11 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		resiliency:      resiliency.New(nil),
+		resiliency:      resiliency.New(nil, metrics),
+		metrics:         metrics,
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
@@ -1784,11 +1811,16 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 
 	fakeServer := newFakeHTTPServer()
 	compStore := compstore.New()
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
+		metrics:         metrics,
 		directMessaging: failingDirectMessaging,
-		resiliency:      resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
+		resiliency:      resiliency.FromConfigurations(logger.NewLogger("messaging.test"), metrics, testResiliency),
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
@@ -1876,10 +1908,14 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 }
 
 func TestV1ActorEndpoints(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		metrics:    metrics,
 		actor:      nil,
-		resiliency: resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency),
+		resiliency: resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), metrics, testResiliency),
 	}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
@@ -2777,6 +2813,9 @@ func createExporters(buffer *string) {
 func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1"}
 
@@ -2785,7 +2824,8 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		actor:       nil,
 		tracingSpec: spec,
-		resiliency:  resiliency.New(nil),
+		metrics:     metrics,
+		resiliency:  resiliency.New(nil, metrics),
 	}
 
 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
@@ -2902,11 +2942,16 @@ func TestAPIToken(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	compStore := compstore.New()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		resiliency:      resiliency.New(nil),
+		resiliency:      resiliency.New(nil, metrics),
+		metrics:         metrics,
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServerWithAPIToken(testAPI.constructDirectMessagingEndpoints())
@@ -3021,12 +3066,17 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	createExporters(&buffer)
 	compStore := compstore.New()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		resiliency:      resiliency.New(nil),
+		resiliency:      resiliency.New(nil, metrics),
+		metrics:         metrics,
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
@@ -3064,10 +3114,14 @@ func TestConfigurationGet(t *testing.T) {
 
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	testAPI := &api{
-		resiliency: resiliency.New(nil),
+		resiliency: resiliency.New(nil, metrics),
+		metrics:    metrics,
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
@@ -3266,10 +3320,14 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	testAPI := &api{
-		resiliency: resiliency.New(nil),
+		resiliency: resiliency.New(nil, metrics),
+		metrics:    metrics,
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
@@ -3358,20 +3416,25 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 func TestV1Alpha1DistributedLock(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	var fakeLockStore lock.Store = &fakeLockStore{}
 
 	storeName := "store1"
 
 	l := logger.NewLogger("fakeLogger")
-	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
+	resiliencyConfig := resiliency.FromConfigurations(l, metrics, testResiliency)
 
 	compStore := compstore.New()
 	compStore.AddLock(storeName, fakeLockStore)
 	testAPI := &api{
+		metrics: metrics,
 		universal: &universalapi.UniversalAPI{
 			Logger:     l,
 			CompStore:  compStore,
 			Resiliency: resiliencyConfig,
+			Metrics:    metrics,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDistributedLockEndpoints())
@@ -3529,16 +3592,21 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 func TestV1Alpha1Workflow(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	fakeWorkflowComponent := &daprt.MockWorkflow{}
 
 	componentName := "dapr"
 
-	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency)
+	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), metrics, testResiliency)
 	compStore := compstore.New()
 	compStore.AddWorkflow(componentName, fakeWorkflowComponent)
 	testAPI := &api{
 		resiliency: resiliencyConfig,
+		metrics:    metrics,
 		universal: &universalapi.UniversalAPI{
+			Metrics:    metrics,
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliencyConfig,
@@ -4034,12 +4102,17 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	createExporters(&buffer)
 	compStore := compstore.New()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		resiliency:      resiliency.New(nil),
+		resiliency:      resiliency.New(nil, metrics),
+		metrics:         metrics,
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
@@ -4091,12 +4164,17 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	createExporters(&buffer)
 	compStore := compstore.New()
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		resiliency:      resiliency.New(nil),
+		resiliency:      resiliency.New(nil, metrics),
+		metrics:         metrics,
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
+			Metrics:   metrics,
 		},
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
@@ -4346,13 +4424,17 @@ func TestV1StateEndpoints(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore(storeName, fakeStore)
 	compStore.AddStateStore("failStore", failingStore)
-	rc := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+	rc := resiliency.FromConfigurations(logger.NewLogger("state.test"), metrics, testResiliency)
 	testAPI := &api{
 		resiliency: rc,
+		metrics:    metrics,
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: rc,
+			Metrics:    metrics,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
@@ -4846,11 +4928,15 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", newFakeStateStore())
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	testAPI := &api{
+		metrics: metrics,
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
-			Resiliency: resiliency.New(nil),
+			Resiliency: resiliency.New(nil, metrics),
+			Metrics:    metrics,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
@@ -4865,12 +4951,16 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", newFakeStateStore())
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
-			Resiliency: resiliency.New(nil),
+			Resiliency: resiliency.New(nil, metrics),
+			Metrics:    metrics,
 		},
+		metrics: metrics,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
@@ -4884,11 +4974,15 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	compStore := compstore.New()
 	compStore.AddStateStore(storeName, newFakeStateStoreQuerier())
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	testAPI := &api{
+		metrics: metrics,
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
-			Resiliency: resiliency.New(nil),
+			Resiliency: resiliency.New(nil, metrics),
+			Metrics:    metrics,
 		},
 	}
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
@@ -5065,8 +5159,11 @@ func TestV1SecretEndpoints(t *testing.T) {
 		},
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	l := logger.NewLogger("fakeLogger")
-	res := resiliency.FromConfigurations(l, testResiliency)
+	res := resiliency.FromConfigurations(l, metrics, testResiliency)
 
 	compStore := compstore.New()
 	for name, conf := range secretsConfiguration {
@@ -5075,12 +5172,15 @@ func TestV1SecretEndpoints(t *testing.T) {
 	for name, store := range fakeStores {
 		compStore.AddSecretStore(name, store)
 	}
+
 	testAPI := &api{
 		resiliency: res,
+		metrics:    metrics,
 		universal: &universalapi.UniversalAPI{
 			Logger:     l,
 			CompStore:  compStore,
 			Resiliency: res,
+			Metrics:    metrics,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
@@ -5443,11 +5543,16 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	compStore.AddStateStore("store1", fakeStore)
 	compStore.AddStateStore("storeNonTransactional", fakeStoreNonTransactional)
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	testAPI := &api{
+		metrics: metrics,
 		universal: &universalapi.UniversalAPI{
+			Metrics:   metrics,
 			CompStore: compStore,
 		},
-		resiliency: resiliency.New(nil),
+		resiliency: resiliency.New(nil, metrics),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

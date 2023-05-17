@@ -20,12 +20,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
@@ -51,12 +53,15 @@ func appClientFn() (grpc.ClientConnInterface, error) {
 }
 
 func TestNewProxy(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
 		AppClientFn:       appClientFn,
 		AppID:             "a",
 		ACL:               nil,
-		Resiliency:        resiliency.New(nil),
+		Resiliency:        resiliency.New(nil, metrics),
+		Metrics:           metrics,
 	})
 	proxy := p.(*proxy)
 
@@ -66,12 +71,15 @@ func TestNewProxy(t *testing.T) {
 }
 
 func TestSetRemoteAppFn(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
 		AppClientFn:       appClientFn,
 		AppID:             "a",
 		ACL:               nil,
-		Resiliency:        resiliency.New(nil),
+		Resiliency:        resiliency.New(nil, metrics),
+		Metrics:           metrics,
 	})
 	p.SetRemoteAppFn(func(s string) (remoteApp, error) {
 		return remoteApp{
@@ -87,12 +95,15 @@ func TestSetRemoteAppFn(t *testing.T) {
 }
 
 func TestSetTelemetryFn(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
 		AppClientFn:       appClientFn,
 		AppID:             "a",
 		ACL:               nil,
-		Resiliency:        resiliency.New(nil),
+		Resiliency:        resiliency.New(nil, metrics),
+		Metrics:           metrics,
 	})
 	p.SetTelemetryFn(func(ctx context.Context) context.Context {
 		return ctx
@@ -107,11 +118,14 @@ func TestSetTelemetryFn(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
 		AppClientFn:       appClientFn,
 		AppID:             "a",
-		Resiliency:        resiliency.New(nil),
+		Resiliency:        resiliency.New(nil, metrics),
+		Metrics:           metrics,
 	})
 	h := p.Handler()
 
@@ -119,12 +133,15 @@ func TestHandler(t *testing.T) {
 }
 
 func TestIntercept(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	t.Run("no app-id in metadata", func(t *testing.T) {
 		p := NewProxy(ProxyOpts{
 			ConnectionFactory: connectionFn,
 			AppClientFn:       appClientFn,
 			AppID:             "a",
-			Resiliency:        resiliency.New(nil),
+			Resiliency:        resiliency.New(nil, metrics),
+			Metrics:           metrics,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx
@@ -150,7 +167,8 @@ func TestIntercept(t *testing.T) {
 			ConnectionFactory: connectionFn,
 			AppClientFn:       appClientFn,
 			AppID:             "a",
-			Resiliency:        resiliency.New(nil),
+			Resiliency:        resiliency.New(nil, metrics),
+			Metrics:           metrics,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx
@@ -174,7 +192,8 @@ func TestIntercept(t *testing.T) {
 			ConnectionFactory: connectionFn,
 			AppClientFn:       appClientFn,
 			AppID:             "a",
-			Resiliency:        resiliency.New(nil),
+			Resiliency:        resiliency.New(nil, metrics),
+			Metrics:           metrics,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx
@@ -201,7 +220,8 @@ func TestIntercept(t *testing.T) {
 			ConnectionFactory: connectionFn,
 			AppClientFn:       appClientFn,
 			AppID:             "a",
-			Resiliency:        resiliency.New(nil),
+			Resiliency:        resiliency.New(nil, metrics),
+			Metrics:           metrics,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			ctx = metadata.AppendToOutgoingContext(ctx, "a", "b")
@@ -240,7 +260,8 @@ func TestIntercept(t *testing.T) {
 			AppClientFn:       appClientFn,
 			AppID:             "a",
 			ACL:               acl,
-			Resiliency:        resiliency.New(nil),
+			Resiliency:        resiliency.New(nil, metrics),
+			Metrics:           metrics,
 		})
 		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
 			return remoteApp{
@@ -268,7 +289,8 @@ func TestIntercept(t *testing.T) {
 			ConnectionFactory: connectionFn,
 			AppClientFn:       appClientFn,
 			AppID:             "a",
-			Resiliency:        resiliency.New(nil),
+			Resiliency:        resiliency.New(nil, metrics),
+			Metrics:           metrics,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx

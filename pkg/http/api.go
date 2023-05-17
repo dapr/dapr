@@ -34,6 +34,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -94,6 +95,7 @@ type api struct {
 	daprRunTimeVersion         string
 	maxRequestBodySize         int64 // In bytes
 	isStreamingEnabled         bool
+	metrics                    *diag.Metrics
 }
 
 type registeredComponent struct {
@@ -173,6 +175,7 @@ type APIOpts struct {
 	GetComponentsCapabilitiesFn func() map[string][]string
 	MaxRequestBodySize          int64 // In bytes
 	IsStreamingEnabled          bool
+	Metrics                     *diag.Metrics
 }
 
 // NewAPI returns a new API.
@@ -198,6 +201,7 @@ func NewAPI(opts APIOpts) API {
 			Resiliency: opts.Resiliency,
 			CompStore:  opts.CompStore,
 		},
+		metrics: opts.Metrics,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -567,9 +571,9 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		Data:      b,
 		Operation: bindings.OperationKind(req.Operation),
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), name, req.Operation, err == nil, elapsed)
+	a.metrics.Component.OutputBindingEvent(context.Background(), name, req.Operation, err == nil, elapsed)
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
@@ -645,8 +649,8 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		})
 	})
 
-	elapsed := diag.ElapsedSince(start)
-	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
+	a.metrics.Component.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_BULK_GET", err.Error())
@@ -866,9 +870,9 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(ctx, req)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
@@ -1021,9 +1025,9 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, req, handler.updateEventHandler)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
+	a.metrics.Component.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
@@ -1055,8 +1059,8 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Unsubscribe(ctx, &req)
 	})
-	elapsed := diag.ElapsedSince(start)
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
+	a.metrics.Component.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_CONFIGURATION_UNSUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, err.Error()))
@@ -1100,9 +1104,9 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, req)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+	a.metrics.Component.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_CONFIGURATION_GET", fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()))
@@ -1174,9 +1178,9 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Delete(ctx, &req)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Delete, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(reqCtx, storeName, diag.Delete, err == nil, elapsed)
 
 	if err != nil {
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
@@ -1256,9 +1260,9 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		}
 		return struct{}{}, store.BulkSet(ctx, reqs)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
 		storeName := a.getStateStoreName(reqCtx)
@@ -2105,9 +2109,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	err := a.pubsubAdapter.Publish(&req)
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+	a.metrics.Component.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
 
 	if err != nil {
 		status := fasthttp.StatusInternalServerError
@@ -2267,7 +2271,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	res, err := a.pubsubAdapter.BulkPublish(&req)
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
 	// BulkPublishResponse contains all failed entries from the request.
 	// If there are no errors, then an empty response is returned.
@@ -2277,7 +2281,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		eventsPublished -= int64(len(res.FailedEntries))
 	}
 
-	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
+	a.metrics.Component.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
 
 	if err != nil {
 		bulkRes.FailedEntries = make([]BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
@@ -2536,9 +2540,9 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, transactionalStore.Multi(reqCtx, storeReq)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_TRANSACTION", fmt.Sprintf(messages.ErrStateTransaction, err.Error()))

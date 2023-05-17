@@ -24,7 +24,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -55,7 +54,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 	var statusCode int32
 	defer func() {
-		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+		a.metrics.Service.ServiceInvocationResponseSent(ctx, callerAppID, req.Message().Method, statusCode)
 	}()
 
 	// stausCode will be read by the deferred method above
@@ -114,7 +113,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 	var statusCode int32
 	defer func() {
-		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+		a.metrics.Service.ServiceInvocationResponseSent(ctx, callerAppID, req.Message().Method, statusCode)
 	}()
 
 	// Read the rest of the data in background as we submit the request
@@ -274,7 +273,7 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 				httpVerb = httpExt.GetVerb()
 			}
 		}
-		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocolIsHTTP, a.accessControlList)
+		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, a.metrics, operation, httpVerb, a.appProtocolIsHTTP, a.accessControlList)
 
 		if !callAllowed {
 			return status.Errorf(codes.PermissionDenied, errMsg)
@@ -301,7 +300,7 @@ func (a *api) callLocalRecordRequest(req *internalv1pb.InternalInvokeRequest) (c
 		callerAppID = "unknown"
 	}
 
-	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message.Method)
+	a.metrics.Service.ServiceInvocationRequestReceived(context.TODO(), callerAppID, req.Message.Method)
 
 	return
 }

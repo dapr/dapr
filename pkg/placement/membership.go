@@ -319,8 +319,8 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	p.streamConnPoolLock.RUnlock()
 	nTargetConns := len(p.raftNode.FSM().State().Members())
 
-	monitoring.RecordRuntimesCount(nStreamConnPool)
-	monitoring.RecordActorRuntimesCount(nTargetConns)
+	monitoring.RecordRuntimesCount(p.metrics, nStreamConnPool)
+	monitoring.RecordActorRuntimesCount(p.metrics, nTargetConns)
 
 	// ignore dissemination if there is no member update.
 	if cnt := p.memberUpdateCount.Load(); cnt > 0 {

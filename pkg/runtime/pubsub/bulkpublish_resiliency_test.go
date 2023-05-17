@@ -21,9 +21,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
@@ -181,7 +183,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(3)
 
 		// timeout will not be triggered here
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -213,7 +215,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(2)
 
 		// timeout will not be triggered here
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -247,7 +249,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(3)
 
 		// timeout will not be triggered here
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -279,7 +281,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(3)
 
 		// timeout will not be triggered here
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -315,7 +317,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// timeout will be triggered here
 		// no retries
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -344,7 +346,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// set short retry with 3 retries max
 		shortRetry.MaxRetries = ptr.Of(3)
 		// timeout will not be triggered here
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -402,7 +404,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(3)
 		// timeout will not be triggered here
 
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -459,7 +461,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// set short retry with 3 retries max
 		shortRetry.MaxRetries = ptr.Of(3)
 		// timeout will not be triggered here
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -502,7 +504,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// set short retry with 3 retries max
 		shortRetry.MaxRetries = ptr.Of(3)
 		// timeout will not be triggered here
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -574,7 +576,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		shortRetry.MaxRetries = ptr.Of(2)
 
 		// timeout will be triggered here
-		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(t, cb, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -623,7 +625,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 		// timeout will be triggered here
-		policyProvider := createResPolicyProvider(cb, shortTimeout, longRetry)
+		policyProvider := createResPolicyProvider(t, cb, shortTimeout, longRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
 
 		// Act
@@ -650,7 +652,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 	})
 }
 
-func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, timeout string, retry resiliencyV1alpha.Retry) *resiliency.Resiliency {
+func createResPolicyProvider(t *testing.T, ciruitBreaker resiliencyV1alpha.CircuitBreaker, timeout string, retry resiliencyV1alpha.Retry) *resiliency.Resiliency {
 	r := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
 			Policies: resiliencyV1alpha.Policies{
@@ -677,7 +679,9 @@ func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, tim
 			},
 		},
 	}
-	return resiliency.FromConfigurations(testLogger, r)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+	return resiliency.FromConfigurations(testLogger, metrics, r)
 }
 
 func assertRetryCount(t *testing.T, expectedIDRetryCountMap map[string]int, actualRetryCountMap map[string]int) {

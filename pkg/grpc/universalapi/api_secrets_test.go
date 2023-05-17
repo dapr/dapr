@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -33,10 +34,14 @@ import (
 )
 
 func TestSecretStoreNotConfigured(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:    testLogger,
 		CompStore: compstore.New(),
+		Metrics:   metrics,
 	}
 
 	// act
@@ -161,11 +166,15 @@ func TestGetSecret(t *testing.T) {
 		compStore.AddSecretsConfiguration(name, conf)
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
+		Resiliency: resiliency.New(nil, metrics),
 		CompStore:  compStore,
+		Metrics:    metrics,
 	}
 
 	// act
@@ -226,11 +235,15 @@ func TestGetBulkSecret(t *testing.T) {
 		compStore.AddSecretsConfiguration(name, conf)
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
+		Resiliency: resiliency.New(nil, metrics),
 		CompStore:  compStore,
+		Metrics:    metrics,
 	}
 
 	// act
@@ -264,11 +277,15 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddSecretStore("failSecret", failingStore)
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// Setup Dapr API
 	fakeAPI := &UniversalAPI{
 		Logger:     testLogger,
-		Resiliency: resiliency.FromConfigurations(testLogger, testResiliency),
+		Resiliency: resiliency.FromConfigurations(testLogger, metrics, testResiliency),
 		CompStore:  compStore,
+		Metrics:    metrics,
 	}
 
 	// act

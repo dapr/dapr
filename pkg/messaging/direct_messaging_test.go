@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -168,7 +169,11 @@ func TestInvokeRemote(t *testing.T) {
 		server := startInternalServer(socket, enableStreaming, chunks)
 		clientConn := createTestClient(socket)
 
+		metrics, err := diag.NewMetrics(nil)
+		require.NoError(t, err)
+
 		messaging := NewDirectMessaging(NewDirectMessagingOpts{
+			Metrics:            metrics,
 			MaxRequestBodySize: 10 << 20,
 			ClientConnFn: func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
 				return clientConn, func(_ bool) {}, nil

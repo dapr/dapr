@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
@@ -91,9 +92,18 @@ func main() {
 		}
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	if err != nil {
+		log.Fatalf("error creating metrics: %s", err)
+	}
+
+	if err := monitoring.InitMetrics(metrics); err != nil {
+		log.Fatal(err)
+	}
+
 	ctx := signals.Context()
 
-	op, err := operator.NewOperator(ctx, operatorOpts)
+	op, err := operator.NewOperator(ctx, metrics, operatorOpts)
 	if err != nil {
 		log.Fatalf("error creating operator: %v", err)
 	}
@@ -144,10 +154,6 @@ func init() {
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
-
-	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 }

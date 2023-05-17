@@ -16,18 +16,19 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/operator/testobjects"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestNewDaprHandler(t *testing.T) {
-	d := getTestDaprHandler()
+	d := getTestDaprHandler(t)
 	assert.True(t, d != nil)
 }
 
 func TestGetAppID(t *testing.T) {
-	testDaprHandler := getTestDaprHandler()
+	testDaprHandler := getTestDaprHandler(t)
 	t.Run("WithValidId", func(t *testing.T) {
 		// Arrange
 		expected := "test_id"
@@ -54,7 +55,7 @@ func TestGetAppID(t *testing.T) {
 }
 
 func TestIsAnnotatedForDapr(t *testing.T) {
-	testDaprHandler := getTestDaprHandler()
+	testDaprHandler := getTestDaprHandler(t)
 	t.Run("Enabled", func(t *testing.T) {
 		// Arrange
 		expected := "true"
@@ -95,19 +96,19 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 func TestDaprService(t *testing.T) {
 	t.Run("invalid empty app id", func(t *testing.T) {
 		d := getDeployment("", "true")
-		err := getTestDaprHandler().ensureDaprServicePresent(context.TODO(), "default", d)
+		err := getTestDaprHandler(t).ensureDaprServicePresent(context.TODO(), "default", d)
 		assert.Error(t, err)
 	})
 
 	t.Run("invalid char app id", func(t *testing.T) {
 		d := getDeployment("myapp@", "true")
-		err := getTestDaprHandler().ensureDaprServicePresent(context.TODO(), "default", d)
+		err := getTestDaprHandler(t).ensureDaprServicePresent(context.TODO(), "default", d)
 		assert.Error(t, err)
 	})
 }
 
 func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
-	testDaprHandler := getTestDaprHandler()
+	testDaprHandler := getTestDaprHandler(t)
 	ctx := context.Background()
 	myDaprService := types.NamespacedName{
 		Namespace: "test",
@@ -134,7 +135,7 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 }
 
 func TestPatchDaprService(t *testing.T) {
-	testDaprHandler := getTestDaprHandler()
+	testDaprHandler := getTestDaprHandler(t)
 
 	s := runtime.NewScheme()
 	err := scheme.AddToScheme(s)
@@ -176,7 +177,7 @@ func TestPatchDaprService(t *testing.T) {
 }
 
 func TestGetMetricsPort(t *testing.T) {
-	testDaprHandler := getTestDaprHandler()
+	testDaprHandler := getTestDaprHandler(t)
 	t.Run("metrics port override", func(t *testing.T) {
 		// Arrange
 		deployment := getDeploymentWithMetricsPortAnnotation("test_id", "true", "5050")
@@ -241,7 +242,10 @@ func TestInit(t *testing.T) {
 
 	_ = scheme.AddToScheme(mgr.GetScheme())
 
-	handler := NewDaprHandlerWithOptions(mgr, &Options{
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	handler := NewDaprHandlerWithOptions(mgr, metrics, &Options{
 		ArgoRolloutServiceReconcilerEnabled: true,
 	})
 
@@ -356,6 +360,10 @@ func getRollout(appID string, daprEnabled string) ObjectWrapper {
 	}
 }
 
-func getTestDaprHandler() *DaprHandler {
-	return &DaprHandler{}
+func getTestDaprHandler(t *testing.T) *DaprHandler {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+	return &DaprHandler{
+		metrics: metrics,
+	}
 }

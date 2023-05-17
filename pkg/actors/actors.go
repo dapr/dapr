@@ -104,32 +104,35 @@ type transactionalStateStore interface {
 }
 
 type actorsRuntime struct {
-	appChannel            channel.AppChannel
-	placement             PlacementService
-	grpcConnectionFn      GRPCConnectionFn
-	config                Config
-	actorsTable           *sync.Map
-	activeTimers          *sync.Map
-	activeTimersCount     map[string]*int64
-	activeTimersCountLock sync.RWMutex
-	activeTimersLock      sync.RWMutex
-	activeReminders       *sync.Map
-	remindersLock         sync.RWMutex
-	remindersStoringLock  sync.Mutex
-	reminders             map[string][]actorReminderReference
-	evaluationLock        sync.RWMutex
-	evaluationChan        chan struct{}
-	appHealthy            *atomic.Bool
-	certChain             *daprCredentials.CertChain
-	tracingSpec           configuration.TracingSpec
-	resiliency            resiliency.Provider
-	storeName             string
-	compStore             *compstore.ComponentStore
-	ctx                   context.Context
-	cancel                context.CancelFunc
-	clock                 clock.WithTicker
-	internalActors        map[string]InternalActor
-	internalActorChannel  *internalActorChannel
+	appChannel             channel.AppChannel
+	placement              PlacementService
+	grpcConnectionFn       GRPCConnectionFn
+	config                 Config
+	actorsTable            *sync.Map
+	activeTimers           *sync.Map
+	activeTimersCount      map[string]*int64
+	activeTimersCountLock  sync.RWMutex
+	activeTimersLock       sync.RWMutex
+	activeReminders        *sync.Map
+	remindersLock          sync.RWMutex
+	remindersStoringLock   sync.Mutex
+	remindersMigrationLock sync.Mutex
+	activeRemindersLock    sync.RWMutex
+	reminders              map[string][]actorReminderReference
+	evaluationLock         sync.RWMutex
+	evaluationChan         chan struct{}
+	appHealthy             *atomic.Bool
+	certChain              *daprCredentials.CertChain
+	tracingSpec            configuration.TracingSpec
+	resiliency             resiliency.Provider
+	storeName              string
+	compStore              *compstore.ComponentStore
+	ctx                    context.Context
+	cancel                 context.CancelFunc
+	clock                  clock.WithTicker
+	internalActors         map[string]InternalActor
+	internalActorChannel   *internalActorChannel
+	metrics                *diag.Metrics
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -173,6 +176,7 @@ type ActorsOpts struct {
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
+	Metrics          *diag.Metrics
 
 	// MockPlacement is a placement service implementation used for testing
 	MockPlacement PlacementService
@@ -209,6 +213,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
 		compStore:            opts.CompStore,
+		metrics:              opts.Metrics,
 	}
 }
 
@@ -247,7 +252,9 @@ func (a *actorsRuntime) Init() error {
 			a.config.PlacementAddresses, a.certChain,
 			a.config.AppID, hostname, a.config.HostedActorTypes,
 			appHealthFn,
-			afterTableUpdateFn)
+			afterTableUpdateFn,
+			a.metrics,
+		)
 	}
 
 	go a.placement.Start()
@@ -302,19 +309,19 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 
 	resp, err := a.getAppChannel(actorType).InvokeMethod(ctx, req)
 	if err != nil {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
+		a.metrics.Service.ActorDeactivationFailed(actorType, "invoke")
 		return err
 	}
 	defer resp.Close()
 
 	if resp.Status().Code != nethttp.StatusOK {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().Code), 10))
+		a.metrics.Service.ActorDeactivationFailed(actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().Code), 10))
 		body, _ := resp.RawDataFull()
 		return fmt.Errorf("error from actor service: %s", string(body))
 	}
 
 	a.removeActorFromTable(actorType, actorID)
-	diag.DefaultMonitoring.ActorDeactivated(actorType)
+	a.metrics.Service.ActorDeactivated(ctx, actorType)
 	log.Debugf("deactivated actor type=%s, id=%s\n", actorType, actorID)
 
 	return nil
@@ -467,7 +474,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.GetReentrancyForType(actorType).MaxStackDepth, a.clock))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.GetReentrancyForType(actorType).MaxStackDepth, a.metrics, a.clock))
 	}
 
 	return val.(*actor)
@@ -740,7 +747,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				// don't allow state changes
 				a.actorsTable.Delete(key)
 
-				diag.DefaultMonitoring.ActorRebalanced(actorType)
+				a.metrics.Service.ActorRebalanced(context.TODO(), actorType)
 
 				for {
 					// wait until actor is not busy, then deactivate
@@ -942,7 +949,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 			}
 
 			err = a.executeReminder(reminder, false)
-			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
+			a.metrics.Service.ActorReminderFired(context.TODO(), reminder.ActorType, err == nil)
 			if err != nil {
 				if errors.Is(err, ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
@@ -1297,7 +1304,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 			if _, exists := a.actorsTable.Load(actorKey); exists {
 				err = a.executeReminder(reminder, true)
-				diag.DefaultMonitoring.ActorTimerFired(req.ActorType, err == nil)
+				a.metrics.Service.ActorTimerFired(context.TODO(), req.ActorType, err == nil)
 				if err != nil {
 					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 				}
@@ -1341,7 +1348,7 @@ func (a *actorsRuntime) updateActiveTimersCount(actorType string, inc int64) {
 		a.activeTimersCountLock.Unlock()
 	}
 
-	diag.DefaultMonitoring.ActorTimers(actorType, atomic.AddInt64(a.activeTimersCount[actorType], inc))
+	a.metrics.Service.ActorTimers(context.TODO(), actorType, atomic.AddInt64(a.activeTimersCount[actorType], inc))
 }
 
 func (a *actorsRuntime) saveActorTypeMetadataRequest(actorType string, actorMetadata *ActorMetadata, stateMetadata map[string]string) state.SetRequest {
@@ -1694,7 +1701,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		}
 
 		a.remindersLock.Lock()
-		diag.DefaultMonitoring.ActorReminders(actorType, int64(len(reminders)))
+		a.metrics.Service.ActorReminders(context.TODO(), actorType, int64(len(reminders)))
 		a.reminders[actorType] = reminders
 		a.remindersLock.Unlock()
 		return struct{}{}, nil
@@ -1816,7 +1823,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, store transactionalSt
 		}
 
 		a.remindersLock.Lock()
-		diag.DefaultMonitoring.ActorReminders(reminder.ActorType, int64(len(reminders)))
+		a.metrics.Service.ActorReminders(context.TODO(), reminder.ActorType, int64(len(reminders)))
 		a.reminders[reminder.ActorType] = reminders
 		a.remindersLock.Unlock()
 		return struct{}{}, nil

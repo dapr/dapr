@@ -13,6 +13,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -95,6 +96,7 @@ func getPubSubMessages() []pubSubMessage {
 
 func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, timeout string,
 	retry resiliencyV1alpha.Retry,
+	metrics *diag.Metrics,
 ) *resiliency.Resiliency {
 	r := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
@@ -122,7 +124,7 @@ func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, tim
 			},
 		},
 	}
-	return resiliency.FromConfigurations(testLogger, r)
+	return resiliency.FromConfigurations(testLogger, metrics, r)
 }
 
 func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.InvokeMethodResponse {
@@ -197,7 +199,7 @@ func getInput() input {
 
 func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("verify Responses when few entries fail even after retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -224,7 +226,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
 
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -263,7 +265,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when ALL entries fail even after retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -290,7 +292,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
 
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -329,7 +331,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("pass ALL entries in second attempt", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -356,7 +358,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
 
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -395,7 +397,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("pass ALL entries in first attempt", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -422,7 +424,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
 
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -461,7 +463,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("fail ALL entries due to timeout", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -489,7 +491,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		}
 		shortRetry.MaxRetries = ptr.Of(2)
 
-		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -516,7 +518,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when ALL entries fail with Circuitbreaker and exhaust retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -549,7 +551,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		shortRetry.MaxRetries = ptr.Of(3)
 
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -598,7 +600,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when Partial entries fail with Circuitbreaker and exhaust retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -631,7 +633,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		shortRetry.MaxRetries = ptr.Of(5)
 
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -680,7 +682,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when Partial entries Pass with Circuitbreaker half open timeout", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -713,7 +715,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		shortRetry.MaxRetries = ptr.Of(3)
 
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -753,7 +755,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("Partial success with CB and exhaust retries, then act with short half open timeout", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -786,7 +788,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		shortRetry.MaxRetries = ptr.Of(3)
 
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -863,7 +865,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("Fail all events with timeout and then Open CB - short retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -898,7 +900,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		shortRetry.MaxRetries = ptr.Of(2)
 
-		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.Background(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
@@ -933,7 +935,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 	t.Run("verify Responses when Circuitbreaker half open state changes happen", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -966,7 +968,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 		shortRetry.MaxRetries = ptr.Of(20)
 
-		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
+		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 
@@ -1097,7 +1099,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 	t.Run("Fail all events with timeout and then Open CB - long retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -1132,7 +1134,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 
 		shortRetry.MaxRetries = ptr.Of(7)
 
-		policyProvider := createResPolicyProvider(cb, shortTimeout, longRetry)
+		policyProvider := createResPolicyProvider(cb, shortTimeout, longRetry, rt.metrics)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)

@@ -21,9 +21,11 @@ import (
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -36,7 +38,7 @@ const (
 )
 
 func TestNoWorkflowState(t *testing.T) {
-	actors := getActorRuntime()
+	actors := getActorRuntime(t)
 	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewWorkflowConfig(testAppID))
 	assert.NoError(t, err)
 	assert.Empty(t, state)
@@ -129,7 +131,7 @@ func TestLoadSavedState(t *testing.T) {
 	assert.Equal(t, 17, upsertCount) // 10x history, 5x inbox, 1 metadata, 1 customStatus
 	assert.Equal(t, 0, deleteCount)
 
-	actors := getActorRuntime()
+	actors := getActorRuntime(t)
 	if err = actors.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
 		return
 	}
@@ -171,7 +173,7 @@ func TestResetLoadedState(t *testing.T) {
 		return
 	}
 
-	actorRuntime := getActorRuntime()
+	actorRuntime := getActorRuntime(t)
 	if err = actorRuntime.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
 		return
 	}
@@ -191,7 +193,8 @@ func TestResetLoadedState(t *testing.T) {
 	}
 }
 
-func getActorRuntime() actors.Actors {
+func getActorRuntime(t *testing.T) actors.Actors {
+	t.Helper()
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
@@ -200,12 +203,15 @@ func getActorRuntime() actors.Actors {
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	actors := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		Resiliency:     resiliency.New(logger.NewLogger("test"), metrics),
+		Metrics:        metrics,
 	})
 	return actors
 }

@@ -38,10 +38,11 @@ type authenticator struct {
 	trustAnchors      *x509.CertPool
 	certChainPem      []byte
 	keyPem            []byte
-	genCSRFunc        func(id string) ([]byte, []byte, error)
+	genCSRFunc        func(id string, metrics *diag.Metrics) ([]byte, []byte, error)
 	sentryAddress     string
 	currentSignedCert *SignedCertificate
 	certMutex         *sync.RWMutex
+	metrics           *diag.Metrics
 }
 
 type SignedCertificate struct {
@@ -51,7 +52,7 @@ type SignedCertificate struct {
 	TrustChain    *x509.CertPool
 }
 
-func newAuthenticator(sentryAddress string, trustAnchors *x509.CertPool, certChainPem, keyPem []byte, genCSRFunc func(id string) ([]byte, []byte, error)) Authenticator {
+func newAuthenticator(sentryAddress string, metrics *diag.Metrics, trustAnchors *x509.CertPool, certChainPem, keyPem []byte, genCSRFunc func(string, *diag.Metrics) ([]byte, []byte, error)) Authenticator {
 	return &authenticator{
 		trustAnchors:  trustAnchors,
 		certChainPem:  certChainPem,
@@ -59,6 +60,7 @@ func newAuthenticator(sentryAddress string, trustAnchors *x509.CertPool, certCha
 		genCSRFunc:    genCSRFunc,
 		sentryAddress: sentryAddress,
 		certMutex:     &sync.RWMutex{},
+		metrics:       metrics,
 	}
 }
 
@@ -77,7 +79,7 @@ func (a *authenticator) GetCurrentSignedCert() *SignedCertificate {
 // CreateSignedWorkloadCert returns a signed workload certificate, the PEM encoded private key
 // And the duration of the signed cert.
 func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain string) (*SignedCertificate, error) {
-	csrb, pkPem, err := a.genCSRFunc(id)
+	csrb, pkPem, err := a.genCSRFunc(id, a.metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -90,10 +92,10 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
+	if a.metrics.GRPC.IsEnabled() {
 		unaryClientInterceptor = grpcMiddleware.ChainUnaryClient(
 			unaryClientInterceptor,
-			diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
+			a.metrics.GRPC.UnaryClientInterceptor(),
 		)
 	}
 
@@ -102,7 +104,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 		grpc.WithTransportCredentials(credentials.NewTLS(config)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor))
 	if err != nil {
-		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
+		a.metrics.Service.MTLSWorkLoadCertRotationFailed("sentry_conn")
 		return nil, fmt.Errorf("error establishing connection to sentry: %w", err)
 	}
 	defer conn.Close()
@@ -118,14 +120,14 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 			Namespace:                 namespace,
 		}, grpcRetry.WithMax(sentryMaxRetries), grpcRetry.WithPerRetryTimeout(sentrySignTimeout))
 	if err != nil {
-		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
+		a.metrics.Service.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
 	}
 
 	workloadCert := resp.GetWorkloadCertificate()
 	validTimestamp := resp.GetValidUntil()
 	if err = validTimestamp.CheckValid(); err != nil {
-		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
+		a.metrics.Service.MTLSWorkLoadCertRotationFailed("invalid_ts")
 		return nil, fmt.Errorf("error parsing ValidUntil: %w", err)
 	}
 
@@ -134,7 +136,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	for _, c := range resp.GetTrustChainCertificates() {
 		ok := trustChain.AppendCertsFromPEM(c)
 		if !ok {
-			diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("chaining")
+			a.metrics.Service.MTLSWorkLoadCertRotationFailed("chaining")
 			return nil, fmt.Errorf("failed adding trust chain cert to x509 CertPool: %w", err)
 		}
 	}

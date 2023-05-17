@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/identity"
@@ -29,11 +30,12 @@ type CertificateAuthority interface {
 type sentry struct {
 	conf    config.SentryConfig
 	server  server.CAServer
+	metrics *diag.Metrics
 	running chan bool
 }
 
 // NewSentryCA returns a new Sentry Certificate Authority instance.
-func NewSentryCA() CertificateAuthority {
+func NewSentryCA(metrics *diag.Metrics) CertificateAuthority {
 	return &sentry{
 		running: make(chan bool, 1),
 	}
@@ -76,7 +78,7 @@ func (s *sentry) createCAServer(ctx context.Context) (ca.CertificateAuthority, i
 		// Need to be in an else block for the linter
 		log.Infof("trust root bundle loaded. issuer cert expiry: %s", certExpiry.String())
 	}
-	monitoring.IssuerCertExpiry(certExpiry)
+	monitoring.IssuerCertExpiry(s.metrics, certExpiry)
 
 	// Create identity validator
 	v, validatorErr := s.createValidator()
@@ -91,7 +93,7 @@ func (s *sentry) createCAServer(ctx context.Context) (ca.CertificateAuthority, i
 // Runs the CA server.
 // This method blocks until the server is shut down.
 func (s *sentry) run(ctx context.Context, certAuth ca.CertificateAuthority, v identity.Validator) error {
-	s.server = server.NewCAServer(certAuth, v)
+	s.server = server.NewCAServer(certAuth, v, s.metrics)
 
 	// In background, watch for the root certificate's expiration
 	var wg sync.WaitGroup

@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"k8s.io/utils/clock"
 )
 
 func (a *UniversalAPI) getStateStore(name string) (state.Store, error) {
@@ -80,9 +81,9 @@ func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.Que
 	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
 		return querier.Query(ctx, &req)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.StateQuery, err == nil, elapsed)
+	a.Metrics.Component.StateInvoked(ctx, in.StoreName, diag.StateQuery, err == nil, elapsed)
 
 	if err != nil {
 		err = messages.ErrStateQueryFailed.WithFormat(in.StoreName, err.Error())

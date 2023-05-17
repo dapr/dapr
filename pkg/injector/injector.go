@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/dapr/pkg/injector/patcher"
@@ -73,6 +74,7 @@ type injector struct {
 	kubeClient   kubernetes.Interface
 	daprClient   scheme.Interface
 	authUIDs     []string
+	metrics      *diag.Metrics
 
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
 	ready                chan struct{}
@@ -108,7 +110,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config.
-func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) (Injector, error) {
+func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface, metrics *diag.Metrics) (Injector, error) {
 	mux := http.NewServeMux()
 
 	i := &injector{
@@ -128,6 +130,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		daprClient: daprClient,
 		authUIDs:   authUIDs,
 		ready:      make(chan struct{}),
+		metrics:    metrics,
 	}
 
 	matcher, err := createNamespaceNameMatcher(strings.TrimSpace(config.AllowedServiceAccountsPrefixNames))
@@ -234,7 +237,7 @@ func (i *injector) Run(ctx context.Context) error {
 }
 
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
-	monitoring.RecordSidecarInjectionRequestsCount()
+	monitoring.RecordSidecarInjectionRequestsCount(i.metrics)
 
 	var body []byte
 	var err error
@@ -290,7 +293,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		admissionResponse = errorToAdmissionResponse(err)
 		log.Errorf("Sidecar injector failed to inject for app '%s'. Error: %s", diagAppID, err)
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "patch")
+		monitoring.RecordFailedSidecarInjectionCount(i.metrics, diagAppID, "patch")
 	} else if len(patchOps) == 0 {
 		admissionResponse = &v1.AdmissionResponse{
 			Allowed: true,
@@ -326,23 +329,23 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Errorf("Sidecar injector failed to inject for app '%s'. Can't serialize response: %s", diagAppID, err)
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
+		monitoring.RecordFailedSidecarInjectionCount(i.metrics, diagAppID, "response")
 		return
 	}
 	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
 	_, err = w.Write(respBytes)
 	if err != nil {
 		log.Errorf("Sidecar injector failed to inject for app '%s'. Failed to write response: %v", diagAppID, err)
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "write_response")
+		monitoring.RecordFailedSidecarInjectionCount(i.metrics, diagAppID, "write_response")
 		return
 	}
 
 	if patchedSuccessfully {
 		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
-		monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
+		monitoring.RecordSuccessfulSidecarInjectionCount(i.metrics, diagAppID)
 	} else {
 		log.Errorf("Admission succeeded, but pod was not patched. No sidecar injected for '%s'", diagAppID)
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
+		monitoring.RecordFailedSidecarInjectionCount(i.metrics, diagAppID, "pod_patch")
 	}
 }
 

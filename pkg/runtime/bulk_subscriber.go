@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
@@ -129,10 +130,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route); dlqErr != nil {
 				populateAllBulkResponsesWithError(msg, &bulkResponses, err)
-				reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+				a.reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
 			}
-			reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+			a.reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 			return nil, nil
 		}
 		hasAnyError := false
@@ -208,7 +209,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 			}
 		}
 		if errors.Is(overallInvokeErr, context.Canceled) {
-			reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+			a.reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 			return bulkResponses, overallInvokeErr
 		}
 		if hasAnyError {
@@ -216,13 +217,13 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			bulkSubDiag.retryReported = true
 			if dlqErr := a.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route); dlqErr != nil {
-				reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+				a.reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
 			}
-			reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+			a.reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 			return nil, nil
 		}
-		reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+		a.reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 		return bulkResponses, err
 	}
 
@@ -378,7 +379,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	defer endSpans(spans)
 	start := time.Now()
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 	if err != nil {
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
@@ -613,7 +614,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 
 	start := time.Now()
 	res, err := clientV1.OnBulkTopicEventAlpha1(ctx, envelope)
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
 	for _, span := range spans {
 		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
@@ -848,12 +849,12 @@ func newBulkSubIngressDiagnostics() bulkSubIngressDiagnostics {
 	return bulkSubDiag
 }
 
-func reportBulkSubDiagnostics(ctx context.Context, topic string, bulkSubDiag *bulkSubIngressDiagnostics) {
+func (a *DaprRuntime) reportBulkSubDiagnostics(ctx context.Context, topic string, bulkSubDiag *bulkSubIngressDiagnostics) {
 	if bulkSubDiag == nil {
 		return
 	}
-	diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, pubsubName, topic, bulkSubDiag.elapsed)
+	a.metrics.Component.BulkPubsubIngressEvent(ctx, pubsubName, topic, bulkSubDiag.elapsed)
 	for status, count := range bulkSubDiag.statusWiseDiag {
-		diag.DefaultComponentMonitoring.BulkPubsubIngressEventEntries(ctx, pubsubName, topic, status, count)
+		a.metrics.Component.BulkPubsubIngressEventEntries(ctx, pubsubName, topic, status, count)
 	}
 }

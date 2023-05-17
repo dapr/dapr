@@ -21,12 +21,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 var reentrancyStackDepth = 32
 
 func TestIsBusy(t *testing.T) {
-	testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+	testActor := newActor("testType", "testID", &reentrancyStackDepth, metrics, nil)
 
 	testActor.lock(nil)
 	assert.Equal(t, true, testActor.isBusy())
@@ -34,7 +38,10 @@ func TestIsBusy(t *testing.T) {
 }
 
 func TestTurnBasedConcurrencyLocks(t *testing.T) {
-	testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	testActor := newActor("testType", "testID", &reentrancyStackDepth, metrics, nil)
 
 	// first lock
 	testActor.lock(nil)
@@ -75,7 +82,10 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 
 func TestDisposedActor(t *testing.T) {
 	t.Run("not disposed", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
+		metrics, err := diag.NewMetrics(nil)
+		require.NoError(t, err)
+
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, metrics, nil)
 
 		testActor.lock(nil)
 		testActor.unlock()
@@ -86,14 +96,17 @@ func TestDisposedActor(t *testing.T) {
 	})
 
 	t.Run("disposed", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
+		metrics, err := diag.NewMetrics(nil)
+		require.NoError(t, err)
+
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, metrics, nil)
 
 		testActor.lock(nil)
 		ch := testActor.channel()
 		assert.NotNil(t, ch)
 		testActor.unlock()
 
-		err := testActor.lock(nil)
+		err = testActor.lock(nil)
 
 		assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
 		assert.IsType(t, ErrActorDisposed, err)
@@ -102,7 +115,10 @@ func TestDisposedActor(t *testing.T) {
 
 func TestPendingActorCalls(t *testing.T) {
 	t.Run("no pending actor call with new actor object", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
+		metrics, err := diag.NewMetrics(nil)
+		require.NoError(t, err)
+
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, metrics, nil)
 		channelClosed := false
 
 		select {
@@ -117,7 +133,10 @@ func TestPendingActorCalls(t *testing.T) {
 	})
 
 	t.Run("close channel before timeout", func(t *testing.T) {
-		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
+		metrics, err := diag.NewMetrics(nil)
+		require.NoError(t, err)
+
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, metrics, nil)
 		testActor.lock(nil)
 
 		channelClosed := atomic.Bool{}
@@ -139,7 +158,10 @@ func TestPendingActorCalls(t *testing.T) {
 
 	t.Run("multiple listeners", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(time.Now())
-		testActor := newActor("testType", "testID", &reentrancyStackDepth, clock)
+		metrics, err := diag.NewMetrics(nil)
+		require.NoError(t, err)
+
+		testActor := newActor("testType", "testID", &reentrancyStackDepth, metrics, clock)
 		testActor.lock(nil)
 
 		nListeners := 10

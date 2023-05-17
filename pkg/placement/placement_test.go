@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
@@ -39,7 +40,9 @@ const testStreamSendLatency = time.Second
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
-	testServer, err := NewPlacementService(raftServer, nil)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+	testServer, err := NewPlacementService(raftServer, nil, metrics)
 	require.NoError(t, err)
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock

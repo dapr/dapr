@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/operator/meta"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
@@ -60,6 +61,7 @@ type DaprHandler struct {
 	client.Client
 	Scheme                              *runtime.Scheme
 	argoRolloutServiceReconcilerEnabled bool
+	metrics                             *diag.Metrics
 }
 
 type Reconciler struct {
@@ -69,14 +71,15 @@ type Reconciler struct {
 
 // NewDaprHandler returns a new Dapr handler.
 // This is a reconciler that watches all Deployment and StatefulSet resources and ensures that a matching Service resource is deployed to allow Dapr sidecar-to-sidecar communication and access to other ports.
-func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
-	return NewDaprHandlerWithOptions(mgr, defaultOptions)
+func NewDaprHandler(mgr ctrl.Manager, metrics *diag.Metrics) *DaprHandler {
+	return NewDaprHandlerWithOptions(mgr, metrics, defaultOptions)
 }
 
 // NewDaprHandlerWithOptions returns a new Dapr handler with options.
-func NewDaprHandlerWithOptions(mgr ctrl.Manager, opts *Options) *DaprHandler {
+func NewDaprHandlerWithOptions(mgr ctrl.Manager, metrics *diag.Metrics, opts *Options) *DaprHandler {
 	return &DaprHandler{
-		mgr: mgr,
+		mgr:     mgr,
+		metrics: metrics,
 
 		Client:                              mgr.GetClient(),
 		Scheme:                              mgr.GetScheme(),
@@ -241,7 +244,7 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 		return err
 	}
 
-	monitoring.RecordServiceUpdatedCount(appID)
+	monitoring.RecordServiceUpdatedCount(h.metrics, appID)
 	return nil
 }
 
@@ -259,7 +262,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 		return err
 	}
 	log.Debugf("created service: %s", expectedService)
-	monitoring.RecordServiceCreatedCount(appID)
+	monitoring.RecordServiceCreatedCount(h.metrics, appID)
 	return nil
 }
 

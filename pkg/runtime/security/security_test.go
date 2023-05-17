@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 )
 
@@ -52,13 +54,16 @@ func TestGenerateSidecarCSR(t *testing.T) {
 		return
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	t.Run("empty id", func(t *testing.T) {
-		_, _, err := generateCSRAndPrivateKey("")
+		_, _, err := generateCSRAndPrivateKey("", metrics)
 		assert.NotNil(t, err)
 	})
 
 	t.Run("with id", func(t *testing.T) {
-		csr, pk, err := generateCSRAndPrivateKey("test")
+		csr, pk, err := generateCSRAndPrivateKey("test", metrics)
 		assert.Nil(t, err)
 		assert.True(t, len(csr) > 0)
 		assert.True(t, len(pk) > 0)
@@ -70,7 +75,10 @@ func TestInitSidecarAuthenticator(t *testing.T) {
 	t.Setenv(sentryConsts.CertChainEnvVar, "111")
 	t.Setenv(sentryConsts.CertKeyEnvVar, "111")
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	certChain, _ := GetCertChain()
-	_, err := GetSidecarAuthenticator("localhost:5050", certChain)
+	_, err = GetSidecarAuthenticator("localhost:5050", metrics, certChain)
 	assert.NoError(t, err)
 }

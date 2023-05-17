@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -627,7 +628,7 @@ func TestPurge(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine, stateStore := startEngineAndGetStore(ctx, r)
+	client, engine, stateStore := startEngineAndGetStore(t, ctx, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChainToPurge")
@@ -691,7 +692,7 @@ func TestPurgeContinueAsNew(t *testing.T) {
 		return input + 1, nil
 	})
 	ctx := context.Background()
-	client, engine, stateStore := startEngineAndGetStore(ctx, r)
+	client, engine, stateStore := startEngineAndGetStore(t, ctx, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
@@ -774,9 +775,11 @@ func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backe
 	return client, engine
 }
 
-func startEngineAndGetStore(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine, state.Store) {
+func startEngineAndGetStore(t *testing.T, ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine, state.Store) {
+	t.Helper()
+
 	var client backend.TaskHubClient
-	engine, store := getEngineAndStateStore()
+	engine, store := getEngineAndStateStore(t)
 	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
 		client = backend.NewTaskHubClient(be)
 		return task.NewTaskExecutor(r)
@@ -797,12 +800,15 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	actors := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		Resiliency:     resiliency.New(logger.NewLogger("test"), metrics),
+		Metrics:        metrics,
 	})
 
 	if err := actors.Init(); err != nil {
@@ -812,7 +818,9 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 	return engine
 }
 
-func getEngineAndStateStore() (*wfengine.WorkflowEngine, state.Store) {
+func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, state.Store) {
+	t.Helper()
+
 	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
@@ -822,13 +830,16 @@ func getEngineAndStateStore() (*wfengine.WorkflowEngine, state.Store) {
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 
 	actors := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		Resiliency:     resiliency.New(logger.NewLogger("test"), metrics),
+		Metrics:        metrics,
 	})
 
 	if err := actors.Init(); err != nil {

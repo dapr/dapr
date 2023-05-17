@@ -18,11 +18,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 func TestConnectToServer(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	t.Run("when grpc get opts return an error connectToServer should return an error", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
 			return nil, errEstablishingTLSConn
@@ -48,7 +54,7 @@ func TestConnectToServer(t *testing.T) {
 		conn, _, cleanup := newTestServer() // do not register the placement stream server
 		defer cleanup()
 
-		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, nil))
+		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, metrics, nil))
 
 		var ready sync.WaitGroup
 		ready.Add(1)
@@ -66,6 +72,9 @@ func TestConnectToServer(t *testing.T) {
 }
 
 func TestDisconnect(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	t.Run("disconnectFn should return and broadcast when connection is not alive", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
 			return nil, nil
@@ -94,7 +103,7 @@ func TestDisconnect(t *testing.T) {
 		conn, _, cleanup := newTestServer() // do not register the placement stream server
 		defer cleanup()
 
-		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, nil))
+		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, metrics, nil))
 		assert.Nil(t, client.connectToServer(conn))
 
 		called := false

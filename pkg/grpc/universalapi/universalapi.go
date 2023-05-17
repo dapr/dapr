@@ -16,6 +16,7 @@ limitations under the License.
 package universalapi
 
 import (
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/kit/logger"
@@ -27,4 +28,5 @@ type UniversalAPI struct {
 	Logger     logger.Logger
 	Resiliency resiliency.Provider
 	CompStore  *compstore.ComponentStore
+	Metrics    *diag.Metrics
 }

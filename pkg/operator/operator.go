@@ -41,6 +41,7 @@ import (
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
@@ -100,7 +101,7 @@ func init() {
 }
 
 // NewOperator returns a new Dapr Operator.
-func NewOperator(ctx context.Context, opts Options) (Operator, error) {
+func NewOperator(ctx context.Context, metrics *diag.Metrics, opts Options) (Operator, error) {
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get controller runtime configuration, err: %s", err)
@@ -140,7 +141,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	if opts.ServiceReconcilerEnabled {
-		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, &handlers.Options{ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled})
+		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, metrics, &handlers.Options{ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled})
 		if err := daprHandler.Init(ctx); err != nil {
 			return nil, fmt.Errorf("unable to initialize handler: %w", err)
 		}

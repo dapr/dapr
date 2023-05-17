@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"k8s.io/utils/clock"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -46,9 +47,9 @@ func (a *UniversalAPI) CryptoGetWrapKeyFn(ctx context.Context, componentName str
 			r.wrappedKey, r.tag, rErr = component.WrapKey(ctx, plaintextKey, algorithm, keyName, nonce, nil)
 			return
 		})
-		elapsed := diag.ElapsedSince(start)
+		elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-		diag.DefaultComponentMonitoring.CryptoInvoked(ctx, componentName, diag.CryptoOp, err == nil, elapsed)
+		a.Metrics.Component.CryptoInvoked(ctx, componentName, diag.CryptoOp, err == nil, elapsed)
 
 		if err != nil {
 			return nil, nil, err
@@ -66,9 +67,9 @@ func (a *UniversalAPI) CryptoGetUnwrapKeyFn(ctx context.Context, componentName s
 		plaintextKey, err := policyRunner(func(ctx context.Context) (jwk.Key, error) {
 			return component.UnwrapKey(ctx, wrappedKey, algorithm, keyName, nonce, tag, nil)
 		})
-		elapsed := diag.ElapsedSince(start)
+		elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-		diag.DefaultComponentMonitoring.CryptoInvoked(ctx, componentName, diag.CryptoOp, err == nil, elapsed)
+		a.Metrics.Component.CryptoInvoked(ctx, componentName, diag.CryptoOp, err == nil, elapsed)
 
 		if err != nil {
 			return nil, err

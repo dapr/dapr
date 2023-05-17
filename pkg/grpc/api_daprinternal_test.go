@@ -24,16 +24,21 @@ import (
 	"google.golang.org/grpc/status"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func TestCallLocal(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	t.Run("appchannel is not ready", func(t *testing.T) {
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: nil,
+			metrics:    metrics,
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -53,6 +58,7 @@ func TestCallLocal(t *testing.T) {
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
+			metrics:    metrics,
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -77,6 +83,7 @@ func TestCallLocal(t *testing.T) {
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
+			metrics:    metrics,
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -93,10 +100,13 @@ func TestCallLocal(t *testing.T) {
 }
 
 func TestCallLocalStream(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	t.Run("appchannel is not ready", func(t *testing.T) {
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: nil,
+			metrics:    metrics,
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -125,6 +135,7 @@ func TestCallLocalStream(t *testing.T) {
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
+			metrics:    metrics,
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -160,6 +171,7 @@ func TestCallLocalStream(t *testing.T) {
 		fakeAPI := &api{
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
+			metrics:    metrics,
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()

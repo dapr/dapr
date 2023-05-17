@@ -25,11 +25,10 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.acl")
@@ -237,7 +236,7 @@ func normalizeOperation(operation string) (string, error) {
 	return s, nil
 }
 
-func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, isHTTP bool, acl *config.AccessControlList) (bool, string) {
+func ApplyAccessControlPolicies(ctx context.Context, metrics *diag.Metrics, operation string, httpVerb commonv1pb.HTTPExtension_Verb, isHTTP bool, acl *config.AccessControlList) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := GetAndParseSpiffeID(ctx)
 	if err != nil {
@@ -261,7 +260,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	}
 
 	action, actionPolicy := IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, isHTTP, acl)
-	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
+	emitACLMetrics(ctx, metrics, actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
 
 	if !action {
 		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
@@ -271,20 +270,20 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	return action, errMessage
 }
 
-func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb string, action bool) {
+func emitACLMetrics(ctx context.Context, metrics *diag.Metrics, actionPolicy, appID, trustDomain, namespace, operation, verb string, action bool) {
 	if action {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diag.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+			metrics.Service.RequestAllowedByAppAction(ctx, appID, trustDomain, namespace, operation, verb, action)
 		case config.ActionPolicyGlobal:
-			diag.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+			metrics.Service.RequestAllowedByGlobalAction(ctx, appID, trustDomain, namespace, operation, verb, action)
 		}
 	} else {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diag.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+			metrics.Service.RequestBlockedByAppAction(ctx, appID, trustDomain, namespace, operation, verb, action)
 		case config.ActionPolicyGlobal:
-			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+			metrics.Service.RequestBlockedByGlobalAction(ctx, appID, trustDomain, namespace, operation, verb, action)
 		}
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
@@ -88,7 +89,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := monitoring.InitMetrics(); err != nil {
+	metrics, err := diag.NewMetrics(nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := monitoring.InitMetrics(metrics); err != nil {
 		log.Fatal(err)
 	}
 
@@ -122,7 +128,7 @@ func main() {
 	caMngrFactory := func() *concurrency.RunnerManager {
 		return concurrency.NewRunnerManager(
 			func(ctx context.Context) error {
-				return sentry.NewSentryCA().Start(ctx, config)
+				return sentry.NewSentryCA(metrics).Start(ctx, config)
 			},
 			func(ctx context.Context) error {
 				select {
@@ -130,7 +136,7 @@ func main() {
 					return nil
 
 				case <-issuerEvent:
-					monitoring.IssuerCertChanged()
+					monitoring.IssuerCertChanged(metrics)
 					log.Debug("received issuer credentials changed signal")
 
 					select {

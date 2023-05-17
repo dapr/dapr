@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -53,10 +54,11 @@ type actor struct {
 	// is used when runtime drains actor.
 	disposeCh chan struct{}
 
-	clock clock.Clock
+	clock   clock.Clock
+	metrics *diag.Metrics
 }
 
-func newActor(actorType, actorID string, maxReentrancyDepth *int, cl clock.Clock) *actor {
+func newActor(actorType, actorID string, maxReentrancyDepth *int, metrics *diag.Metrics, cl clock.Clock) *actor {
 	if cl == nil {
 		cl = &clock.RealClock{}
 	}
@@ -64,6 +66,7 @@ func newActor(actorType, actorID string, maxReentrancyDepth *int, cl clock.Clock
 		actorType:    actorType,
 		actorID:      actorID,
 		actorLock:    NewActorLock(int32(*maxReentrancyDepth)),
+		metrics:      metrics,
 		clock:        cl,
 		lastUsedTime: cl.Now().UTC(),
 	}
@@ -101,7 +104,7 @@ func (a *actor) channel() chan struct{} {
 // lock holds the lock for turn-based concurrency.
 func (a *actor) lock(reentrancyID *string) error {
 	pending := a.pendingActorCalls.Add(1)
-	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
+	a.metrics.Service.ReportActorPendingCalls(context.TODO(), a.actorType, pending)
 
 	err := a.actorLock.Lock(reentrancyID)
 	if err != nil {
@@ -136,5 +139,5 @@ func (a *actor) unlock() {
 	}
 
 	a.actorLock.Unlock()
-	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
+	a.metrics.Service.ReportActorPendingCalls(context.TODO(), a.actorType, pending)
 }

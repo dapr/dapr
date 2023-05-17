@@ -90,6 +90,8 @@ type ActorPlacement struct {
 	shutdown atomic.Bool
 	// shutdownConnLoop is the wait group to wait until all connection loop are done
 	shutdownConnLoop sync.WaitGroup
+
+	metrics *diag.Metrics
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
@@ -98,6 +100,7 @@ func NewActorPlacement(
 	appID, runtimeHostName string, actorTypes []string,
 	appHealthFn func() bool,
 	afterTableUpdateFn func(),
+	metrics *diag.Metrics,
 ) *ActorPlacement {
 	servers := addDNSResolverPrefix(serverAddr)
 	return &ActorPlacement{
@@ -106,7 +109,7 @@ func NewActorPlacement(
 		runtimeHostName: runtimeHostName,
 		serverAddr:      servers,
 
-		client: newPlacementClient(getGrpcOptsGetter(servers, clientCert)),
+		client: newPlacementClient(getGrpcOptsGetter(servers, metrics, clientCert)),
 
 		placementTableLock: &sync.RWMutex{},
 		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
@@ -115,6 +118,7 @@ func NewActorPlacement(
 		tableIsBlocked:      &atomic.Bool{},
 		appHealthFn:         appHealthFn,
 		afterTableUpdateFn:  afterTableUpdateFn,
+		metrics:             metrics,
 	}
 }
 
@@ -220,13 +224,13 @@ func (p *ActorPlacement) Start() {
 
 			err := p.client.send(&host)
 			if err != nil {
-				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
+				p.metrics.Service.ActorStatusReportFailed("send", "status")
 				log.Debugf("failed to report status to placement service : %v", err)
 			}
 
 			// No delay if stream connection is not alive.
 			if p.client.isConnected() {
-				diag.DefaultMonitoring.ActorStatusReported("send")
+				p.metrics.Service.ActorStatusReported(context.TODO(), "send")
 				time.Sleep(statusReportHeartbeatInterval)
 			}
 		}
@@ -335,7 +339,7 @@ func (p *ActorPlacement) onPlacementError(err error) {
 
 func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	log.Debugf("placement order received: %s", in.Operation)
-	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
+	p.metrics.Service.ActorPlacementTableOperationReceived(context.TODO(), in.Operation)
 
 	// lock all incoming calls when an updated table arrives
 	p.operationUpdateLock.Lock()

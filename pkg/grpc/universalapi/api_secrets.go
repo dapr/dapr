@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"k8s.io/utils/clock"
 )
 
 func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
@@ -51,9 +52,9 @@ func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretR
 		rResp, rErr := component.GetSecret(ctx, req)
 		return &rResp, rErr
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
+	a.Metrics.Component.SecretInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
 		err = messages.ErrSecretGet.WithFormat(req.Name, in.StoreName, err.Error())
@@ -89,9 +90,9 @@ func (a *UniversalAPI) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBul
 		rResp, rErr := component.BulkGetSecret(ctx, req)
 		return &rResp, rErr
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock.RealClock{}, start)
 
-	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
+	a.Metrics.Component.SecretInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
 	if err != nil {
 		err = messages.ErrBulkSecretGet.WithFormat(in.StoreName, err.Error())

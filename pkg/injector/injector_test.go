@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,12 +35,15 @@ import (
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 )
 
 func TestConfigCorrectValues(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 	i, err := NewInjector(nil, Config{
 		TLSCertFile:                       "a",
 		TLSKeyFile:                        "b",
@@ -47,7 +51,7 @@ func TestConfigCorrectValues(t *testing.T) {
 		SidecarImagePullPolicy:            "d",
 		Namespace:                         "e",
 		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*",
-	}, nil, nil)
+	}, nil, nil, metrics)
 	assert.NoError(t, err)
 
 	injector := i.(*injector)
@@ -62,14 +66,17 @@ func TestConfigCorrectValues(t *testing.T) {
 }
 
 func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
-	_, err := NewInjector(nil, Config{
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
+	_, err = NewInjector(nil, Config{
 		TLSCertFile:                       "a",
 		TLSKeyFile:                        "b",
 		SidecarImage:                      "c",
 		SidecarImagePullPolicy:            "d",
 		Namespace:                         "e",
 		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
-	}, nil, nil)
+	}, nil, nil, metrics)
 	assert.Error(t, err)
 }
 
@@ -403,13 +410,16 @@ func TestGetAppIDFromRequest(t *testing.T) {
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	i, err := NewInjector([]string{authID}, Config{
 		TLSCertFile:                       "test-cert",
 		TLSKeyFile:                        "test-key",
 		SidecarImage:                      "test-image",
 		Namespace:                         "test-ns",
 		AllowedServiceAccountsPrefixNames: "vc-proj*:sa-dev*,vc-all-allowed*:*",
-	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
+	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset(), metrics)
 
 	assert.NoError(t, err)
 	injector := i.(*injector)

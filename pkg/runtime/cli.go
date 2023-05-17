@@ -359,11 +359,16 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
+	metrics, err := diag.NewMetrics(globalConfig.Spec.MetricSpec.Rules)
+	if err != nil {
+		log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
+	}
+
 	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
 	if *mode == string(modes.KubernetesMode) {
 		log.Info("Initializing the operator client")
-		client, conn, clientErr := client.GetOperatorClient(context.TODO(), *controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
+		client, conn, clientErr := client.GetOperatorClient(context.TODO(), metrics, *controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
 			return nil, clientErr
 		}
@@ -401,9 +406,9 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	// Initialize metrics only if MetricSpec is enabled.
-	if globalConfig.Spec.MetricSpec.Enabled {
-		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
-			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
+	if metrics != nil && globalConfig.Spec.MetricSpec.Enabled {
+		if err := metrics.Init(runtimeConfig.ID, namespace); err != nil {
+			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
 		}
 	}
 
@@ -413,14 +418,14 @@ func FromFlags() (*DaprRuntime, error) {
 	case modes.KubernetesMode:
 		resiliencyConfigs := resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
 		log.Debugf("Found %d resiliency configurations from Kubernetes", len(resiliencyConfigs))
-		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+		resiliencyProvider = resiliencyConfig.FromConfigurations(log, metrics, resiliencyConfigs...)
 	case modes.StandaloneMode:
 		if len(resourcesPath) > 0 {
 			resiliencyConfigs := resiliencyConfig.LoadLocalResiliency(log, *appID, resourcesPath...)
 			log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
-			resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
+			resiliencyProvider = resiliencyConfig.FromConfigurations(log, metrics, resiliencyConfigs...)
 		} else {
-			resiliencyProvider = resiliencyConfig.FromConfigurations(log)
+			resiliencyProvider = resiliencyConfig.FromConfigurations(log, metrics)
 		}
 	}
 	log.Info("Resiliency configuration loaded")
@@ -440,7 +445,7 @@ func FromFlags() (*DaprRuntime, error) {
 		runtimeConfig.EnableAPILogging = globalConfig.Spec.LoggingSpec.APILogging.Enabled
 	}
 
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
+	return NewDaprRuntime(runtimeConfig, metrics, globalConfig, accessControlList, resiliencyProvider), nil
 }
 
 func parsePlacementAddr(val string) []string {

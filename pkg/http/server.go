@@ -62,6 +62,7 @@ type server struct {
 	apiSpec            config.APISpec
 	servers            []*fasthttp.Server
 	profilingListeners []net.Listener
+	metrics            *diag.Metrics
 }
 
 // NewServerOpts are the options for NewServer.
@@ -72,6 +73,7 @@ type NewServerOpts struct {
 	MetricSpec  config.MetricSpec
 	Pipeline    httpMiddleware.Pipeline
 	APISpec     config.APISpec
+	Metrics     *diag.Metrics
 }
 
 // NewServer returns a new HTTP server.
@@ -84,6 +86,7 @@ func NewServer(opts NewServerOpts) Server {
 		metricSpec:  opts.MetricSpec,
 		pipeline:    opts.Pipeline,
 		apiSpec:     opts.APISpec,
+		metrics:     opts.Metrics,
 	}
 }
 
@@ -222,7 +225,7 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 	if s.metricSpec.Enabled {
 		log.Infof("enabled metrics http middleware")
 
-		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
+		return s.metrics.HTTP.FastHTTPMiddleware(next)
 	}
 
 	return next

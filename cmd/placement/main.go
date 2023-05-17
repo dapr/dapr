@@ -21,6 +21,7 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
@@ -49,7 +50,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = monitoring.InitMetrics()
+	metrics, err := diag.NewMetrics(nil)
+	if err != nil {
+		log.Fatalf("error creating metrics: %s", err)
+	}
+
+	err = monitoring.InitMetrics(metrics)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -79,7 +85,7 @@ func main() {
 
 	// Start Placement gRPC server.
 	hashing.SetReplicationFactor(cfg.replicationFactor)
-	apiServer, err := placement.NewPlacementService(raftServer, certChain)
+	apiServer, err := placement.NewPlacementService(raftServer, certChain, metrics)
 	if err != nil {
 		log.Fatal(err)
 	}

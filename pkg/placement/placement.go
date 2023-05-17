@@ -31,6 +31,7 @@ import (
 	"k8s.io/utils/clock"
 
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/logger"
@@ -115,6 +116,7 @@ type Service struct {
 	// clock keeps time. Mocked in tests.
 	clock clock.WithTicker
 
+	metrics  *diag.Metrics
 	running  atomic.Bool
 	closed   atomic.Bool
 	closedCh chan struct{}
@@ -122,7 +124,7 @@ type Service struct {
 }
 
 // NewPlacementService returns a new placement service.
-func NewPlacementService(raftNode *raft.Server, certChain *daprCredentials.CertChain) (*Service, error) {
+func NewPlacementService(raftNode *raft.Server, certChain *daprCredentials.CertChain, metrics *diag.Metrics) (*Service, error) {
 	fhdd := &atomic.Int64{}
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
 
@@ -139,6 +141,7 @@ func NewPlacementService(raftNode *raft.Server, certChain *daprCredentials.CertC
 		grpcServer:               grpc.NewServer(opts...),
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
+		metrics:                  metrics,
 	}
 
 	placementv1pb.RegisterPlacementServer(p.grpcServer, p)

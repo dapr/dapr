@@ -112,7 +112,7 @@ func TestBulkSubscribe(t *testing.T) {
 	}
 
 	t.Run("bulk Subscribe Message for raw payload", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -160,7 +160,7 @@ func TestBulkSubscribe(t *testing.T) {
 	})
 
 	t.Run("bulk Subscribe Message for cloud event", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -208,7 +208,7 @@ func TestBulkSubscribe(t *testing.T) {
 	})
 
 	t.Run("bulk Subscribe multiple Messages at once for cloud events", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -259,7 +259,7 @@ func TestBulkSubscribe(t *testing.T) {
 	})
 
 	t.Run("bulk Subscribe events on different paths", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -325,7 +325,7 @@ func TestBulkSubscribe(t *testing.T) {
 	})
 
 	t.Run("verify Responses when bulk Subscribe events on different paths", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -445,7 +445,7 @@ func TestBulkSubscribe(t *testing.T) {
 	})
 
 	t.Run("verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -527,7 +527,7 @@ func TestBulkSubscribe(t *testing.T) {
 	})
 
 	t.Run("verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -613,7 +613,7 @@ func TestBulkSubscribe(t *testing.T) {
 	})
 
 	t.Run("verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(t, modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -713,7 +713,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - bulk Subscribe Message for raw payload", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(t, modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -798,7 +798,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - bulk Subscribe cloud event Message on different paths and verify response", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(t, modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -921,7 +921,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(t, modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -1001,7 +1001,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(t, modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -1093,7 +1093,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(t, modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -1179,7 +1179,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Response when error while fetching Entry due to wrong dataContentType", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(t, modes.StandaloneMode, string(GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(

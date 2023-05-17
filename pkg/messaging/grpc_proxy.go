@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -49,6 +50,7 @@ type proxy struct {
 	acl                *config.AccessControlList
 	resiliency         resiliency.Provider
 	maxRequestBodySize int
+	metrics            *diag.Metrics
 }
 
 // ProxyOpts is the struct with options for NewProxy.
@@ -59,6 +61,7 @@ type ProxyOpts struct {
 	ACL                *config.AccessControlList
 	Resiliency         resiliency.Provider
 	MaxRequestBodySize int
+	Metrics            *diag.Metrics
 }
 
 // NewProxy returns a new proxy.
@@ -70,6 +73,7 @@ func NewProxy(opts ProxyOpts) Proxy {
 		acl:                opts.ACL,
 		resiliency:         opts.Resiliency,
 		maxRequestBodySize: opts.MaxRequestBodySize,
+		metrics:            opts.Metrics,
 	}
 }
 
@@ -116,7 +120,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	if isLocal {
 		// proxy locally to the app
 		if p.acl != nil {
-			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, false, p.acl) //nolint:nosnakecase
+			ok, authError := acl.ApplyAccessControlPolicies(ctx, p.metrics, fullName, common.HTTPExtension_NONE, false, p.acl) //nolint:nosnakecase
 			if !ok {
 				return ctx, nil, nil, nopTeardown, status.Errorf(codes.PermissionDenied, authError)
 			}

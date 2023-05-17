@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -30,15 +31,19 @@ import (
 
 func TestCryptoEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
 
 	compStore := compstore.New()
 	const cryptoComponentName = "myvault"
 	compStore.AddCryptoProvider(cryptoComponentName, &daprt.FakeSubtleCrypto{})
 	testAPI := &api{
+		metrics: metrics,
 		universal: &universalapi.UniversalAPI{
+			Metrics:    metrics,
 			Logger:     log,
 			CompStore:  compStore,
-			Resiliency: resiliency.New(nil),
+			Resiliency: resiliency.New(nil, metrics),
 		},
 	}
 

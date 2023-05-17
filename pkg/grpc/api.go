@@ -94,6 +94,7 @@ type api struct {
 	getComponentsCapabilitesFn func() map[string][]string
 	shutdown                   func()
 	daprRunTimeVersion         string
+	metrics                    *diag.Metrics
 }
 
 // APIOpts contains options for NewAPI.
@@ -111,6 +112,7 @@ type APIOpts struct {
 	AppProtocolIsHTTP           bool
 	Shutdown                    func()
 	GetComponentsCapabilitiesFn func() map[string][]string
+	Metrics                     *diag.Metrics
 }
 
 // NewAPI returns a new gRPC API.
@@ -135,6 +137,7 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                   opts.Shutdown,
 		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		daprRunTimeVersion:         buildinfo.Version(),
+		metrics:                    opts.Metrics,
 	}
 }
 
@@ -222,9 +225,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	start := time.Now()
 	err := a.pubsubAdapter.Publish(&req)
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+	a.metrics.Component.PubsubEgressEvent(context.TODO(), pubsubName, topic, err == nil, elapsed)
 
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
@@ -435,13 +438,13 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	// For partial success, err is not nil and res contains the failed entries.
 	res, err := a.pubsubAdapter.BulkPublish(&req)
 
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 	eventsPublished := int64(len(req.Entries))
 
 	if len(res.FailedEntries) != 0 {
 		eventsPublished -= int64(len(res.FailedEntries))
 	}
-	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
+	a.metrics.Component.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
 
 	// BulkPublishResponse contains all failed entries from the request.
 	// If there are no failed entries, then the failedEntries array will be empty.
@@ -497,9 +500,9 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	r := &runtimev1pb.InvokeBindingResponse{}
 	start := time.Now()
 	resp, err := a.sendToOutputBindingFn(in.Name, req)
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), in.Name, in.Operation, err == nil, elapsed)
+	a.metrics.Component.OutputBindingEvent(context.Background(), in.Name, in.Operation, err == nil, elapsed)
 
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.Name, err.Error())
@@ -550,8 +553,8 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		})
 	})
 
-	elapsed := diag.ElapsedSince(start)
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
+	elapsed := diag.ElapsedSince(clock, start)
+	a.metrics.Component.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
 	if err != nil {
 		return bulkResp, err
@@ -632,9 +635,9 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	getResponse, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(ctx, req)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
@@ -733,9 +736,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		}
 		return struct{}{}, store.BulkSet(ctx, reqs)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.Set, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(ctx, in.StoreName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
@@ -795,9 +798,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Delete(ctx, &req)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.Delete, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(ctx, in.StoreName, diag.Delete, err == nil, elapsed)
 
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
@@ -845,9 +848,9 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.BulkDelete(ctx, reqs)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkDelete, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(ctx, in.StoreName, diag.BulkDelete, err == nil, elapsed)
 
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -963,9 +966,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, transactionalStore.Multi(ctx, storeReq)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.StateTransaction, err == nil, elapsed)
+	a.metrics.Component.StateInvoked(ctx, in.StoreName, diag.StateTransaction, err == nil, elapsed)
 
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
@@ -1396,9 +1399,9 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, &req)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
+	a.metrics.Component.ConfigurationInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, req.Keys, in.StoreName, err.Error())
@@ -1489,9 +1492,9 @@ func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfiguration
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, req, handler.updateEventHandler)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
+	a.metrics.Component.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
@@ -1549,9 +1552,9 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Unsubscribe(ctx, storeReq)
 	})
-	elapsed := diag.ElapsedSince(start)
+	elapsed := diag.ElapsedSince(clock, start)
 
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+	a.metrics.Component.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
 
 	if err != nil {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{

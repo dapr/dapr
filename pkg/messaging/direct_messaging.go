@@ -77,6 +77,7 @@ type directMessaging struct {
 	resiliency              resiliency.Provider
 	isStreamingEnabled      bool
 	universal               *universalapi.UniversalAPI
+	metrics                 *diag.Metrics
 }
 
 type remoteApp struct {
@@ -101,6 +102,7 @@ type NewDirectMessagingOpts struct {
 	ReadBufferSize          int
 	Resiliency              resiliency.Provider
 	IsStreamingEnabled      bool
+	Metrics                 *diag.Metrics
 }
 
 // NewDirectMessaging returns a new direct messaging api.
@@ -130,6 +132,7 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 			Resiliency: opts.Resiliency,
 			CompStore:  opts.CompStore,
 		},
+		metrics: opts.Metrics,
 	}
 
 	if dm.proxy != nil {
@@ -276,12 +279,12 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	d.metrics.Service.ServiceInvocationRequestSent(ctx, appID, req.Message().Method)
 	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, nil, req, nil, appID)
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+		d.metrics.Service.ServiceInvocationResponseReceived(ctx, appID, req.Message().Method, imr.Status().Code, start)
 	}
 
 	return imr, noopTeardown, err
@@ -308,7 +311,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	d.metrics.Service.ServiceInvocationRequestSent(ctx, appID, req.Message().Method)
 
 	var imr *invokev1.InvokeMethodResponse
 	if !d.isStreamingEnabled {
@@ -319,7 +322,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+		d.metrics.Service.ServiceInvocationResponseReceived(ctx, appID, req.Message().Method, imr.Status().Code, start)
 	}
 
 	return imr, teardown, err

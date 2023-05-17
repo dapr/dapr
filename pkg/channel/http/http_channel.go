@@ -62,6 +62,7 @@ type Channel struct {
 	appHealthCheckPath    string
 	appHealth             *apphealth.AppHealth
 	pipeline              httpMiddleware.Pipeline
+	metrics               *diag.Metrics
 }
 
 // ChannelConfiguration is the configuration used to create an HTTP AppChannel.
@@ -72,6 +73,7 @@ type ChannelConfiguration struct {
 	Pipeline             httpMiddleware.Pipeline
 	TracingSpec          config.TracingSpec
 	MaxRequestBodySizeMB int
+	Metrics              *diag.Metrics
 }
 
 // CreateLocalChannel creates an HTTP AppChannel.
@@ -83,6 +85,7 @@ func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error)
 		tracingSpec:           config.TracingSpec,
 		appHeaderToken:        auth.GetAppToken(),
 		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
+		metrics:               config.Metrics,
 	}
 
 	if config.MaxConcurrency > 0 {
@@ -177,7 +180,7 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	diag.DefaultHTTPMonitoring.AppHealthProbeStarted(ctx)
+	h.metrics.HTTP.AppHealthProbeStarted(ctx)
 	startRequest := time.Now()
 
 	channelResp, err := h.client.Do(channelReq)
@@ -187,7 +190,7 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	if err != nil {
 		// Errors here are network-level errors, so we are not returning them as errors
 		// Instead, we just return a failed probe
-		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), elapsedMs)
+		h.metrics.HTTP.AppHealthProbeCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), elapsedMs)
 		//nolint:nilerr
 		return false, nil
 	}
@@ -197,7 +200,7 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	channelResp.Body.Close()
 
 	status := channelResp.StatusCode >= 200 && channelResp.StatusCode < 300
-	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(channelResp.StatusCode), elapsedMs)
+	h.metrics.HTTP.AppHealthProbeCompleted(ctx, strconv.Itoa(channelResp.StatusCode), elapsedMs)
 
 	return status, nil
 }
@@ -218,7 +221,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}()
 
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().Method, int64(len(req.Message().Data.GetValue())))
+	h.metrics.HTTP.ClientRequestStarted(ctx, channelReq.Method, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
 	var resp *http.Response
@@ -260,17 +263,17 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		h.metrics.HTTP.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
 	rsp, err := h.parseChannelResponse(req, resp)
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		h.metrics.HTTP.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), contentLength, elapsedMs)
+	h.metrics.HTTP.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), contentLength, elapsedMs)
 
 	return rsp, nil
 }

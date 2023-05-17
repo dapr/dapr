@@ -54,6 +54,7 @@ type AppChannelConfig struct {
 	ReadBufferSizeKB     int
 	AllowInsecureTLS     bool
 	BaseAddress          string
+	Metrics              *diag.Metrics
 }
 
 // Manager is a wrapper around gRPC connection pooling.
@@ -65,6 +66,7 @@ type Manager struct {
 	localConn         *ConnectionPool
 	localConnCreateFn ConnCreatorFn
 	localConnLock     sync.RWMutex
+	metrics           *diag.Metrics
 }
 
 // NewGRPCManager returns a new grpc manager.
@@ -74,6 +76,7 @@ func NewGRPCManager(mode modes.DaprMode, channelConfig *AppChannelConfig) *Manag
 		mode:          mode,
 		channelConfig: channelConfig,
 		localConn:     NewConnectionPool(maxConnIdle, 1),
+		metrics:       channelConfig.Metrics,
 	}
 }
 
@@ -146,9 +149,9 @@ func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
 func (g *Manager) createLocalConnection(parentCtx context.Context, port int, enableTLS bool, allowInsecureTLS bool) (conn *grpc.ClientConn, err error) {
 	opts := make([]grpc.DialOption, 0, 2)
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
+	if g.metrics.GRPC.IsEnabled() {
 		opts = append(opts,
-			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+			grpc.WithUnaryInterceptor(g.metrics.GRPC.UnaryClientInterceptor()),
 		)
 	}
 
@@ -201,9 +204,9 @@ func (g *Manager) connectRemote(
 	opts := make([]grpc.DialOption, 0, 3+len(customOpts))
 	opts = append(opts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
+	if g.metrics.GRPC.IsEnabled() {
 		opts = append(opts,
-			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+			grpc.WithUnaryInterceptor(g.metrics.GRPC.UnaryClientInterceptor()),
 		)
 	}
 

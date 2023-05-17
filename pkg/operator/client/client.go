@@ -25,6 +25,7 @@ const (
 // GetOperatorClient returns a new k8s operator client and the underlying connection.
 // If a cert chain is given, a TLS connection will be established.
 func GetOperatorClient(ctx context.Context,
+	metrics *diag.Metrics,
 	address, serverName string, certChain *daprCredentials.CertChain,
 ) (operatorv1pb.OperatorClient, *grpc.ClientConn, error) {
 	if certChain == nil {
@@ -33,10 +34,10 @@ func GetOperatorClient(ctx context.Context,
 
 	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
+	if metrics.GRPC.IsEnabled() {
 		unaryClientInterceptor = grpcMiddleware.ChainUnaryClient(
 			unaryClientInterceptor,
-			diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
+			metrics.GRPC.UnaryClientInterceptor(),
 		)
 	}
 

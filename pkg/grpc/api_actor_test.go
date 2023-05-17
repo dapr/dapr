@@ -18,12 +18,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -286,10 +288,13 @@ func TestInvokeActorWithResiliency(t *testing.T) {
 		),
 	}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	server, lis := startDaprAPIServer(&api{
 		id:         "fakeAPI",
 		actor:      &failingActors,
-		resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testActorResiliency),
+		resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), metrics, testActorResiliency),
 	}, "")
 	defer server.Stop()
 

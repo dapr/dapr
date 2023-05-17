@@ -5,24 +5,30 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
-func mockGenCSR(id string) ([]byte, []byte, error) {
+func mockGenCSR(id string, _ *diag.Metrics) ([]byte, []byte, error) {
 	return []byte{1}, []byte{2}, nil
 }
 
-func getTestAuthenticator() Authenticator {
-	return newAuthenticator("test", x509.NewCertPool(), nil, nil, mockGenCSR)
+func getTestAuthenticator(t *testing.T) Authenticator {
+	t.Helper()
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+	return newAuthenticator("test", metrics, x509.NewCertPool(), nil, nil, mockGenCSR)
 }
 
 func TestGetTrustAuthAnchors(t *testing.T) {
-	a := getTestAuthenticator()
+	a := getTestAuthenticator(t)
 	ta := a.GetTrustAnchors()
 	assert.NotNil(t, ta)
 }
 
 func TestGetCurrentSignedCert(t *testing.T) {
-	a := getTestAuthenticator()
+	a := getTestAuthenticator(t)
 	a.(*authenticator).currentSignedCert = &SignedCertificate{}
 	c := a.GetCurrentSignedCert()
 	assert.NotNil(t, c)

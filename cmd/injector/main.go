@@ -25,6 +25,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
@@ -59,7 +60,17 @@ func main() {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient)
+	metrics, err := diag.NewMetrics(nil)
+	if err != nil {
+		log.Fatalf("error creating metrics: %s", err)
+	}
+
+	// Initialize injector service metrics
+	if err := monitoring.InitMetrics(metrics); err != nil {
+		log.Fatal(err)
+	}
+
+	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient, metrics)
 	if err != nil {
 		log.Fatalf("error creating injector: %s", err)
 	}
@@ -126,11 +137,6 @@ func init() {
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Initialize injector service metrics
-	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 }

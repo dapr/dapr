@@ -52,30 +52,30 @@ func GetCertChain() (*credentials.CertChain, error) {
 }
 
 // GetSidecarAuthenticator returns a new authenticator with the extracted trust anchors.
-func GetSidecarAuthenticator(sentryAddress string, certChain *credentials.CertChain) (Authenticator, error) {
+func GetSidecarAuthenticator(sentryAddress string, metrics *diag.Metrics, certChain *credentials.CertChain) (Authenticator, error) {
 	trustAnchors, err := CertPool(certChain.RootCA)
 	if err != nil {
 		return nil, err
 	}
 	log.Info("trust anchors and cert chain extracted successfully")
 
-	return newAuthenticator(sentryAddress, trustAnchors, certChain.Cert, certChain.Key, generateCSRAndPrivateKey), nil
+	return newAuthenticator(sentryAddress, metrics, trustAnchors, certChain.Cert, certChain.Key, generateCSRAndPrivateKey), nil
 }
 
-func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
+func generateCSRAndPrivateKey(id string, metrics *diag.Metrics) ([]byte, []byte, error) {
 	if id == "" {
 		return nil, nil, errors.New("id must not be empty")
 	}
 
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
-		diag.DefaultMonitoring.MTLSInitFailed("prikeygen")
+		metrics.Service.MTLSInitFailed("prikeygen")
 		return nil, nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
 	encodedKey, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
-		diag.DefaultMonitoring.MTLSInitFailed("prikeyenc")
+		metrics.Service.MTLSInitFailed("prikeyenc")
 		return nil, nil, err
 	}
 	keyPem := pem.EncodeToMemory(&pem.Block{Type: ecPKType, Bytes: encodedKey})
@@ -86,7 +86,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 	}
 	csrb, err := x509.CreateCertificateRequest(rand.Reader, &csr, key)
 	if err != nil {
-		diag.DefaultMonitoring.MTLSInitFailed("csr")
+		metrics.Service.MTLSInitFailed("csr")
 		return nil, nil, fmt.Errorf("failed to create sidecar csr: %w", err)
 	}
 	return csrb, keyPem, nil

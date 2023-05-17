@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
@@ -58,6 +59,9 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	const testServerCount = 3
 	leaderServer := []int32{1, 2}
 
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	address := make([]string, testServerCount)
 	testSrv := make([]*testServer, testServerCount)
 	cleanup := make([]func(), testServerCount)
@@ -73,7 +77,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 
 	testPlacement := NewActorPlacement(
 		address, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
-		appHealthFunc, noopTableUpdateFunc)
+		appHealthFunc, noopTableUpdateFunc, metrics)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
 		// set leader for leaderServer[0]
@@ -112,6 +116,9 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 }
 
 func TestAppHealthyStatus(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	// arrange
 	address, testSrv, cleanup := newTestServer()
 
@@ -125,7 +132,7 @@ func TestAppHealthyStatus(t *testing.T) {
 	noopTableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{address}, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
-		appHealthFunc, noopTableUpdateFunc)
+		appHealthFunc, noopTableUpdateFunc, metrics)
 
 	// act
 	testPlacement.Start()
@@ -146,6 +153,9 @@ func TestAppHealthyStatus(t *testing.T) {
 }
 
 func TestOnPlacementOrder(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	tableUpdateCount := 0
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() { tableUpdateCount++ }
@@ -153,7 +163,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		[]string{}, nil,
 		"testAppID", "127.0.0.1:1000",
 		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		appHealthFunc, tableUpdateFunc, metrics)
 
 	t.Run("lock operation", func(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
@@ -196,13 +206,16 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
 		"testAppID", "127.0.0.1:1000",
 		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		appHealthFunc, tableUpdateFunc, metrics)
 
 	t.Run("already unlocked", func(t *testing.T) {
 		require.False(t, testPlacement.tableIsBlocked.Load())
@@ -270,13 +283,16 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 }
 
 func TestLookupActor(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
 		"testAppID", "127.0.0.1:1000",
 		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		appHealthFunc, tableUpdateFunc, metrics)
 
 	t.Run("Placementtable is unset", func(t *testing.T) {
 		name, appID := testPlacement.LookupActor("actorOne", "test")
@@ -310,13 +326,16 @@ func TestLookupActor(t *testing.T) {
 }
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
+	metrics, err := diag.NewMetrics(nil)
+	require.NoError(t, err)
+
 	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
 		"testAppID", "127.0.0.1:1000",
 		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		appHealthFunc, tableUpdateFunc, metrics)
 
 	t.Run("concurrent_unlock", func(t *testing.T) {
 		for i := 0; i < 10000; i++ {

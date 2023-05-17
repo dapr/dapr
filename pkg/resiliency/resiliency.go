@@ -109,6 +109,7 @@ type (
 		name      string
 		namespace string
 		log       logger.Logger
+		metrics   *diag.Metrics
 
 		timeouts        map[string]time.Duration
 		retries         map[string]*retry.Config
@@ -282,8 +283,8 @@ func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, op
 }
 
 // FromConfigurations creates a resiliency provider and decodes the configurations from `c`.
-func FromConfigurations(log logger.Logger, c ...*resiliencyV1alpha.Resiliency) *Resiliency {
-	r := New(log)
+func FromConfigurations(log logger.Logger, metrics *diag.Metrics, c ...*resiliencyV1alpha.Resiliency) *Resiliency {
+	r := New(log, metrics)
 
 	// Add the default policies into the overall resiliency first. This allows customers to overwrite them if desired.
 	r.addBuiltInPolicies()
@@ -295,15 +296,16 @@ func FromConfigurations(log logger.Logger, c ...*resiliencyV1alpha.Resiliency) *
 			log.Errorf("Could not read resiliency policy %s: %w", &config.ObjectMeta.Name, err)
 			continue
 		}
-		diag.DefaultResiliencyMonitoring.PolicyLoaded(config.Name, config.Namespace)
+		metrics.Resiliency.PolicyLoaded(context.TODO(), config.Name, config.Namespace)
 	}
 	return r
 }
 
 // New creates a new Resiliency.
-func New(log logger.Logger) *Resiliency {
+func New(log logger.Logger, metrics *diag.Metrics) *Resiliency {
 	return &Resiliency{
 		log:             log,
+		metrics:         metrics,
 		timeouts:        make(map[string]time.Duration),
 		retries:         make(map[string]*retry.Config),
 		circuitBreakers: make(map[string]*breaker.CircuitBreaker),
@@ -543,21 +545,21 @@ func (r *Resiliency) isProtectedPolicy(name string) bool {
 // addMetricsToPolicy adds metrics for resiliency policies for count on instantiation and activation for each policy that is defined.
 func (r *Resiliency) addMetricsToPolicy(policyDef *PolicyDefinition, target string, direction diag.PolicyFlowDirection) {
 	if policyDef.t != 0 {
-		diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy, direction, target)
+		r.metrics.Resiliency.PolicyExecuted(context.TODO(), r.name, r.namespace, diag.TimeoutPolicy, direction, target)
 		policyDef.addTimeoutActivatedMetric = func() {
-			diag.DefaultResiliencyMonitoring.PolicyActivated(r.name, r.namespace, diag.TimeoutPolicy, direction, target)
+			r.metrics.Resiliency.PolicyActivated(context.TODO(), r.name, r.namespace, diag.TimeoutPolicy, direction, target)
 		}
 	}
 	if policyDef.r != nil {
-		diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy, direction, target)
+		r.metrics.Resiliency.PolicyExecuted(context.TODO(), r.name, r.namespace, diag.RetryPolicy, direction, target)
 		policyDef.addRetryActivatedMetric = func() {
-			diag.DefaultResiliencyMonitoring.PolicyActivated(r.name, r.namespace, diag.RetryPolicy, direction, target)
+			r.metrics.Resiliency.PolicyActivated(context.TODO(), r.name, r.namespace, diag.RetryPolicy, direction, target)
 		}
 	}
 	if policyDef.cb != nil {
-		diag.DefaultResiliencyMonitoring.PolicyWithStatusExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
+		r.metrics.Resiliency.PolicyWithStatusExecuted(context.TODO(), r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
 		policyDef.addCBStateChangedMetric = func() {
-			diag.DefaultResiliencyMonitoring.PolicyWithStatusActivated(r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
+			r.metrics.Resiliency.PolicyWithStatusActivated(context.TODO(), r.name, r.namespace, diag.CircuitBreakerPolicy, direction, target, string(policyDef.cb.State()))
 		}
 	}
 }

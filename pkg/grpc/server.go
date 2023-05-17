@@ -75,6 +75,7 @@ type server struct {
 	apiSpec            config.APISpec
 	proxy              messaging.Proxy
 	workflowEngine     *wfengine.WorkflowEngine
+	metrics            *diag.Metrics
 }
 
 var (
@@ -84,7 +85,7 @@ var (
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine, metrics *diag.Metrics) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
 		api:            api,
@@ -98,6 +99,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		apiSpec:        apiSpec,
 		proxy:          proxy,
 		workflowEngine: workflowEngine,
+		metrics:        metrics,
 	}
 }
 
@@ -240,12 +242,12 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 
 	if s.metricSpec.Enabled {
 		s.logger.Info("Enabled gRPC metrics middleware")
-		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
+		intr = append(intr, s.metrics.GRPC.UnaryServerInterceptor())
 
 		if s.kind == apiServer {
-			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingServerInterceptor())
+			intrStream = append(intrStream, s.metrics.GRPC.StreamingServerInterceptor())
 		} else if s.kind == internalServer {
-			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingClientInterceptor())
+			intrStream = append(intrStream, s.metrics.GRPC.StreamingClientInterceptor())
 		}
 	}
 
@@ -324,7 +326,7 @@ func (s *server) startWorkloadCertRotation() {
 				s.renewMutex.Unlock()
 				continue
 			}
-			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
+			s.metrics.Service.MTLSWorkLoadCertRotationCompleted(context.TODO())
 		}
 		s.renewMutex.Unlock()
 	}

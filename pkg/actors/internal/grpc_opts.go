@@ -28,7 +28,7 @@ import (
 var errEstablishingTLSConn = errors.New("failed to establish TLS credentials for actor placement service")
 
 // getGrpcOptsGetter returns a function that provides the grpc options and once defined, a cached version will be returned.
-func getGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) func() ([]grpc.DialOption, error) {
+func getGrpcOptsGetter(servers []string, metrics *diag.Metrics, clientCert *daprCredentials.CertChain) func() ([]grpc.DialOption, error) {
 	mu := sync.RWMutex{}
 	var cached []grpc.DialOption
 	return func() ([]grpc.DialOption, error) {
@@ -51,10 +51,10 @@ func getGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) 
 			return nil, errEstablishingTLSConn
 		}
 
-		if diag.DefaultGRPCMonitoring.IsEnabled() {
+		if metrics.GRPC.IsEnabled() {
 			opts = append(
 				opts,
-				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
+				grpc.WithUnaryInterceptor(metrics.GRPC.UnaryClientInterceptor()))
 		}
 
 		if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
