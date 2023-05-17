@@ -8,7 +8,8 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 var (
@@ -44,46 +45,62 @@ var (
 )
 
 // CertSignRequestReceived counts when CSR received.
-func CertSignRequestReceived() {
-	stats.Record(context.Background(), csrReceivedTotal.M(1))
+func CertSignRequestReceived(metrics *diag.Metrics) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		stats.WithMeasurements(csrReceivedTotal.M(1)),
+	)
 }
 
 // CertSignSucceed counts succeeded cert issuance.
-func CertSignSucceed() {
-	stats.Record(context.Background(), certSignSuccessTotal.M(1))
+func CertSignSucceed(metrics *diag.Metrics) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		stats.WithMeasurements(certSignSuccessTotal.M(1)),
+	)
 }
 
 // CertSignFailed counts succeeded cert issuance.
-func CertSignFailed(reason string) {
-	stats.RecordWithTags(
-		context.Background(),
-		diagUtils.WithTags(certSignFailedTotal.Name(), failedReasonKey, reason),
-		certSignFailedTotal.M(1))
+func CertSignFailed(metrics *diag.Metrics, reason string) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		metrics.Rules.WithTags(certSignFailedTotal.Name(), failedReasonKey, reason),
+		stats.WithMeasurements(certSignFailedTotal.M(1)),
+	)
 }
 
 // IssuerCertExpiry records root cert expiry.
-func IssuerCertExpiry(expiry *time.Time) {
-	stats.Record(context.Background(), issuerCertExpiryTimestamp.M(expiry.Unix()))
+func IssuerCertExpiry(metrics *diag.Metrics, expiry *time.Time) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		stats.WithMeasurements(issuerCertExpiryTimestamp.M(expiry.Unix())),
+	)
 }
 
 // ServerCertIssueFailed records server cert issue failure.
-func ServerCertIssueFailed(reason string) {
-	stats.Record(context.Background(), serverTLSCertIssueFailedTotal.M(1))
+func ServerCertIssueFailed(metrics *diag.Metrics, reason string) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		stats.WithMeasurements(serverTLSCertIssueFailedTotal.M(1)),
+	)
 }
 
 // IssuerCertChanged records issuer credential change.
-func IssuerCertChanged() {
-	stats.Record(context.Background(), issuerCertChangedTotal.M(1))
+func IssuerCertChanged(metrics *diag.Metrics) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		stats.WithMeasurements(issuerCertChangedTotal.M(1)),
+	)
 }
 
 // InitMetrics initializes metrics.
-func InitMetrics() error {
-	return view.Register(
-		diagUtils.NewMeasureView(csrReceivedTotal, noKeys, view.Count()),
-		diagUtils.NewMeasureView(certSignSuccessTotal, noKeys, view.Count()),
-		diagUtils.NewMeasureView(certSignFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
-		diagUtils.NewMeasureView(serverTLSCertIssueFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
-		diagUtils.NewMeasureView(issuerCertChangedTotal, noKeys, view.Count()),
-		diagUtils.NewMeasureView(issuerCertExpiryTimestamp, noKeys, view.LastValue()),
+func InitMetrics(metrics *diag.Metrics) error {
+	return metrics.Meter.Register(
+		utils.NewMeasureView(csrReceivedTotal, noKeys, utils.Count()),
+		utils.NewMeasureView(certSignSuccessTotal, noKeys, utils.Count()),
+		utils.NewMeasureView(certSignFailedTotal, []tag.Key{failedReasonKey}, utils.Count()),
+		utils.NewMeasureView(serverTLSCertIssueFailedTotal, []tag.Key{failedReasonKey}, utils.Count()),
+		utils.NewMeasureView(issuerCertChangedTotal, noKeys, utils.Count()),
+		utils.NewMeasureView(issuerCertExpiryTimestamp, noKeys, view.LastValue()),
 	)
 }

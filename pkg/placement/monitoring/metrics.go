@@ -20,7 +20,8 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 var (
@@ -37,21 +38,25 @@ var (
 )
 
 // RecordRuntimesCount records the number of connected runtimes.
-func RecordRuntimesCount(count int) {
-	stats.Record(context.Background(), runtimesTotal.M(int64(count)))
+func RecordRuntimesCount(metrics *diag.Metrics, count int) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		stats.WithMeasurements(runtimesTotal.M(int64(count))),
+	)
 }
 
 // RecordActorRuntimesCount records the number of valid actor runtimes.
-func RecordActorRuntimesCount(count int) {
-	stats.Record(context.Background(), actorRuntimesTotal.M(int64(count)))
+func RecordActorRuntimesCount(metrics *diag.Metrics, count int) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		stats.WithMeasurements(actorRuntimesTotal.M(int64(count))),
+	)
 }
 
 // InitMetrics initialize the placement service metrics.
-func InitMetrics() error {
-	err := view.Register(
-		diagUtils.NewMeasureView(runtimesTotal, noKeys, view.LastValue()),
-		diagUtils.NewMeasureView(actorRuntimesTotal, noKeys, view.LastValue()),
+func InitMetrics(metrics *diag.Metrics) error {
+	return metrics.Meter.Register(
+		utils.NewMeasureView(runtimesTotal, noKeys, view.LastValue()),
+		utils.NewMeasureView(actorRuntimesTotal, noKeys, view.LastValue()),
 	)
-
-	return err
 }

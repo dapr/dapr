@@ -17,10 +17,10 @@ import (
 	"context"
 
 	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (
@@ -52,27 +52,34 @@ var (
 )
 
 // RecordSidecarInjectionRequestsCount records the total number of sidecar injection requests.
-func RecordSidecarInjectionRequestsCount() {
-	stats.Record(context.Background(), sidecarInjectionRequestsTotal.M(1))
+func RecordSidecarInjectionRequestsCount(metrics *diag.Metrics) {
+	stats.RecordWithOptions(context.Background(),
+		stats.WithRecorder(metrics.Meter),
+		stats.WithMeasurements(sidecarInjectionRequestsTotal.M(1)),
+	)
 }
 
 // RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections.
-func RecordSuccessfulSidecarInjectionCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(succeededSidecarInjectedTotal.Name(), appIDKey, appID), succeededSidecarInjectedTotal.M(1))
+func RecordSuccessfulSidecarInjectionCount(metrics *diag.Metrics, appID string) {
+	stats.RecordWithOptions(context.Background(),
+		metrics.Rules.WithTags(succeededSidecarInjectedTotal.Name(), appIDKey, appID),
+		stats.WithMeasurements(succeededSidecarInjectedTotal.M(1)),
+	)
 }
 
 // RecordFailedSidecarInjectionCount records the number of failed sidecar injections.
-func RecordFailedSidecarInjectionCount(appID, reason string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(failedSidecarInjectedTotal.Name(), appIDKey, appID, failedReasonKey, reason), failedSidecarInjectedTotal.M(1))
+func RecordFailedSidecarInjectionCount(metrics *diag.Metrics, appID, reason string) {
+	stats.RecordWithOptions(context.Background(),
+		metrics.Rules.WithTags(failedSidecarInjectedTotal.Name(), appIDKey, appID, failedReasonKey, reason),
+		stats.WithMeasurements(failedSidecarInjectedTotal.M(1)),
+	)
 }
 
 // InitMetrics initialize the injector service metrics.
-func InitMetrics() error {
-	err := view.Register(
-		diagUtils.NewMeasureView(sidecarInjectionRequestsTotal, noKeys, view.Count()),
-		diagUtils.NewMeasureView(succeededSidecarInjectedTotal, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(failedSidecarInjectedTotal, []tag.Key{appIDKey, failedReasonKey}, view.Count()),
+func InitMetrics(metrics *diag.Metrics) error {
+	return metrics.Meter.Register(
+		utils.NewMeasureView(sidecarInjectionRequestsTotal, noKeys, utils.Count()),
+		utils.NewMeasureView(succeededSidecarInjectedTotal, []tag.Key{appIDKey}, utils.Count()),
+		utils.NewMeasureView(failedSidecarInjectedTotal, []tag.Key{appIDKey, failedReasonKey}, utils.Count()),
 	)
-
-	return err
 }

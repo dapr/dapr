@@ -17,10 +17,10 @@ import (
 	"context"
 
 	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (
@@ -46,27 +46,34 @@ var (
 )
 
 // RecordServiceCreatedCount records the number of dapr service created.
-func RecordServiceCreatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceCreatedTotal.Name(), appIDKey, appID), serviceCreatedTotal.M(1))
+func RecordServiceCreatedCount(metrics *diag.Metrics, appID string) {
+	stats.RecordWithOptions(context.Background(),
+		metrics.Rules.WithTags(serviceCreatedTotal.Name(), appIDKey, appID),
+		stats.WithMeasurements(serviceCreatedTotal.M(1)),
+	)
 }
 
 // RecordServiceDeletedCount records the number of dapr service deleted.
-func RecordServiceDeletedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceDeletedTotal.Name(), appIDKey, appID), serviceDeletedTotal.M(1))
+func RecordServiceDeletedCount(metrics *diag.Metrics, appID string) {
+	stats.RecordWithOptions(context.Background(),
+		metrics.Rules.WithTags(serviceDeletedTotal.Name(), appIDKey, appID),
+		stats.WithMeasurements(serviceDeletedTotal.M(1)),
+	)
 }
 
 // RecordServiceUpdatedCount records the number of dapr service updated.
-func RecordServiceUpdatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceUpdatedTotal.Name(), appIDKey, appID), serviceUpdatedTotal.M(1))
+func RecordServiceUpdatedCount(metrics *diag.Metrics, appID string) {
+	stats.RecordWithOptions(context.Background(),
+		metrics.Rules.WithTags(serviceUpdatedTotal.Name(), appIDKey, appID),
+		stats.WithMeasurements(serviceUpdatedTotal.M(1)),
+	)
 }
 
 // InitMetrics initialize the operator service metrics.
-func InitMetrics() error {
-	err := view.Register(
-		diagUtils.NewMeasureView(serviceCreatedTotal, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(serviceDeletedTotal, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(serviceUpdatedTotal, []tag.Key{appIDKey}, view.Count()),
+func InitMetrics(metrics *diag.Metrics) error {
+	return metrics.Meter.Register(
+		utils.NewMeasureView(serviceCreatedTotal, []tag.Key{appIDKey}, utils.Count()),
+		utils.NewMeasureView(serviceDeletedTotal, []tag.Key{appIDKey}, utils.Count()),
+		utils.NewMeasureView(serviceUpdatedTotal, []tag.Key{appIDKey}, utils.Count()),
 	)
-
-	return err
 }
