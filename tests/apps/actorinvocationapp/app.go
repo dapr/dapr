@@ -28,7 +28,7 @@ import (
 
 const (
 	appPort            = 3000
-	daprBaseURL        = "http://localhost:3500/v1.0"
+	daprBaseURL        = "http://localhost:3500//v1.0" // Using "//" to repro regression.
 	daprActorMethodURL = daprBaseURL + "/actors/%s/%s/method/%s"
 
 	actorIdleTimeout        = "5s" // Short idle timeout.

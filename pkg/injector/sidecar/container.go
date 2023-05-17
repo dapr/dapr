@@ -148,7 +148,10 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
 		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(disableBuiltinK8sSecretStore),
-		"--app-channel-address", cfg.Annotations.GetString(annotations.KeyAppChannel),
+	}
+
+	if v, ok := cfg.Annotations[annotations.KeyAppChannel]; ok && v != "" {
+		args = append(args, "--app-channel-address", v)
 	}
 
 	// --enable-api-logging is set only if there's an explicit annotation (true or false) for that
