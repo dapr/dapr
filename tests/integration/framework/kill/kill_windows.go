@@ -17,39 +17,17 @@ limitations under the License.
 package kill
 
 import (
+	"os"
 	"os/exec"
-	"syscall"
+	"strconv"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/windows"
+	"github.com/stretchr/testify/assert"
 )
 
 func interrupt(t *testing.T, cmd *exec.Cmd) {
-	dll, err := windows.LoadDLL("kernel32.dll")
-	require.NoError(t, err)
-	defer dll.Release()
-
-	f, err := dll.FindProc("AttachConsole")
-	require.NoError(t, err)
-
-	r1, _, err := f.Call(uintptr(cmd.Process.Pid))
-	if r1 == 0 && err != syscall.ERROR_ACCESS_DENIED {
-		require.NoError(t, err)
-	}
-
-	f, err = dll.FindProc("SetConsoleCtrlHandler")
-	require.NoError(t, err)
-
-	r1, _, err = f.Call(0, 1)
-	require.ErrorContains(t, err, "The operation completed successfully")
-
-	f, err = dll.FindProc("GenerateConsoleCtrlEvent")
-	require.NoError(t, err)
-
-	r1, _, err = f.Call(windows.CTRL_BREAK_EVENT, uintptr(cmd.Process.Pid))
-	require.ErrorContains(t, err, "The operation completed successfully")
-
-	r1, _, err = f.Call(windows.CTRL_C_EVENT, uintptr(cmd.Process.Pid))
-	require.ErrorContains(t, err, "The operation completed successfully")
+	tk := exec.Command("taskkill", "/T", "/PID", strconv.FormatInt(int64(cmd.Process.Pid), 10))
+	tk.Stderr = os.Stderr
+	tk.Stdout = os.Stdout
+	assert.NoError(t, tk.Run())
 }
