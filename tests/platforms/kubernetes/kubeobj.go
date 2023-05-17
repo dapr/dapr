@@ -155,6 +155,10 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 		annotationObject["dapr.io/sidecar-image"] = appDesc.SidecarImage
 	}
 
+	if appDesc.MaxRequestSizeMB != 0 {
+		annotationObject["dapr.io/http-max-request-size"] = strconv.Itoa(appDesc.MaxRequestSizeMB)
+	}
+
 	return annotationObject
 }
 

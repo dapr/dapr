@@ -30,7 +30,8 @@ type FakeStateStoreItem struct {
 }
 
 type FakeStateStore struct {
-	Items map[string]*FakeStateStoreItem
+	NoLock bool
+	Items  map[string]*FakeStateStoreItem
 
 	lock sync.RWMutex
 }
@@ -63,8 +64,11 @@ func (f *FakeStateStore) Features() []state.Feature {
 }
 
 func (f *FakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
+	if !f.NoLock {
+		f.lock.Lock()
+		defer f.lock.Unlock()
+	}
+
 	delete(f.Items, req.Key)
 
 	return nil
@@ -75,10 +79,12 @@ func (f *FakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteReque
 }
 
 func (f *FakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
-	f.lock.RLock()
-	defer f.lock.RUnlock()
-	item := f.Items[req.Key]
+	if !f.NoLock {
+		f.lock.RLock()
+		defer f.lock.RUnlock()
+	}
 
+	item := f.Items[req.Key]
 	if item == nil {
 		return &state.GetResponse{Data: nil, ETag: nil}, nil
 	}
@@ -109,9 +115,12 @@ func (f *FakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest, op
 }
 
 func (f *FakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
+	if !f.NoLock {
+		f.lock.Lock()
+		defer f.lock.Unlock()
+	}
+
 	b, _ := marshal(&req.Value)
-	f.lock.Lock()
-	defer f.lock.Unlock()
 	f.Items[req.Key] = f.NewItem(b)
 
 	return nil
@@ -126,8 +135,11 @@ func (f *FakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest, op
 }
 
 func (f *FakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
+	if !f.NoLock {
+		f.lock.Lock()
+		defer f.lock.Unlock()
+	}
+
 	// First we check all eTags
 	for _, o := range request.Operations {
 		var eTag *string

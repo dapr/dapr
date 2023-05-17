@@ -1,13 +1,14 @@
-// list of owner who can control dapr-bot workflow
+// List of owner who can control dapr-bot workflow
+// IMPORTANT: Make sure usernames are lower-cased
 // TODO: Read owners from OWNERS file.
 const owners = [
     'addjuarez',
     'artursouza',
     'berndverst',
     'daixiang0',
-    'DeepanshuA',
+    'deepanshua',
     'halspang',
-    'ItalyPaleAle',
+    'italypaleale',
     'johnewart',
     'joshvanl',
     'mcandeia',
@@ -19,7 +20,7 @@ const owners = [
     'ryanlettieri',
     'shubham1172',
     'skyao',
-    "Taction",
+    'taction',
     'tanvigour',
     'yaron2',
 ]
