@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/kill"
 )
@@ -108,18 +109,19 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		defaultExitCode = 1
 	}
 
+	fp := freeport.New(t, 6)
 	options := daprdOptions{
 		stdout:           iowriter.New(t),
 		stderr:           iowriter.New(t),
 		binPath:          os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"),
 		appID:            uid.String(),
 		appPort:          appListener.Addr().(*net.TCPAddr).Port,
-		grpcPort:         freeport(t),
-		httpPort:         freeport(t),
-		internalGRPCPort: freeport(t),
-		publicPort:       freeport(t),
-		metricsPort:      freeport(t),
-		profilePort:      freeport(t),
+		grpcPort:         fp.Port(t, 0),
+		httpPort:         fp.Port(t, 1),
+		internalGRPCPort: fp.Port(t, 2),
+		publicPort:       fp.Port(t, 3),
+		metricsPort:      fp.Port(t, 4),
+		profilePort:      fp.Port(t, 5),
 		runErrorFn: func(err error) {
 			if runtime.GOOS == "windows" {
 				// Windows returns 1 when we kill the process.
@@ -178,6 +180,7 @@ func RunDaprd(t *testing.T, ctx context.Context, opts ...RunDaprdOption) *Comman
 		exitCode:         options.exitCode,
 	}
 
+	fp.Free(t)
 	require.NoError(t, cmd.Start())
 
 	return daprd
@@ -211,11 +214,4 @@ func (c *Command) checkExit(t *testing.T) {
 	c.runErrorFnFn(c.cmd.Wait())
 	assert.NotNil(t, c.cmd.ProcessState, "process state should not be nil")
 	assert.Equalf(t, c.exitCode, c.cmd.ProcessState.ExitCode(), "expected exit code to be %d", c.exitCode)
-}
-
-func freeport(t *testing.T) int {
-	n, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer n.Close()
-	return n.Addr().(*net.TCPAddr).Port
 }
