@@ -37,6 +37,7 @@ type AppDescription struct {
 	DaprEnabled               bool                            `json:",omitempty"`
 	ImageName                 string                          `json:",omitempty"`
 	ImageSecret               string                          `json:",omitempty"`
+	SidecarImage              string                          `json:",omitempty"`
 	RegistryName              string                          `json:",omitempty"`
 	Replicas                  int32                           `json:",omitempty"`
 	IngressEnabled            bool                            `json:",omitempty"`
@@ -73,6 +74,7 @@ type AppDescription struct {
 	AppHealthProbeTimeout     int                             `json:",omitempty"` // In milliseconds
 	AppHealthThreshold        int                             `json:",omitempty"`
 	AppChannelAddress         string                          `json:",omitempty"`
+	MaxRequestSizeMB          int                             `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {
