@@ -16,6 +16,7 @@ package kill
 import (
 	"os/exec"
 	"testing"
+	"time"
 )
 
 func Kill(t *testing.T, cmd *exec.Cmd) {
@@ -27,5 +28,9 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 
 	t.Log("interrupting daprd process")
 
+	// TODO: daprd does not currently gracefully exit on a single interrupt
+	// signal. Remove once fixed.
+	interrupt(t, cmd)
+	time.Sleep(time.Millisecond * 300)
 	interrupt(t, cmd)
 }

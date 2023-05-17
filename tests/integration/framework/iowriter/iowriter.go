@@ -14,6 +14,7 @@ limitations under the License.
 package iowriter
 
 import (
+	"bytes"
 	"io"
 	"testing"
 )
@@ -27,7 +28,12 @@ func New(t *testing.T) io.WriteCloser {
 }
 
 func (w *stdwriter) Write(p []byte) (n int, err error) {
-	w.t.Log(w.t.Name() + ": " + string(p))
+	for _, line := range bytes.Split(p, []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		w.t.Log(w.t.Name() + ": " + string(line))
+	}
 	return len(p), nil
 }
 

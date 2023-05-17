@@ -11,7 +11,9 @@ always built from source within the test.
 
 ## Invoking the test
 
-`go test -v -race -tags="integration" ./tests/integration`
+```go
+go test -v -race -tags="integration" ./tests/integration`
+```
 
 Rather than building from source, you can also set a custom daprd binary path
 with the environment variable `DAPR_INTEGRATION_DAPRD_PATH`.
@@ -33,7 +35,7 @@ type Case interface {
 
 To add the test to the suite, add the following `init` function
 
-```
+```go
 func init() {
 	suite.Register(new(MyNewTestScenario))
 }
@@ -42,12 +44,12 @@ func init() {
 Finally, include your integration test directory with a blank identifier to
 `tests/integration/integration.go` so that the init function is invoked.
 
-```
+```go
 	_ "github.com/dapr/dapr/tests/integration/suite/my-new-test-scenario"
 ```
 
 You may need to extend the framework options to suit your test scenario. These
 are defined in `tests/integration/framework`.
 
-Take a look at `tests/integration/suite/ports/ports.go` as a trivial example to
-base your test on.
+Take a look at `tests/integration/suite/ports/ports.go` as a "hello world"
+example to base your test on.
