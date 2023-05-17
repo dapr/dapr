@@ -153,6 +153,11 @@ func (c *FSM) Apply(log *raft.Log) interface{} {
 		return false
 	}
 
+	if len(log.Data) < 2 {
+		logging.Warnf("too short log data in raft logs: %v", log.Data)
+		return false
+	}
+
 	switch CommandType(log.Data[0]) {
 	case MemberUpsert:
 		updated, err = c.upsertMember(log.Data[1:])
