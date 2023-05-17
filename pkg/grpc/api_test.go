@@ -1043,7 +1043,7 @@ func TestSaveState(t *testing.T) {
 				req[1].Key == etagMismatchKey
 		}),
 		mock.Anything,
-	).Return(errors.Join(state.NewBulkStoreError(1, etagMismatchErr)))
+	).Return(errors.Join(state.NewBulkStoreError(etagMismatchKey, etagMismatchErr)))
 	fakeStore.On("BulkSet",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.SetRequest) bool {
@@ -1054,8 +1054,8 @@ func TestSaveState(t *testing.T) {
 		}),
 		mock.Anything,
 	).Return(errors.Join(
-		state.NewBulkStoreError(1, etagMismatchErr),
-		state.NewBulkStoreError(2, etagInvalidErr),
+		state.NewBulkStoreError(etagMismatchKey, etagMismatchErr),
+		state.NewBulkStoreError(etagInvalidKey, etagInvalidErr),
 	))
 
 	compStore := compstore.New()
@@ -2194,7 +2194,7 @@ func TestDeleteBulkState(t *testing.T) {
 				req[1].Key == etagMismatchKey
 		}),
 		mock.Anything,
-	).Return(errors.Join(state.NewBulkStoreError(1, etagMismatchErr)))
+	).Return(errors.Join(state.NewBulkStoreError(etagMismatchKey, etagMismatchErr)))
 	fakeStore.On("BulkDelete",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req []state.DeleteRequest) bool {
@@ -2205,8 +2205,8 @@ func TestDeleteBulkState(t *testing.T) {
 		}),
 		mock.Anything,
 	).Return(errors.Join(
-		state.NewBulkStoreError(1, etagMismatchErr),
-		state.NewBulkStoreError(2, etagInvalidErr),
+		state.NewBulkStoreError(etagMismatchKey, etagMismatchErr),
+		state.NewBulkStoreError(etagInvalidKey, etagInvalidErr),
 	))
 
 	compStore := compstore.New()

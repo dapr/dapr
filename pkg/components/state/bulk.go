@@ -24,8 +24,24 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
+type stateRequestConstraint interface {
+	state.SetRequest | state.DeleteRequest
+	state.StateRequest
+}
+
+func requestWithKey[T stateRequestConstraint](reqs []T, key string) int {
+	for i, r := range reqs {
+		if r.GetKey() == key {
+			return i
+		}
+	}
+
+	// Should never happen…
+	return -1
+}
+
 // PerformBulkStoreOperation performs a bulk set or delete using resiliency, retrying operations that fail only when they can be retried.
-func PerformBulkStoreOperation[T state.SetRequest | state.DeleteRequest](
+func PerformBulkStoreOperation[T stateRequestConstraint](
 	ctx context.Context, reqs []T, policyDef *resiliency.PolicyDefinition, opts state.BulkStoreOpts,
 	execSingle func(ctx context.Context, req *T) error,
 	execMulti func(ctx context.Context, reqs []T, opts state.BulkStoreOpts) error,
@@ -34,21 +50,26 @@ func PerformBulkStoreOperation[T state.SetRequest | state.DeleteRequest](
 	reqsAtomic.Store(&reqs)
 	policyRunner := resiliency.NewRunnerWithOptions(ctx,
 		policyDef,
-		resiliency.RunnerOpts[[]int]{
+		resiliency.RunnerOpts[[]string]{
 			// In case of errors, the policy runner function returns a list of items that are to be retried.
 			// Items that can NOT be retried are the items that either succeeded (when at least one other item failed) or which failed with an etag error (which can't be retried)
-			Accumulator: func(retry []int) {
-				// This function is executed synchronously so we can modify reqs
+			Accumulator: func(retry []string) {
 				rReqs := *reqsAtomic.Load()
 				newReqs := make([]T, len(retry))
-				for i, seq := range retry {
-					newReqs[i] = rReqs[seq]
+				var n int
+				for _, retryKey := range retry {
+					i := requestWithKey(reqs, retryKey)
+					if i >= 0 {
+						newReqs[n] = rReqs[i]
+						n++
+					}
 				}
+				newReqs = newReqs[:n]
 				reqsAtomic.Store(&newReqs)
 			},
 		},
 	)
-	_, err := policyRunner(func(ctx context.Context) ([]int, error) {
+	_, err := policyRunner(func(ctx context.Context) ([]string, error) {
 		var rErr error
 		rReqs := *reqsAtomic.Load()
 
@@ -89,7 +110,7 @@ func PerformBulkStoreOperation[T state.SetRequest | state.DeleteRequest](
 		// Check which operation(s) failed
 		// We can retry if at least one error is not an etag error
 		var canRetry, etagInvalid bool
-		retry := make([]int, 0, len(errs))
+		retry := make([]string, 0, len(errs))
 		for _, e := range errs {
 			// Check if it's a BulkStoreError
 			// If not, we will cause all operations to be retried, because the error was not a multi BulkStoreError
@@ -101,7 +122,7 @@ func PerformBulkStoreOperation[T state.SetRequest | state.DeleteRequest](
 			// If it's not an etag error, the operation can retry this failed item
 			if etagErr := bse.ETagError(); etagErr == nil {
 				canRetry = true
-				retry = append(retry, bse.Sequence())
+				retry = append(retry, bse.Key())
 			} else if etagErr.Kind() == state.ETagInvalid {
 				// If at least one etag error is due to an etag invalid, record that
 				etagInvalid = true

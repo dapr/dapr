@@ -150,7 +150,7 @@ func TestPerformBulkStoreOperation(t *testing.T) {
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
 					return errors.Join(
-						state.NewBulkStoreError(1, etagMismatchErr),
+						state.NewBulkStoreError("key2", etagMismatchErr),
 					)
 				},
 			)
@@ -168,8 +168,8 @@ func TestPerformBulkStoreOperation(t *testing.T) {
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
 					return errors.Join(
-						state.NewBulkStoreError(0, etagInvalidErr),
-						state.NewBulkStoreError(1, etagMismatchErr),
+						state.NewBulkStoreError("key1", etagInvalidErr),
+						state.NewBulkStoreError("key2", etagMismatchErr),
 					)
 				},
 			)
@@ -192,7 +192,7 @@ func TestPerformBulkStoreOperation(t *testing.T) {
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
 					return errors.Join(
-						state.NewBulkStoreError(1, simulatedErr),
+						state.NewBulkStoreError("key2", simulatedErr),
 					)
 				},
 			)
@@ -213,8 +213,8 @@ func TestPerformBulkStoreOperation(t *testing.T) {
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
 					return errors.Join(
-						state.NewBulkStoreError(0, simulatedErr),
-						state.NewBulkStoreError(1, etagMismatchErr),
+						state.NewBulkStoreError("key1", simulatedErr),
+						state.NewBulkStoreError("key2", etagMismatchErr),
 					)
 				},
 			)
@@ -241,8 +241,8 @@ func TestPerformBulkStoreOperation(t *testing.T) {
 				func(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 					count.Add(1)
 					return errors.Join(
-						state.NewBulkStoreError(0, simulatedErr),
-						state.NewBulkStoreError(1, etagMismatchErr),
+						state.NewBulkStoreError("key1", simulatedErr),
+						state.NewBulkStoreError("key2", etagMismatchErr),
 					)
 				},
 			)
@@ -265,26 +265,23 @@ func TestPerformBulkStoreOperation(t *testing.T) {
 					if count.Add(1) == 1 {
 						// On first attempt, key1 and key3 fail with non-etag errors
 						return errors.Join(
-							state.NewBulkStoreError(0, simulatedErr),
-							state.NewBulkStoreError(2, simulatedErr),
+							state.NewBulkStoreError("key1", simulatedErr),
+							state.NewBulkStoreError("key3", simulatedErr),
 						)
 					}
 
 					// On the second attempt, key3 fails with etag error
 					require.Len(t, req, 2)
-					var key3Idx int
 					for i := 0; i < 2; i++ {
 						switch req[i].Key {
-						case "key3":
-							key3Idx = i
-						case "key1":
+						case "key3", "key1":
 							// All good
 						default:
 							t.Fatalf("Found unexpected key: %s", req[i].Key)
 						}
 					}
 					return errors.Join(
-						state.NewBulkStoreError(key3Idx, etagMismatchErr),
+						state.NewBulkStoreError("key3", etagMismatchErr),
 					)
 				},
 			)

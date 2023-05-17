@@ -427,4 +427,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date.
 
 // TODO: REMOVE WHEN PR IN COMPONENTS-CONTRIB IS MERGED
-replace github.com/dapr/components-contrib => github.com/dapr/components-contrib v1.11.0-rc.2.0.20230516184520-41303a9b0c00
+replace github.com/dapr/components-contrib => github.com/dapr/components-contrib v1.11.0-rc.2.0.20230517001818-eebf0f677a19
