@@ -35,6 +35,9 @@ func RunIntegrationTests(t *testing.T) {
 			t.Parallel()
 
 			guard <- struct{}{}
+			t.Cleanup(func() {
+				<-guard
+			})
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -52,7 +55,6 @@ func RunIntegrationTests(t *testing.T) {
 			daprd.Cleanup(t)
 
 			t.Log("done")
-			<-guard
 		})
 	}
 }
