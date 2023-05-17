@@ -64,7 +64,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		}
 
 		ctx = trace.ContextWithRemoteSpanContext(ctx, sc)
-		ctx, span = tracer.Start(ctx, info.FullMethod, spanKind)
+		ctx, span = tracer().Start(ctx, info.FullMethod, spanKind)
 
 		isSampled := span.SpanContext().IsSampled()
 		if isSampled {
@@ -148,7 +148,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		// Overwrite context
 		sc, _ := SpanContextFromIncomingGRPCMetadata(ctx)
 		ctx = trace.ContextWithRemoteSpanContext(ctx, sc)
-		ctx, span = tracer.Start(ctx, info.FullMethod, spanKind)
+		ctx, span = tracer().Start(ctx, info.FullMethod, spanKind)
 		wrapped := grpcMiddleware.WrapServerStream(ss)
 		wrapped.WrappedContext = ctx
 
@@ -215,7 +215,7 @@ func StartGRPCProducerSpanChildFromParent(ct context.Context, parentSpan trace.S
 	netCtx := trace.ContextWithRemoteSpanContext(ct, parentSpan.SpanContext())
 	spanKind := trace.WithSpanKind(trace.SpanKindProducer)
 
-	ctx, span := tracer.Start(netCtx, spanName, spanKind)
+	ctx, span := tracer().Start(netCtx, spanName, spanKind)
 
 	return ctx, span
 }

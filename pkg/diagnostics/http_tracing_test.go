@@ -20,7 +20,6 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
@@ -35,6 +34,7 @@ import (
 )
 
 func TestSpanContextFromRequest(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		header string
@@ -82,7 +82,9 @@ func TestSpanContextFromRequest(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			req := &fasthttp.Request{}
 			req.Header.Add("traceparent", tt.header)
 
@@ -94,6 +96,7 @@ func TestSpanContextFromRequest(t *testing.T) {
 }
 
 func TestUserDefinedHTTPHeaders(t *testing.T) {
+	t.Parallel()
 	reqCtx := &fasthttp.RequestCtx{}
 	reqCtx.Request.Header.Add("dapr-userdefined-1", "value1")
 	reqCtx.Request.Header.Add("dapr-userdefined-2", "value2")
@@ -107,6 +110,7 @@ func TestUserDefinedHTTPHeaders(t *testing.T) {
 }
 
 func TestSpanContextToHTTPHeaders(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		sc trace.SpanContextConfig
 	}{
@@ -119,7 +123,9 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run("SpanContextToHTTPHeaders", func(t *testing.T) {
+			t.Parallel()
 			req := &fasthttp.Request{}
 			wantSc := trace.NewSpanContext(tt.sc)
 			SpanContextToHTTPHeaders(wantSc, req.Header.Set)
@@ -131,6 +137,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 	}
 
 	t.Run("empty span context", func(t *testing.T) {
+		t.Parallel()
 		req := &fasthttp.Request{}
 		sc := trace.SpanContext{}
 		SpanContextToHTTPHeaders(sc, req.Header.Set)
@@ -140,6 +147,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 }
 
 func TestGetAPIComponent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path    string
 		version string
@@ -157,7 +165,9 @@ func TestGetAPIComponent(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
 			ver, api := getAPIComponent(tt.path)
 			assert.Equal(t, tt.version, ver)
 			assert.Equal(t, tt.api, api)
@@ -166,6 +176,7 @@ func TestGetAPIComponent(t *testing.T) {
 }
 
 func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path string
 		out  map[string]string
@@ -244,7 +255,9 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
 			req := getTestHTTPRequest()
 			resp := &fasthttp.Response{}
 			resp.SetStatusCode(200)
@@ -270,6 +283,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 }
 
 func TestSpanContextToResponse(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		scConfig trace.SpanContextConfig
 	}{
@@ -282,7 +296,9 @@ func TestSpanContextToResponse(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run("SpanContextToResponse", func(t *testing.T) {
+			t.Parallel()
 			resp := &fasthttp.Response{}
 			wantSc := trace.NewSpanContext(tt.scConfig)
 			SpanContextToHTTPHeaders(wantSc, resp.Header.Set)
@@ -323,7 +339,6 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	responseBody := "fake_responseDaprBody"
 
 	fakeHandler := func(ctx *fasthttp.RequestCtx) {
-		time.Sleep(100 * time.Millisecond)
 		ctx.Response.SetBodyRaw([]byte(responseBody))
 	}
 
@@ -339,6 +354,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	otel.SetTracerProvider(tp)
 
 	t.Run("traceparent is given in request and sampling is enabled", func(t *testing.T) {
+		t.Parallel()
 		testRequestCtx := newTraceFastHTTPRequestCtx(
 			requestBody, "/v1.0/state/statestore",
 			map[string]string{
@@ -356,6 +372,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	})
 
 	t.Run("traceparent is not given in request", func(t *testing.T) {
+		t.Parallel()
 		testRequestCtx := newTraceFastHTTPRequestCtx(
 			requestBody, "/v1.0/state/statestore",
 			map[string]string{
@@ -373,6 +390,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	})
 
 	t.Run("traceparent not given in response", func(t *testing.T) {
+		t.Parallel()
 		testRequestCtx := newTraceFastHTTPRequestCtx(
 			requestBody, "/v1.0/state/statestore",
 			map[string]string{
@@ -387,6 +405,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	})
 
 	t.Run("traceparent given in response", func(t *testing.T) {
+		t.Parallel()
 		testRequestCtx := newTraceFastHTTPRequestCtx(
 			requestBody, "/v1.0/state/statestore",
 			map[string]string{
@@ -404,6 +423,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	})
 
 	t.Run("path is /v1.0/invoke/*", func(t *testing.T) {
+		t.Parallel()
 		testRequestCtx := newTraceFastHTTPRequestCtx(
 			requestBody, "/v1.0/invoke/callee/method/method1",
 			map[string]string{},
@@ -450,7 +470,9 @@ func TestTraceStatusFromHTTPCode(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run("traceStatusFromHTTPCode", func(t *testing.T) {
+			t.Parallel()
 			gotOtelCode, gotOtelCodeDescription := traceStatusFromHTTPCode(tt.httpCode)
 			assert.Equalf(t, gotOtelCode, tt.wantOtelCode, "traceStatusFromHTTPCode(%v) got = %v, want %v", tt.httpCode, gotOtelCode, tt.wantOtelCode)
 			assert.Equalf(t, gotOtelCodeDescription, tt.wantOtelCodeDescription, "traceStatusFromHTTPCode(%v) got = %v, want %v", tt.httpCode, gotOtelCodeDescription, tt.wantOtelCodeDescription)

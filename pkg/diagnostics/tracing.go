@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -81,10 +82,20 @@ const (
 	tracerName = "dapr-diagnostics"
 )
 
-var tracer trace.Tracer = otel.Tracer(tracerName)
-
 // Effectively const, but isn't a const from upstream.
 var messagingDestinationTopicKind = semconv.MessagingDestinationKindTopic.Value.AsString()
+
+var sharedTracer trace.Tracer
+var sharedTrackerLock sync.Mutex
+
+func tracer() trace.Tracer {
+	sharedTrackerLock.Lock()
+	defer sharedTrackerLock.Unlock()
+	if sharedTracer == nil {
+		sharedTracer = otel.Tracer(tracerName)
+	}
+	return sharedTracer
+}
 
 // SpanContextToW3CString returns the SpanContext string representation.
 func SpanContextToW3CString(sc trace.SpanContext) string {
@@ -222,7 +233,7 @@ func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trac
 	}
 
 	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
-	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := tracer().Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
 
 	return ctx, span
 }

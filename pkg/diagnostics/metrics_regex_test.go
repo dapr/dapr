@@ -1,58 +1,77 @@
 package diagnostics
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.opencensus.io/stats/view"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestRegexRulesSingle(t *testing.T) {
-	InitMetrics("testAppId2", "", []config.MetricsRule{
-		{
-			Name: "dapr_runtime_service_invocation_req_sent_total",
-			Labels: []config.MetricLabel{
-				{
-					Name: "method",
-					Regex: map[string]string{
-						"/orders/TEST":      "/orders/.+",
-						"/lightsabers/TEST": "/lightsabers/.+",
+	t.Parallel()
+
+	newMetrics := func(t *testing.T) *Metrics {
+		t.Helper()
+		metrics, err := NewMetrics([]config.MetricsRule{
+			{
+				Name: "dapr_runtime_service_invocation_req_sent_total",
+				Labels: []config.MetricLabel{
+					{
+						Name: "method",
+						Regex: map[string]string{
+							"/orders/TEST":      "/orders/.+",
+							"/lightsabers/TEST": "/lightsabers/.+",
+						},
 					},
 				},
 			},
-		},
-	})
+		})
+		require.NoError(t, err)
+		require.NoError(t, metrics.Init("testAppId2", ""))
+		return metrics
+	}
 
 	t.Run("single regex rule applied", func(t *testing.T) {
+		t.Parallel()
+		m := newMetrics(t)
+		s := m.Service
+
 		t.Cleanup(func() {
-			view.Unregister(view.Find("runtime/service_invocation/req_sent_total"))
+			m.Meter.Unregister(m.Meter.Find("runtime/service_invocation/req_sent_total"))
 		})
 
-		s := servicesMetrics()
+		s.ServiceInvocationRequestSent(context.Background(), "testAppId2", "/orders/123")
 
-		s.ServiceInvocationRequestSent("testAppId2", "/orders/123")
+		assert.Eventually(t, func() bool {
 
-		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
-		v := view.Find("runtime/service_invocation/req_sent_total")
+			viewData, err := m.Meter.RetrieveData("runtime/service_invocation/req_sent_total")
+			require.NoError(t, err)
+			v := m.Meter.Find("runtime/service_invocation/req_sent_total")
 
-		allTagsPresent(t, v, viewData[0].Tags)
+			allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, "/orders/TEST", viewData[0].Tags[2].Value)
+			return "/orders/TEST" == viewData[0].Tags[2].Value
+		}, time.Second*5, time.Millisecond)
 	})
 
 	t.Run("single regex rule not applied", func(t *testing.T) {
+		t.Parallel()
+
+		m := newMetrics(t)
+		s := m.Service
 		t.Cleanup(func() {
-			view.Unregister(view.Find("runtime/service_invocation/req_sent_total"))
+			m.Meter.Unregister(m.Meter.Find("runtime/service_invocation/req_sent_total"))
 		})
 
-		s := servicesMetrics()
+		s.ServiceInvocationRequestSent(context.Background(), "testAppId2", "/siths/123")
 
-		s.ServiceInvocationRequestSent("testAppId2", "/siths/123")
-
-		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
-		v := view.Find("runtime/service_invocation/req_sent_total")
+		viewData, err := m.Meter.RetrieveData("runtime/service_invocation/req_sent_total")
+		require.NoError(t, err)
+		v := m.Meter.Find("runtime/service_invocation/req_sent_total")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
@@ -60,16 +79,18 @@ func TestRegexRulesSingle(t *testing.T) {
 	})
 
 	t.Run("correct regex rules applied", func(t *testing.T) {
+		t.Parallel()
+		m := newMetrics(t)
+		s := m.Service
 		t.Cleanup(func() {
-			view.Unregister(view.Find("runtime/service_invocation/req_sent_total"))
+			m.Meter.Unregister(m.Meter.Find("runtime/service_invocation/req_sent_total"))
 		})
 
-		s := servicesMetrics()
+		s.ServiceInvocationRequestSent(context.Background(), "testAppId2", "/orders/123")
+		s.ServiceInvocationRequestSent(context.Background(), "testAppId3", "/lightsabers/123")
 
-		s.ServiceInvocationRequestSent("testAppId2", "/orders/123")
-		s.ServiceInvocationRequestSent("testAppId3", "/lightsabers/123")
-
-		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
+		viewData, err := m.Meter.RetrieveData("runtime/service_invocation/req_sent_total")
+		require.NoError(t, err)
 
 		orders := false
 		lightsabers := false

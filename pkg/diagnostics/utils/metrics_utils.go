@@ -24,7 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 )
 
-var metricsRules map[string][]regexPair
+type Rules map[string][]regexPair
 
 type regexPair struct {
 	regex   *regexp.Regexp
@@ -44,8 +44,12 @@ func NewMeasureView(measure stats.Measure, keys []tag.Key, aggregation *view.Agg
 
 // WithTags converts tag key and value pairs to tag.Mutator array.
 // WithTags(key1, value1, key2, value2) returns
-// []tag.Mutator{tag.Upsert(key1, value1), tag.Upsert(key2, value2)}.
-func WithTags(name string, opts ...interface{}) []tag.Mutator {
+// []tag.Mutator{tag.Upsert(key1, value1), tag.Upsert(key2, value2)} (stats.Options).
+func (r Rules) WithTags(name string, opts ...interface{}) stats.Options {
+	return stats.WithTags(r.tags(name, opts...)...)
+}
+
+func (r Rules) tags(name string, opts ...interface{}) []tag.Mutator {
 	tagMutators := []tag.Mutator{}
 	for i := 0; i < len(opts)-1; i += 2 {
 		key, ok := opts[i].(tag.Key)
@@ -58,8 +62,8 @@ func WithTags(name string, opts ...interface{}) []tag.Mutator {
 		}
 		// skip if value is empty
 		if value != "" {
-			if len(metricsRules) > 0 {
-				pairs := metricsRules[strings.ReplaceAll(name, "_", "/")+key.Name()]
+			if len(r) > 0 {
+				pairs := r[strings.ReplaceAll(name, "_", "/")+key.Name()]
 
 				for _, p := range pairs {
 					value = p.regex.ReplaceAllString(value, p.replace)
@@ -82,8 +86,8 @@ func AddNewTagKey(views []*view.View, key *tag.Key) []*view.View {
 }
 
 // CreateRulesMap generates a fast lookup map for metrics regex.
-func CreateRulesMap(rules []config.MetricsRule) error {
-	metricsRules = map[string][]regexPair{}
+func CreateRulesMap(rules []config.MetricsRule) (Rules, error) {
+	metricsRules := make(map[string][]regexPair)
 
 	for _, r := range rules {
 		// strip the metric name of known runtime prefixes and mutate them to fit stat names
@@ -96,7 +100,7 @@ func CreateRulesMap(rules []config.MetricsRule) error {
 			for k, v := range l.Regex {
 				regex, err := regexp.Compile(v)
 				if err != nil {
-					return err
+					return nil, err
 				}
 
 				metricsRules[r.Name+l.Name] = append(metricsRules[r.Name+l.Name], regexPair{
@@ -107,5 +111,31 @@ func CreateRulesMap(rules []config.MetricsRule) error {
 		}
 	}
 
-	return nil
+	return metricsRules, nil
+}
+
+var aggBase view.Aggregation = *view.Count()
+
+// Count indicates that data collected and aggregated
+// with this method will be turned into a count value.
+// For example, total number of accepted requests can be
+// aggregated by using Count.
+func Count() *view.Aggregation {
+	agg := new(view.Aggregation)
+	*agg = aggBase
+	agg.Type = view.AggTypeCount
+	agg.Buckets = make([]float64, 0)
+	return agg
+}
+
+// Sum indicates that data collected and aggregated
+// with this method will be summed up.
+// For example, accumulated request bytes can be aggregated by using
+// Sum.
+func Sum() *view.Aggregation {
+	agg := new(view.Aggregation)
+	*agg = aggBase
+	agg.Type = view.AggTypeSum
+	agg.Buckets = make([]float64, 0)
+	return agg
 }

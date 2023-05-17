@@ -21,6 +21,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
+	"go.opentelemetry.io/otel"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -97,6 +98,7 @@ func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName st
 	sc, _ := SpanContextFromRequest(&ctx.Request)
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
+	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(netCtx, spanName, kindOption)
 	diagUtils.SpanToFastHTTPContext(ctx, span)
 	return ctx, span
@@ -106,6 +108,7 @@ func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace
 	path := string(ctx.Request.URI().Path())
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, parentSpan.SpanContext())
 	kindOption := trace.WithSpanKind(trace.SpanKindProducer)
+	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(netCtx, path, kindOption)
 	return span
 }

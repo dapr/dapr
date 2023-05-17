@@ -25,14 +25,14 @@ import (
 func TestWithTags(t *testing.T) {
 	t.Run("one tag", func(t *testing.T) {
 		appKey := tag.MustNewKey("app_id")
-		mutators := WithTags("", appKey, "test")
+		mutators := Rules{}.tags("", appKey, "test")
 		assert.Equal(t, 1, len(mutators))
 	})
 
 	t.Run("two tags", func(t *testing.T) {
 		appKey := tag.MustNewKey("app_id")
 		operationKey := tag.MustNewKey("operation")
-		mutators := WithTags("", appKey, "test", operationKey, "op")
+		mutators := Rules{}.tags("", appKey, "test", operationKey, "op")
 		assert.Equal(t, 2, len(mutators))
 	})
 
@@ -40,14 +40,14 @@ func TestWithTags(t *testing.T) {
 		appKey := tag.MustNewKey("app_id")
 		operationKey := tag.MustNewKey("operation")
 		methodKey := tag.MustNewKey("method")
-		mutators := WithTags("", appKey, "test", operationKey, "op", methodKey, "method")
+		mutators := Rules{}.tags("", appKey, "test", operationKey, "op", methodKey, "method")
 		assert.Equal(t, 3, len(mutators))
 	})
 
 	t.Run("two tags with wrong value type", func(t *testing.T) {
 		appKey := tag.MustNewKey("app_id")
 		operationKey := tag.MustNewKey("operation")
-		mutators := WithTags("", appKey, "test", operationKey, 1)
+		mutators := Rules{}.tags("", appKey, "test", operationKey, 1)
 		assert.Equal(t, 1, len(mutators))
 	})
 
@@ -55,14 +55,14 @@ func TestWithTags(t *testing.T) {
 		appKey := tag.MustNewKey("app_id")
 		operationKey := tag.MustNewKey("operation")
 		methodKey := tag.MustNewKey("method")
-		mutators := WithTags("", appKey, "", operationKey, "op", methodKey, "method")
+		mutators := Rules{}.tags("", appKey, "", operationKey, "op", methodKey, "method")
 		assert.Equal(t, 2, len(mutators))
 	})
 }
 
 func TestCreateRulesMap(t *testing.T) {
 	t.Run("invalid rule", func(t *testing.T) {
-		err := CreateRulesMap([]config.MetricsRule{
+		_, err := CreateRulesMap([]config.MetricsRule{
 			{
 				Name: "test",
 				Labels: []config.MetricLabel{
@@ -79,7 +79,7 @@ func TestCreateRulesMap(t *testing.T) {
 	})
 
 	t.Run("valid rule", func(t *testing.T) {
-		err := CreateRulesMap([]config.MetricsRule{
+		rules, err := CreateRulesMap([]config.MetricsRule{
 			{
 				Name: "test",
 				Labels: []config.MetricLabel{
@@ -94,10 +94,10 @@ func TestCreateRulesMap(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.NotNil(t, metricsRules)
-		assert.Len(t, metricsRules, 1)
-		assert.Len(t, metricsRules["testlabel"], 1)
-		assert.Equal(t, "TEST", metricsRules["testlabel"][0].replace)
-		assert.NotNil(t, metricsRules["testlabel"][0].regex)
+		assert.NotNil(t, rules)
+		assert.Len(t, rules, 1)
+		assert.Len(t, rules["testlabel"], 1)
+		assert.Equal(t, "TEST", rules["testlabel"][0].replace)
+		assert.NotNil(t, rules["testlabel"][0].regex)
 	})
 }

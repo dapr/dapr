@@ -40,6 +40,8 @@ import (
 )
 
 func TestSpanAttributesMapFromGRPC(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		rpcMethod                    string
 		req                          any
@@ -58,7 +60,9 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 		{"/dapr.proto.internals.v1.ServiceInvocation/CallLocal", &internalv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "mymethod"}}, "ServiceInvocation", "mymethod"},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.rpcMethod, func(t *testing.T) {
+			t.Parallel()
 			got := spanAttributesMapFromGRPC("fakeAppID", tt.req, tt.rpcMethod)
 			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
 		})
@@ -66,6 +70,7 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 }
 
 func TestUserDefinedMetadata(t *testing.T) {
+	t.Parallel()
 	md := grpcMetadata.MD{
 		"dapr-userdefined-1": []string{"value1"},
 		"DAPR-userdefined-2": []string{"value2", "value3"}, // Will be lowercased
@@ -86,7 +91,10 @@ func TestUserDefinedMetadata(t *testing.T) {
 }
 
 func TestSpanContextToGRPCMetadata(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty span context", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		newCtx := SpanContextToGRPCMetadata(ctx, trace.SpanContext{})
 
@@ -95,6 +103,8 @@ func TestSpanContextToGRPCMetadata(t *testing.T) {
 }
 
 func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
+	t.Parallel()
+
 	exp := newOtelFakeExporter()
 
 	tp := sdktrace.NewTracerProvider(
@@ -110,6 +120,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	testTraceBinary := diagUtils.BinaryFromSpanContext(testSpanContext)
 
 	t.Run("grpc-trace-bin is given", func(t *testing.T) {
+		t.Parallel()
 		ctx := grpcMetadata.NewIncomingContext(context.Background(), grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
 		fakeInfo := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
@@ -137,6 +148,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	})
 
 	t.Run("grpc-trace-bin is not given", func(t *testing.T) {
+		t.Parallel()
 		fakeInfo := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
@@ -161,6 +173,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	})
 
 	t.Run("InvokeService call", func(t *testing.T) {
+		t.Parallel()
 		fakeInfo := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/InvokeService",
 		}
@@ -187,6 +200,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	})
 
 	t.Run("InvokeService call with grpc status error", func(t *testing.T) {
+		t.Parallel()
 		// set a new tracer provider with a callback on span completion to check that the span errors out
 		checkErrorStatusOnSpan := func(s sdktrace.ReadOnlySpan) {
 			assert.Equal(t, otelcodes.Error, s.Status().Code, "expected span status to be an error")
@@ -232,6 +246,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 }
 
 func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
+	t.Parallel()
 	exp := newOtelFakeExporter()
 
 	tp := sdktrace.NewTracerProvider(
@@ -460,6 +475,8 @@ func (f *fakeStream) RecvMsg(m any) error {
 }
 
 func TestSpanContextSerialization(t *testing.T) {
+	t.Parallel()
+
 	wantScConfig := trace.SpanContextConfig{
 		TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
 		SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},

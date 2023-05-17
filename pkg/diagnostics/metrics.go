@@ -18,55 +18,94 @@ import (
 
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
-// appIDKey is a tag key for App ID.
-var appIDKey = tag.MustNewKey("app_id")
-
 var (
+	// appIDKey is a tag key for App ID.
+	appIDKey = tag.MustNewKey("app_id")
+
 	// DefaultReportingPeriod is the default view reporting period.
 	DefaultReportingPeriod = 1 * time.Minute
-
-	// DefaultMonitoring holds service monitoring metrics definitions.
-	DefaultMonitoring = newServiceMetrics()
-	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middlewares.
-	DefaultGRPCMonitoring = newGRPCMetrics()
-	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middlewares.
-	DefaultHTTPMonitoring = newHTTPMetrics()
-	// DefaultComponentMonitoring holds component specific metrics.
-	DefaultComponentMonitoring = newComponentMetrics()
-	// DefaultResiliencyMonitoring holds resiliency specific metrics.
-	DefaultResiliencyMonitoring = newResiliencyMetrics()
-	// Rules holds regex expressions for metrics labels
-	Rules map[string]string
 )
 
-// InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string, rules []config.MetricsRule) error {
-	if err := DefaultMonitoring.Init(appID); err != nil {
-		return err
-	}
+// Metrics is a collection of metrics.
+type Metrics struct {
+	Meter view.Meter
 
-	if err := DefaultGRPCMonitoring.Init(appID); err != nil {
-		return err
-	}
+	// Service holds service monitoring metrics definitions.
+	Service *serviceMetrics
 
-	if err := DefaultHTTPMonitoring.Init(appID); err != nil {
-		return err
-	}
+	// GRPC holds default gRPC monitoring handlers and middlewares.
+	GRPC *grpcMetrics
 
-	if err := DefaultComponentMonitoring.Init(appID, namespace); err != nil {
-		return err
-	}
+	// HTTP holds default HTTP monitoring handlers and middlewares.
+	HTTP *httpMetrics
 
-	if err := DefaultResiliencyMonitoring.Init(appID); err != nil {
-		return err
-	}
+	// Component holds component specific metrics.
+	Component *componentMetrics
+
+	// Resiliency holds resiliency specific metrics.
+	Resiliency *resiliencyMetrics
+
+	// Rules holds regex expressions for metrics labels
+	Rules utils.Rules
+}
+
+// NewMetrics initializes metrics.
+func NewMetrics(rules []config.MetricsRule) (*Metrics, error) {
+	meter := view.NewMeter()
+	meter.Start()
 
 	// Set reporting period of views
-	view.SetReportingPeriod(DefaultReportingPeriod)
-	return utils.CreateRulesMap(rules)
+	meter.SetReportingPeriod(DefaultReportingPeriod)
+
+	clock := clock.RealClock{}
+
+	regRules, err := utils.CreateRulesMap(rules)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Metrics{
+		Meter:      meter,
+		Service:    newServiceMetrics(meter, clock, regRules),
+		GRPC:       newGRPCMetrics(meter, clock, regRules),
+		HTTP:       newHTTPMetrics(meter, clock, regRules),
+		Component:  newComponentMetrics(meter, regRules),
+		Resiliency: newResiliencyMetrics(meter, regRules),
+		Rules:      regRules,
+	}, nil
+}
+
+func (m *Metrics) Init(appID, namespace string) error {
+	if err := m.Service.init(appID); err != nil {
+		return err
+	}
+
+	if err := m.GRPC.init(appID); err != nil {
+		return err
+	}
+
+	if err := m.HTTP.init(appID); err != nil {
+		return err
+	}
+
+	if err := m.Component.init(appID, namespace); err != nil {
+		return err
+	}
+
+	if err := m.Resiliency.init(appID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Stop stops the metrics collection.
+func (m *Metrics) Stop() {
+	m.Meter.Stop()
 }

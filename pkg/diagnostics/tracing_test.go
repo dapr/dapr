@@ -31,13 +31,16 @@ import (
 )
 
 func TestSpanContextToW3CString(t *testing.T) {
+	t.Parallel()
 	t.Run("empty SpanContext", func(t *testing.T) {
+		t.Parallel()
 		expected := "00-00000000000000000000000000000000-0000000000000000-00"
 		sc := trace.SpanContext{}
 		got := SpanContextToW3CString(sc)
 		assert.Equal(t, expected, got)
 	})
 	t.Run("valid SpanContext", func(t *testing.T) {
+		t.Parallel()
 		expected := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 		scConfig := trace.SpanContextConfig{
 			TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
@@ -51,12 +54,15 @@ func TestSpanContextToW3CString(t *testing.T) {
 }
 
 func TestTraceStateToW3CString(t *testing.T) {
+	t.Parallel()
 	t.Run("empty Tracestate", func(t *testing.T) {
+		t.Parallel()
 		sc := trace.SpanContext{}
 		got := TraceStateToW3CString(sc)
 		assert.Empty(t, got)
 	})
 	t.Run("valid Tracestate", func(t *testing.T) {
+		t.Parallel()
 		ts := trace.TraceState{}
 		ts, _ = ts.Insert("key", "value")
 		sc := trace.SpanContext{}
@@ -67,13 +73,16 @@ func TestTraceStateToW3CString(t *testing.T) {
 }
 
 func TestSpanContextFromW3CString(t *testing.T) {
+	t.Parallel()
 	t.Run("empty SpanContext", func(t *testing.T) {
+		t.Parallel()
 		sc := "00-00000000000000000000000000000000-0000000000000000-00"
 		expected := trace.SpanContext{}
 		got, _ := SpanContextFromW3CString(sc)
 		assert.Equal(t, expected, got)
 	})
 	t.Run("valid SpanContext", func(t *testing.T) {
+		t.Parallel()
 		sc := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 		scConfig := trace.SpanContextConfig{
 			TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
@@ -87,7 +96,9 @@ func TestSpanContextFromW3CString(t *testing.T) {
 }
 
 func TestTraceStateFromW3CString(t *testing.T) {
+	t.Parallel()
 	t.Run("empty Tracestate", func(t *testing.T) {
+		t.Parallel()
 		ts := trace.TraceState{}
 		sc := trace.SpanContext{}
 		sc = sc.WithTraceState(ts)
@@ -96,6 +107,7 @@ func TestTraceStateFromW3CString(t *testing.T) {
 		assert.Equal(t, ts, *got)
 	})
 	t.Run("valid Tracestate", func(t *testing.T) {
+		t.Parallel()
 		ts := trace.TraceState{}
 		ts, _ = ts.Insert("key", "value")
 		sc := trace.SpanContext{}
@@ -105,6 +117,7 @@ func TestTraceStateFromW3CString(t *testing.T) {
 		assert.Equal(t, ts, *got)
 	})
 	t.Run("invalid Tracestate", func(t *testing.T) {
+		t.Parallel()
 		ts := trace.TraceState{}
 		// A non-parsable tracestate should equate back to an empty one.
 		got := TraceStateFromW3CString("bad tracestate")
@@ -113,6 +126,7 @@ func TestTraceStateFromW3CString(t *testing.T) {
 }
 
 func TestStartInternalCallbackSpan(t *testing.T) {
+	t.Parallel()
 	exp := newOtelFakeExporter()
 
 	tp := sdktrace.NewTracerProvider(
@@ -122,6 +136,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	otel.SetTracerProvider(tp)
 
 	t.Run("traceparent is provided and sampling is enabled", func(t *testing.T) {
+		t.Parallel()
 		traceSpec := config.TracingSpec{SamplingRate: "1"}
 
 		scConfig := trace.SpanContextConfig{
@@ -142,6 +157,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	})
 
 	t.Run("traceparent is provided with sampling flag = 1 but sampling is disabled", func(t *testing.T) {
+		t.Parallel()
 		traceSpec := config.TracingSpec{SamplingRate: "0"}
 
 		scConfig := trace.SpanContextConfig{
@@ -159,6 +175,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	})
 
 	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
+		t.Parallel()
 		// We use a fixed seed for the RNG so we can use an exact number here
 		const expectSampled = 1051
 		const numTraces = 100000
@@ -168,12 +185,14 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	})
 
 	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (and P=1.00)", func(t *testing.T) {
+		t.Parallel()
 		const numTraces = 1000
 		sampledCount := runTraces(t, "test_trace", numTraces, "1.00", 0)
 		require.Equal(t, sampledCount, numTraces, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
 	})
 
 	t.Run("traceparent is provided with sampling flag = 1 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
+		t.Parallel()
 		const numTraces = 1000
 		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", 1)
 		require.Equal(t, sampledCount, numTraces, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)

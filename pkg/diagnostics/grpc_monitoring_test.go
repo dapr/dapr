@@ -22,6 +22,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"google.golang.org/grpc"
 	grpcMetadata "google.golang.org/grpc/metadata"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 )
@@ -61,9 +62,15 @@ func (f *fakeProxyStream) RecvMsg(m interface{}) error {
 }
 
 func TestStreamingServerInterceptor(t *testing.T) {
+	t.Parallel()
+
 	t.Run("not a proxy request, do not run pipeline", func(t *testing.T) {
-		m := newGRPCMetrics()
-		m.Init("test")
+		t.Parallel()
+		meter := view.NewMeter()
+		m := newGRPCMetrics(meter, clock.RealClock{}, nil)
+		meter.Start()
+		t.Cleanup(meter.Stop)
+		m.init("test")
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{}
@@ -74,18 +81,22 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		err := i(nil, s, &grpc.StreamServerInfo{}, f)
 		assert.NoError(t, err)
 
-		rows, err := view.RetrieveData("grpc.io/server/completed_rpcs")
+		rows, err := meter.RetrieveData("grpc.io/server/completed_rpcs")
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(rows))
 
-		rowsLatency, err := view.RetrieveData("grpc.io/server/server_latency")
+		rowsLatency, err := meter.RetrieveData("grpc.io/server/server_latency")
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(rowsLatency))
 	})
 
 	t.Run("proxy request, run pipeline", func(t *testing.T) {
-		m := newGRPCMetrics()
-		m.Init("test")
+		t.Parallel()
+		meter := view.NewMeter()
+		m := newGRPCMetrics(meter, clock.RealClock{}, nil)
+		meter.Start()
+		t.Cleanup(meter.Stop)
+		m.init("test")
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{
@@ -98,14 +109,14 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		err := i(nil, s, &grpc.StreamServerInfo{FullMethod: "/appv1.Test"}, f)
 		assert.NoError(t, err)
 
-		rows, err := view.RetrieveData("grpc.io/server/completed_rpcs")
+		rows, err := meter.RetrieveData("grpc.io/server/completed_rpcs")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(rows))
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 		assert.Equal(t, "grpc_server_method", rows[0].Tags[1].Key.Name())
 		assert.Equal(t, "grpc_server_status", rows[0].Tags[2].Key.Name())
 
-		rows, err = view.RetrieveData("grpc.io/server/server_latency")
+		rows, err = meter.RetrieveData("grpc.io/server/server_latency")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(rows))
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
@@ -114,9 +125,15 @@ func TestStreamingServerInterceptor(t *testing.T) {
 }
 
 func TestStreamingClientInterceptor(t *testing.T) {
+	t.Parallel()
+
 	t.Run("not a proxy request, do not run pipeline", func(t *testing.T) {
-		m := newGRPCMetrics()
-		m.Init("test")
+		t.Parallel()
+		meter := view.NewMeter()
+		m := newGRPCMetrics(meter, clock.RealClock{}, nil)
+		meter.Start()
+		t.Cleanup(meter.Stop)
+		m.init("test")
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{}
@@ -127,18 +144,22 @@ func TestStreamingClientInterceptor(t *testing.T) {
 		err := i(nil, s, &grpc.StreamServerInfo{}, f)
 		assert.NoError(t, err)
 
-		rows, err := view.RetrieveData("grpc.io/client/completed_rpcs")
+		rows, err := meter.RetrieveData("grpc.io/client/completed_rpcs")
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(rows))
 
-		rowsLatency, err := view.RetrieveData("grpc.io/client/roundtrip_latency")
+		rowsLatency, err := meter.RetrieveData("grpc.io/client/roundtrip_latency")
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(rowsLatency))
 	})
 
 	t.Run("proxy request, run pipeline", func(t *testing.T) {
-		m := newGRPCMetrics()
-		m.Init("test")
+		t.Parallel()
+		meter := view.NewMeter()
+		m := newGRPCMetrics(meter, clock.RealClock{}, nil)
+		meter.Start()
+		t.Cleanup(meter.Stop)
+		m.init("test")
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{
@@ -151,14 +172,14 @@ func TestStreamingClientInterceptor(t *testing.T) {
 		err := i(nil, s, &grpc.StreamServerInfo{FullMethod: "/appv1.Test"}, f)
 		assert.NoError(t, err)
 
-		rows, err := view.RetrieveData("grpc.io/client/completed_rpcs")
+		rows, err := meter.RetrieveData("grpc.io/client/completed_rpcs")
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(rows))
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 		assert.Equal(t, "grpc_client_method", rows[0].Tags[1].Key.Name())
 		assert.Equal(t, "grpc_client_status", rows[0].Tags[2].Key.Name())
 
-		rowsLatency, err := view.RetrieveData("grpc.io/client/roundtrip_latency")
+		rowsLatency, err := meter.RetrieveData("grpc.io/client/roundtrip_latency")
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(rowsLatency))
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())

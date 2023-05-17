@@ -20,7 +20,7 @@ func NewTag(key string, value string) tag.Tag {
 	}
 }
 
-// GetValueForObservationWithTagSet is a helper to find a row out of a slice of rows retrieved when executing view.RetrieveData
+// GetValueForObservationWithTagSet is a helper to find a row out of a slice of rows retrieved when executing meter.RetrieveData
 // This particular row should have the tags present in the tag set.
 func GetValueForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[tag.Tag]bool) int64 {
 	for _, row := range rows {
@@ -37,7 +37,7 @@ func GetValueForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[ta
 	return 0
 }
 
-// RequireTagExist tries to find a tag in a slice of rows return from view.RetrieveData
+// RequireTagExist tries to find a tag in a slice of rows return from meter.RetrieveData
 func RequireTagExist(t *testing.T, rows []*view.Row, wantedTag tag.Tag) {
 	t.Helper()
 	var found bool
@@ -53,7 +53,7 @@ outerLoop:
 	require.True(t, found, fmt.Sprintf("did not find tag (%s) in rows:", wantedTag), rows)
 }
 
-// RequireTagNotExist checks a tag in a slice of rows return from view.RetrieveData is not present
+// RequireTagNotExist checks a tag in a slice of rows return from meter.RetrieveData is not present
 func RequireTagNotExist(t *testing.T, rows []*view.Row, wantedTag tag.Tag) {
 	t.Helper()
 	var found bool
@@ -67,15 +67,4 @@ outerLoop:
 		}
 	}
 	require.False(t, found, fmt.Sprintf("found tag (%s) in rows:", wantedTag), rows)
-}
-
-// CleanupRegisteredViews is a safe method to removed registered views to avoid errors when running tests on the same metrics
-func CleanupRegisteredViews(viewNames ...string) {
-	var views []*view.View
-	for _, v := range viewNames {
-		if v := view.Find(v); v != nil {
-			views = append(views, v)
-		}
-	}
-	view.Unregister(views...)
 }

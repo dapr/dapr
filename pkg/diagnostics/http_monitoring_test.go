@@ -8,22 +8,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/stats/view"
+	"k8s.io/utils/clock"
+	clocktesting "k8s.io/utils/clock/testing"
 )
 
 func TestFastHTTPMiddleware(t *testing.T) {
+	t.Parallel()
+
 	requestBody := "fake_requestDaprBody"
 	responseBody := "fake_responseDaprBody"
 
 	testRequestCtx := fakeFastHTTPRequestCtx(requestBody)
 
+	clock := clocktesting.NewFakeClock(time.Now())
+
 	fakeHandler := func(ctx *fasthttp.RequestCtx) {
-		time.Sleep(100 * time.Millisecond)
+		clock.Step(time.Millisecond * 101)
 		ctx.Response.SetBodyRaw([]byte(responseBody))
 	}
 
 	// create test httpMetrics
-	testHTTP := newHTTPMetrics()
-	testHTTP.Init("fakeID")
+	meter := view.NewMeter()
+	testHTTP := newHTTPMetrics(meter, clock, nil)
+	meter.Start()
+	t.Cleanup(meter.Stop)
+	testHTTP.init("fakeID")
 
 	handler := testHTTP.FastHTTPMiddleware(fakeHandler)
 
@@ -31,7 +40,7 @@ func TestFastHTTPMiddleware(t *testing.T) {
 	handler(testRequestCtx)
 
 	// assert
-	rows, err := view.RetrieveData("http/server/request_count")
+	rows, err := meter.RetrieveData("http/server/request_count")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
@@ -41,43 +50,50 @@ func TestFastHTTPMiddleware(t *testing.T) {
 	assert.Equal(t, "path", rows[0].Tags[2].Key.Name())
 	assert.Equal(t, "/invoke/method/testmethod", rows[0].Tags[2].Value)
 
-	rows, err = view.RetrieveData("http/server/request_bytes")
+	rows, err = meter.RetrieveData("http/server/request_bytes")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
 	assert.True(t, (rows[0].Data).(*view.DistributionData).Min == float64(len([]byte(requestBody))))
 
-	rows, err = view.RetrieveData("http/server/response_bytes")
+	rows, err = meter.RetrieveData("http/server/response_bytes")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.True(t, (rows[0].Data).(*view.DistributionData).Min == float64(len([]byte(responseBody))))
 
-	rows, err = view.RetrieveData("http/server/latency")
+	rows, err = meter.RetrieveData("http/server/latency")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
-	assert.True(t, (rows[0].Data).(*view.DistributionData).Min >= 100.0)
+	assert.LessOrEqual(t, 100.0, (rows[0].Data).(*view.DistributionData).Min)
 }
 
 func TestFastHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
+	t.Parallel()
+
 	requestBody := "fake_requestDaprBody"
 	responseBody := "fake_responseDaprBody"
 
 	testRequestCtx := fakeFastHTTPRequestCtx(requestBody)
 
+	clock := clocktesting.NewFakeClock(time.Now())
+
 	fakeHandler := func(ctx *fasthttp.RequestCtx) {
-		time.Sleep(100 * time.Millisecond)
+		clock.Step(time.Millisecond * 100)
 		ctx.Response.SetBodyRaw([]byte(responseBody))
 	}
 
 	// create test httpMetrics
-	testHTTP := newHTTPMetrics()
+	meter := view.NewMeter()
+	testHTTP := newHTTPMetrics(meter, clock, nil)
+	meter.Start()
+	t.Cleanup(meter.Stop)
 	testHTTP.enabled = false
 
-	testHTTP.Init("fakeID")
-	v := view.Find("http/server/request_count")
+	testHTTP.init("fakeID")
+	v := meter.Find("http/server/request_count")
 	views := []*view.View{v}
-	view.Unregister(views...)
+	meter.Unregister(views...)
 
 	handler := testHTTP.FastHTTPMiddleware(fakeHandler)
 
@@ -85,12 +101,14 @@ func TestFastHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	handler(testRequestCtx)
 
 	// assert
-	rows, err := view.RetrieveData("http/server/request_count")
+	rows, err := meter.RetrieveData("http/server/request_count")
 	assert.Error(t, err)
 	assert.Nil(t, rows)
 }
 
 func TestConvertPathToMethodName(t *testing.T) {
+	t.Parallel()
+
 	convertTests := []struct {
 		in  string
 		out string
@@ -112,9 +130,15 @@ func TestConvertPathToMethodName(t *testing.T) {
 		{"", ""},
 	}
 
-	testHTTP := newHTTPMetrics()
 	for _, tt := range convertTests {
+		tt := tt
 		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+			meter := view.NewMeter()
+			testHTTP := newHTTPMetrics(meter, clock.RealClock{}, nil)
+			meter.Start()
+			t.Cleanup(meter.Stop)
+
 			lowCardinalityName := testHTTP.convertPathToMetricLabel(tt.in)
 			assert.Equal(t, tt.out, lowCardinalityName)
 		})
