@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,7 +36,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -59,10 +57,7 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-const (
-	daprHTTPStatusHeader  = "dapr-http-status"
-	daprRuntimeVersionKey = "daprRuntimeVersion"
-)
+const daprHTTPStatusHeader = "dapr-http-status"
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
@@ -80,20 +75,14 @@ type API interface {
 
 type api struct {
 	*universalapi.UniversalAPI
-	actor                      actors.Actors
-	directMessaging            messaging.DirectMessaging
-	appChannel                 channel.AppChannel
-	resiliency                 resiliency.Provider
-	pubsubAdapter              runtimePubsub.Adapter
-	id                         string
-	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec                config.TracingSpec
-	accessControlList          *config.AccessControlList
-	appProtocolIsHTTP          bool
-	extendedMetadata           sync.Map
-	getComponentsCapabilitesFn func() map[string][]string
-	shutdown                   func()
-	daprRunTimeVersion         string
+	directMessaging       messaging.DirectMessaging
+	appChannel            channel.AppChannel
+	resiliency            resiliency.Provider
+	pubsubAdapter         runtimePubsub.Adapter
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec           config.TracingSpec
+	accessControlList     *config.AccessControlList
+	appProtocolIsHTTP     bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -104,7 +93,7 @@ type APIOpts struct {
 	CompStore                   *compstore.ComponentStore
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
-	Actor                       actors.Actors
+	Actors                      actors.Actors
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	AccessControlList           *config.AccessControlList
@@ -117,24 +106,22 @@ type APIOpts struct {
 func NewAPI(opts APIOpts) API {
 	return &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:      opts.AppID,
-			Logger:     apiServerLogger,
-			Resiliency: opts.Resiliency,
-			CompStore:  opts.CompStore,
+			AppID:                      opts.AppID,
+			Logger:                     apiServerLogger,
+			Resiliency:                 opts.Resiliency,
+			Actors:                     opts.Actors,
+			CompStore:                  opts.CompStore,
+			ShutdownFn:                 opts.Shutdown,
+			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		},
-		directMessaging:            opts.DirectMessaging,
-		actor:                      opts.Actor,
-		id:                         opts.AppID,
-		resiliency:                 opts.Resiliency,
-		appChannel:                 opts.AppChannel,
-		pubsubAdapter:              opts.PubsubAdapter,
-		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
-		tracingSpec:                opts.TracingSpec,
-		accessControlList:          opts.AccessControlList,
-		appProtocolIsHTTP:          opts.AppProtocolIsHTTP,
-		shutdown:                   opts.Shutdown,
-		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-		daprRunTimeVersion:         buildinfo.Version(),
+		directMessaging:       opts.DirectMessaging,
+		resiliency:            opts.Resiliency,
+		appChannel:            opts.AppChannel,
+		pubsubAdapter:         opts.PubsubAdapter,
+		sendToOutputBindingFn: opts.SendToOutputBindingFn,
+		tracingSpec:           opts.TracingSpec,
+		accessControlList:     opts.AccessControlList,
+		appProtocolIsHTTP:     opts.AppProtocolIsHTTP,
 	}
 }
 
@@ -160,7 +147,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+		return nil, "", "", false, messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
 	}
 
 	return thepubsub, pubsubName, topic, rawPayload, nil
@@ -188,7 +175,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			Source:          a.id,
+			Source:          a.UniversalAPI.AppID,
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
 			Data:            body,
@@ -396,7 +383,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				Source:          a.id,
+				Source:          a.UniversalAPI.AppID,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
@@ -862,7 +849,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
-		key, err := stateLoader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
+		key, err := stateLoader.GetModifiedStateKey(req.Key, in.StoreName, a.UniversalAPI.AppID)
 		if err != nil {
 			return &emptypb.Empty{}, err
 		}
@@ -956,7 +943,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -979,12 +966,12 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 		}
 		req.Data = j
 	}
-	err := a.actor.CreateTimer(ctx, req)
+	err := a.UniversalAPI.Actors.CreateTimer(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -996,12 +983,12 @@ func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Unregist
 		ActorType: in.ActorType,
 	}
 
-	err := a.actor.DeleteTimer(ctx, req)
+	err := a.UniversalAPI.Actors.DeleteTimer(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1023,12 +1010,12 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		}
 		req.Data = j
 	}
-	err := a.actor.CreateReminder(ctx, req)
+	err := a.UniversalAPI.Actors.CreateReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1040,12 +1027,12 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 		ActorType: in.ActorType,
 	}
 
-	err := a.actor.DeleteReminder(ctx, req)
+	err := a.UniversalAPI.Actors.DeleteReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1058,12 +1045,12 @@ func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameAct
 		NewName:   in.NewName,
 	}
 
-	err := a.actor.RenameReminder(ctx, req)
+	err := a.UniversalAPI.Actors.RenameReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return nil, err
@@ -1073,7 +1060,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	actorID := in.ActorId
 	key := in.Key
 
-	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1090,7 +1077,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 		Key:       key,
 	}
 
-	resp, err := a.actor.GetState(ctx, &req)
+	resp, err := a.UniversalAPI.Actors.GetState(ctx, &req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
 		apiServerLogger.Debug(err)
@@ -1103,7 +1090,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1150,7 +1137,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		actorOps = append(actorOps, actorOp)
 	}
 
-	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1167,7 +1154,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		Operations: actorOps,
 	}
 
-	err := a.actor.TransactionalStateOperation(ctx, &req)
+	err := a.UniversalAPI.Actors.TransactionalStateOperation(ctx, &req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
 		apiServerLogger.Debug(err)
@@ -1180,7 +1167,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return response, err
@@ -1214,7 +1201,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return a.actor.Call(ctx, req)
+		return a.UniversalAPI.Actors.Call(ctx, req)
 	})
 	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
@@ -1243,96 +1230,7 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 }
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
-	a.actor = actor
-}
-
-func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
-	extendedMetadata := make(map[string]string)
-	// Copy synchronously so it can be serialized to JSON.
-	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		extendedMetadata[key.(string)] = value.(string)
-		return true
-	})
-	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
-
-	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
-	if a.actor != nil {
-		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
-			activeActorsCount = append(activeActorsCount, &runtimev1pb.ActiveActorsCount{
-				Type:  actorTypeCount.Type,
-				Count: int32(actorTypeCount.Count),
-			})
-		}
-	}
-
-	components := a.CompStore.ListComponents()
-	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
-	componentsCapabilities := a.getComponentsCapabilitesFn()
-	for _, comp := range components {
-		registeredComp := &runtimev1pb.RegisteredComponents{
-			Name:         comp.Name,
-			Version:      comp.Spec.Version,
-			Type:         comp.Spec.Type,
-			Capabilities: getOrDefaultCapabilities(componentsCapabilities, comp.Name),
-		}
-		registeredComponents = append(registeredComponents, registeredComp)
-	}
-
-	ps := []*runtimev1pb.PubsubSubscription{}
-	for _, s := range a.CompStore.ListSubscriptions() {
-		ps = append(ps, &runtimev1pb.PubsubSubscription{
-			PubsubName:      s.PubsubName,
-			Topic:           s.Topic,
-			Metadata:        s.Metadata,
-			DeadLetterTopic: s.DeadLetterTopic,
-			Rules:           convertPubsubSubscriptionRules(s.Rules),
-		})
-	}
-
-	response := &runtimev1pb.GetMetadataResponse{
-		Id:                   a.id,
-		ExtendedMetadata:     extendedMetadata,
-		RegisteredComponents: registeredComponents,
-		ActiveActorsCount:    activeActorsCount,
-		Subscriptions:        ps,
-	}
-
-	return response, nil
-}
-
-func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
-	if val, ok := dict[key]; ok {
-		return val
-	}
-	return make([]string, 0)
-}
-
-func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
-	out := &runtimev1pb.PubsubSubscriptionRules{
-		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
-	}
-	for _, r := range rules {
-		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
-			Match: fmt.Sprintf("%s", r.Match),
-			Path:  r.Path,
-		})
-	}
-	return out
-}
-
-// SetMetadata Sets value in extended metadata of the sidecar.
-func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
-	a.extendedMetadata.Store(in.Key, in.Value)
-	return &emptypb.Empty{}, nil
-}
-
-// Shutdown the sidecar.
-func (a *api) Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
-	go func() {
-		<-ctx.Done()
-		a.shutdown()
-	}()
-	return &emptypb.Empty{}, nil
+	a.UniversalAPI.Actors = actor
 }
 
 func stringValueOrEmpty(value *string) string {

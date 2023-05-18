@@ -114,12 +114,12 @@ jobs:
         run: |
           dapr uninstall --all
           dapr init
-      - name: Build and override daprd with HEAD.
+      - name: Build and override daprd
         run: |
           make
           mkdir -p $HOME/.dapr/bin/
           cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Override placement service.
+      - name: Override placement service
         run: |
           docker stop dapr_placement
           ./dist/linux_amd64/release/placement --healthz-port 9091 &
@@ -245,12 +245,12 @@ jobs:
         run: |
           dapr uninstall --all
           dapr init
-      - name: Build and override daprd with HEAD.
+      - name: Build and override daprd
         run: |
           make
           mkdir -p $HOME/.dapr/bin/
           cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Override placement service.
+      - name: Override placement service
         run: |
           docker stop dapr_placement
           ./dist/linux_amd64/release/placement &
@@ -340,7 +340,7 @@ jobs:
     name: "JS SDK verification tests"
     runs-on: ubuntu-latest
     env:
-      NODE_VER: 18.16.0
+      NODE_VER: 18
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -379,14 +379,13 @@ jobs:
             🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
 
             Commit ref: ${{ env.CHECKOUT_REF }}
-
       - name: Check out code
         uses: actions/checkout@v3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: NodeJS - Install
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VER }}
       - name: "Set up Go"
@@ -394,22 +393,23 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
-      - name: Checkout js repo to run tests.
+      - name: Checkout js-sdk repo to run tests.
         uses: actions/checkout@v3
         with:
           repository: dapr/js-sdk
           path: js-sdk
       - name: Set up Dapr CLI
         run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
-      - name: Build and override daprd with HEAD.
+      - name: Initialize Dapr runtime
+        run: |
+          dapr uninstall --all
+          dapr init
+      - name: Build and override daprd
         run: |
           make
           mkdir -p $HOME/.dapr/bin/
           cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Initialize Dapr runtime
-        run: |
-          dapr init
-      - name: Override placement service.
+      - name: Override placement service
         run: |
           docker stop dapr_placement
           ./dist/linux_amd64/release/placement --healthz-port 9091 &
@@ -418,8 +418,7 @@ jobs:
       - name: Run E2E tests
         id: tests
         run: cd js-sdk && npm run test:e2e:all
-      - name: Run E2E test to show successful typescript build
-        id: typescript-build-test
+      - name: Run E2E test to show successful TypeScript build
         run: |
           cd js-sdk test/e2e/typescript-build
           npm install

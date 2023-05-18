@@ -79,9 +79,6 @@ const (
 	ErrDirectInvokeMethod   = "invalid method name"
 	ErrDirectInvokeNotReady = "invoke API is not ready"
 
-	// Metadata.
-	ErrMetadataGet = "failed deserializing metadata: %s"
-
 	// Healthz.
 	ErrHealthNotReady         = "dapr is not ready"
 	ErrOutboundHealthNotReady = "dapr outbound is not ready"
@@ -104,6 +101,9 @@ var (
 	ErrStateStoreNotFound       = APIError{"state store %s is not found", "ERR_STATE_STORE_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrStateQueryFailed         = APIError{"failed query in state store %s: %s", "ERR_STATE_QUERY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrStateQueryUnsupported    = APIError{"state store does not support querying", "ERR_STATE_STORE_NOT_SUPPORTED", http.StatusInternalServerError, grpcCodes.Internal}
+
+	// PubSub.
+	ErrPubSubMetadataDeserialize = APIError{"failed deserializing metadata: %v", "ERR_PUBSUB_REQUEST_METADATA", http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
