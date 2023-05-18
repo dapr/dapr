@@ -1030,11 +1030,12 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 
 func (a *DaprRuntime) initProxy() {
 	a.proxy = messaging.NewProxy(messaging.ProxyOpts{
-		AppClientFn:       a.grpc.GetAppClient,
-		ConnectionFactory: a.grpc.GetGRPCConnection,
-		AppID:             a.runtimeConfig.ID,
-		ACL:               a.accessControlList,
-		Resiliency:        a.resiliency,
+		AppClientFn:        a.grpc.GetAppClient,
+		ConnectionFactory:  a.grpc.GetGRPCConnection,
+		AppID:              a.runtimeConfig.ID,
+		ACL:                a.accessControlList,
+		Resiliency:         a.resiliency,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
 	})
 
 	log.Info("gRPC proxy enabled")

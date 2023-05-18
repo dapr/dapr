@@ -9,13 +9,13 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-*/ 
+*/
 
-import http from 'k6/http';
-import { check } from 'k6';
+import http from 'k6/http'
+import { check } from 'k6'
 
 const httpReqDurationThreshold = __ENV.HTTP_REQ_DURATION_THRESHOLD
-  
+
 export const options = {
     discardResponseBodies: true,
     thresholds: {
@@ -40,15 +40,17 @@ export const options = {
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
 function execute() {
-    return http.post(__ENV.TARGET_URL,__ENV.PAYLOAD,{ headers: { 'Content-Type': 'application/json' } })
+    return http.post(__ENV.TARGET_URL, __ENV.PAYLOAD, {
+        headers: { 'Content-Type': 'application/json' },
+    })
 }
 
 export default function () {
-  let result = execute()
-  console.log(result.json());
-  check(result, {
-    'response code was 2xx': (result) =>
-     result.status >= 200 && result.status < 300,
+    let result = execute()
+    console.log(result.json())
+    check(result, {
+        'response code was 2xx': (result) =>
+            result.status >= 200 && result.status < 300,
     })
 }
 
