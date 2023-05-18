@@ -37,6 +37,10 @@ type OperatorClient interface {
 	ListResiliency(ctx context.Context, in *ListResiliencyRequest, opts ...grpc.CallOption) (*ListResiliencyResponse, error)
 	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
 	ListSubscriptionsV2(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	// Returns a list of http endpoints
+	ListHTTPEndpoints(ctx context.Context, in *ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListHTTPEndpointsResponse, error)
+	// Sends events to Dapr sidecars upon http endpoint changes.
+	HTTPEndpointUpdate(ctx context.Context, in *HTTPEndpointUpdateRequest, opts ...grpc.CallOption) (Operator_HTTPEndpointUpdateClient, error)
 }
 
 type operatorClient struct {
@@ -133,6 +137,47 @@ func (c *operatorClient) ListSubscriptionsV2(ctx context.Context, in *ListSubscr
 	return out, nil
 }
 
+func (c *operatorClient) ListHTTPEndpoints(ctx context.Context, in *ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListHTTPEndpointsResponse, error) {
+	out := new(ListHTTPEndpointsResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *operatorClient) HTTPEndpointUpdate(ctx context.Context, in *HTTPEndpointUpdateRequest, opts ...grpc.CallOption) (Operator_HTTPEndpointUpdateClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[1], "/dapr.proto.operator.v1.Operator/HTTPEndpointUpdate", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &operatorHTTPEndpointUpdateClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Operator_HTTPEndpointUpdateClient interface {
+	Recv() (*HTTPEndpointUpdateEvent, error)
+	grpc.ClientStream
+}
+
+type operatorHTTPEndpointUpdateClient struct {
+	grpc.ClientStream
+}
+
+func (x *operatorHTTPEndpointUpdateClient) Recv() (*HTTPEndpointUpdateEvent, error) {
+	m := new(HTTPEndpointUpdateEvent)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // OperatorServer is the server API for Operator service.
 // All implementations should embed UnimplementedOperatorServer
 // for forward compatibility
@@ -151,6 +196,10 @@ type OperatorServer interface {
 	ListResiliency(context.Context, *ListResiliencyRequest) (*ListResiliencyResponse, error)
 	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
 	ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
+	// Returns a list of http endpoints
+	ListHTTPEndpoints(context.Context, *ListHTTPEndpointsRequest) (*ListHTTPEndpointsResponse, error)
+	// Sends events to Dapr sidecars upon http endpoint changes.
+	HTTPEndpointUpdate(*HTTPEndpointUpdateRequest, Operator_HTTPEndpointUpdateServer) error
 }
 
 // UnimplementedOperatorServer should be embedded to have forward compatible implementations.
@@ -177,6 +226,12 @@ func (UnimplementedOperatorServer) ListResiliency(context.Context, *ListResilien
 }
 func (UnimplementedOperatorServer) ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptionsV2 not implemented")
+}
+func (UnimplementedOperatorServer) ListHTTPEndpoints(context.Context, *ListHTTPEndpointsRequest) (*ListHTTPEndpointsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListHTTPEndpoints not implemented")
+}
+func (UnimplementedOperatorServer) HTTPEndpointUpdate(*HTTPEndpointUpdateRequest, Operator_HTTPEndpointUpdateServer) error {
+	return status.Errorf(codes.Unimplemented, "method HTTPEndpointUpdate not implemented")
 }
 
 // UnsafeOperatorServer may be embedded to opt out of forward compatibility for this service.
@@ -319,6 +374,45 @@ func _Operator_ListSubscriptionsV2_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Operator_ListHTTPEndpoints_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListHTTPEndpointsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OperatorServer).ListHTTPEndpoints(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OperatorServer).ListHTTPEndpoints(ctx, req.(*ListHTTPEndpointsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Operator_HTTPEndpointUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(HTTPEndpointUpdateRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(OperatorServer).HTTPEndpointUpdate(m, &operatorHTTPEndpointUpdateServer{stream})
+}
+
+type Operator_HTTPEndpointUpdateServer interface {
+	Send(*HTTPEndpointUpdateEvent) error
+	grpc.ServerStream
+}
+
+type operatorHTTPEndpointUpdateServer struct {
+	grpc.ServerStream
+}
+
+func (x *operatorHTTPEndpointUpdateServer) Send(m *HTTPEndpointUpdateEvent) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Operator_ServiceDesc is the grpc.ServiceDesc for Operator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -350,11 +444,20 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ListSubscriptionsV2",
 			Handler:    _Operator_ListSubscriptionsV2_Handler,
 		},
+		{
+			MethodName: "ListHTTPEndpoints",
+			Handler:    _Operator_ListHTTPEndpoints_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "ComponentUpdate",
 			Handler:       _Operator_ComponentUpdate_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "HTTPEndpointUpdate",
+			Handler:       _Operator_HTTPEndpointUpdate_Handler,
 			ServerStreams: true,
 		},
 	},

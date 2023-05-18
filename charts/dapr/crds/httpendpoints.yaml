@@ -1,0 +1,82 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: httpendpoints.dapr.io
+  labels:
+    app.kubernetes.io/part-of: "dapr"
+spec:
+  group: dapr.io
+  names:
+    kind: HTTPEndpoint
+    listKind: HTTPEndpointList
+    plural: httpendpoints
+    singular: httpendpoint
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: HTTPEndpoint describes a Dapr HTTPEndpoint type for external service invocation. This endpoint can be external to Dapr, or external to the environment.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          auth:
+            description: Auth represents authentication details for the component.
+            properties:
+              secretStore:
+                type: string
+            required:
+            - secretStore
+            type: object
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          scopes:
+            items:
+              type: string
+            type: array
+          spec:
+            description: HTTPEndpointSpec describes an access specification for allowing external service invocations.
+            properties:
+              baseUrl:
+                type: string
+              headers:
+                items:
+                  description: Header is the name/value pair for a header specification.
+                  properties:
+                    name:
+                      type: string
+                    secretKeyRef:
+                      description: SecretKeyRef is a reference to a secret holding the value for the metadata item. Name is the secret name, and key is the field in the secret.
+                      properties:
+                        key:
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - key
+                      - name
+                      type: object
+                    value:
+                      x-kubernetes-preserve-unknown-fields: true
+                  required:
+                  - name
+                  type: object
+                type: array
+            required:
+            - baseUrl
+            type: object
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

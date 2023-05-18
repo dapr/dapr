@@ -48,7 +48,8 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 			}
 			c.Request.SetBody(reqBody)
 		}
-		c.Request.SetRequestURI(r.URL.RequestURI())
+		c.Request.URI().SetQueryString(r.URL.RawQuery)
+		c.Request.URI().SetPath(r.URL.Path)
 		c.Request.URI().SetScheme(r.URL.Scheme)
 		c.Request.SetHost(r.Host)
 		c.Request.Header.SetMethod(r.Method)

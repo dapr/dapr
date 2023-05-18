@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	runtime_utils "github.com/dapr/dapr/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,6 +57,7 @@ func TestMain(m *testing.M) {
 			AppName:           "hellobluedapr",
 			DaprEnabled:       true,
 			ImageName:         "e2e-hellodapr",
+			SidecarImage:      runtime_utils.GetEnvOrElse("DAPR_TEST_N_MINUS_2_IMAGE", ""), // old image to avoid regression in injector.
 			Replicas:          1,
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
