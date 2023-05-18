@@ -19,8 +19,8 @@ name: dapr-test-sdk
 on:
   # Run every 12 hours on weekdays, and every 24 hours on weekends.
   schedule:
-    - cron: "0 */12 * * 1-5"
-    - cron: "30 0 * * 0,6"
+    - cron: "16 */11 * * 1-5"
+    - cron: "41 0 * * 0,6"
   # Dispatch on external events
   repository_dispatch:
     types: [test-sdk-all, test-sdk-python, test-sdk-java]
@@ -72,7 +72,7 @@ jobs:
         if: env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
           hide: true
           hide_classify: OUTDATED
@@ -127,7 +127,7 @@ jobs:
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -137,7 +137,7 @@ jobs:
         if: ${{ failure() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -149,7 +149,7 @@ jobs:
         if: ${{ cancelled() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -199,7 +199,7 @@ jobs:
         if: env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
           hide: true
           hide_classify: OUTDATED
@@ -284,7 +284,7 @@ jobs:
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -294,7 +294,7 @@ jobs:
         if: ${{ failure() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -306,7 +306,7 @@ jobs:
         if: ${{ cancelled() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
