@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	env "github.com/dapr/dapr/pkg/config/env"
+
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,8 +41,6 @@ type Feature string
 const (
 	// Enable support for streaming in HTTP service invocation
 	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
-	// Enables the app health check feature, allowing the use of the CLI flags
-	AppHealthCheck Feature = "AppHealthCheck"
 	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
 	// TODO: Remove this feature flag in Dapr 1.13.
 	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"
@@ -378,6 +378,38 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 
 	sortMetricsSpec(conf)
 	return conf, nil
+}
+
+// Update configuration from Otlp Environment Variables, if they exist.
+func SetTracingSpecFromEnv(conf *Configuration) {
+	// If Otel Endpoint is already set, then don't override.
+	if conf.Spec.TracingSpec.Otel.EndpointAddress != "" {
+		return
+	}
+
+	if endpoint := os.Getenv(env.OtlpExporterEndpoint); endpoint != "" {
+		// remove "http://" or "https://" from the endpoint
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+
+		conf.Spec.TracingSpec.Otel.EndpointAddress = endpoint
+
+		if conf.Spec.TracingSpec.SamplingRate == "" {
+			conf.Spec.TracingSpec.SamplingRate = "1"
+		}
+
+		// The OTLP attribute allows 'grpc', 'http/protobuf', or 'http/json'.
+		// Dapr setting can only be 'grpc' or 'http'.
+		if protocol := os.Getenv(env.OtlpExporterProtocol); strings.HasPrefix(protocol, "http") {
+			conf.Spec.TracingSpec.Otel.Protocol = "http"
+		} else {
+			conf.Spec.TracingSpec.Otel.Protocol = "grpc"
+		}
+
+		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
+			conf.Spec.TracingSpec.Otel.IsSecure = false
+		}
+	}
 }
 
 // Apply .metrics if set. If not, retain .metric.

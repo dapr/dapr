@@ -50,6 +50,7 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 					// We can embed the proto object directly only for as long as the protojson key is == json key
 					ActiveActorsCount:    out.ActiveActorsCount,
 					RegisteredComponents: out.RegisteredComponents,
+					HTTPEndpoints:        out.HttpEndpoints,
 				}
 
 				// Copy the subscriptions into a custom struct
@@ -106,6 +107,7 @@ type metadataResponse struct {
 	RegisteredComponents []*runtimev1pb.RegisteredComponents  `json:"components,omitempty"`
 	Extended             map[string]string                    `json:"extended,omitempty"`
 	Subscriptions        []metadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints        []*runtimev1pb.MetadataHTTPEndpoint  `json:"httpEndpoints,omitempty"`
 }
 
 type metadataResponsePubsubSubscription struct {

@@ -35,6 +35,7 @@ spec:
       annotations:
         dapr.io/enabled: "true"
         dapr.io/app-id: "grpcproxyclient"
+        dapr.io/http-max-request-size: "6"
     spec:
       containers:
       - name: service-invocation-grpc-proxy-client

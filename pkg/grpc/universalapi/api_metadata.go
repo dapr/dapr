@@ -68,12 +68,22 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		}
 	}
 
+	// HTTP endpoints
+	endpoints := a.CompStore.ListHTTPEndpoints()
+	registeredHTTPEndpoints := make([]*runtimev1pb.MetadataHTTPEndpoint, len(endpoints))
+	for i, e := range endpoints {
+		registeredHTTPEndpoints[i] = &runtimev1pb.MetadataHTTPEndpoint{
+			Name: e.Name,
+		}
+	}
+
 	return &runtimev1pb.GetMetadataResponse{
 		Id:                   a.AppID,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
 		Subscriptions:        ps,
+		HttpEndpoints:        registeredHTTPEndpoints,
 	}, nil
 }
 

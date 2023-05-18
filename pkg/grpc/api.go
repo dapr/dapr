@@ -980,7 +980,11 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 	}
 
 	if in.Data != nil {
-		req.Data = in.Data
+		j, err := json.Marshal(in.Data)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
+		req.Data = j
 	}
 	err := a.UniversalAPI.Actors.CreateTimer(ctx, req)
 	return &emptypb.Empty{}, err
@@ -1020,7 +1024,11 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 	}
 
 	if in.Data != nil {
-		req.Data = in.Data
+		j, err := json.Marshal(in.Data)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
+		req.Data = j
 	}
 	err := a.UniversalAPI.Actors.CreateReminder(ctx, req)
 	return &emptypb.Empty{}, err
@@ -1422,7 +1430,8 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 	_, ok := a.CompStore.GetConfigurationSubscribe(subscribeID)
 	if !ok {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
-			Ok: true,
+			Ok:      false,
+			Message: fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, "subscription does not exist"),
 		}, nil
 	}
 	a.CompStore.DeleteConfigurationSubscribe(subscribeID)

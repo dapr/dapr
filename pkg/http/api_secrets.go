@@ -70,6 +70,21 @@ func (a *api) onBulkGetSecretHandler() fasthttp.RequestHandler {
 				in.Metadata = getMetadataFromRequest(reqCtx)
 				return in, nil
 			},
+			OutModifier: func(out *runtimev1pb.GetBulkSecretResponse) (any, error) {
+				// If the data is nil, return nil
+				if out == nil || out.Data == nil {
+					return nil, nil
+				}
+
+				var secrets map[string]map[string]string
+				secrets = make(map[string]map[string]string, len(out.Data))
+				// Return just the secrets as map
+				for secretKey, secret := range out.Data {
+					secrets[secretKey] = secret.Secrets
+				}
+
+				return secrets, nil
+			},
 		},
 	)
 }
