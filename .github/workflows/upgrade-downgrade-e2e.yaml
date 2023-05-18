@@ -144,7 +144,8 @@ jobs:
     - name: Setup Dapr - control-plane previous release
       if: matrix.mode == 'dapr-sidecar-master'
       run: |
-        wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_LATEST_VERSION }}
+        export DAPR_CLI_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/cli/releases/latest | jq -r '.tag_name' | cut -c 2-)
+        wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s $DAPR_CLI_LATEST_VERSION
         name create-test-namespace
         dapr uninstall --all
         dapr init -k --runtime-version ${{ env.DAPR_LATEST_VERSION }} \
