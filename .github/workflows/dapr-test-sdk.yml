@@ -84,7 +84,11 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
 
-      - uses: actions/checkout@v3
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Python 3.9
         uses: actions/setup-python@v4
         with:
@@ -94,7 +98,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
-      - name: Checkout p repo to run tests.
+      - name: Checkout python-sdk repo to run tests.
         uses: actions/checkout@v3
         with:
           repository: dapr/python-sdk
@@ -210,7 +214,11 @@ jobs:
             🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
 
             Commit ref: ${{ env.CHECKOUT_REF }}
-      - uses: actions/checkout@v3
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
       - name: Set up OpenJDK ${{ env.JDK_VER }}
         uses: actions/setup-java@v3
         with:
