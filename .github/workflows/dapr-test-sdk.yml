@@ -19,8 +19,8 @@ name: dapr-test-sdk
 on:
   # Run every 12 hours on weekdays, and every 24 hours on weekends.
   schedule:
-    - cron: "0 */12 * * 1-5"
-    - cron: "30 0 * * 0,6"
+    - cron: "16 */11 * * 1-5"
+    - cron: "41 0 * * 0,6"
   # Dispatch on external events
   repository_dispatch:
     types:
@@ -77,7 +77,7 @@ jobs:
         if: env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
           hide: true
           hide_classify: OUTDATED
@@ -89,7 +89,11 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
 
-      - uses: actions/checkout@v3
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Python 3.9
         uses: actions/setup-python@v4
         with:
@@ -132,7 +136,7 @@ jobs:
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -142,7 +146,7 @@ jobs:
         if: ${{ failure() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -154,7 +158,7 @@ jobs:
         if: ${{ cancelled() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -204,7 +208,7 @@ jobs:
         if: env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
           hide: true
           hide_classify: OUTDATED
@@ -215,7 +219,11 @@ jobs:
             🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
 
             Commit ref: ${{ env.CHECKOUT_REF }}
-      - uses: actions/checkout@v3
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
       - name: Set up OpenJDK ${{ env.JDK_VER }}
         uses: actions/setup-java@v3
         with:
@@ -223,7 +231,7 @@ jobs:
           java-version: ${{ env.JDK_VER }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
       - name: Checkout java-sdk repo to run tests.
@@ -289,7 +297,7 @@ jobs:
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -299,7 +307,7 @@ jobs:
         if: ${{ failure() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -311,7 +319,7 @@ jobs:
         if: ${{ cancelled() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -333,9 +341,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_VER: 16.14.0
-    steps:
-    name: "JS SDK verification tests"
-    runs-on: ubuntu-latest
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -363,7 +368,7 @@ jobs:
         if: env.PR_NUMBER != ''
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-js
           number: ${{ env.PR_NUMBER }}
           hide: true
           hide_classify: OUTDATED
@@ -375,7 +380,11 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
 
-      - uses: actions/checkout@v3
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
       - name: NodeJS - Install
         uses: actions/setup-node@v2
         with:
@@ -419,7 +428,7 @@ jobs:
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-js
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -429,7 +438,7 @@ jobs:
         if: ${{ failure() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-js
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -441,7 +450,7 @@ jobs:
         if: ${{ cancelled() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
-          header: ${{ github.run_id }}
+          header: ${{ github.run_id }}-js
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
