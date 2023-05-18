@@ -26,9 +26,10 @@ const (
 	ErrMalformedRequestData = "can't serialize request data field: %s"
 
 	// State.
-	ErrStateGet    = "fail to get %s from state store %s: %s"
-	ErrStateDelete = "failed deleting state with key %s: %s"
-	ErrStateSave   = "failed saving state in state store %s: %s"
+	ErrStateGet        = "fail to get %s from state store %s: %s"
+	ErrStateDelete     = "failed deleting state with key %s: %s"
+	ErrStateSave       = "failed saving state in state store %s: %s"
+	ErrStateDeleteBulk = "failed deleting state in state store %s: %s"
 
 	// StateTransaction.
 	ErrStateStoreNotSupported     = "state store %s doesn't support transaction"

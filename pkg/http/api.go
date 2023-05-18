@@ -1175,23 +1175,17 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[struct{}](reqCtx,
+	err = stateLoader.PerformBulkStoreOperation(reqCtx, reqs,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		state.BulkStoreOpts{},
+		store.Set,
+		store.BulkSet,
 	)
-	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
-		// If there's a single request, perform it in non-bulk
-		if len(reqs) == 1 {
-			return struct{}{}, store.Set(ctx, &reqs[0])
-		}
-		return struct{}{}, store.BulkSet(ctx, reqs)
-	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		storeName := a.getStateStoreName(reqCtx)
-
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
 		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
@@ -1205,10 +1199,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 // stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error.
 func (a *api) stateErrorResponse(err error, errorCode string) (int, string, ErrorResponse) {
-	var message string
-	var code int
-	var etag bool
-	etag, code, message = a.etagError(err)
+	etag, code, message := a.etagError(err)
 
 	r := ErrorResponse{
 		ErrorCode: errorCode,
@@ -1224,17 +1215,15 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,
 // an status code and an error message.
 func (a *api) etagError(err error) (bool, int, string) {
-	e, ok := err.(*state.ETagError)
-	if !ok {
-		return false, -1, ""
+	var etagErr *state.ETagError
+	if errors.As(err, &etagErr) {
+		switch etagErr.Kind() {
+		case state.ETagMismatch:
+			return true, fasthttp.StatusConflict, etagErr.Error()
+		case state.ETagInvalid:
+			return true, fasthttp.StatusBadRequest, etagErr.Error()
+		}
 	}
-	switch e.Kind() {
-	case state.ETagMismatch:
-		return true, fasthttp.StatusConflict, e.Error()
-	case state.ETagInvalid:
-		return true, fasthttp.StatusBadRequest, e.Error()
-	}
-
 	return false, -1, ""
 }
 
