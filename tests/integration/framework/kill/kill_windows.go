@@ -26,7 +26,7 @@ import (
 )
 
 func interrupt(t *testing.T, cmd *exec.Cmd) {
-	tk := exec.Command("taskkill", "/T", "/PID", strconv.FormatInt(int64(cmd.Process.Pid), 10))
+	tk := exec.Command("taskkill", "/PID", strconv.FormatInt(int64(cmd.Process.Pid), 10))
 	tk.Stderr = os.Stderr
 	tk.Stdout = os.Stdout
 	assert.NoError(t, tk.Run())
