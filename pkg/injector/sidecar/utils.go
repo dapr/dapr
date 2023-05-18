@@ -30,6 +30,11 @@ func GetAppID(pod metaV1.ObjectMeta) string {
 	return annotations.New(pod.Annotations).GetStringOrDefault(annotations.KeyAppID, pod.GetName())
 }
 
+// GetMetricsEnabled returns true if metrics have been enabled, or false as fallback.
+func GetMetricsEnabled(pod metaV1.ObjectMeta) bool {
+	return annotations.New(pod.Annotations).GetBoolOrDefault(annotations.KeyEnableMetrics, annotations.DefaultEnableMetric)
+}
+
 // add env-vars from annotations.
 func ParseEnvString(envStr string) []coreV1.EnvVar {
 	indexes := envRegexp.FindAllStringIndex(envStr, -1)

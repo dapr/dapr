@@ -5232,11 +5232,17 @@ func TestV1SecretEndpoints(t *testing.T) {
 	})
 
 	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
+		// The interface{} use here is due to JSONBody usage
+		expectedOutput := map[string]interface{}{
+			"good-key": map[string]interface{}{"good-key": "life is good"},
+		}
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bulk", storeName)
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "reading secrets should succeed")
+		body := resp.JSONBody
+		assert.Equal(t, expectedOutput, body, "bulk secret response should be same as expected")
 	})
 
 	t.Run("Get secret - retries on initial failure with resiliency", func(t *testing.T) {
