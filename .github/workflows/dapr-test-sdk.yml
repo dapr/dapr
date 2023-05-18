@@ -340,7 +340,7 @@ jobs:
     name: "JS SDK verification tests"
     runs-on: ubuntu-latest
     env:
-      NODE_VER: 16.14.0
+      NODE_VER: 18.16.0
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
