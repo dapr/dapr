@@ -58,10 +58,6 @@ type appResponse struct {
 	EndTime   int    `json:"end_time,omitempty"`
 }
 
-type receivedMessagesResponse struct {
-	ReceivedUpdates []string `json:"received-messages"`
-}
-
 type Item struct {
 	Value    string            `json:"value,omitempty"`
 	Version  string            `json:"version,omitempty"`
