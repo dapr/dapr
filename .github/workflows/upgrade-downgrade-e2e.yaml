@@ -60,7 +60,7 @@ jobs:
         go-version-file: 'go.mod'
     - name: Get last version of dapr
       run: |
-        echo "DAPR_TEST_SIDECAR_IMAGE_OVERRIDE=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name')" >> $GITHUB_ENV
+        echo "DAPR_TEST_SIDECAR_IMAGE_OVERRIDE=ghcr.io/dapr/daprd:$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
       # (a) a couple of worker nodes: this is needed to run both
