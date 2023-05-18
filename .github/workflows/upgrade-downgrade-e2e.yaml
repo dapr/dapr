@@ -1,0 +1,211 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Upgrade/Downgrade E2E tests on KinD
+
+on:
+  # Run every 12 hours on weekdays, and every 24 hours on weekends.
+  schedule:
+    - cron: "10 */12 * * 1-5"
+    - cron: "40 0 * * 0,6"
+  # Manual trigger
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # This workflow runs our e2e tests on KinD. Tests are performed with the
+  # control plane on master and side car on the previous release, and vice
+  # versa.
+  #
+  # KinD currently does not support Windows nodes so this is not intended to be
+  # a complete replacement for our AKS-based E2E workflows.
+  e2e-upgrade-downgrade:
+    name: e2e-upgrade-downgrade
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_PORT: 5000
+      REGISTRY_NAME: kind-registry
+      DAPR_REGISTRY: localhost:5000/dapr
+      DAPR_TAG: dev
+      DAPR_NAMESPACE: dapr-tests
+      DAPR_TEST_SIDECAR_IMAGE_OVERRIDE: "-"
+      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      PULL_POLICY: IfNotPresent
+    strategy:
+      fail-fast: false # Keep running if one leg fails.
+      matrix:
+        mode:
+        - control-plane-master
+          #- dapr-sidecar-master
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Set up Go
+      id: setup-go
+      uses: actions/setup-go@v3
+      with:
+        go-version-file: 'go.mod'
+    - name: Get last version of dapr
+      run: |
+        echo "DAPR_TEST_SIDECAR_IMAGE_OVERRIDE=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name')" >> $GITHUB_ENV
+    - name: Configure KinD
+      # Generate a KinD configuration file that uses:
+      # (a) a couple of worker nodes: this is needed to run both
+      #     ZooKeeper + Kakfa, and
+      # (b) a local registry: Due to `kind load` performance
+      #     https://github.com/kubernetes-sigs/kind/issues/1165, using
+      #     a local repository speeds up the image pushes into KinD
+      #     significantly.
+      run: |
+        cat > kind.yaml <<EOF
+        apiVersion: kind.x-k8s.io/v1alpha4
+        kind: Cluster
+        nodes:
+        - role: control-plane
+          image: kindest/node:v1.25.3@sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        - role: worker
+          image: kindest/node:v1.25.3@sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        - role: worker
+          image: kindest/node:v1.25.3@sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        - role: worker
+          image: kindest/node:v1.25.3@sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        containerdConfigPatches:
+        - |-
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
+            endpoint = ["http://$REGISTRY_NAME:$REGISTRY_PORT"]
+        EOF
+
+        # Log the generated kind.yaml for easy reference.
+        cat kind.yaml
+
+        # Set log target directories
+        echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/v1.25.3_ha" >> $GITHUB_ENV
+        echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/v1.25.3_ha" >> $GITHUB_ENV
+
+    - name: Create KinD Cluster
+      uses: helm/kind-action@v1.5.0
+      with:
+        config: kind.yaml
+        cluster_name: kind
+        version: v0.17.0
+
+    - name: Get KinD info
+      run: |
+        kubectl cluster-info --context kind-kind
+        NODE_IP=$(kubectl get nodes \
+                  -lkubernetes.io/hostname!=kind-control-plane \
+                  -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+        echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
+
+    - name: Setup test output
+      shell: bash
+      run: |
+        export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
+        echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
+
+    - name: Setup local registry
+      run: |
+        # Run a registry.
+        docker run -d --restart=always \
+          -p $REGISTRY_PORT:$REGISTRY_PORT --name $REGISTRY_NAME registry:2
+        # Connect the registry to the KinD network.
+        docker network connect "kind" $REGISTRY_NAME
+
+    - name: Setup Helm
+      uses: azure/setup-helm@v1
+      with:
+        version: v3.3.4
+
+    - name: Build and push Dapr
+      run: |
+        make build-linux
+        make docker-build
+        make docker-push
+
+    - name: Build and push test apps
+      run: |
+        make build-push-e2e-app-all
+
+    - name: Setup Dapr
+      run: |
+        make setup-helm-init
+        make create-test-namespace
+        export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
+        export HA_MODE=true
+        make docker-deploy-k8s
+
+    - name: Setup Redis
+      run: |
+        make setup-test-env-redis
+
+    - name: Setup Kafka
+      run: |
+        make setup-test-env-kafka
+
+    - name: Setup MongoDB
+      run: |
+        make setup-test-env-mongodb
+
+    - name: Setup Zipkin
+      run: |
+        make setup-test-env-zipkin
+
+    - name: Setup test components
+      run: |
+        make setup-test-components
+
+    - name: Free up some diskspace
+      run: |
+        docker image prune -a -f
+
+    - name: Run tests
+      run: |
+        make test-e2e-all
+
+    - name: Save control plane logs
+      if: always()
+      run: |
+        make save-dapr-control-plane-k8s-logs
+
+    # Container log files can be bigger than the maximum file size allowed by GitHub
+    - name: Compress logs
+      if: always()
+      run: |
+        gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
+      shell: bash
+
+    - name: Upload container logs
+      if: always()
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ matrix.mode}}_container_logs
+        path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+
+    - name: Upload test logs
+      if: always()
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ matrix.mode}}_test_logs
+        path: ${{ env.DAPR_TEST_LOG_PATH }}
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@master
+      with:
+        #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
+        name: ${{ matrix.mode }}_test_e2e.json
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*

@@ -151,8 +151,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.InjectPluggableComponents {
 		annotationObject["dapr.io/inject-pluggable-components"] = "true"
 	}
-	if appDesc.SidecarImage != "" {
-		annotationObject["dapr.io/sidecar-image"] = appDesc.SidecarImage
+	sidecarImage := utils.GetEnvOrElse("DAPR_TEST_SIDECAR_IMAGE_OVERRIDE", appDesc.SidecarImage)
+	if len(sidecarImage) > 0 {
+		annotationObject["dapr.io/sidecar-image"] = sidecarImage
 	}
 
 	if appDesc.MaxRequestSizeMB != 0 {
