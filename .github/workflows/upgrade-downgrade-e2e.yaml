@@ -41,7 +41,6 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      DAPR_TEST_SIDECAR_IMAGE_OVERRIDE: "-"
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
     strategy:
@@ -49,7 +48,7 @@ jobs:
       matrix:
         mode:
         - control-plane-master
-          #- dapr-sidecar-master
+        - dapr-sidecar-master
     steps:
     - name: Check out code
       uses: actions/checkout@v3
@@ -60,15 +59,8 @@ jobs:
         go-version-file: 'go.mod'
     - name: Get last version of dapr
       run: |
-        echo "DAPR_TEST_SIDECAR_IMAGE_OVERRIDE=ghcr.io/dapr/daprd:$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
+        echo "DAPR_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
     - name: Configure KinD
-      # Generate a KinD configuration file that uses:
-      # (a) a couple of worker nodes: this is needed to run both
-      #     ZooKeeper + Kakfa, and
-      # (b) a local registry: Due to `kind load` performance
-      #     https://github.com/kubernetes-sigs/kind/issues/1165, using
-      #     a local repository speeds up the image pushes into KinD
-      #     significantly.
       run: |
         cat > kind.yaml <<EOF
         apiVersion: kind.x-k8s.io/v1alpha4
@@ -139,13 +131,26 @@ jobs:
       run: |
         make build-push-e2e-app-all
 
-    - name: Setup Dapr
+    - name: Setup Dapr - control-plane master
+      if: matrix.mode == 'control-plane-master'
       run: |
+        echo "DAPR_TEST_SIDECAR_IMAGE_OVERRIDE=ghcr.io/dapr/daprd:$DAPR_LATEST_VERSION" >> $GITHUB_ENV
         make setup-helm-init
         make create-test-namespace
         export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
         export HA_MODE=true
         make docker-deploy-k8s
+
+    - name: Setup Dapr - control-plane previous release
+      if: matrix.mode == 'dapr-sidecar-master'
+      run: |
+        wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_LATEST_VERSION }}
+        name create-test-namespace
+        dapr uninstall --all
+        dapr init -k --runtime-version ${{ env.DAPR_LATEST_VERSION }} \
+          --set dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s \
+          -n dapr-tests \
+          --enable-ha
 
     - name: Setup Redis
       run: |
@@ -206,6 +211,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@master
       with:
-        #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
         name: ${{ matrix.mode }}_test_e2e.json
         path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
