@@ -154,24 +154,24 @@ jobs:
           -n dapr-tests \
           --enable-ha
 
-    - name: Setup Redis
+    - name: Checkout last release repo
+      uses: actions/checkout@v3
+      if: matrix.mode == 'dapr-sidecar-master'
+      with:
+        repository: dapr/dapr
+        path: latest-release
+        ref: v${{ env.DAPR_LATEST_VERSION }}
+
+    - name: Setup Components
       run: |
         make setup-test-env-redis
-
-    - name: Setup Kafka
-      run: |
         make setup-test-env-kafka
-
-    - name: Setup MongoDB
-      run: |
         make setup-test-env-mongodb
-
-    - name: Setup Zipkin
-      run: |
         make setup-test-env-zipkin
 
-    - name: Setup test components
-      run: |
+        if [ "${{ matrix.mode }}" == "dapr-sidecar-master" ]; then
+          cd latest-release
+        fi
         make setup-test-components
 
     - name: Free up some diskspace
