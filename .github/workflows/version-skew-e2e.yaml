@@ -11,31 +11,41 @@
 # limitations under the License.
 #
 
-name: Upgrade/Downgrade E2E tests on KinD
+name: Version Skew E2E tests on KinD
 
 on:
-  # Run every 12 hours on weekdays, and every 24 hours on weekends.
-  schedule:
-    - cron: "10 */12 * * 1-5"
-    - cron: "40 0 * * 0,6"
-  # Manual trigger
-  workflow_dispatch:
+  # Run when a PR is merged to master.
+  push:
+    branches:
+      - master
+  # Dispatch on external events
+  repository_dispatch:
+    types:
+    - test-version-skew
 
 defaults:
   run:
     shell: bash
 
+# Jobs can be triggered with the `/test-version-skew` command. You can also
+# supply a specific version to test against, overriding the current latest
+# release, e.g. `/test-version-skew 1.10.5`. This is useful for testing
+# against a specific patch or release candidate. This version must be a
+# valid tag and artefacts be publicly available. Remember that Dapr only
+# guarantees N-1.
 jobs:
-  # This workflow runs our e2e tests on KinD. Tests are performed with the
+  # Dapr guarantees that the control plane and Dapr sidecars may have a version
+  # skew of N-1 and still be fully functional. This workflow verifies this
+  # guarantee holds for master and the previous release (or overridden version
+  # reference).
+  #
+  # The workflow runs our e2e tests on KinD. Tests are performed with the
   # control plane on master and side car on the previous release, and vice
   # versa.
   #
   # The e2e tests from the previous release are run against this deployment.
-  #
-  # KinD currently does not support Windows nodes so this is not intended to be
-  # a complete replacement for our AKS-based E2E workflows.
-  e2e-upgrade-downgrade:
-    name: e2e-upgrade-downgrade
+  e2e-version-skew:
+    name: e2e-version-skew
     runs-on: ubuntu-latest
     env:
       REGISTRY_PORT: 5000
@@ -52,17 +62,60 @@ jobs:
         - control-plane-master
         - dapr-sidecar-master
     steps:
+    - name: Set up for Dapr lastest release
+      run: |
+        echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
+    - name: Set up for master
+      if: github.event_name != 'repository_dispatch'
+      run: |
+        echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+      shell: bash
+    - name: Parse test payload
+      if: github.event_name == 'repository_dispatch'
+      uses: actions/github-script@v6.2.0
+      with:
+        github-token: ${{secrets.DAPR_BOT_TOKEN}}
+        script: |
+          const testPayload = context.payload.client_payload;
+          if (testPayload) {
+            var fs = require('fs');
+            // Set environment variables
+            fs.appendFileSync(process.env.GITHUB_ENV,
+              `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+              `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+              `PR_NUMBER=${testPayload.issue.number}`
+            );
+            if (testPayload.previous_version) {
+              fs.appendFileSync(process.env.GITHUB_ENV,`DAPR_PREV_VERSION=${testPayload.previous_version}`);
+            }
+          }
+    - name: Create PR comment
+      if: env.PR_NUMBER != ''
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew
+        number: ${{ env.PR_NUMBER }}
+        hide: true
+        hide_classify: OUTDATED
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          # Dapr Version Skew test
+
+          🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+          Commit ref: ${{ env.CHECKOUT_REF }}
     - name: Check out code
       uses: actions/checkout@v3
-    - name: Get last version of dapr
-      run: |
-        echo "DAPR_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
+      with:
+        repository: ${{ env.CHECKOUT_REPO }}
+        ref: ${{ env.CHECKOUT_REF }}
     - name: Checkout last release repo
       uses: actions/checkout@v3
       with:
         repository: dapr/dapr
         path: latest-release
-        ref: v${{ env.DAPR_LATEST_VERSION }}
+        ref: v${{ env.DAPR_PREV_VERSION }}
     - name: Set up Go
       id: setup-go
       uses: actions/setup-go@v4
@@ -144,7 +197,7 @@ jobs:
       run: |
         make setup-helm-init
         make create-test-namespace
-        export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:${{env.DAPR_LATEST_VERSION}}"
+        export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:${{env.DAPR_PREV_VERSION}}"
         export HA_MODE=true
         make docker-deploy-k8s
 
@@ -156,7 +209,7 @@ jobs:
         export DAPR_CLI_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/cli/releases/latest | jq -r '.tag_name' | cut -c 2-)
         wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s $DAPR_CLI_LATEST_VERSION
         dapr uninstall --all
-        dapr init -k --runtime-version ${{ env.DAPR_LATEST_VERSION }} \
+        dapr init -k --runtime-version ${{ env.DAPR_PREV_VERSION }} \
           --set dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:dev \
           -n dapr-tests \
           --enable-ha
@@ -212,3 +265,37 @@ jobs:
       with:
         name: ${{ matrix.mode }}_test_e2e.json
         path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
+    - name: Update PR comment for success
+      if: ${{ success() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ✅ Version Skew tests passed
+    - name: Update PR comment for failure
+      if: ${{ failure() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ❌ Version Skew tests failed
+
+          Please check the logs for details on the error.
+    - name: Update PR comment for cancellation
+      if: ${{ cancelled() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ⚠️ Version Skew tests cancelled
+
+          The Action has been canceled
