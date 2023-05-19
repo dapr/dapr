@@ -114,7 +114,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 }
 
 // appRouter initializes restful api router
-func appRouter() *mux.Router {
+func appRouter() http.Handler {
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Log requests and their processing time

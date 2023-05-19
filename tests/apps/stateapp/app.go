@@ -26,9 +26,11 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	daprhttp "github.com/dapr/dapr/pkg/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -45,6 +47,7 @@ const (
 
 	metadataPartitionKey = "partitionKey"
 	partitionKey         = "e2etest"
+	badEtag              = "99999" // Must be numeric because of Redis
 )
 
 var (
@@ -80,6 +83,7 @@ type appState struct {
 type daprState struct {
 	Key           string            `json:"key,omitempty"`
 	Value         *appState         `json:"value,omitempty"`
+	Etag          string            `json:"etag,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
 	OperationType string            `json:"operationType,omitempty"`
 }
@@ -93,17 +97,15 @@ type bulkGetRequest struct {
 
 // bulkGetResponse is the response object from Dapr for a bulk get operation.
 type bulkGetResponse struct {
-	Key  string      `json:"key"`
-	Data interface{} `json:"data"`
-	ETag string      `json:"etag"`
+	Key  string `json:"key"`
+	Data any    `json:"data"`
+	ETag string `json:"etag"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
-	StartTime int         `json:"start_time,omitempty"`
-	EndTime   int         `json:"end_time,omitempty"`
-	States    []daprState `json:"states,omitempty"`
-	Message   string      `json:"message,omitempty"`
+	States  []daprState `json:"states,omitempty"`
+	Message string      `json:"message,omitempty"`
 }
 
 // indexHandler is the handler for root path
@@ -131,7 +133,7 @@ func load(data []byte, statestore string, meta map[string]string) (int, error) {
 		stateURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(data), stateURL)
-	res, err := httpClient.Post(stateURL, "application/json", bytes.NewBuffer(data))
+	res, err := httpClient.Post(stateURL, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -139,16 +141,21 @@ func load(data []byte, statestore string, meta map[string]string) (int, error) {
 
 	// Save must return 204
 	if res.StatusCode != http.StatusNoContent {
-		err = fmt.Errorf("expected status code 204, got %d", res.StatusCode)
+		body, _ := io.ReadAll(res.Body)
+		err = fmt.Errorf("expected status code 204, got %d; response: %s", res.StatusCode, string(body))
 	}
+
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, res.Body)
+
 	return res.StatusCode, err
 }
 
-func get(key, statestore string, meta map[string]string) (*appState, error) {
+func get(key string, statestore string, meta map[string]string) (*appState, string, error) {
 	log.Printf("Processing get request for %s.", key)
 	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	log.Printf("Fetching state from %s", url)
@@ -156,27 +163,27 @@ func get(key, statestore string, meta map[string]string) (*appState, error) {
 	/* #nosec */
 	res, err := httpClient.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
+		return nil, "", fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
 
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
+		return nil, "", fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return nil, fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
+		return nil, "", fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
 	}
 
 	log.Printf("Found state for key %s: %s", key, body)
 
 	state, err := parseState(key, body)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return state, nil
+	return state, res.Header.Get("etag"), nil
 }
 
 func parseState(key string, body []byte) (*appState, error) {
@@ -203,7 +210,7 @@ func getAll(states []daprState, statestore string, meta map[string]string) ([]da
 
 	output := make([]daprState, 0, len(states))
 	for _, state := range states {
-		value, err := get(state.Key, statestore, meta)
+		value, etag, err := get(state.Key, statestore, meta)
 		if err != nil {
 			return nil, err
 		}
@@ -212,6 +219,7 @@ func getAll(states []daprState, statestore string, meta map[string]string) ([]da
 		output = append(output, daprState{
 			Key:   state.Key,
 			Value: value,
+			Etag:  etag,
 		})
 	}
 
@@ -240,7 +248,7 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 		return nil, err
 	}
 
-	res, err := httpClient.Post(url, "application/json", bytes.NewBuffer(b))
+	res, err := httpClient.Post(url, "application/json", bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -260,17 +268,18 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 		return nil, fmt.Errorf("could not unmarshal bulk get response from Dapr: %s", err.Error())
 	}
 
-	for _, i := range resp {
+	for _, state := range resp {
 		var as appState
-		b, err := json.Marshal(i.Data)
+		b, err := json.Marshal(state.Data)
 		if err != nil {
 			return nil, fmt.Errorf("could not marshal return data: %s", err)
 		}
 		json.Unmarshal(b, &as)
 
 		output = append(output, daprState{
-			Key:   i.Key,
+			Key:   state.Key,
 			Value: &as,
+			Etag:  state.ETag,
 		})
 	}
 
@@ -278,37 +287,44 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 	return output, nil
 }
 
-func delete(key, statestore string, meta map[string]string) error {
-	log.Printf("Processing delete request for %s.", key)
+func delete(key, statestore string, meta map[string]string, etag string) (int, error) {
+	log.Printf("Processing delete request for %s", key)
 	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
-		return fmt.Errorf("could not create delete request for key %s in Dapr: %s", key, err.Error())
+		return 0, fmt.Errorf("could not create delete request for key %s in Dapr: %s", key, err.Error())
+	}
+	if etag != "" {
+		req.Header.Set("If-Match", etag)
 	}
 
 	log.Printf("Deleting state for %s", url)
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
+		return 0, fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return fmt.Errorf("failed to delete key %s in Dapr: %s", key, err.Error())
+		body, _ := io.ReadAll(res.Body)
+		return res.StatusCode, fmt.Errorf("failed to delete key %s in Dapr: %s", key, string(body))
 	}
 
-	return nil
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, res.Body)
+
+	return res.StatusCode, nil
 }
 
 func deleteAll(states []daprState, statestore string, meta map[string]string) error {
 	log.Printf("Processing delete request for %d states.", len(states))
 
 	for _, state := range states {
-		err := delete(state.Key, statestore, meta)
+		_, err := delete(state.Key, statestore, meta, "")
 		if err != nil {
 			return err
 		}
@@ -340,7 +356,7 @@ func executeTransaction(states []daprState, statestore string) error {
 	}
 
 	log.Printf("Posting state to %s with '%s'", stateTransactionURL, jsonValue)
-	res, err := httpClient.Post(stateTransactionURL, "application/json", bytes.NewBuffer(jsonValue))
+	res, err := httpClient.Post(stateTransactionURL, "application/json", bytes.NewReader(jsonValue))
 	if err != nil {
 		return err
 	}
@@ -358,7 +374,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 		queryURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(query), queryURL)
-	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query))
+	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewReader(query))
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +411,8 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 
 func parseRequestBody(w http.ResponseWriter, r *http.Request) (*requestResponse, error) {
 	req := &requestResponse{}
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(req)
+	if err != nil {
 		log.Printf("Could not parse request body: %s", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(requestResponse{
@@ -411,7 +428,8 @@ func parseRequestBody(w http.ResponseWriter, r *http.Request) (*requestResponse,
 }
 
 func getRequestBody(w http.ResponseWriter, r *http.Request) (data []byte, err error) {
-	if data, err = io.ReadAll(r.Body); err != nil {
+	data, err = io.ReadAll(r.Body)
+	if err != nil {
 		log.Printf("Could not read request body: %s", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(requestResponse{
@@ -453,14 +471,13 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	uri := r.URL.RequestURI()
 	statusCode := http.StatusOK
 
-	res.StartTime = epoch()
-
 	cmd := mux.Vars(r)["command"]
 	statestore := mux.Vars(r)["statestore"]
 	meta := getMetadata(r.URL.Query())
 	switch cmd {
 	case "save":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		_, err = save(req.States, statestore, meta)
@@ -470,33 +487,39 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 			statusCode = http.StatusNoContent
 		}
 	case "load":
-		if data, err = getRequestBody(w, r); err != nil {
+		data, err = getRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		statusCode, err = load(data, statestore, meta)
 	case "get":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		res.States, err = getAll(req.States, statestore, meta)
 	case "getbulk":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		res.States, err = getBulk(req.States, statestore)
 	case "delete":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		err = deleteAll(req.States, statestore, meta)
 		statusCode = http.StatusNoContent
 	case "transact":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		err = executeTransaction(req.States, statestore)
 	case "query":
-		if data, err = getRequestBody(w, r); err != nil {
+		data, err = getRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		res.States, err = executeQuery(data, statestore, meta)
@@ -511,8 +534,6 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusInternalServerError
 		res.Message = err.Error()
 	}
-
-	res.EndTime = epoch()
 
 	if !statusCheck {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
@@ -532,7 +553,6 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var res requestResponse
 	var response *runtimev1pb.GetBulkStateResponse
-	res.StartTime = epoch()
 	statusCode := http.StatusOK
 
 	cmd := mux.Vars(r)["command"]
@@ -571,7 +591,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		res.States = states
 	case "get":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		states, err = getAllGRPC(req.States, statestore, meta)
@@ -580,7 +601,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		res.States = states
 	case "delete":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		statusCode = http.StatusNoContent
@@ -589,7 +611,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 			statusCode, res.Message = setErrorMessage("DeleteState", err.Error())
 		}
 	case "transact":
-		if req, err = parseRequestBody(w, r); err != nil {
+		req, err = parseRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		_, err = grpcClient.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
@@ -601,7 +624,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 			statusCode, res.Message = setErrorMessage("ExecuteStateTransaction", err.Error())
 		}
 	case "query":
-		if data, err = getRequestBody(w, r); err != nil {
+		data, err = getRequestBody(w, r)
+		if err != nil {
 			return
 		}
 		resp, err := grpcClient.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
@@ -628,7 +652,6 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		res.Message = unsupportedCommandMessage
 	}
 
-	res.EndTime = epoch()
 	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
 	}
@@ -659,30 +682,42 @@ func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, erro
 		result[i] = daprState{
 			Key:   state.Key,
 			Value: daprStateItem,
+			Etag:  state.Etag,
 		}
 	}
 
 	return result, nil
 }
 
-func deleteAllGRPC(states []daprState, statestore string, meta map[string]string) error {
-	m := map[string]string{metadataPartitionKey: partitionKey}
-	for k, v := range meta {
-		m[k] = v
-	}
-	for _, state := range states {
-		log.Printf("deleting sate for key %s\n", state.Key)
-		_, err := grpcClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
-			StoreName: statestore,
-			Key:       state.Key,
-			Metadata:  m,
-		})
-		if err != nil {
-			return err
-		}
+func deleteAllGRPC(states []daprState, statestore string, meta map[string]string) (err error) {
+	if len(states) == 0 {
+		return nil
 	}
 
-	return nil
+	if len(states) == 1 {
+		log.Print("deleting sate for key", states[0].Key)
+		m := map[string]string{metadataPartitionKey: partitionKey}
+		for k, v := range meta {
+			m[k] = v
+		}
+		_, err = grpcClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
+			StoreName: statestore,
+			Key:       states[0].Key,
+			Metadata:  m,
+		})
+		return err
+	}
+
+	keys := make([]string, len(states))
+	for i, state := range states {
+		keys[i] = state.Key
+	}
+	log.Print("deleting bulk sates for keys", keys)
+	_, err = grpcClient.DeleteBulkState(context.Background(), &runtimev1pb.DeleteBulkStateRequest{
+		StoreName: statestore,
+		States:    daprState2StateItems(states, meta),
+	})
+	return err
 }
 
 func getAllGRPC(states []daprState, statestore string, meta map[string]string) ([]daprState, error) {
@@ -716,8 +751,7 @@ func getAllGRPC(states []daprState, statestore string, meta map[string]string) (
 }
 
 func setErrorMessage(method, errorString string) (int, string) {
-	log.Printf("GRPC %s had error %s\n", method, errorString)
-
+	log.Printf("GRPC %s had error %s", method, errorString)
 	return http.StatusInternalServerError, errorString
 }
 
@@ -733,6 +767,11 @@ func daprState2StateItems(daprStates []daprState, meta map[string]string) []*com
 			Key:      daprState.Key,
 			Value:    val,
 			Metadata: m,
+		}
+		if daprState.Etag != "" {
+			stateItems[i].Etag = &commonv1pb.Etag{
+				Value: daprState.Etag,
+			}
 		}
 	}
 
@@ -783,13 +822,404 @@ func createBulkStateURL(statestore string) (string, error) {
 	return url.String(), nil
 }
 
-// epoch returns the current unix epoch timestamp
-func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+// Etag test for HTTP
+func etagTestHTTP(statestore string) error {
+	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
+
+	// Use two random keys for testing
+	var etags [2]string
+	keys := [2]string{
+		uuid.NewString(),
+		uuid.NewString(),
+	}
+
+	type retrieveStateOpts struct {
+		expectNotFound     bool
+		expectValue        string
+		expectEtagEqual    string
+		expectEtagNotEqual string
+	}
+	retrieveState := func(stateId int, opts retrieveStateOpts) (string, error) {
+		value, etag, err := get(keys[stateId], statestore, pkMetadata)
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve value %d: %w", stateId, err)
+		}
+
+		if opts.expectNotFound {
+			if value != nil && len(value.Data) != 0 {
+				return "", fmt.Errorf("invalid value for state %d: %#v (expected empty)", stateId, value)
+			}
+			return "", nil
+		}
+		if value == nil || string(value.Data) != opts.expectValue {
+			return "", fmt.Errorf("invalid value for state %d: %#v (expected: %q)", stateId, value, opts.expectValue)
+		}
+		if etag == "" {
+			return "", fmt.Errorf("etag is empty for state %d", stateId)
+		}
+		if opts.expectEtagEqual != "" && etag != opts.expectEtagEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected: %q)", stateId, etag, opts.expectEtagEqual)
+		}
+		if opts.expectEtagNotEqual != "" && etag == opts.expectEtagNotEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected different value)", stateId, etag)
+		}
+		return etag, nil
+	}
+
+	// First, write two values
+	_, err := save([]daprState{
+		{Key: keys[0], Value: &appState{Data: []byte("1")}, Metadata: pkMetadata},
+		{Key: keys[1], Value: &appState{Data: []byte("1")}, Metadata: pkMetadata},
+	}, statestore, pkMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to store initial values: %w", err)
+	}
+
+	// Retrieve the two values to get the etag
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 1: %w", err)
+	}
+
+	// Update the first state using the correct etag
+	_, err = save([]daprState{
+		{Key: keys[0], Value: &appState{Data: []byte("2")}, Metadata: pkMetadata, Etag: etags[0]},
+	}, statestore, pkMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to update value 0: %w", err)
+	}
+
+	// Check the first state
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "2", expectEtagNotEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 0: %w", err)
+	}
+
+	// Updating with wrong etag should fail with 409 status code
+	statusCode, _ := save([]daprState{
+		{Key: keys[1], Value: &appState{Data: []byte("2")}, Metadata: pkMetadata, Etag: badEtag},
+	}, statestore, pkMetadata)
+	if statusCode != http.StatusConflict {
+		return fmt.Errorf("expected update with invalid etag to fail with status code 409, but got: %d", statusCode)
+	}
+
+	// Value should not have changed
+	_, err = retrieveState(1, retrieveStateOpts{expectValue: "1", expectEtagEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+
+	// Bulk update with all valid etags
+	_, err = save([]daprState{
+		{Key: keys[0], Value: &appState{Data: []byte("3")}, Metadata: pkMetadata, Etag: etags[0]},
+		{Key: keys[1], Value: &appState{Data: []byte("3")}, Metadata: pkMetadata, Etag: etags[1]},
+	}, statestore, pkMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to update bulk values: %w", err)
+	}
+
+	// Retrieve the two values to confirm they're updated
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+
+	// Bulk update with one etag incorrect
+	statusCode, _ = save([]daprState{
+		{Key: keys[0], Value: &appState{Data: []byte("4")}, Metadata: pkMetadata, Etag: badEtag},
+		{Key: keys[1], Value: &appState{Data: []byte("4")}, Metadata: pkMetadata, Etag: etags[1]},
+	}, statestore, pkMetadata)
+	if statusCode != http.StatusConflict {
+		return fmt.Errorf("expected update with invalid etag to fail with status code 409, but got: %d", statusCode)
+	}
+
+	// Retrieve the two values to confirm only the second is updated
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "4", expectEtagNotEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+
+	// Delete single item with incorrect etag
+	statusCode, _ = delete(keys[0], statestore, pkMetadata, badEtag)
+	if statusCode != http.StatusConflict {
+		return fmt.Errorf("expected delete with invalid etag to fail with status code 409, but got: %d", statusCode)
+	}
+
+	// Value should not have changed
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+
+	// TODO: There's no "Bulk Delete" API in HTTP right now, so we can't test that
+	// Create a test here when the API is implemented
+	err = deleteAll([]daprState{
+		{Key: keys[0], Metadata: pkMetadata},
+		{Key: keys[1], Metadata: pkMetadata},
+	}, statestore, pkMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to delete all data at the end of the test: %w", err)
+	}
+
+	return nil
+}
+
+// Etag test for gRPC
+func etagTestGRPC(statestore string) error {
+	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
+
+	// Use three random keys for testing
+	var etags [3]string
+	keys := [3]string{
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
+	}
+
+	type retrieveStateOpts struct {
+		expectNotFound     bool
+		expectValue        string
+		expectEtagEqual    string
+		expectEtagNotEqual string
+	}
+	retrieveState := func(stateId int, opts retrieveStateOpts) (string, error) {
+		res, err := grpcClient.GetState(context.Background(), &runtimev1pb.GetStateRequest{
+			StoreName: statestore,
+			Key:       keys[stateId],
+			Metadata:  pkMetadata,
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve value %d: %w", stateId, err)
+		}
+
+		if opts.expectNotFound {
+			if len(res.Data) != 0 {
+				return "", fmt.Errorf("invalid value for state %d: %q (expected empty)", stateId, string(res.Data))
+			}
+			return "", nil
+		}
+		if len(res.Data) == 0 || string(res.Data) != opts.expectValue {
+			return "", fmt.Errorf("invalid value for state %d: %q (expected: %q)", stateId, string(res.Data), opts.expectValue)
+		}
+		if res.Etag == "" {
+			return "", fmt.Errorf("etag is empty for state %d", stateId)
+		}
+		if opts.expectEtagEqual != "" && res.Etag != opts.expectEtagEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected: %q)", stateId, res.Etag, opts.expectEtagEqual)
+		}
+		if opts.expectEtagNotEqual != "" && res.Etag == opts.expectEtagNotEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected different value)", stateId, res.Etag)
+		}
+		return res.Etag, nil
+	}
+
+	// First, write three values
+	_, err := grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Value: []byte("1"), Metadata: pkMetadata},
+			{Key: keys[1], Value: []byte("1"), Metadata: pkMetadata},
+			{Key: keys[2], Value: []byte("1"), Metadata: pkMetadata},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to store initial values: %w", err)
+	}
+
+	// Retrieve the two values to get the etag
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 1: %w", err)
+	}
+	etags[2], err = retrieveState(2, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 2: %w", err)
+	}
+
+	// Update the first state using the correct etag
+	_, err = grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Value: []byte("2"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[0]}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update value 0: %w", err)
+	}
+
+	// Check the first state
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "2", expectEtagNotEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+
+	// Updating with wrong etag should fail with 409 status code
+	_, err = grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[1], Value: []byte("2"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: badEtag}},
+		},
+	})
+	if status.Code(err) != codes.Aborted {
+		return fmt.Errorf("expected gRPC error with code Aborted, but got err: %v", err)
+	}
+
+	// Value should not have changed
+	_, err = retrieveState(1, retrieveStateOpts{expectValue: "1", expectEtagEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+
+	// Bulk update with all valid etags
+	_, err = grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Value: []byte("3"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[0]}},
+			{Key: keys[1], Value: []byte("3"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[1]}},
+			{Key: keys[2], Value: []byte("3"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[2]}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update bulk values: %w", err)
+	}
+
+	// Retrieve the three values to confirm they're updated
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+	etags[2], err = retrieveState(2, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[2]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 2: %w", err)
+	}
+
+	// Bulk update with one etag incorrect
+	_, err = grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Value: []byte("4"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: badEtag}},
+			{Key: keys[1], Value: []byte("4"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[1]}},
+			{Key: keys[2], Value: []byte("4"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[2]}},
+		},
+	})
+	if status.Code(err) != codes.Aborted {
+		return fmt.Errorf("expected gRPC error with code Aborted, but got err: %v", err)
+	}
+
+	// Retrieve the three values to confirm only the last two are updated
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "4", expectEtagNotEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+	etags[2], err = retrieveState(2, retrieveStateOpts{expectValue: "4", expectEtagNotEqual: etags[2]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 2: %w", err)
+	}
+
+	// Delete single item with incorrect etag
+	_, err = grpcClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
+		StoreName: statestore,
+		Key:       keys[0],
+		Metadata:  pkMetadata,
+		Etag:      &commonv1pb.Etag{Value: badEtag},
+	})
+	if status.Code(err) != codes.Aborted {
+		return fmt.Errorf("expected gRPC error with code Aborted, but got err: %v", err)
+	}
+
+	// Value should not have changed
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+
+	// Bulk delete with two etags incorrect
+	_, err = grpcClient.DeleteBulkState(context.Background(), &runtimev1pb.DeleteBulkStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: badEtag}},
+			{Key: keys[1], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: badEtag}},
+			{Key: keys[2], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[2]}},
+		},
+	})
+	if status.Code(err) != codes.Aborted {
+		return fmt.Errorf("expected gRPC error with code Aborted, but got err: %v", err)
+	}
+
+	// Validate items 0 and 1 are the only ones still existing
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check value for state 0 after not deleting it: %w", err)
+	}
+	_, err = retrieveState(1, retrieveStateOpts{expectValue: "4", expectEtagEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check value for state 1 after not deleting it: %w", err)
+	}
+	_, err = retrieveState(2, retrieveStateOpts{expectNotFound: true})
+	if err != nil {
+		return fmt.Errorf("failed to check value for state 2 after deleting it: %w", err)
+	}
+
+	// Delete the remaining items
+	_, err = grpcClient.DeleteBulkState(context.Background(), &runtimev1pb.DeleteBulkStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[0]}},
+			{Key: keys[1], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[1]}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete bulk values: %w", err)
+	}
+
+	return nil
+}
+
+// Returns a HTTP handler for functions that return an error
+func testFnHandler(testFn func(statestore string) error) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Processing request for %s", r.URL.RequestURI())
+
+		err := testFn(mux.Vars(r)["statestore"])
+		if err != nil {
+			w.Header().Add("content-type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]any{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 // appRouter initializes restful api router
-func appRouter() *mux.Router {
+func appRouter() http.Handler {
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Log requests and their processing time
@@ -798,6 +1228,8 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/http/{command}/{statestore}", httpHandler).Methods("POST")
 	router.HandleFunc("/test/grpc/{command}/{statestore}", grpcHandler).Methods("POST")
+	router.HandleFunc("/test-etag/http/{statestore}", testFnHandler(etagTestHTTP)).Methods("POST")
+	router.HandleFunc("/test-etag/grpc/{statestore}", testFnHandler(etagTestGRPC)).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
