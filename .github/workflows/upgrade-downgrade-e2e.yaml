@@ -44,7 +44,7 @@ jobs:
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
-      PULL_POLICY: IfNotPresent
+      PULL_POLICY: Always
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
