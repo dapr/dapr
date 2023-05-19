@@ -52,6 +52,9 @@ jobs:
     steps:
     - name: Check out code
       uses: actions/checkout@v3
+    - name: Get last version of dapr
+      run: |
+        echo "DAPR_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
     - name: Checkout last release repo
       uses: actions/checkout@v3
       if: matrix.mode == 'dapr-sidecar-master'
@@ -64,9 +67,6 @@ jobs:
       uses: actions/setup-go@v3
       with:
         go-version-file: 'go.mod'
-    - name: Get last version of dapr
-      run: |
-        echo "DAPR_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
     - name: Configure KinD
       run: |
         cat > kind.yaml <<EOF
