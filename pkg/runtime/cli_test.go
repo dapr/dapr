@@ -14,6 +14,8 @@ limitations under the License.
 package runtime
 
 import (
+	"flag"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +27,7 @@ var (
 	testAppID       = "testapp"
 	testAppPort     = "80"
 	testAppProtocol = "http"
+	testMetricsPort = 10000
 )
 
 func TestParsePlacementAddr(t *testing.T) {
@@ -54,7 +57,12 @@ func TestParsePlacementAddr(t *testing.T) {
 }
 
 func TestAppFlag(t *testing.T) {
-	runtime, err := FromFlags([]string{"--app-id", testAppID, "--app-port", testAppPort, "--app-protocol", testAppProtocol})
+	// reset CommandLine to avoid conflicts from other tests
+	flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
+	// avoid port conflicts from other tests
+	testMetricsPort++
+
+	runtime, err := FromFlags([]string{"--app-id", testAppID, "--app-port", testAppPort, "--app-protocol", testAppProtocol, "--metrics-port", strconv.Itoa(testMetricsPort)})
 	assert.NoError(t, err)
 	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
 	assert.EqualValues(t, 80, runtime.runtimeConfig.ApplicationPort)
@@ -62,7 +70,12 @@ func TestAppFlag(t *testing.T) {
 }
 
 func TestStandaloneGlobalConfig(t *testing.T) {
-	runtime, err := FromFlags([]string{"--app-id", testAppID, "--mode", string(modes.StandaloneMode), "--config", "../config/testdata/metric_disabled.yaml"})
+	// reset CommandLine to avoid conflicts from other tests
+	flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
+	// avoid port conflicts from other tests
+	testMetricsPort++
+
+	runtime, err := FromFlags([]string{"--app-id", testAppID, "--mode", string(modes.StandaloneMode), "--config", "../config/testdata/metric_disabled.yaml", "--metrics-port", strconv.Itoa(testMetricsPort)})
 	assert.NoError(t, err)
 	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
 	assert.False(t, runtime.globalConfig.Spec.MetricsSpec.Enabled)
