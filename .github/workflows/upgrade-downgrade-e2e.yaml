@@ -30,6 +30,8 @@ jobs:
   # control plane on master and side car on the previous release, and vice
   # versa.
   #
+  # The e2e tests from the previous release are run against this deployment.
+  #
   # KinD currently does not support Windows nodes so this is not intended to be
   # a complete replacement for our AKS-based E2E workflows.
   e2e-upgrade-downgrade:
