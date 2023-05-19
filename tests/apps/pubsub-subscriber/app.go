@@ -462,7 +462,7 @@ func initializeSets() {
 }
 
 // appRouter initializes restful api router
-func appRouter() *mux.Router {
+func appRouter() http.Handler {
 	log.Printf("Called appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 
