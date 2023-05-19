@@ -57,7 +57,6 @@ jobs:
         echo "DAPR_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
     - name: Checkout last release repo
       uses: actions/checkout@v3
-      if: matrix.mode == 'dapr-sidecar-master'
       with:
         repository: dapr/dapr
         path: latest-release
