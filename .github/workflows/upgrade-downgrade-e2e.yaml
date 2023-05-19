@@ -65,7 +65,7 @@ jobs:
         ref: v${{ env.DAPR_LATEST_VERSION }}
     - name: Set up Go
       id: setup-go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v4
       with:
         go-version-file: 'go.mod'
     - name: Configure KinD
