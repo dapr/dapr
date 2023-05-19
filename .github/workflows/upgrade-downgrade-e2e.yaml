@@ -52,6 +52,13 @@ jobs:
     steps:
     - name: Check out code
       uses: actions/checkout@v3
+    - name: Checkout last release repo
+      uses: actions/checkout@v3
+      if: matrix.mode == 'dapr-sidecar-master'
+      with:
+        repository: dapr/dapr
+        path: latest-release
+        ref: v${{ env.DAPR_LATEST_VERSION }}
     - name: Set up Go
       id: setup-go
       uses: actions/setup-go@v3
@@ -129,7 +136,7 @@ jobs:
 
     - name: Build and push test apps
       run: |
-        make build-push-e2e-app-all
+        cd lastest-release && make build-push-e2e-app-all
 
     - name: Setup Dapr - control-plane master
       if: matrix.mode == 'control-plane-master'
@@ -154,24 +161,14 @@ jobs:
           -n dapr-tests \
           --enable-ha
 
-    - name: Checkout last release repo
-      uses: actions/checkout@v3
-      if: matrix.mode == 'dapr-sidecar-master'
-      with:
-        repository: dapr/dapr
-        path: latest-release
-        ref: v${{ env.DAPR_LATEST_VERSION }}
-
     - name: Setup Components
       run: |
+        cd latest-release
+
         make setup-test-env-redis
         make setup-test-env-kafka
         make setup-test-env-mongodb
         make setup-test-env-zipkin
-
-        if [ "${{ matrix.mode }}" == "dapr-sidecar-master" ]; then
-          cd latest-release
-        fi
         make setup-test-components
 
     - name: Free up some diskspace
@@ -180,12 +177,12 @@ jobs:
 
     - name: Run tests
       run: |
-        make test-e2e-all
+        cd latest-release && make test-e2e-all
 
     - name: Save control plane logs
       if: always()
       run: |
-        make save-dapr-control-plane-k8s-logs
+        cd latest-release && make save-dapr-control-plane-k8s-logs
 
     # Container log files can be bigger than the maximum file size allowed by GitHub
     - name: Compress logs
