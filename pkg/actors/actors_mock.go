@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -225,9 +226,9 @@ func (_m *MockActors) GetReminder(ctx context.Context, req *GetReminderRequest) 
 }
 
 // GetActiveActorsCount provides a mock function
-func (_m *MockActors) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
+func (_m *MockActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
 	_m.Called()
-	return []ActiveActorsCount{
+	return []*runtimev1pb.ActiveActorsCount{
 		{
 			Type:  "abcd",
 			Count: 10,
@@ -310,6 +311,6 @@ func (f *FailingActors) IsActorHosted(ctx context.Context, req *ActorHostedReque
 	return true
 }
 
-func (f *FailingActors) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
-	return []ActiveActorsCount{}
+func (f *FailingActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
+	return []*runtimev1pb.ActiveActorsCount{}
 }
