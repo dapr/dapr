@@ -144,7 +144,7 @@ jobs:
       run: |
         make setup-helm-init
         make create-test-namespace
-        export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:${{env.DAPR_LATEST_VERSION}}"
+        export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:${{env.DAPR_LATEST_VERSION}}"
         export HA_MODE=true
         make docker-deploy-k8s
 
