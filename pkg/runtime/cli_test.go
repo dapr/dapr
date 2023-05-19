@@ -17,6 +17,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/modes"
+)
+
+var (
+	testAppID       = "testapp"
+	testAppPort     = "80"
+	testAppProtocol = "http"
 )
 
 func TestParsePlacementAddr(t *testing.T) {
@@ -43,4 +51,21 @@ func TestParsePlacementAddr(t *testing.T) {
 			assert.EqualValues(t, tc.out, parsePlacementAddr(tc.addr))
 		})
 	}
+}
+
+func TestAppFlag(t *testing.T) {
+	// run test
+	runtime, err := FromFlags([]string{"--app-id", testAppID, "--app-port", testAppPort, "--app-protocol", testAppProtocol})
+	assert.NoError(t, err)
+	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
+	assert.EqualValues(t, 80, runtime.runtimeConfig.ApplicationPort)
+	assert.EqualValues(t, testAppProtocol, runtime.runtimeConfig.ApplicationProtocol)
+}
+
+func TestStandaloneGlobalConfig(t *testing.T) {
+	// run test
+	runtime, err := FromFlags([]string{"--app-id", testAppID, "--mode", string(modes.StandaloneMode), "--config", "../config/testdata/metric_disabled.yaml"})
+	assert.NoError(t, err)
+	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
+	assert.False(t, runtime.globalConfig.Spec.MetricsSpec.Enabled)
 }
