@@ -19,17 +19,20 @@ package stateapp_e2e
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
 
+	guuid "github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	guuid "github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-	apiv1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -153,15 +156,10 @@ func generateTestCases(isHTTP bool) []testCase {
 	if isHTTP {
 		protocol = "http"
 	}
-	// Just for readability
-	emptyRequest := requestResponse{
-		nil,
-	}
 
 	// Just for readability
-	emptyResponse := requestResponse{
-		nil,
-	}
+	emptyRequest := requestResponse{}
+	emptyResponse := requestResponse{}
 
 	testCase1Key := guuid.New().String()
 	testCase1Value := "The best song ever is 'Highwayman' by 'The Highwaymen'."
@@ -307,10 +305,9 @@ func generateStateTransactionCases(protocolType string) testStateTransactionCase
 	testCase1Key, testCase2Key := guuid.New().String()+protocolType, guuid.New().String()+protocolType
 	testCase1Value := "The best song ever is 'Highwayman' by 'The Highwaymen'."
 	testCase2Value := "Hello World"
+
 	// Just for readability
-	emptyResponse := requestResponse{
-		nil,
-	}
+	emptyResponse := requestResponse{}
 
 	testStateTransactionCase := testStateTransactionCase{
 		[]stateTransactionTestStep{
@@ -690,5 +687,29 @@ func TestQueryStateStore(t *testing.T) {
 				require.Equal(t, test.keys, len(states.States))
 			}
 		}
+	}
+}
+
+func TestEtags(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	testCases := []struct {
+		protocol string
+	}{
+		{protocol: "http"},
+		{protocol: "grpc"},
+	}
+
+	// Now we are ready to run the actual tests
+	for _, tt := range testCases {
+		t.Run(fmt.Sprintf("Test Etags using %s protocol", tt.protocol), func(t *testing.T) {
+			url := strings.TrimSpace(fmt.Sprintf("%s/test-etag/%s/statestore", externalURL, tt.protocol))
+			resp, status, err := utils.HTTPPostWithStatus(url, nil)
+			require.NoError(t, err)
+
+			// The test passes with 204 if there's no error
+			assert.Equalf(t, http.StatusNoContent, status, "Test failed. Body is: %q", string(resp))
+		})
 	}
 }
