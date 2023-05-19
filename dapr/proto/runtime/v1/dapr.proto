@@ -580,10 +580,11 @@ message InvokeActorResponse {
 // GetMetadataResponse is a message that is returned on GetMetadata rpc call
 message GetMetadataResponse {
   string id = 1;
-  repeated ActiveActorsCount active_actors_count = 2;
-  repeated RegisteredComponents registered_components = 3;
-  map<string, string> extended_metadata = 4;
-  repeated PubsubSubscription subscriptions = 5;
+  repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors"];
+  repeated RegisteredComponents registered_components = 3 [json_name = "components"];
+  map<string, string> extended_metadata = 4 [json_name = "extended"];
+  repeated PubsubSubscription subscriptions = 5 [json_name = "subscriptions"];
+  repeated MetadataHTTPEndpoint http_endpoints = 6 [json_name = "httpEndpoints"];
 }
 
 message ActiveActorsCount {
@@ -598,12 +599,16 @@ message RegisteredComponents {
   repeated string capabilities = 4;
 }
 
+message MetadataHTTPEndpoint {
+  string name = 1 [json_name = "name"];
+}
+
 message PubsubSubscription {
-  string pubsub_name = 1;
-  string topic = 2;
-  map<string,string> metadata = 3;
-  PubsubSubscriptionRules rules = 4;
-  string dead_letter_topic = 5;
+  string pubsub_name = 1 [json_name = "pubsubname"];
+  string topic = 2 [json_name = "topic"];
+  map<string,string> metadata = 3 [json_name = "metadata"];
+  PubsubSubscriptionRules rules = 4 [json_name = "rules"];
+  string dead_letter_topic = 5 [json_name = "deadLetterTopic"];
 }
 
 message PubsubSubscriptionRules {
