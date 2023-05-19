@@ -210,7 +210,7 @@ func getBindingsDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 }
 
 // appRouter initializes restful api router.
-func appRouter() *mux.Router {
+func appRouter() http.Handler {
 	log.Printf("Enter appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 

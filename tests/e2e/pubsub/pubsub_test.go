@@ -313,13 +313,14 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 func postSingleMessage(url string, data []byte) (int, error) {
 	// HTTPPostWithStatus by default sends with content-type application/json
 	start := time.Now()
-	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
+	body, statusCode, err := utils.HTTPPostWithStatus(url, data)
 	if err != nil {
-		log.Printf("Publish failed with error=%s (body=%s) (duration=%s)", err.Error(), data, utils.FormatDuration(time.Now().Sub(start)))
+		log.Printf("Publish failed with error=%s (response=%s) (request=%s) (duration=%s)", err.Error(), string(body), string(data), utils.FormatDuration(time.Since(start)))
 		return http.StatusInternalServerError, err
 	}
 	if (statusCode != http.StatusOK) && (statusCode != http.StatusNoContent) {
-		err = fmt.Errorf("publish failed with StatusCode=%d (body=%s) (duration=%s)", statusCode, data, utils.FormatDuration(time.Now().Sub(start)))
+		log.Printf("publish failed with StatusCode=%d (response=%s) (request=%s) (duration=%s)", statusCode, string(body), string(data), utils.FormatDuration(time.Since(start)))
+		err = fmt.Errorf("publish failed with StatusCode=%d (response=%s) (request=%s) (duration=%s)", statusCode, string(body), string(data), utils.FormatDuration(time.Since(start)))
 	}
 	return statusCode, err
 }
@@ -328,7 +329,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
-	log.Printf("Test bulkPublish and normal subscribe success flow\n")
+	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
@@ -340,7 +341,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
-	log.Printf("Test publish subscribe success flow\n")
+	log.Print("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
@@ -349,7 +350,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 }
 
 func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
-	log.Printf("Test publish without topic\n")
+	log.Print("Test publish without topic")
 	commandBody := publishCommand{
 		ReqID:    "c-" + uuid.New().String(),
 		Protocol: protocol,
