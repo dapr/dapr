@@ -78,5 +78,6 @@ func TestStandaloneGlobalConfig(t *testing.T) {
 	runtime, err := FromFlags([]string{"--app-id", testAppID, "--mode", string(modes.StandaloneMode), "--config", "../config/testdata/metric_disabled.yaml", "--metrics-port", strconv.Itoa(testMetricsPort)})
 	assert.NoError(t, err)
 	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
+	assert.EqualValues(t, string(modes.StandaloneMode), runtime.runtimeConfig.Mode)
 	assert.False(t, runtime.globalConfig.Spec.MetricsSpec.Enabled)
 }
