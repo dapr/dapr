@@ -4502,7 +4502,62 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
-		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+		assert.Equal(t, 409, resp.StatusCode, "updating existing key with wrong etag should fail")
+	})
+
+	t.Run("Update bulk state - No ETag", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		request := []state.SetRequest{
+			{Key: "good-key"},
+			{Key: "good-key2"},
+		}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, "", string(resp.RawBody))
+	})
+
+	t.Run("Update bulk state - State Error", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		request := []state.SetRequest{
+			{Key: "good-key"},
+			{Key: "error-key"},
+		}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_STATE_SAVE", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Update bulk state - Matching ETag", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		request := []state.SetRequest{
+			{Key: "good-key", ETag: &etag},
+			{Key: "good-key2", ETag: &etag},
+		}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, "", string(resp.RawBody))
+	})
+
+	t.Run("Update bulk state - One has invalid ETag", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		request := []state.SetRequest{
+			{Key: "good-key", ETag: &etag},
+			{Key: "good-key2", ETag: ptr.Of("BAD ETAG")},
+		}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		// assert
+		assert.Equal(t, 409, resp.StatusCode)
 	})
 
 	t.Run("Delete state - No ETag", func(t *testing.T) {
@@ -4528,7 +4583,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "If-Match", "BAD ETAG")
 		// assert
-		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+		assert.Equal(t, 409, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
 
 	t.Run("Bulk state get - Empty request", func(t *testing.T) {
@@ -4952,7 +5007,7 @@ func (c fakeStateStore) Ping() error {
 func (c fakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	if req.Key == "good-key" {
 		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
-			return errors.New("ETag mismatch")
+			return state.NewETagError(state.ETagMismatch, errors.New("ETag mismatch"))
 		}
 		return nil
 	}
@@ -4984,9 +5039,9 @@ func (c fakeStateStore) Features() []state.Feature {
 }
 
 func (c fakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
-	if req.Key == "good-key" {
+	if req.Key == "good-key" || req.Key == "good-key2" {
 		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
-			return errors.New("ETag mismatch")
+			return state.NewETagError(state.ETagMismatch, errors.New("ETag mismatch"))
 		}
 		return nil
 	}

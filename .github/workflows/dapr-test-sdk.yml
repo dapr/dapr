@@ -103,7 +103,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
-      - name: Checkout p repo to run tests.
+      - name: Checkout python-sdk repo to run tests.
         uses: actions/checkout@v3
         with:
           repository: dapr/python-sdk
