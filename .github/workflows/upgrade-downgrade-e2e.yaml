@@ -125,7 +125,7 @@ jobs:
         docker network connect "kind" $REGISTRY_NAME
 
     - name: Setup Helm
-      uses: azure/setup-helm@v1
+      uses: azure/setup-helm@v3
       with:
         version: v3.3.4
 
