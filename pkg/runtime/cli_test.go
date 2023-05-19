@@ -54,7 +54,6 @@ func TestParsePlacementAddr(t *testing.T) {
 }
 
 func TestAppFlag(t *testing.T) {
-	// run test
 	runtime, err := FromFlags([]string{"--app-id", testAppID, "--app-port", testAppPort, "--app-protocol", testAppProtocol})
 	assert.NoError(t, err)
 	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
@@ -63,7 +62,6 @@ func TestAppFlag(t *testing.T) {
 }
 
 func TestStandaloneGlobalConfig(t *testing.T) {
-	// run test
 	runtime, err := FromFlags([]string{"--app-id", testAppID, "--mode", string(modes.StandaloneMode), "--config", "../config/testdata/metric_disabled.yaml"})
 	assert.NoError(t, err)
 	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
