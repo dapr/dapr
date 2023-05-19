@@ -123,6 +123,7 @@ async function handleIssueCommentCreate({ github, context }) {
         case '/test-sdk-all':
         case '/test-sdk-java':
         case '/test-sdk-python':
+        case '/test-sdk-js':
             await cmdTestSDK(
                 github,
                 issue,
