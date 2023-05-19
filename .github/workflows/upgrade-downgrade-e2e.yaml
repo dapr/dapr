@@ -157,7 +157,7 @@ jobs:
         wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s $DAPR_CLI_LATEST_VERSION
         dapr uninstall --all
         dapr init -k --runtime-version ${{ env.DAPR_LATEST_VERSION }} \
-          --set dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:dev \
+          --set dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:dev \
           -n dapr-tests \
           --enable-ha
 
