@@ -134,6 +134,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.AppHealthThreshold != 0 {
 		annotationObject["dapr.io/app-health-threshold"] = strconv.Itoa(appDesc.AppHealthThreshold)
 	}
+	if appDesc.AppChannelAddress != "" {
+		annotationObject["dapr.io/app-channel-address"] = appDesc.AppChannelAddress
+	}
 	if len(appDesc.PluggableComponents) != 0 {
 		componentNames := make([]string, len(appDesc.PluggableComponents))
 		for idx, component := range appDesc.PluggableComponents {
@@ -147,6 +150,13 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 
 	if appDesc.InjectPluggableComponents {
 		annotationObject["dapr.io/inject-pluggable-components"] = "true"
+	}
+	if appDesc.SidecarImage != "" {
+		annotationObject["dapr.io/sidecar-image"] = appDesc.SidecarImage
+	}
+
+	if appDesc.MaxRequestSizeMB != 0 {
+		annotationObject["dapr.io/http-max-request-size"] = strconv.Itoa(appDesc.MaxRequestSizeMB)
 	}
 
 	return annotationObject

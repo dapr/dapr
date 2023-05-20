@@ -368,8 +368,10 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			var span trace.Span
 			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, a.globalConfig.Spec.TracingSpec)
-			spans[n] = span
-			n++
+			if span != nil {
+				spans[n] = span
+				n++
+			}
 		}
 	}
 	spans = spans[:n]
@@ -388,11 +390,9 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	statusCode := int(resp.Status().Code)
 
 	for _, span := range spans {
-		if span != nil {
-			m := diag.ConstructSubscriptionSpanAttributes(psm.topic)
-			diag.AddAttributesToSpan(span, m)
-			diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
-		}
+		m := diag.ConstructSubscriptionSpanAttributes(psm.topic)
+		diag.AddAttributesToSpan(span, m)
+		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
 	}
 
 	if (statusCode >= 200) && (statusCode <= 299) {
@@ -561,8 +561,12 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 		items[i] = item
 	}
 
+	uuidObj, err := uuid.NewRandom()
+	if err != nil {
+		return fmt.Errorf("failed to generate UUID: %w", err)
+	}
 	envelope := &runtimev1pb.TopicEventBulkRequest{
-		Id:         uuid.New().String(),
+		Id:         uuidObj.String(),
 		Entries:    items,
 		Metadata:   psm.metadata,
 		Topic:      psm.topic,
@@ -586,9 +590,11 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 				// no ops if trace is off
 				var span trace.Span
 				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, a.globalConfig.Spec.TracingSpec)
-				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-				spans[n] = span
-				n++
+				if span != nil {
+					ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+					spans[n] = span
+					n++
+				}
 			} else {
 				log.Warnf("ignored non-string traceid value: %v", iTraceID)
 			}
@@ -599,6 +605,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
 
 	conn, err := a.grpc.GetAppClient()
+	defer a.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
@@ -609,11 +616,9 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 	elapsed := diag.ElapsedSince(start)
 
 	for _, span := range spans {
-		if span != nil {
-			m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
-			diag.AddAttributesToSpan(span, m)
-			diag.UpdateSpanStatusFromGRPCError(span, err)
-		}
+		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
+		diag.AddAttributesToSpan(span, m)
+		diag.UpdateSpanStatusFromGRPCError(span, err)
 	}
 
 	if err != nil {

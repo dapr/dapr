@@ -392,6 +392,35 @@ func TestMTLSSpecForStandAlone(t *testing.T) {
 	})
 }
 
+func TestSetTracingSpecFromEnv(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otlpendpoint:1234")
+	t.Setenv("OTEL_EXPORTER_OTLP_INSECURE", "true")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json")
+
+	// get default configuration
+	conf := LoadDefaultConfiguration()
+
+	// set tracing spec from env
+	SetTracingSpecFromEnv(conf)
+
+	assert.Equal(t, "otlpendpoint:1234", conf.Spec.TracingSpec.Otel.EndpointAddress)
+	assert.Equal(t, "http", conf.Spec.TracingSpec.Otel.Protocol)
+	assert.Equal(t, false, conf.Spec.TracingSpec.Otel.IsSecure)
+
+	// Spec from config file should not be overridden
+	conf = LoadDefaultConfiguration()
+	conf.Spec.TracingSpec.Otel.EndpointAddress = "configfileendpoint:4321"
+	conf.Spec.TracingSpec.Otel.Protocol = "grpc"
+	conf.Spec.TracingSpec.Otel.IsSecure = true
+
+	// set tracing spec from env
+	SetTracingSpecFromEnv(conf)
+
+	assert.Equal(t, "configfileendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
+	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
+	assert.Equal(t, true, conf.Spec.TracingSpec.Otel.IsSecure)
+}
+
 func TestSortMetrics(t *testing.T) {
 	t.Run("metrics overrides metric", func(t *testing.T) {
 		config := &Configuration{
