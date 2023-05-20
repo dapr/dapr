@@ -210,9 +210,8 @@ jobs:
         wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s $DAPR_CLI_LATEST_VERSION
         dapr uninstall --all
         dapr init -k --runtime-version ${{ env.DAPR_PREV_VERSION }} \
-          --set dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:dev \
-          -n dapr-tests \
-          --enable-ha
+          --set dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=localhost:5000/dapr/daprd:dev-linux-amd64 \
+          -n dapr-tests --enable-ha
 
     - name: Setup Components
       run: |
