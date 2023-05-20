@@ -94,13 +94,13 @@ jobs:
       if: env.PR_NUMBER != ''
       uses: artursouza/sticky-pull-request-comment@v2.2.0
       with:
-        header: ${{ github.run_id }}-version-skew
+        header: ${{ github.run_id }}-version-skew-${{ matrix.mode }}
         number: ${{ env.PR_NUMBER }}
         hide: true
         hide_classify: OUTDATED
         GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
         message: |
-          # Dapr Version Skew test
+          # Dapr Version Skew test (${{ matrix.mode }})
 
           🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
 
@@ -268,7 +268,7 @@ jobs:
       if: ${{ success() }}
       uses: artursouza/sticky-pull-request-comment@v2.2.0
       with:
-        header: ${{ github.run_id }}-version-skew
+        header: ${{ github.run_id }}-version-skew-${{ matrix.mode }}
         number: ${{ env.PR_NUMBER }}
         append: true
         GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -278,7 +278,7 @@ jobs:
       if: ${{ failure() }}
       uses: artursouza/sticky-pull-request-comment@v2.2.0
       with:
-        header: ${{ github.run_id }}-version-skew
+        header: ${{ github.run_id }}-version-skew-${{ matrix.mode }}
         number: ${{ env.PR_NUMBER }}
         append: true
         GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
@@ -290,7 +290,7 @@ jobs:
       if: ${{ cancelled() }}
       uses: artursouza/sticky-pull-request-comment@v2.2.0
       with:
-        header: ${{ github.run_id }}-version-skew
+        header: ${{ github.run_id }}-version-skew-${{ matrix.mode }}
         number: ${{ env.PR_NUMBER }}
         append: true
         GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
