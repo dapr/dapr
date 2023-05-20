@@ -80,15 +80,14 @@ jobs:
           const testPayload = context.payload.client_payload;
           if (testPayload) {
             var fs = require('fs');
-            // Set environment variables
-            fs.appendFileSync(process.env.GITHUB_ENV,
-              `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+            var envs = `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
               `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
-              `PR_NUMBER=${testPayload.issue.number}`
-            );
+              `PR_NUMBER=${testPayload.issue.number}`;
             if (testPayload.previous_version) {
-              fs.appendFileSync(process.env.GITHUB_ENV,`DAPR_PREV_VERSION=${testPayload.previous_version}`);
+              envs += `\nDAPR_PREV_VERSION=${testPayload.previous_version}`;
             }
+            // Set environment variables
+            fs.appendFileSync(process.env.GITHUB_ENV, envs);
           }
     - name: Create PR comment
       if: env.PR_NUMBER != ''
