@@ -14,6 +14,8 @@ limitations under the License.
 package main
 
 import (
+	"os"
+
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
@@ -31,8 +33,6 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
-	config "github.com/dapr/dapr/pkg/config/modes"
-	"github.com/dapr/dapr/pkg/metrics"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -47,59 +47,53 @@ func main() {
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 
-	opts, err := options.New()
-	if err != nil {
+	opts := options.New(os.Args[1:])
+
+	// Apply options to all loggers.
+	opts.Logger.SetAppID(opts.AppID)
+
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
 	}
 
 	log.Infof("starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
 
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
-	}
-
-	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
-
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
-
 	rt, err := runtime.FromConfig(&runtime.Config{
-		ID:                 opts.AppID,
-		PlacementAddresses: opts.PlacementAddresses,
-		AllowedOrigins:     opts.AllowedOrigins,
-		Standalone: config.StandaloneConfig{
-			ResourcesPath: opts.ResourcesPaths,
-		},
-		Kubernetes: config.KubernetesConfig{
-			ControlPlaneAddress: opts.ControlPlaneAddress,
-		},
-		ApplicationProtocol:          opts.AppProtocol,
+		AppID:                        opts.AppID,
+		PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
+		AllowedOrigins:               opts.AllowedOrigins,
+		ResourcesPath:                opts.ResourcesPath,
+		ControlPlaneAddress:          opts.ControlPlaneAddress,
+		AppProtocol:                  opts.AppProtocol,
 		Mode:                         opts.Mode,
-		HTTPPort:                     opts.DaprHTTPPort,
-		InternalGRPCPort:             opts.DaprInternalGRPCPort,
-		APIGRPCPort:                  opts.DaprAPIGRPCPort,
-		APIListenAddresses:           opts.DaprAPIListenAddressList,
-		PublicPort:                   opts.DaprPublicPort,
+		DaprHTTPPort:                 opts.DaprHTTPPort,
+		DaprInternalGRPCPort:         opts.DaprInternalGRPCPort,
+		DaprAPIGRPCPort:              opts.DaprAPIGRPCPort,
+		DaprAPIListenAddresses:       opts.DaprAPIListenAddresses,
+		DaprPublicPort:               opts.DaprPublicPort,
 		ApplicationPort:              opts.AppPort,
 		ProfilePort:                  opts.ProfilePort,
 		EnableProfiling:              opts.EnableProfiling,
-		MaxConcurrency:               opts.AppMaxConcurrency,
-		MTLSEnabled:                  opts.EnableMTLS,
-		SentryServiceAddress:         opts.SentryAddress,
-		MaxRequestBodySize:           opts.DaprHTTPMaxRequestSize,
+		AppMaxConcurrency:            opts.AppMaxConcurrency,
+		EnableMTLS:                   opts.EnableMTLS,
+		SentryAddress:                opts.SentryAddress,
+		DaprHTTPMaxRequestSize:       opts.DaprHTTPMaxRequestSize,
 		UnixDomainSocket:             opts.UnixDomainSocket,
-		ReadBufferSize:               opts.DaprHTTPReadBufferSize,
-		GracefulShutdownDuration:     opts.GracefulShutdownDuration,
+		DaprHTTPReadBufferSize:       opts.DaprHTTPReadBufferSize,
+		DaprGracefulShutdownSeconds:  opts.DaprGracefulShutdownSeconds,
 		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
-		AppHealthCheckHTTPPath:       opts.AppHealthCheckPath,
-		AppHealthCheck:               opts.AppHealthCheck,
+		EnableAppHealthCheck:         opts.EnableAppHealthCheck,
+		AppHealthCheckPath:           opts.AppHealthCheckPath,
+		AppHealthProbeInterval:       opts.AppHealthProbeInterval,
+		AppHealthProbeTimeout:        opts.AppHealthProbeTimeout,
+		AppHealthThreshold:           opts.AppHealthThreshold,
 		AppChannelAddress:            opts.AppChannelAddress,
 		EnableAPILogging:             opts.EnableAPILogging,
 		ConfigPath:                   opts.ConfigPath,
 		Metrics:                      opts.Metrics,
+		AppSSL:                       opts.AppSSL,
+		ComponentsPath:               opts.ComponentsPath,
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -230,7 +230,7 @@ func NewMockKubernetesStoreWithInitCallback(cb func()) secretstores.SecretStore 
 
 func TestNewRuntime(t *testing.T) {
 	// act
-	r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 	// assert
 	assert.NotNil(t, r, "runtime must be initiated")
@@ -912,11 +912,11 @@ func TestInitNameResolution(t *testing.T) {
 		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
 			Name: resolverName,
 			Properties: map[string]string{
-				nameresolution.DaprHTTPPort: strconv.Itoa(rt.runtimeConfig.HTTPPort),
-				nameresolution.DaprPort:     strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
-				nameresolution.AppPort:      strconv.Itoa(rt.runtimeConfig.ApplicationPort),
+				nameresolution.DaprHTTPPort: strconv.Itoa(rt.runtimeConfig.httpPort),
+				nameresolution.DaprPort:     strconv.Itoa(rt.runtimeConfig.internalGRPCPort),
+				nameresolution.AppPort:      strconv.Itoa(rt.runtimeConfig.applicationPort),
 				nameresolution.HostAddress:  rt.hostAddress,
-				nameresolution.AppID:        rt.runtimeConfig.ID,
+				nameresolution.AppID:        rt.runtimeConfig.id,
 			},
 		}}
 
@@ -1235,7 +1235,7 @@ func TestMetadataNamespace(t *testing.T) {
 		})
 	rt := NewTestDaprRuntime(modes.KubernetesMode)
 	rt.namespace = "test"
-	rt.runtimeConfig.ID = "app1"
+	rt.runtimeConfig.id = "app1"
 
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
@@ -1281,7 +1281,7 @@ func TestMetadataAppID(t *testing.T) {
 			},
 		})
 	rt := NewTestDaprRuntime(modes.KubernetesMode)
-	rt.runtimeConfig.ID = TestRuntimeConfigID
+	rt.runtimeConfig.id = TestRuntimeConfigID
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
@@ -1661,7 +1661,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
+		rts.runtimeConfig.standalone.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1686,7 +1686,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
+		rts.runtimeConfig.standalone.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1712,7 +1712,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.NoError(t, err)
 		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ResourcesPath = []string{resourcesDir}
+		rts.runtimeConfig.standalone.ResourcesPath = []string{resourcesDir}
 		subs := rts.getDeclarativeSubscriptions()
 		assert.Len(t, subs, 0)
 	})
@@ -2209,7 +2209,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 	t.Run("ignore component that does not exists", func(t *testing.T) {
 		rt := &DaprRuntime{
 			globalConfig:  &config.Configuration{},
-			runtimeConfig: &Config{},
+			runtimeConfig: &internalConfig{},
 			compStore:     compstore.New(),
 		}
 
@@ -2252,7 +2252,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			globalConfig:           &config.Configuration{},
 			compStore:              compStore,
 			httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
-			runtimeConfig:          &Config{},
+			runtimeConfig:          &internalConfig{},
 		}
 		called := 0
 		rt.httpMiddlewareRegistry.RegisterComponent(
@@ -2316,7 +2316,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 				compStore:              compStore,
 				globalConfig:           &config.Configuration{},
 				httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
-				runtimeConfig:          &Config{},
+				runtimeConfig:          &internalConfig{},
 			}
 			called := 0
 			rt.httpMiddlewareRegistry.RegisterComponent(
@@ -2810,7 +2810,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 	t.Run("disable built-in secret store flag", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		defer stopRuntime(t, rt)
-		rt.runtimeConfig.DisableBuiltinK8sSecretStore = true
+		rt.runtimeConfig.disableBuiltinK8sSecretStore = true
 
 		testOk := make(chan struct{})
 		defer close(testOk)
@@ -3558,7 +3558,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 }
 
 func TestPubsubLifecycle(t *testing.T) {
-	rt := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	rt.pubSubRegistry = pubsubLoader.NewRegistry()
 	defer func() {
 		if rt != nil {
@@ -3861,7 +3861,7 @@ func TestPubsubLifecycle(t *testing.T) {
 }
 
 func TestPubsubWithResiliency(t *testing.T) {
-	r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
+	r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
 	r.pubSubRegistry = pubsubLoader.NewRegistry()
 	defer stopRuntime(t, r)
 
@@ -3931,7 +3931,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
+	r.runtimeConfig.appConnectionConfig.Protocol = protocol.HTTPProtocol
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
@@ -4348,48 +4348,48 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 	return rt
 }
 
-func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *Config {
-	return &Config{
-		ID:                 TestRuntimeConfigID,
-		PlacementAddresses: []string{"10.10.10.12"},
-		Kubernetes: modeconfig.KubernetesConfig{
+func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *internalConfig {
+	return &internalConfig{
+		id:                 TestRuntimeConfigID,
+		placementAddresses: []string{"10.10.10.12"},
+		kubernetes: modeconfig.KubernetesConfig{
 			ControlPlaneAddress: "10.10.10.11",
 		},
-		AllowedOrigins:               cors.DefaultAllowedOrigins,
-		ApplicationProtocol:          Protocol(protocol),
-		Mode:                         mode,
-		HTTPPort:                     DefaultDaprHTTPPort,
-		InternalGRPCPort:             0,
-		APIGRPCPort:                  DefaultDaprAPIGRPCPort,
-		APIListenAddresses:           []string{DefaultAPIListenAddress},
-		PublicPort:                   nil,
-		ApplicationPort:              appPort,
-		ProfilePort:                  DefaultProfilePort,
-		EnableProfiling:              false,
-		MaxConcurrency:               -1,
-		MTLSEnabled:                  false,
-		SentryServiceAddress:         "",
-		MaxRequestBodySize:           4,
-		UnixDomainSocket:             "",
-		ReadBufferSize:               4,
-		GracefulShutdownDuration:     time.Second,
-		EnableAPILogging:             ptr.Of(true),
-		DisableBuiltinK8sSecretStore: false,
-		AppChannelAddress:            "127.0.0.1",
+		allowedOrigins:               cors.DefaultAllowedOrigins,
+		applicationProtocol:          Protocol(protocol),
+		mode:                         mode,
+		httpPort:                     DefaultDaprHTTPPort,
+		internalGRPCPort:             0,
+		apiGRPCPort:                  DefaultDaprAPIGRPCPort,
+		apiListenAddresses:           []string{DefaultAPIListenAddress},
+		publicPort:                   nil,
+		applicationPort:              appPort,
+		profilePort:                  DefaultProfilePort,
+		enableProfiling:              false,
+		maxConcurrency:               -1,
+		mTLSEnabled:                  false,
+		sentryServiceAddress:         "",
+		maxRequestBodySize:           4,
+		unixDomainSocket:             "",
+		readBufferSize:               4,
+		gracefulShutdownDuration:     time.Second,
+		enableAPILogging:             ptr.Of(true),
+		disableBuiltinK8sSecretStore: false,
+		appChannelAddress:            "127.0.0.1",
 	}
 }
 
 func TestGracefulShutdown(t *testing.T) {
 	r := NewTestDaprRuntime(modes.StandaloneMode)
-	assert.Equal(t, time.Second, r.runtimeConfig.GracefulShutdownDuration)
+	assert.Equal(t, time.Second, r.runtimeConfig.gracefulShutdownDuration)
 }
 
 func TestMTLS(t *testing.T) {
 	t.Run("with mTLS enabled", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.runtimeConfig.MTLSEnabled = true
-		rt.runtimeConfig.SentryServiceAddress = "1.1.1.1"
+		rt.runtimeConfig.mTLSEnabled = true
+		rt.runtimeConfig.sentryServiceAddress = "1.1.1.1"
 
 		t.Setenv(sentryConsts.TrustAnchorsEnvVar, testCertRoot)
 		t.Setenv(sentryConsts.CertChainEnvVar, "a")
@@ -4399,7 +4399,7 @@ func TestMTLS(t *testing.T) {
 		assert.NoError(t, err)
 		rt.runtimeConfig.certChain = certChain
 
-		err = rt.establishSecurity(rt.runtimeConfig.SentryServiceAddress)
+		err = rt.establishSecurity(rt.runtimeConfig.sentryServiceAddress)
 		assert.NoError(t, err)
 		assert.NotNil(t, rt.authenticator)
 	})
@@ -4408,7 +4408,7 @@ func TestMTLS(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 
-		err := rt.establishSecurity(rt.runtimeConfig.SentryServiceAddress)
+		err := rt.establishSecurity(rt.runtimeConfig.sentryServiceAddress)
 		assert.NoError(t, err)
 		assert.Nil(t, rt.authenticator)
 	})
@@ -4637,7 +4637,7 @@ func TestReadInputBindings(t *testing.T) {
 	})
 
 	t.Run("start and stop reading", func(t *testing.T) {
-		rt := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		rt := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, rt)
 
 		closeCh := make(chan struct{})
@@ -5000,17 +5000,17 @@ func (m *mockPublishPubSub) GetComponentMetadata() map[string]string {
 
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
-		r := newDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 		r.namespace = ""
-		r.runtimeConfig.MTLSEnabled = true
+		r.runtimeConfig.mTLSEnabled = true
 
 		err := r.initActors()
 		assert.Error(t, err)
 	})
 
 	t.Run("actors hosted = true", func(t *testing.T) {
-		r := newDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 		r.appConfig = config.ApplicationConfig{
 			Entities: []string{"actor1"},
@@ -5021,7 +5021,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("actors hosted = false", func(t *testing.T) {
-		r := newDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		hosted := len(r.appConfig.Entities) > 0
@@ -5029,7 +5029,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("placement enable = false", func(t *testing.T) {
-		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		err := r.initActors()
@@ -5037,7 +5037,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
-		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		assert.Nil(t, r.actor)
@@ -5046,7 +5046,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
-		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		assert.Equal(t, "", r.actorStateStoreName)
@@ -5057,7 +5057,7 @@ func TestInitActors(t *testing.T) {
 
 func TestInitBindings(t *testing.T) {
 	t.Run("single input binding", func(t *testing.T) {
-		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterInputBinding(
@@ -5075,7 +5075,7 @@ func TestInitBindings(t *testing.T) {
 	})
 
 	t.Run("single output binding", func(t *testing.T) {
-		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterOutputBinding(
@@ -5093,7 +5093,7 @@ func TestInitBindings(t *testing.T) {
 	})
 
 	t.Run("one input binding, one output binding", func(t *testing.T) {
-		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterInputBinding(
@@ -5182,7 +5182,7 @@ func TestBindingTracingHttp(t *testing.T) {
 }
 
 func TestBindingResiliency(t *testing.T) {
-	r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
+	r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
 	r.bindingsRegistry = bindingsLoader.NewRegistry()
 	defer stopRuntime(t, r)
 
@@ -5203,7 +5203,7 @@ func TestBindingResiliency(t *testing.T) {
 	}
 
 	r.appChannel = &failingChannel
-	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
+	r.runtimeConfig.appConnectionConfig.Protocol = protocol.HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
 		Failure: daprt.NewFailure(
@@ -5334,11 +5334,11 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.Name, func(t *testing.T) {
-			r := newDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+			r := newDaprRuntime(&internalConfig{mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel
-			r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
+			r.runtimeConfig.appConnectionConfig.Protocol = protocol.HTTPProtocol
 
 			configResp := config.ApplicationConfig{}
 			json.Unmarshal(tc.Config, &configResp)
@@ -5563,7 +5563,7 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 
 func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
-	rt.runtimeConfig.AppConnectionConfig.ChannelAddress = "my.app"
+	rt.runtimeConfig.appConnectionConfig.ChannelAddress = "my.app"
 
 	defer stopRuntime(t, rt)
 
@@ -5630,7 +5630,7 @@ func TestGRPCProxy(t *testing.T) {
 	// setup proxy
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "grpc", serverPort)
 	internalPort, _ := freeport.GetFreePort()
-	rt.runtimeConfig.InternalGRPCPort = internalPort
+	rt.runtimeConfig.internalGRPCPort = internalPort
 	defer stopRuntime(t, rt)
 
 	go func() {
@@ -5889,7 +5889,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		},
 		"mockPubSub",
 	)
-	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
+	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
 	mockPubSub.On("Init", mock.Anything).Return(nil)
 	mockPubSub.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
 	mockPubSub.On("Close").Return(nil)
@@ -5920,14 +5920,14 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	select {
 	case <-rt.pubsubCtx.Done():
 		assert.Error(t, rt.pubsubCtx.Err(), context.Canceled)
-	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
+	case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "pubsub shutdown timed out")
 	}
 }
 
 func TestGracefulShutdownBindings(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	rt.runtimeConfig.GracefulShutdownDuration = 3 * time.Second
+	rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
 	rt.bindingsRegistry.RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
 			return &daprt.MockBinding{}
@@ -5957,14 +5957,14 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	select {
 	case <-rt.inputBindingsCtx.Done():
 		return
-	case <-time.After(rt.runtimeConfig.GracefulShutdownDuration + 2*time.Second):
+	case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "input bindings shutdown timed out")
 	}
 }
 
 func TestGracefulShutdownActors(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
+	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
 
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
@@ -6007,12 +6007,12 @@ func TestGracefulShutdownActors(t *testing.T) {
 	assert.NoError(t, err, "expected no error")
 
 	rt.namespace = "test"
-	rt.runtimeConfig.MTLSEnabled = true
+	rt.runtimeConfig.mTLSEnabled = true
 	assert.Nil(t, rt.initActors())
 
 	rt.running.Store(true)
 	go sendSigterm(rt)
-	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 3*time.Second)
+	<-time.After(rt.runtimeConfig.gracefulShutdownDuration + 3*time.Second)
 
 	var activeActCount int32
 	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
@@ -6055,7 +6055,7 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 
 func TestTraceShutdown(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	rt.runtimeConfig.GracefulShutdownDuration = 5 * time.Second
+	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
 	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
 		Otel: config.OtelSpec{
 			EndpointAddress: "foo.bar",
@@ -6075,7 +6075,7 @@ func TestTraceShutdown(t *testing.T) {
 }
 
 func sendSigterm(rt *DaprRuntime) {
-	rt.Shutdown(rt.runtimeConfig.GracefulShutdownDuration)
+	rt.Shutdown(rt.runtimeConfig.gracefulShutdownDuration)
 }
 
 func createTestEndpoint(name, baseURL string) httpEndpointV1alpha1.HTTPEndpoint {
