@@ -11,6 +11,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: dapr-webhook-cert
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-operator
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -29,6 +30,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: dapr-webhook-ca
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-operator
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -43,6 +45,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dapr-operator
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-operator
     {{- range $key, $value := .Values.global.k8sLabels }}
