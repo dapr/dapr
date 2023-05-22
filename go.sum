@@ -1115,8 +1115,8 @@ github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5
 github.com/matttproud/golang_protobuf_extensions v1.0.4 h1:mmDVorXM7PCGKw94cs5zkfA9PSy5pEvNWRP0ET0TIVo=
 github.com/matttproud/golang_protobuf_extensions v1.0.4/go.mod h1:BSXmuO+STAnVfrANrmjBb36TMTDstsz7MSK+HVaYKv4=
 github.com/microcosm-cc/bluemonday v1.0.21 h1:dNH3e4PSyE4vNX+KlRGHT5KrSvjeUkoNPwEORjffHJg=
-github.com/microsoft/durabletask-go v0.2.1 h1:ZSEJi43KOEALwWOlj0oJI2LezEgwQeUsITyTUbH2DYQ=
-github.com/microsoft/durabletask-go v0.2.1/go.mod h1:UtJXHmKalksdccRiN9Y16cHJYYtZN0bqmqOSiy56V8g=
+github.com/microsoft/durabletask-go v0.2.2 h1:hJkr8w9mRWAggGDm+1j8IlXKLtHgRmu/3ErWmzjpUMI=
+github.com/microsoft/durabletask-go v0.2.2/go.mod h1:UtJXHmKalksdccRiN9Y16cHJYYtZN0bqmqOSiy56V8g=
 github.com/microsoft/go-mssqldb v0.21.0 h1:p2rpHIL7TlSv1QrbXJUAcbyRKnIT0C9rRkH2E4OjLn8=
 github.com/microsoft/go-mssqldb v0.21.0/go.mod h1:+4wZTUnz/SV6nffv+RRRB/ss8jPng5Sho2SmM1l2ts4=
 github.com/miekg/dns v1.0.14/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=
