@@ -3,6 +3,7 @@ kind: Service
 apiVersion: v1
 metadata:
   name: dapr-placement-server
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-placement-server
     {{- range $key, $value := .Values.global.k8sLabels }}
