@@ -16,7 +16,6 @@ package options
 import (
 	"errors"
 	"flag"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -72,7 +71,9 @@ type Options struct {
 }
 
 func New(args []string) *Options {
-	var opts Options
+	opts := Options{
+		EnableAPILogging: new(bool),
+	}
 
 	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	flag.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
