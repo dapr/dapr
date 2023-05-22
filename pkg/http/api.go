@@ -2188,7 +2188,7 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	// If we have an "appid" parameter in the query string, we will return an error if the ID of this app is not the value of the requested "appid"
 	// This is used by some components (e.g. Consul nameresolver) to check if the app was replaced with a different one
 	matchAppID := reqCtx.QueryArgs().Peek("appid")
-	if len(matchAppID) > 0 && string(matchAppID) != a.id {
+	if len(matchAppID) > 0 && string(matchAppID) != a.universal.AppID {
 		msg := messages.ErrHealthAppIDNotMatch
 		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
