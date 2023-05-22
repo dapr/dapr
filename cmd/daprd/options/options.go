@@ -16,14 +16,12 @@ package options
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dapr/dapr/pkg/apphealth"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/cors"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -134,21 +132,6 @@ func New(args []string) *Options {
 				break
 			}
 		}
-	}
-
-	if opts.RuntimeVersion {
-		fmt.Println(buildinfo.Version())
-		os.Exit(0)
-	}
-
-	if opts.BuildInfo {
-		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", buildinfo.Version(), buildinfo.Commit(), buildinfo.GitVersion())
-		os.Exit(0)
-	}
-
-	if opts.WaitCommand {
-		runtime.WaitUntilDaprOutboundReady(opts.DaprHTTPPort)
-		os.Exit(0)
 	}
 
 	return &opts

@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"go.uber.org/automaxprocs/maxprocs"
@@ -48,6 +49,21 @@ func main() {
 	_, _ = maxprocs.Set()
 
 	opts := options.New(os.Args[1:])
+
+	if opts.RuntimeVersion {
+		fmt.Println(buildinfo.Version())
+		os.Exit(0)
+	}
+
+	if opts.BuildInfo {
+		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", buildinfo.Version(), buildinfo.Commit(), buildinfo.GitVersion())
+		os.Exit(0)
+	}
+
+	if opts.WaitCommand {
+		runtime.WaitUntilDaprOutboundReady(opts.DaprHTTPPort)
+		os.Exit(0)
+	}
 
 	// Apply options to all loggers.
 	opts.Logger.SetAppID(opts.AppID)
