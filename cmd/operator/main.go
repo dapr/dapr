@@ -23,9 +23,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log = logger.NewLogger("dapr.operator")
-)
+var log = logger.NewLogger("dapr.operator")
 
 func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
@@ -38,18 +36,17 @@ func main() {
 	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
 
 	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
+	if err = logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
-	} else {
-		log.Infof("log level set to: %s", opts.Logger.OutputLevel)
 	}
+	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
 
 	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
+	if err = metricsExporter.Init(); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := monitoring.InitMetrics(); err != nil {
+	if err = monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 

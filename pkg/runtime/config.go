@@ -135,7 +135,6 @@ type internalConfig struct {
 	appChannelAddress            string
 	configPath                   string
 	certChain                    *credentials.CertChain
-	metricsExporter              metrics.Exporter
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
@@ -154,7 +153,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 
 	// Initialize dapr metrics exporter
 	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, cfg.Metrics)
-	if err := metricsExporter.Init(); err != nil {
+	if err = metricsExporter.Init(); err != nil {
 		return nil, err
 	}
 
@@ -200,7 +199,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 	podName := os.Getenv("POD_NAME")
 
 	if intc.configPath != "" {
-		switch modes.DaprMode(intc.mode) {
+		switch intc.mode {
 		case modes.KubernetesMode:
 			log.Debug("Loading Kubernetes config resource: " + intc.configPath)
 			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(intc.configPath, namespace, podName, operatorClient)
@@ -333,7 +332,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	if c.DaprPublicPort != "" {
-		port, err := strconv.Atoi(c.DaprPublicPort)
+		var port int
+		port, err = strconv.Atoi(c.DaprPublicPort)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing dapr-public-port: %w", err)
 		}

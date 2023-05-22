@@ -17,9 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/kit/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/kit/ptr"
 )
 
 func TestParsePlacementAddr(t *testing.T) {

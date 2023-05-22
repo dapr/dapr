@@ -27,6 +27,7 @@ import (
 )
 
 const (
+	//nolint:gosec
 	// defaultCredentialsPath is the default path for the credentials (the K8s mountpoint by default).
 	defaultCredentialsPath = "/var/run/dapr/credentials"
 

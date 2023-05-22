@@ -36,15 +36,6 @@ import (
 
 var log = logger.NewLogger("dapr.sentry")
 
-//nolint:gosec
-const (
-	defaultCredentialsPath = "/var/run/dapr/credentials"
-	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
-	defaultDaprSystemConfigName = "daprsystem"
-
-	defaultHealthzPort = 8080
-)
-
 func main() {
 	log.Infof("starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
