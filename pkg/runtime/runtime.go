@@ -254,8 +254,8 @@ type pubsubSubscribedMessage struct {
 	pubsub     string
 }
 
-// NewDaprRuntime returns a new runtime with the given runtime config and global config.
-func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
+// newDaprRuntime returns a new runtime with the given runtime config and global config.
+func newDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	rt := &DaprRuntime{
@@ -335,7 +335,7 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 		return nil, nil
 	}
 
-	client, _, err := client.GetOperatorClient(context.TODO(), a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
+	client, _, err := client.GetOperatorClient(context.TODO(), a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.certChain)
 	if err != nil {
 		return nil, fmt.Errorf("error creating operator client: %w", err)
 	}
@@ -1621,7 +1621,7 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
 		UnixDomainSocket:     a.runtimeConfig.UnixDomainSocket,
 		ReadBufferSizeKB:     a.runtimeConfig.ReadBufferSize,
-		EnableAPILogging:     a.runtimeConfig.EnableAPILogging,
+		EnableAPILogging:     *a.runtimeConfig.EnableAPILogging,
 	}
 }
 
@@ -2531,7 +2531,7 @@ func extractCloudEventProperty(cloudEvent map[string]interface{}, property strin
 }
 
 func (a *DaprRuntime) initActors() error {
-	err := actors.ValidateHostEnvironment(a.runtimeConfig.mtlsEnabled, a.runtimeConfig.Mode, a.namespace)
+	err := actors.ValidateHostEnvironment(a.runtimeConfig.MTLSEnabled, a.runtimeConfig.Mode, a.namespace)
 	if err != nil {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 	}
@@ -2556,7 +2556,7 @@ func (a *DaprRuntime) initActors() error {
 		AppChannel:       a.appChannel,
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
-		CertChain:        a.runtimeConfig.CertChain,
+		CertChain:        a.runtimeConfig.certChain,
 		TracingSpec:      a.globalConfig.Spec.TracingSpec,
 		Resiliency:       a.resiliency,
 		StateStoreName:   a.actorStateStoreName,
@@ -3433,7 +3433,7 @@ func featureTypeToString(features interface{}) []string {
 }
 
 func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
-	if !a.runtimeConfig.mtlsEnabled {
+	if !a.runtimeConfig.MTLSEnabled {
 		log.Info("mTLS is disabled. Skipping certificate request and tls validation")
 		return nil
 	}
@@ -3442,7 +3442,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	}
 	log.Info("mTLS enabled. creating sidecar authenticator")
 
-	auth, err := security.GetSidecarAuthenticator(sentryAddress, a.runtimeConfig.CertChain)
+	auth, err := security.GetSidecarAuthenticator(sentryAddress, a.runtimeConfig.certChain)
 	if err != nil {
 		return err
 	}

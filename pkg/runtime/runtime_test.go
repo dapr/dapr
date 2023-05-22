@@ -82,6 +82,7 @@ import (
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
+	modeconfig "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/cors"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
@@ -229,7 +230,7 @@ func NewMockKubernetesStoreWithInitCallback(cb func()) secretstores.SecretStore 
 
 func TestNewRuntime(t *testing.T) {
 	// act
-	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 	// assert
 	assert.NotNil(t, r, "runtime must be initiated")
@@ -3557,7 +3558,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 }
 
 func TestPubsubLifecycle(t *testing.T) {
-	rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	rt.pubSubRegistry = pubsubLoader.NewRegistry()
 	defer func() {
 		if rt != nil {
@@ -3860,7 +3861,7 @@ func TestPubsubLifecycle(t *testing.T) {
 }
 
 func TestPubsubWithResiliency(t *testing.T) {
-	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
+	r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
 	r.pubSubRegistry = pubsubLoader.NewRegistry()
 	defer stopRuntime(t, r)
 
@@ -4334,7 +4335,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(mode, protocol, appPort)
 
-	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt := newDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	rt.stateStoreRegistry = stateLoader.NewRegistry()
 	rt.secretStoresRegistry = secretstoresLoader.NewRegistry()
 	rt.nameResolutionRegistry = nrLoader.NewRegistry()
@@ -4348,32 +4349,34 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 }
 
 func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *Config {
-	return NewRuntimeConfig(NewRuntimeConfigOpts{
-		ID:                           TestRuntimeConfigID,
-		PlacementAddresses:           []string{"10.10.10.12"},
-		ControlPlaneAddress:          "10.10.10.11",
+	return &Config{
+		ID:                 TestRuntimeConfigID,
+		PlacementAddresses: []string{"10.10.10.12"},
+		Kubernetes: modeconfig.KubernetesConfig{
+			ControlPlaneAddress: "10.10.10.11",
+		},
 		AllowedOrigins:               cors.DefaultAllowedOrigins,
-		AppProtocol:                  protocol,
-		Mode:                         string(mode),
+		ApplicationProtocol:          Protocol(protocol),
+		Mode:                         mode,
 		HTTPPort:                     DefaultDaprHTTPPort,
 		InternalGRPCPort:             0,
 		APIGRPCPort:                  DefaultDaprAPIGRPCPort,
 		APIListenAddresses:           []string{DefaultAPIListenAddress},
 		PublicPort:                   nil,
-		AppPort:                      appPort,
+		ApplicationPort:              appPort,
 		ProfilePort:                  DefaultProfilePort,
 		EnableProfiling:              false,
 		MaxConcurrency:               -1,
 		MTLSEnabled:                  false,
-		SentryAddress:                "",
+		SentryServiceAddress:         "",
 		MaxRequestBodySize:           4,
 		UnixDomainSocket:             "",
 		ReadBufferSize:               4,
 		GracefulShutdownDuration:     time.Second,
-		EnableAPILogging:             true,
+		EnableAPILogging:             ptr.Of(true),
 		DisableBuiltinK8sSecretStore: false,
 		AppChannelAddress:            "127.0.0.1",
-	})
+	}
 }
 
 func TestGracefulShutdown(t *testing.T) {
@@ -4385,7 +4388,7 @@ func TestMTLS(t *testing.T) {
 	t.Run("with mTLS enabled", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.runtimeConfig.mtlsEnabled = true
+		rt.runtimeConfig.MTLSEnabled = true
 		rt.runtimeConfig.SentryServiceAddress = "1.1.1.1"
 
 		t.Setenv(sentryConsts.TrustAnchorsEnvVar, testCertRoot)
@@ -4394,7 +4397,7 @@ func TestMTLS(t *testing.T) {
 
 		certChain, err := security.GetCertChain()
 		assert.NoError(t, err)
-		rt.runtimeConfig.CertChain = certChain
+		rt.runtimeConfig.certChain = certChain
 
 		err = rt.establishSecurity(rt.runtimeConfig.SentryServiceAddress)
 		assert.NoError(t, err)
@@ -4634,7 +4637,7 @@ func TestReadInputBindings(t *testing.T) {
 	})
 
 	t.Run("start and stop reading", func(t *testing.T) {
-		rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		rt := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, rt)
 
 		closeCh := make(chan struct{})
@@ -4846,8 +4849,8 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(protocol.HTTPSProtocol), 1024)
-		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPSProtocol), 1024)
+		rt := newDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
 		})
@@ -4997,17 +5000,17 @@ func (m *mockPublishPubSub) GetComponentMetadata() map[string]string {
 
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 		r.namespace = ""
-		r.runtimeConfig.mtlsEnabled = true
+		r.runtimeConfig.MTLSEnabled = true
 
 		err := r.initActors()
 		assert.Error(t, err)
 	})
 
 	t.Run("actors hosted = true", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 		r.appConfig = config.ApplicationConfig{
 			Entities: []string{"actor1"},
@@ -5018,7 +5021,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("actors hosted = false", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		hosted := len(r.appConfig.Entities) > 0
@@ -5026,7 +5029,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("placement enable = false", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		err := r.initActors()
@@ -5034,7 +5037,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		assert.Nil(t, r.actor)
@@ -5043,7 +5046,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		assert.Equal(t, "", r.actorStateStoreName)
@@ -5054,7 +5057,7 @@ func TestInitActors(t *testing.T) {
 
 func TestInitBindings(t *testing.T) {
 	t.Run("single input binding", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterInputBinding(
@@ -5072,7 +5075,7 @@ func TestInitBindings(t *testing.T) {
 	})
 
 	t.Run("single output binding", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterOutputBinding(
@@ -5090,7 +5093,7 @@ func TestInitBindings(t *testing.T) {
 	})
 
 	t.Run("one input binding, one output binding", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterInputBinding(
@@ -5179,7 +5182,7 @@ func TestBindingTracingHttp(t *testing.T) {
 }
 
 func TestBindingResiliency(t *testing.T) {
-	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
+	r := newDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
 	r.bindingsRegistry = bindingsLoader.NewRegistry()
 	defer stopRuntime(t, r)
 
@@ -5331,7 +5334,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.Name, func(t *testing.T) {
-			r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+			r := newDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel
@@ -6004,7 +6007,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	assert.NoError(t, err, "expected no error")
 
 	rt.namespace = "test"
-	rt.runtimeConfig.mtlsEnabled = true
+	rt.runtimeConfig.MTLSEnabled = true
 	assert.Nil(t, rt.initActors())
 
 	rt.running.Store(true)

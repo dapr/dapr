@@ -14,13 +14,13 @@ limitations under the License.
 package main
 
 import (
-	"os"
-
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
 	_ "github.com/dapr/dapr/cmd/daprd/components"
+	"github.com/dapr/dapr/cmd/daprd/options"
 
+	"github.com/dapr/dapr/pkg/buildinfo"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
@@ -31,6 +31,8 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
+	config "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/metrics"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -45,7 +47,60 @@ func main() {
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 
-	rt, err := runtime.FromFlags(os.Args[1:])
+	opts, err := options.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Infof("starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
+
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
+		log.Fatal(err)
+	}
+
+	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
+
+	// Initialize dapr metrics exporter
+	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+	rt, err := runtime.FromConfig(&runtime.Config{
+		ID:                 opts.AppID,
+		PlacementAddresses: opts.PlacementAddresses,
+		AllowedOrigins:     opts.AllowedOrigins,
+		Standalone: config.StandaloneConfig{
+			ResourcesPath: opts.ResourcesPaths,
+		},
+		Kubernetes: config.KubernetesConfig{
+			ControlPlaneAddress: opts.ControlPlaneAddress,
+		},
+		ApplicationProtocol:          opts.AppProtocol,
+		Mode:                         opts.Mode,
+		HTTPPort:                     opts.DaprHTTPPort,
+		InternalGRPCPort:             opts.DaprInternalGRPCPort,
+		APIGRPCPort:                  opts.DaprAPIGRPCPort,
+		APIListenAddresses:           opts.DaprAPIListenAddressList,
+		PublicPort:                   opts.DaprPublicPort,
+		ApplicationPort:              opts.AppPort,
+		ProfilePort:                  opts.ProfilePort,
+		EnableProfiling:              opts.EnableProfiling,
+		MaxConcurrency:               opts.AppMaxConcurrency,
+		MTLSEnabled:                  opts.EnableMTLS,
+		SentryServiceAddress:         opts.SentryAddress,
+		MaxRequestBodySize:           opts.DaprHTTPMaxRequestSize,
+		UnixDomainSocket:             opts.UnixDomainSocket,
+		ReadBufferSize:               opts.DaprHTTPReadBufferSize,
+		GracefulShutdownDuration:     opts.GracefulShutdownDuration,
+		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
+		AppHealthCheckHTTPPath:       opts.AppHealthCheckPath,
+		AppHealthCheck:               opts.AppHealthCheck,
+		AppChannelAddress:            opts.AppChannelAddress,
+		EnableAPILogging:             opts.EnableAPILogging,
+		ConfigPath:                   opts.ConfigPath,
+		Metrics:                      opts.Metrics,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -31,7 +31,19 @@ func NewExporter(namespace string) Exporter {
 	return &promMetricsExporter{
 		&exporter{
 			namespace: namespace,
-			options:   defaultMetricOptions(),
+			options:   DefaultMetricOptions(),
+			logger:    logger.NewLogger("dapr.metrics"),
+		},
+		nil,
+	}
+}
+
+// NewExporterWithOptions creates new MetricsExporter instance with options.
+func NewExporterWithOptions(namespace string, options *Options) Exporter {
+	return &promMetricsExporter{
+		&exporter{
+			namespace: namespace,
+			options:   options,
 			logger:    logger.NewLogger("dapr.metrics"),
 		},
 		nil,
