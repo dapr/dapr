@@ -200,6 +200,34 @@ func TestTryEncryptValue(t *testing.T) {
 	})
 }
 
+func TestTryDecryptValue(t *testing.T) {
+	t.Run("empty value", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		cipherObj, _ := createCipher(pr, AESGCMAlgorithm)
+		pr.cipherObj = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		dr, err := TryDecryptValue("test", nil)
+		assert.NoError(t, err)
+		assert.Empty(t, dr)
+	})
+}
+
 func TestEncryptedStateStore(t *testing.T) {
 	t.Run("store supports encryption", func(t *testing.T) {
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}

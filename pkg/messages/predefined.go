@@ -26,9 +26,10 @@ const (
 	ErrMalformedRequestData = "can't serialize request data field: %s"
 
 	// State.
-	ErrStateGet    = "fail to get %s from state store %s: %s"
-	ErrStateDelete = "failed deleting state with key %s: %s"
-	ErrStateSave   = "failed saving state in state store %s: %s"
+	ErrStateGet        = "fail to get %s from state store %s: %s"
+	ErrStateDelete     = "failed deleting state with key %s: %s"
+	ErrStateSave       = "failed saving state in state store %s: %s"
+	ErrStateDeleteBulk = "failed deleting state in state store %s: %s"
 
 	// StateTransaction.
 	ErrStateStoreNotSupported     = "state store %s doesn't support transaction"
@@ -104,6 +105,9 @@ var (
 	ErrHealthNotReady         = APIError{"dapr is not ready", "ERR_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", "ERR_OUTBOUND_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", "ERR_HEALTH_APPID_NOT_MATCH", http.StatusInternalServerError, grpcCodes.Internal}
+
+	// PubSub.
+	ErrPubSubMetadataDeserialize = APIError{"failed deserializing metadata: %v", "ERR_PUBSUB_REQUEST_METADATA", http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
