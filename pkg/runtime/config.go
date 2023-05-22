@@ -246,7 +246,6 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 			resiliencyProvider = resiliencyConfig.FromConfigurations(log)
 		}
 	}
-	log.Info("Resiliency configuration loaded")
 
 	accessControlList, err = acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,

@@ -1049,8 +1049,6 @@ func (a *DaprRuntime) initProxy() {
 		Resiliency:         a.resiliency,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
 	})
-
-	log.Info("gRPC proxy enabled")
 }
 
 // begin components updates for kubernetes mode.
