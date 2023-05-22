@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/utils/clock"
 
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
@@ -182,26 +181,6 @@ func (p *Service) Run(ctx context.Context, port string) error {
 	return <-errCh
 }
 
-// GetPlacementTables returns the current placement host infos.
-func (p *Service) GetPlacementTables(ctx context.Context, empty *emptypb.Empty) (*placementv1pb.GetPlacementTablesResponse, error) {
-	m := p.raftNode.FSM().State().Members()
-	version := p.raftNode.FSM().State().TableGeneration()
-	response := &placementv1pb.GetPlacementTablesResponse{
-		TableVersion: version,
-	}
-	members := make(map[string]*placementv1pb.HostInfo, len(m))
-	for k, v := range m {
-		members[k] = &placementv1pb.HostInfo{
-			Name:      v.Name,
-			AppId:     v.AppID,
-			Entities:  v.Entities,
-			UpdatedAt: v.UpdatedAt,
-		}
-	}
-	response.HostMap = members
-	return response, nil
-}
-
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
 	registeredMemberID := ""
@@ -262,12 +241,11 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						UpdatedAt: p.clock.Now().UnixNano(),
 					},
 				}
-				log.Debugf("Member changed upserting appid %s with entities %v", req.Id, req.Entities)
 			}
 
 		default:
 			if registeredMemberID == "" {
-				log.Error("Stream is disconnected before member is added ", err)
+				log.Error("Stream is disconnected before member is added")
 				return nil
 			}
 
