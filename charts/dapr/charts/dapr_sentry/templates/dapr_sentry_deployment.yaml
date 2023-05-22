@@ -4,6 +4,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: dapr-trust-bundle
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-sentry
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -24,6 +25,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dapr-sentry
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-sentry
     {{- range $key, $value := .Values.global.k8sLabels }}
