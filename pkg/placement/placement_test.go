@@ -49,7 +49,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	serverStopped := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		close(serverStopped)
+		defer close(serverStopped)
 		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
 	}()
 
