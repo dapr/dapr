@@ -5955,12 +5955,12 @@ func TestGracefulShutdownActors(t *testing.T) {
 	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 3*time.Second)
 
-	var activeActCount int
+	var activeActCount int32
 	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
 	for _, v := range activeActors {
 		activeActCount += v.Count
 	}
-	assert.Equal(t, activeActCount, 0)
+	assert.Equal(t, activeActCount, int32(0))
 }
 
 func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *daprt.MockStateStore {

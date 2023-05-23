@@ -1029,11 +1029,12 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 
 func (a *DaprRuntime) initProxy() {
 	a.proxy = messaging.NewProxy(messaging.ProxyOpts{
-		AppClientFn:       a.grpc.GetAppClient,
-		ConnectionFactory: a.grpc.GetGRPCConnection,
-		AppID:             a.runtimeConfig.ID,
-		ACL:               a.accessControlList,
-		Resiliency:        a.resiliency,
+		AppClientFn:        a.grpc.GetAppClient,
+		ConnectionFactory:  a.grpc.GetGRPCConnection,
+		AppID:              a.runtimeConfig.ID,
+		ACL:                a.accessControlList,
+		Resiliency:         a.resiliency,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
 	})
 
 	log.Info("gRPC proxy enabled")
@@ -1290,19 +1291,19 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
-			state, ok := a.compStore.GetStateStore(response.StoreName)
+			store, ok := a.compStore.GetStateStore(response.StoreName)
 			if !ok {
 				return
 			}
 
-			policyRunner := resiliency.NewRunner[any](a.ctx,
+			err := stateLoader.PerformBulkStoreOperation(a.ctx, reqs,
 				a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
+				state.BulkStoreOpts{},
+				store.Set,
+				store.BulkSet,
 			)
-			_, err := policyRunner(func(ctx context.Context) (any, error) {
-				return nil, state.BulkSet(ctx, reqs)
-			})
 			if err != nil {
-				log.Errorf("error saving state from app response: %s", err)
+				log.Errorf("error saving state from app response: %v", err)
 			}
 		}(response.State)
 	}
@@ -1325,7 +1326,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
-	spanName := fmt.Sprintf("bindings/%s", bindingName)
+	spanName := "bindings/" + bindingName
 	spanContext := trace.SpanContext{}
 
 	// Check the grpc-trace-bin with fallback to traceparent.
@@ -1531,7 +1532,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		DirectMessaging:             a.directMessaging,
 		Resiliency:                  a.resiliency,
 		PubsubAdapter:               a.getPublishAdapter(),
-		Actor:                       a.actor,
+		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
 		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
 		Shutdown:                    a.ShutdownWithWait,
@@ -1624,7 +1625,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Resiliency:                  a.resiliency,
 		PubsubAdapter:               a.getPublishAdapter(),
 		DirectMessaging:             a.directMessaging,
-		Actor:                       a.actor,
+		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
 		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
 		AccessControlList:           a.accessControlList,

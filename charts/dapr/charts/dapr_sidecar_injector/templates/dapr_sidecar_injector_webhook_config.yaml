@@ -12,6 +12,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: dapr-sidecar-injector-cert
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-sidecar-injector
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -37,6 +38,7 @@ metadata:
     {{- end }}
 webhooks:
 - name: sidecar-injector.dapr.io
+  reinvocationPolicy: IfNeeded
   clientConfig:
     service:
       namespace: {{ .Release.Namespace }}

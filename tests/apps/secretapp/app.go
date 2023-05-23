@@ -247,11 +247,11 @@ func createSecretURL(key, store string) (string, error) {
 
 // epoch returns the current unix epoch timestamp
 func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+	return int(time.Now().UnixMilli())
 }
 
 // appRouter initializes restful api router
-func appRouter() *mux.Router {
+func appRouter() http.Handler {
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Log requests and their processing time

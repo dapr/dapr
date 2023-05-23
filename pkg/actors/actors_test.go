@@ -46,6 +46,7 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -540,36 +541,36 @@ func TestStoreIsNotInitialized(t *testing.T) {
 	}
 
 	t.Run("getReminderTrack", func(t *testing.T) {
-		r, e := testActorsRuntime.getReminderTrack(context.Background(), "foo||bar")
-		assert.NotNil(t, e)
+		r, err := testActorsRuntime.getReminderTrack(context.Background(), "foo||bar")
+		assert.Error(t, err)
 		assert.Nil(t, r)
 	})
 
 	t.Run("updateReminderTrack", func(t *testing.T) {
-		e := testActorsRuntime.updateReminderTrack(context.Background(), "foo||bar", 1, testActorsRuntime.clock.Now(), nil)
-		assert.NotNil(t, e)
+		err := testActorsRuntime.updateReminderTrack(context.Background(), "foo||bar", 1, testActorsRuntime.clock.Now(), nil)
+		assert.Error(t, err)
 	})
 
 	t.Run("CreateReminder", func(t *testing.T) {
-		e := testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{})
-		assert.NotNil(t, e)
+		err := testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{})
+		assert.Error(t, err)
 	})
 
 	t.Run("getRemindersForActorType", func(t *testing.T) {
-		r1, r2, e := testActorsRuntime.getRemindersForActorType(context.Background(), "foo", false)
+		r1, r2, err := testActorsRuntime.getRemindersForActorType(context.Background(), "foo", false)
 		assert.Nil(t, r1)
 		assert.Nil(t, r2)
-		assert.NotNil(t, e)
+		assert.Error(t, err)
 	})
 
 	t.Run("DeleteReminder", func(t *testing.T) {
-		e := testActorsRuntime.DeleteReminder(context.Background(), &DeleteReminderRequest{})
-		assert.NotNil(t, e)
+		err := testActorsRuntime.DeleteReminder(context.Background(), &DeleteReminderRequest{})
+		assert.Error(t, err)
 	})
 
 	t.Run("RenameReminder", func(t *testing.T) {
-		e := testActorsRuntime.RenameReminder(context.Background(), &RenameReminderRequest{})
-		assert.NotNil(t, e)
+		err := testActorsRuntime.RenameReminder(context.Background(), &RenameReminderRequest{})
+		assert.Error(t, err)
 	})
 }
 
@@ -698,8 +699,6 @@ func TestReminderCountFiringBad(t *testing.T) {
 
 	// init default service metrics where actor metrics are registered
 	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.config.AppID))
-	t.Cleanup(func() {
-	})
 
 	numReminders := 2
 
@@ -796,30 +795,46 @@ func TestCreateReminder(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntimeWithMock(appChannel)
 	defer testActorsRuntime.Stop()
 
-	actorType, actorID := getTestActorTypeAndID()
-	secondActorType := "actor2"
-	ctx := context.Background()
-	err := testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Name:      "reminder0",
-		Period:    "1s",
-		DueTime:   "1s",
-		TTL:       "PT10M",
-		Data:      nil,
-	})
-	require.NoError(t, err)
+	// Set the state store to not use locks when accessing data.
+	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
+	stateStore, _ := testActorsRuntime.stateStore()
+	stateStore.(*daprt.FakeStateStore).NoLock = true
 
-	err = testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
-		ActorID:   actorID,
-		ActorType: secondActorType,
-		Name:      "reminder0",
-		Period:    "1s",
-		DueTime:   "1s",
-		TTL:       "PT10M",
-		Data:      nil,
-	})
-	require.NoError(t, err)
+	actorType, actorID := getTestActorTypeAndID()
+	const secondActorType = "actor2"
+	ctx := context.Background()
+
+	// Create the reminders in parallel, which would surface race conditions if present
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+
+		err := testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			Name:      "reminder0",
+			Period:    "1s",
+			DueTime:   "1s",
+			TTL:       "PT10M",
+			Data:      nil,
+		})
+		require.NoError(t, err)
+	}()
+	go func() {
+		defer wg.Done()
+		err := testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
+			ActorID:   actorID,
+			ActorType: secondActorType,
+			Name:      "reminder0",
+			Period:    "1s",
+			DueTime:   "1s",
+			TTL:       "PT10M",
+			Data:      nil,
+		})
+		require.NoError(t, err)
+	}()
+	wg.Wait()
 
 	// Now creates new reminders and migrates the previous one.
 	testActorsRuntimeWithPartition := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
@@ -828,7 +843,7 @@ func TestCreateReminder(t *testing.T) {
 	testActorsRuntimeWithPartition.compStore = testActorsRuntime.compStore
 	for i := 1; i < numReminders; i++ {
 		for _, reminderActorType := range []string{actorType, secondActorType} {
-			err = testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
+			err := testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
 				ActorID:   actorID,
 				ActorType: reminderActorType,
 				Name:      "reminder" + strconv.Itoa(i),
@@ -897,48 +912,125 @@ func TestRenameReminder(t *testing.T) {
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	err := testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Name:      "reminder0",
-		Period:    "1s",
-		DueTime:   "1s",
-		TTL:       "PT10M",
-		Data:      json.RawMessage(`"a"`),
-	})
-	require.NoError(t, err)
-	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+	errs := make(chan error, 2)
+	retrieved := make(chan *reminders.Reminder, 2)
 
-	// rename reminder
-	err = testActorsRuntime.RenameReminder(ctx, &RenameReminderRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		OldName:   "reminder0",
-		NewName:   "reminder1",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+	// Set the state store to not use locks when accessing data.
+	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
+	stateStore, _ := testActorsRuntime.stateStore()
+	stateStore.(*daprt.FakeStateStore).NoLock = true
 
-	// verify that the reminder retrieved with the old name no longer exists
-	oldReminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-		Name:      "reminder0",
-	})
-	require.NoError(t, err)
-	assert.Nil(t, oldReminder)
+	// Create 2 reminders in parallel
+	go func() {
+		errs <- testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			Name:      "reminder0",
+			Period:    "1s",
+			DueTime:   "1s",
+			TTL:       "PT10M",
+			Data:      json.RawMessage(`"a"`),
+		})
+	}()
+	go func() {
+		errs <- testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			Name:      "reminderA",
+			Period:    "10s",
+			DueTime:   "10s",
+			TTL:       "PT10M",
+			Data:      json.RawMessage(`"b"`),
+		})
+	}()
+	for i := 0; i < 2; i++ {
+		require.NoError(t, <-errs)
+	}
+	require.Equal(t, 2, len(testActorsRuntime.reminders[actorType]))
 
-	// verify that the reminder retrieved with the new name already exists
-	newReminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-		Name:      "reminder1",
-	})
-	require.NoError(t, err)
-	assert.NotNil(t, newReminder)
-	assert.Equal(t, "1s", newReminder.Period.String())
-	assert.Equal(t, "1s", newReminder.DueTime)
-	assert.Equal(t, json.RawMessage(`"a"`), newReminder.Data)
+	// Rename reminders, in parallel
+	go func() {
+		errs <- testActorsRuntime.RenameReminder(ctx, &RenameReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			OldName:   "reminder0",
+			NewName:   "reminder1",
+		})
+	}()
+	go func() {
+		errs <- testActorsRuntime.RenameReminder(ctx, &RenameReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			OldName:   "reminderA",
+			NewName:   "reminderB",
+		})
+	}()
+	for i := 0; i < 2; i++ {
+		require.NoError(t, <-errs)
+	}
+	assert.Equal(t, 2, len(testActorsRuntime.reminders[actorType]))
+
+	// Verify that the reminders retrieved with the old name no longer exists (in parallel)
+	go func() {
+		reminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      "reminder0",
+		})
+		errs <- err
+		retrieved <- reminder
+	}()
+	go func() {
+		reminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      "reminderA",
+		})
+		errs <- err
+		retrieved <- reminder
+	}()
+	for i := 0; i < 2; i++ {
+		require.NoError(t, <-errs)
+	}
+	for i := 0; i < 2; i++ {
+		require.Nil(t, <-retrieved)
+	}
+
+	// Verify that the reminders retrieved with the new name already exists (in parallel)
+	go func() {
+		reminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      "reminder1",
+		})
+		errs <- err
+		retrieved <- reminder
+	}()
+	go func() {
+		reminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      "reminderB",
+		})
+		errs <- err
+		retrieved <- reminder
+	}()
+	for i := 0; i < 2; i++ {
+		require.NoError(t, <-errs)
+	}
+	for i := 0; i < 2; i++ {
+		reminder := <-retrieved
+		require.NotNil(t, reminder)
+		if string(reminder.Data) == `"a"` {
+			assert.Equal(t, "1s", reminder.Period.String())
+			assert.Equal(t, "1s", reminder.DueTime)
+		} else if string(reminder.Data) == `"b"` {
+			assert.Equal(t, "10s", reminder.Period.String())
+			assert.Equal(t, "10s", reminder.DueTime)
+		} else {
+			t.Fatal("Found unexpected reminder:", reminder)
+		}
+	}
 }
 
 func TestOverrideReminder(t *testing.T) {
@@ -1148,18 +1240,47 @@ func TestDeleteReminder(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
 
+	// Set the state store to not use locks when accessing data.
+	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
+	stateStore, _ := testActorsRuntime.stateStore()
+	stateStore.(*daprt.FakeStateStore).NoLock = true
+
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-	err := testActorsRuntime.CreateReminder(ctx, &reminder)
-	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
-	require.NoError(t, err)
-	err = testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
-		Name:      "reminder1",
-		ActorID:   actorID,
-		ActorType: actorType,
-	})
-	require.NoError(t, err)
+
+	// Create 2 reminders (in parallel)
+	errs := make(chan error, 2)
+	go func() {
+		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
+		errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
+	}()
+	go func() {
+		reminder := createReminderData(actorID, actorType, "reminder2", "1s", "1s", "", "")
+		errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
+	}()
+	for i := 0; i < 2; i++ {
+		require.NoError(t, <-errs)
+	}
+	assert.Equal(t, 2, len(testActorsRuntime.reminders[actorType]))
+
+	// Delete the reminders (in parallel)
+	go func() {
+		errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+			Name:      "reminder1",
+			ActorID:   actorID,
+			ActorType: actorType,
+		})
+	}()
+	go func() {
+		errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+			Name:      "reminder2",
+			ActorID:   actorID,
+			ActorType: actorType,
+		})
+	}()
+	for i := 0; i < 2; i++ {
+		require.NoError(t, <-errs)
+	}
 	assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
 }
 
@@ -2552,7 +2673,7 @@ func TestGetOrCreateActor(t *testing.T) {
 func TestActiveActorsCount(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Actors Count", func(t *testing.T) {
-		expectedCounts := []ActiveActorsCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
+		expectedCounts := []*runtimev1pb.ActiveActorsCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
 
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
@@ -2566,7 +2687,7 @@ func TestActiveActorsCount(t *testing.T) {
 	})
 
 	t.Run("Actors Count empty", func(t *testing.T) {
-		expectedCounts := []ActiveActorsCount{}
+		expectedCounts := []*runtimev1pb.ActiveActorsCount{}
 
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
