@@ -1122,21 +1122,35 @@ func (m *ActorMetadata) calculateEtag(partitionID uint32) *string {
 	return m.RemindersMetadata.partitionsEtag[partitionID]
 }
 
-func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) ([]reminders.Reminder, string, *string) {
+func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) (bool, []reminders.Reminder, string, *string) {
 	// First, we find the partition
 	var partitionID uint32
+	l := len(reminderRefs)
 	if m.RemindersMetadata.PartitionCount > 0 {
+		var found bool
 		for _, reminderRef := range reminderRefs {
 			if reminderRef.reminder.ActorType == actorType && reminderRef.reminder.ActorID == actorID && reminderRef.reminder.Name == reminderName {
 				partitionID = reminderRef.actorRemindersPartitionID
+				found = true
 				break
 			}
 		}
+
+		// If the reminder doesn't exist, return without making any change
+		if !found {
+			return false, nil, "", nil
+		}
+
+		// When calculating the initial allocated size of remindersInPartitionAfterRemoval, if we have partitions assume len(reminderRefs)/PartitionCount for an initial count
+		// This is unlikely to avoid all re-allocations, but it's still better than allocating the slice with capacity 0
+		l /= m.RemindersMetadata.PartitionCount
 	}
 
-	var remindersInPartitionAfterRemoval []reminders.Reminder
+	remindersInPartitionAfterRemoval := make([]reminders.Reminder, 0, l)
+	var found bool
 	for _, reminderRef := range reminderRefs {
 		if reminderRef.reminder.ActorType == actorType && reminderRef.reminder.ActorID == actorID && reminderRef.reminder.Name == reminderName {
+			found = true
 			continue
 		}
 
@@ -1146,8 +1160,13 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminder
 		}
 	}
 
+	// If no reminder found, return false here to short-circuit the next operations
+	if !found {
+		return false, nil, "", nil
+	}
+
 	stateKey := m.calculateRemindersStateKey(actorType, partitionID)
-	return remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
+	return true, remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
 }
 
 func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderReference, reminder reminders.Reminder) ([]reminders.Reminder, actorReminderReference, string, *string) {
@@ -1649,17 +1668,22 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		noOp := resiliency.NoOp{}
 		policyDef = noOp.EndpointPolicy("", "")
 	}
-	policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
-	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+	policyRunner := resiliency.NewRunner[bool](ctx, policyDef)
+	found, err := policyRunner(func(ctx context.Context) (bool, error) {
 		reminders, actorMetadata, rErr := a.getRemindersForActorType(ctx, actorType, false)
 		if rErr != nil {
-			return struct{}{}, fmt.Errorf("error obtaining reminders for actor type %s: %w", actorType, rErr)
+			return false, fmt.Errorf("error obtaining reminders for actor type %s: %w", actorType, rErr)
 		}
 
-		// remove from partition first.
-		remindersInPartition, stateKey, etag := actorMetadata.removeReminderFromPartition(reminders, actorType, actorID, name)
+		// Remove from partition first
+		found, remindersInPartition, stateKey, etag := actorMetadata.removeReminderFromPartition(reminders, actorType, actorID, name)
 
-		// now, we can remove from the "global" list.
+		// If the reminder doesn't exist, stop here
+		if !found {
+			return false, nil
+		}
+
+		// Now, we can remove from the "global" list.
 		n := 0
 		for _, v := range reminders {
 			if v.reminder.ActorType != actorType ||
@@ -1676,7 +1700,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		// Check if context is still valid
 		rErr = ctx.Err()
 		if rErr != nil {
-			return struct{}{}, fmt.Errorf("context error before saving reminders: %w", rErr)
+			return false, fmt.Errorf("context error before saving reminders: %w", rErr)
 		}
 
 		// Save the partition in the database, in a transaction where we also save the metadata.
@@ -1690,17 +1714,21 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		}
 		rErr = a.executeStateStoreTransaction(ctx, store, stateOperations, stateMetadata)
 		if rErr != nil {
-			return struct{}{}, fmt.Errorf("error saving reminders partition and metadata: %w", rErr)
+			return false, fmt.Errorf("error saving reminders partition and metadata: %w", rErr)
 		}
 
 		a.remindersLock.Lock()
 		diag.DefaultMonitoring.ActorReminders(actorType, int64(len(reminders)))
 		a.reminders[actorType] = reminders
 		a.remindersLock.Unlock()
-		return struct{}{}, nil
+		return true, nil
 	})
 	if err != nil {
 		return err
+	}
+	if !found {
+		// Reminder was not found, so nothing to do here
+		return nil
 	}
 
 	deletePolicyRunner := resiliency.NewRunner[struct{}](ctx,
