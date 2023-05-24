@@ -130,6 +130,7 @@ type actorsRuntime struct {
 	clock                 clock.WithTicker
 	internalActors        map[string]InternalActor
 	internalActorChannel  *internalActorChannel
+	stateTTLEnabled       bool
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -172,6 +173,7 @@ type ActorsOpts struct {
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
+	StateTTLEnabled  bool
 	CompStore        *compstore.ComponentStore
 
 	// MockPlacement is a placement service implementation used for testing
@@ -209,6 +211,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
 		compStore:            opts.CompStore,
+		stateTTLEnabled:      opts.StateTTLEnabled,
 	}
 }
 
@@ -650,7 +653,8 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 	baseKey += daprSeparator
 	for i, o := range req.Operations {
 		operations[i], err = o.StateOperation(baseKey, StateOperationOpts{
-			Metadata: metadata,
+			Metadata:        metadata,
+			StateTTLEnabled: a.stateTTLEnabled,
 		})
 		if err != nil {
 			return err

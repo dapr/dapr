@@ -2526,6 +2526,7 @@ func (a *DaprRuntime) initActors() error {
 		Resiliency:       a.resiliency,
 		StateStoreName:   a.actorStateStoreName,
 		CompStore:        a.compStore,
+		StateTTLEnabled:  a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 	})
 	err = act.Init()
 	if err == nil {

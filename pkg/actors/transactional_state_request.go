@@ -21,6 +21,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/config"
 )
 
 // OperationType describes a CRUD operation performed against a state store.
@@ -35,8 +36,9 @@ const (
 
 // Options for the StateOperation method
 type StateOperationOpts struct {
-	Metadata    map[string]string
-	ContentType *string
+	Metadata        map[string]string
+	ContentType     *string
+	StateTTLEnabled bool
 }
 
 // TransactionalRequest describes a set of stateful operations for a given actor that are performed in a transactional manner.
@@ -132,6 +134,12 @@ func (t TransactionalUpsert) StateOperation(baseKey string, opts StateOperationO
 		t.Metadata = opts.Metadata
 	} else {
 		maps.Copy(t.Metadata, opts.Metadata)
+	}
+
+	if !opts.StateTTLEnabled {
+		if _, ok := t.Metadata["ttlInSeconds"]; ok {
+			return op, fmt.Errorf("ttlInSeconds is not supported without the %q feature enabled", config.ActorStateTTL)
+		}
 	}
 
 	return state.SetRequest{

@@ -20,3 +20,5 @@ spec:
   features:
     - name: ServiceInvocationStreaming
       enabled: true
+    - name: ActorStateTTL
+      enabled: true

@@ -2547,6 +2547,29 @@ func TestTransactionalOperation(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "base||"+TestKeyName, res.Key)
 	})
+
+	t.Run("error if ttlInSeconds and actor state TTL not enabled", func(t *testing.T) {
+		op := TransactionalOperation{
+			Operation: Upsert,
+			Request: map[string]any{
+				"key":      TestKeyName,
+				"metadata": map[string]string{"ttlInSeconds": "1"},
+			},
+		}
+		resI, err := op.StateOperation("base||", StateOperationOpts{
+			StateTTLEnabled: false,
+		})
+		assert.ErrorContains(t, err, `ttlInSeconds is not supported without the "ActorStateTTL" feature enabled`)
+
+		resI, err = op.StateOperation("base||", StateOperationOpts{
+			StateTTLEnabled: true,
+		})
+		assert.NoError(t, err)
+
+		res, ok := resI.(state.SetRequest)
+		require.True(t, ok)
+		assert.Equal(t, "base||"+TestKeyName, res.Key)
+	})
 }
 
 func TestCallLocalActor(t *testing.T) {
