@@ -2556,12 +2556,12 @@ func TestTransactionalOperation(t *testing.T) {
 				"metadata": map[string]string{"ttlInSeconds": "1"},
 			},
 		}
-		resI, err := op.StateOperation("base||", StateOperationOpts{
+		_, err := op.StateOperation("base||", StateOperationOpts{
 			StateTTLEnabled: false,
 		})
 		assert.ErrorContains(t, err, `ttlInSeconds is not supported without the "ActorStateTTL" feature enabled`)
 
-		resI, err = op.StateOperation("base||", StateOperationOpts{
+		resI, err := op.StateOperation("base||", StateOperationOpts{
 			StateTTLEnabled: true,
 		})
 		assert.NoError(t, err)
