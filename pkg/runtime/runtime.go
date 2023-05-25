@@ -545,8 +545,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 
-	a.initDirectMessaging(a.nameResolver)
-
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
 
@@ -1031,11 +1029,12 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 
 func (a *DaprRuntime) initProxy() {
 	a.proxy = messaging.NewProxy(messaging.ProxyOpts{
-		AppClientFn:       a.grpc.GetAppClient,
-		ConnectionFactory: a.grpc.GetGRPCConnection,
-		AppID:             a.runtimeConfig.ID,
-		ACL:               a.accessControlList,
-		Resiliency:        a.resiliency,
+		AppClientFn:        a.grpc.GetAppClient,
+		ConnectionFactory:  a.grpc.GetGRPCConnection,
+		AppID:              a.runtimeConfig.ID,
+		ACL:                a.accessControlList,
+		Resiliency:         a.resiliency,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
 	})
 
 	log.Info("gRPC proxy enabled")
@@ -1292,19 +1291,19 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
-			state, ok := a.compStore.GetStateStore(response.StoreName)
+			store, ok := a.compStore.GetStateStore(response.StoreName)
 			if !ok {
 				return
 			}
 
-			policyRunner := resiliency.NewRunner[any](a.ctx,
+			err := stateLoader.PerformBulkStoreOperation(a.ctx, reqs,
 				a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
+				state.BulkStoreOpts{},
+				store.Set,
+				store.BulkSet,
 			)
-			_, err := policyRunner(func(ctx context.Context) (any, error) {
-				return nil, state.BulkSet(ctx, reqs)
-			})
 			if err != nil {
-				log.Errorf("error saving state from app response: %s", err)
+				log.Errorf("error saving state from app response: %v", err)
 			}
 		}(response.State)
 	}
@@ -1327,7 +1326,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
-	spanName := fmt.Sprintf("bindings/%s", bindingName)
+	spanName := "bindings/" + bindingName
 	spanContext := trace.SpanContext{}
 
 	// Check the grpc-trace-bin with fallback to traceparent.
@@ -1376,6 +1375,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		conn, err := a.grpc.GetAppClient()
+		defer a.grpc.ReleaseAppClient(conn)
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
@@ -1646,6 +1646,7 @@ func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() ([]string, error) {
 	conn, err := a.grpc.GetAppClient()
+	defer a.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting app client: %w", err)
 	}
@@ -1945,6 +1946,7 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	} else {
 		var conn gogrpc.ClientConnInterface
 		conn, err = a.grpc.GetAppClient()
+		defer a.grpc.ReleaseAppClient(conn)
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
@@ -2400,6 +2402,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
 	conn, err := a.grpc.GetAppClient()
+	defer a.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}

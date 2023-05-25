@@ -516,7 +516,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
 	bulkResp := &runtimev1pb.GetBulkStateResponse{}
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
 		// Error has already been logged
 		return bulkResp, err
@@ -526,11 +526,10 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		return bulkResp, nil
 	}
 
-	// try bulk get first
 	var key string
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
-		key, err = stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
+		key, err = stateLoader.GetModifiedStateKey(k, in.StoreName, a.UniversalAPI.AppID)
 		if err != nil {
 			return &runtimev1pb.GetBulkStateResponse{}, err
 		}
@@ -542,7 +541,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	start := time.Now()
-	policyDef := a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
+	policyDef := a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
 	bgrPolicyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx, policyDef)
 	responses, err := bgrPolicyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
 		return store.BulkGet(ctx, reqs, state.BulkGetOpts{
@@ -591,29 +590,13 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	return bulkResp, nil
 }
 
-func (a *api) getStateStore(name string) (state.Store, error) {
-	if a.CompStore.StateStoresLen() == 0 {
-		err := messages.ErrStateStoresNotConfigured
-		apiServerLogger.Debug(err)
-		return nil, err
-	}
-
-	state, ok := a.CompStore.GetStateStore(name)
-	if !ok {
-		err := messages.ErrStateStoreNotFound.WithFormat(name)
-		apiServerLogger.Debug(err)
-		return nil, err
-	}
-	return state, nil
-}
-
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
 		// Error has already been logged
 		return &runtimev1pb.GetStateResponse{}, err
 	}
-	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.UniversalAPI.AppID)
 	if err != nil {
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -627,7 +610,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(ctx, req)
@@ -638,7 +621,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
-		apiServerLogger.Debug(err)
+		a.UniversalAPI.Logger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 
@@ -649,7 +632,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		val, err := encryption.TryDecryptValue(in.StoreName, getResponse.Data)
 		if err != nil {
 			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
-			apiServerLogger.Debug(err)
+			a.UniversalAPI.Logger.Debug(err)
 			return &runtimev1pb.GetStateResponse{}, err
 		}
 
@@ -668,7 +651,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
 		// Error has already been logged
 		return empty, err
@@ -682,7 +665,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	reqs := make([]state.SetRequest, l)
 	for i, s := range in.States {
 		var key string
-		key, err = stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
+		key, err = stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.UniversalAPI.AppID)
 		if err != nil {
 			return empty, err
 		}
@@ -712,7 +695,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		if encryption.EncryptedStateStore(in.StoreName) {
 			val, encErr := encryption.TryEncryptValue(in.StoreName, s.Value)
 			if encErr != nil {
-				apiServerLogger.Debug(encErr)
+				a.UniversalAPI.Logger.Debug(encErr)
 				return empty, encErr
 			}
 
@@ -723,23 +706,19 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	err = stateLoader.PerformBulkStoreOperation(ctx, reqs,
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		state.BulkStoreOpts{},
+		store.Set,
+		store.BulkSet,
 	)
-	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
-		// If there's a single request, perform it in non-bulk
-		if len(reqs) == 1 {
-			return struct{}{}, store.Set(ctx, &reqs[0])
-		}
-		return struct{}{}, store.BulkSet(ctx, reqs)
-	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
-		apiServerLogger.Debug(err)
+		a.UniversalAPI.Logger.Debug(err)
 		return empty, err
 	}
 	return empty, nil
@@ -747,15 +726,14 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 // stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
 func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
-	e, ok := err.(*state.ETagError)
-	if !ok {
-		return status.Errorf(codes.Internal, format, args...)
-	}
-	switch e.Kind() {
-	case state.ETagMismatch:
-		return status.Errorf(codes.Aborted, format, args...)
-	case state.ETagInvalid:
-		return status.Errorf(codes.InvalidArgument, format, args...)
+	var etagErr *state.ETagError
+	if errors.As(err, &etagErr) {
+		switch etagErr.Kind() {
+		case state.ETagMismatch:
+			return status.Errorf(codes.Aborted, format, args...)
+		case state.ETagInvalid:
+			return status.Errorf(codes.InvalidArgument, format, args...)
+		}
 	}
 
 	return status.Errorf(codes.Internal, format, args...)
@@ -764,13 +742,13 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
 		// Error has already been logged
 		return empty, err
 	}
 
-	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.UniversalAPI.AppID)
 	if err != nil {
 		return empty, err
 	}
@@ -790,7 +768,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Delete(ctx, &req)
@@ -801,7 +779,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
-		apiServerLogger.Debug(err)
+		a.UniversalAPI.Logger.Debug(err)
 		return empty, err
 	}
 	return empty, nil
@@ -810,15 +788,15 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
 		// Error has already been logged
 		return empty, err
 	}
 
-	reqs := make([]state.DeleteRequest, 0, len(in.States))
-	for _, item := range in.States {
-		key, err1 := stateLoader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
+	reqs := make([]state.DeleteRequest, len(in.States))
+	for i, item := range in.States {
+		key, err1 := stateLoader.GetModifiedStateKey(item.Key, in.StoreName, a.UniversalAPI.AppID)
 		if err1 != nil {
 			return empty, err1
 		}
@@ -835,24 +813,26 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 				Consistency: stateConsistencyToString(item.Options.Consistency),
 			}
 		}
-		reqs = append(reqs, req)
+		reqs[i] = req
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	err = stateLoader.PerformBulkStoreOperation(ctx, reqs,
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		state.BulkStoreOpts{},
+		store.Delete,
+		store.BulkDelete,
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkDelete(ctx, reqs)
-	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkDelete, err == nil, elapsed)
 
 	if err != nil {
-		apiServerLogger.Debug(err)
+		err = a.stateErrorResponse(err, messages.ErrStateDeleteBulk, in.StoreName, err.Error())
+		a.UniversalAPI.Logger.Debug(err)
 		return empty, err
 	}
+
 	return empty, nil
 }
 
@@ -864,7 +844,7 @@ func extractEtag(req *commonv1pb.StateItem) (bool, string) {
 }
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
-	store, storeErr := a.getStateStore(in.StoreName)
+	store, storeErr := a.UniversalAPI.GetStateStore(in.StoreName)
 	if storeErr != nil {
 		// Error has already been logged
 		return &emptypb.Empty{}, storeErr
@@ -993,7 +973,11 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 	}
 
 	if in.Data != nil {
-		req.Data = in.Data
+		j, err := json.Marshal(in.Data)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
+		req.Data = j
 	}
 	err := a.actor.CreateTimer(ctx, req)
 	return &emptypb.Empty{}, err
@@ -1033,7 +1017,11 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 	}
 
 	if in.Data != nil {
-		req.Data = in.Data
+		j, err := json.Marshal(in.Data)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
+		req.Data = j
 	}
 	err := a.actor.CreateReminder(ctx, req)
 	return &emptypb.Empty{}, err

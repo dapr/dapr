@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -30,14 +31,25 @@ type FakeStateStoreItem struct {
 }
 
 type FakeStateStore struct {
-	Items map[string]*FakeStateStoreItem
+	NoLock bool
+	Items  map[string]*FakeStateStoreItem
 
-	lock sync.RWMutex
+	lock      sync.RWMutex
+	callCount map[string]*atomic.Uint64
 }
 
 func NewFakeStateStore() *FakeStateStore {
 	return &FakeStateStore{
 		Items: map[string]*FakeStateStoreItem{},
+		callCount: map[string]*atomic.Uint64{
+			"Delete":     {},
+			"BulkDelete": {},
+			"Get":        {},
+			"BulkGet":    {},
+			"Set":        {},
+			"BulkSet":    {},
+			"Multi":      {},
+		},
 	}
 }
 
@@ -63,22 +75,33 @@ func (f *FakeStateStore) Features() []state.Feature {
 }
 
 func (f *FakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
+	f.callCount["Delete"].Add(1)
+
+	if !f.NoLock {
+		f.lock.Lock()
+		defer f.lock.Unlock()
+	}
+
 	delete(f.Items, req.Key)
 
 	return nil
 }
 
-func (f *FakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
+func (f *FakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
+	f.callCount["BulkDelete"].Add(1)
+
 	return nil
 }
 
 func (f *FakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
-	f.lock.RLock()
-	defer f.lock.RUnlock()
-	item := f.Items[req.Key]
+	f.callCount["Get"].Add(1)
 
+	if !f.NoLock {
+		f.lock.RLock()
+		defer f.lock.RUnlock()
+	}
+
+	item := f.Items[req.Key]
 	if item == nil {
 		return &state.GetResponse{Data: nil, ETag: nil}, nil
 	}
@@ -87,6 +110,8 @@ func (f *FakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state
 }
 
 func (f *FakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
+	f.callCount["BulkGet"].Add(1)
+
 	res := []state.BulkGetResponse{}
 	for _, oneRequest := range req {
 		oneResponse, err := f.Get(ctx, &state.GetRequest{
@@ -109,9 +134,14 @@ func (f *FakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest, op
 }
 
 func (f *FakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
+	f.callCount["Set"].Add(1)
+
+	if !f.NoLock {
+		f.lock.Lock()
+		defer f.lock.Unlock()
+	}
+
 	b, _ := marshal(&req.Value)
-	f.lock.Lock()
-	defer f.lock.Unlock()
 	f.Items[req.Key] = f.NewItem(b)
 
 	return nil
@@ -121,13 +151,20 @@ func (f *FakeStateStore) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
 
-func (f *FakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
+func (f *FakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
+	f.callCount["BulkSet"].Add(1)
+
 	return nil
 }
 
 func (f *FakeStateStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
-	f.lock.Lock()
-	defer f.lock.Unlock()
+	f.callCount["Multi"].Add(1)
+
+	if !f.NoLock {
+		f.lock.Lock()
+		defer f.lock.Unlock()
+	}
+
 	// First we check all eTags
 	for _, o := range request.Operations {
 		var eTag *string
@@ -163,6 +200,13 @@ func (f *FakeStateStore) Multi(ctx context.Context, request *state.Transactional
 	}
 
 	return nil
+}
+
+func (f *FakeStateStore) CallCount(op string) uint64 {
+	if f.callCount[op] == nil {
+		return 0
+	}
+	return f.callCount[op].Load()
 }
 
 // Adapted from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16

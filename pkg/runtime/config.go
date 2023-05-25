@@ -56,7 +56,7 @@ const (
 	// DefaultGracefulShutdownDuration is the default option for the duration of the graceful shutdown.
 	DefaultGracefulShutdownDuration = time.Second * 5
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
-	DefaultAppHealthCheckPath = "/health"
+	DefaultAppHealthCheckPath = "/healthz"
 	// DefaultChannelAddress is the default local network address that user application listen on.
 	DefaultChannelAddress = "127.0.0.1"
 )

@@ -236,8 +236,13 @@ message SetRequest {
 // reserved for future-proof extensibility
 message SetResponse {}
 
+message BulkDeleteRequestOptions {
+  int64 parallelism = 1;
+}
+
 message BulkDeleteRequest {
   repeated DeleteRequest items = 1;
+  BulkDeleteRequestOptions options = 2;
 }
 
 // reserved for future-proof extensibility
@@ -271,8 +276,13 @@ message BulkGetResponse {
   repeated BulkStateItem items = 1;
 }
 
+message BulkSetRequestOptions {
+  int64 parallelism = 1;
+}
+
 message BulkSetRequest {
   repeated SetRequest items = 1;
+  BulkSetRequestOptions options = 2;
 }
 
 // reserved for future-proof extensibility
