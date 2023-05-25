@@ -114,6 +114,11 @@ func (g *Manager) GetAppClient() (grpc.ClientConnInterface, error) {
 	return g.localConn.Get(g.defaultLocalConnCreateFn)
 }
 
+// ReleaseAppClient decreases the reference counter of a gRPC connection in the connection pool.
+func (g *Manager) ReleaseAppClient(conn grpc.ClientConnInterface) {
+	g.localConn.Release(conn)
+}
+
 // CloseAppClient closes the active app client connections.
 func (g *Manager) CloseAppClient() {
 	g.localConn.DestroyAll()

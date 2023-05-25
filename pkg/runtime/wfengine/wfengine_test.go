@@ -565,6 +565,46 @@ func TestRaiseEvent(t *testing.T) {
 	}
 }
 
+// TestContinueAsNew_WithEvents verifies that a workflow can continue as new and process any received events
+// in subsequent iterations.
+func TestContinueAsNew_WithEvents(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("ContinueAsNewTest", func(ctx *task.OrchestrationContext) (any, error) {
+		var input int32
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		var complete bool
+		if err := ctx.WaitForSingleEvent("MyEvent", -1).Await(&complete); err != nil {
+			return nil, err
+		}
+		if complete {
+			return input, nil
+		}
+		ctx.ContinueAsNew(input+1, task.WithKeepUnprocessedEvents())
+		return nil, nil
+	})
+
+	// Initialization
+	ctx := context.Background()
+	client, engine := startEngine(ctx, t, r)
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			// Run the orchestration
+			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
+			require.NoError(t, err)
+			for i := 0; i < 10; i++ {
+				require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithJsonSerializableEventData(false)))
+			}
+			require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithJsonSerializableEventData(true)))
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
+		})
+	}
+}
+
 // TestPurge verifies that a workflow can have a series of activities created and then
 // verifies that all the metadata for those activities can be deleted from the statestore
 func TestPurge(t *testing.T) {

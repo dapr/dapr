@@ -15,15 +15,10 @@ syntax = "proto3";
 
 package dapr.proto.placement.v1;
 
-import "google/protobuf/empty.proto";
-
 option go_package = "github.com/dapr/dapr/pkg/proto/placement/v1;placement";
 
 // Placement service is used to report Dapr runtime host status.
 service Placement {
-  // Returns current placement tables.
-  rpc GetPlacementTables (google.protobuf.Empty) returns (GetPlacementTablesResponse) {}
-  // Reports Dapr actor status and retrieves actor placement table.
   rpc ReportDaprStatus(stream Host) returns (stream PlacementOrder) {}
 }
 
@@ -50,16 +45,4 @@ message Host {
   int64 load = 3;
   repeated string entities = 4;
   string id = 5;
-}
-
-message HostInfo {
-  string name = 1;
-  string app_id = 2;
-  repeated string entities = 3;
-  int64 updated_at = 4;
-}
-
-message GetPlacementTablesResponse {
-  map<string, HostInfo> host_map = 1;
-  uint64 table_version = 2;
 }

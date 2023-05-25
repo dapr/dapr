@@ -65,7 +65,6 @@ func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflow
 }
 
 type workflowEngineComponent struct {
-	workflows.Workflow
 	logger logger.Logger
 	client backend.TaskHubClient
 }
@@ -199,7 +198,7 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 	}
 }
 
-func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workflows.PauseRequest) error {
+func (c *workflowEngineComponent) Pause(ctx context.Context, req *workflows.PauseRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -212,7 +211,7 @@ func (c *workflowEngineComponent) PauseWorkflow(ctx context.Context, req *workfl
 	return nil
 }
 
-func (c *workflowEngineComponent) ResumeWorkflow(ctx context.Context, req *workflows.ResumeRequest) error {
+func (c *workflowEngineComponent) Resume(ctx context.Context, req *workflows.ResumeRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -235,6 +234,10 @@ func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workfl
 	}
 
 	c.logger.Infof("purging workflow instance '%s'", req.InstanceID)
+	return nil
+}
+
+func (c *workflowEngineComponent) GetComponentMetadata() map[string]string {
 	return nil
 }
 

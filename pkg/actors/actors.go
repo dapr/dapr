@@ -104,33 +104,32 @@ type transactionalStateStore interface {
 }
 
 type actorsRuntime struct {
-	appChannel             channel.AppChannel
-	placement              PlacementService
-	grpcConnectionFn       GRPCConnectionFn
-	config                 Config
-	actorsTable            *sync.Map
-	activeTimers           *sync.Map
-	activeTimersCount      map[string]*int64
-	activeTimersCountLock  sync.RWMutex
-	activeTimersLock       sync.RWMutex
-	activeReminders        *sync.Map
-	remindersLock          sync.RWMutex
-	remindersMigrationLock sync.Mutex
-	activeRemindersLock    sync.RWMutex
-	reminders              map[string][]actorReminderReference
-	evaluationLock         sync.RWMutex
-	evaluationChan         chan struct{}
-	appHealthy             *atomic.Bool
-	certChain              *daprCredentials.CertChain
-	tracingSpec            configuration.TracingSpec
-	resiliency             resiliency.Provider
-	storeName              string
-	compStore              *compstore.ComponentStore
-	ctx                    context.Context
-	cancel                 context.CancelFunc
-	clock                  clock.WithTicker
-	internalActors         map[string]InternalActor
-	internalActorChannel   *internalActorChannel
+	appChannel            channel.AppChannel
+	placement             PlacementService
+	grpcConnectionFn      GRPCConnectionFn
+	config                Config
+	actorsTable           *sync.Map
+	activeTimers          *sync.Map
+	activeTimersCount     map[string]*int64
+	activeTimersCountLock sync.RWMutex
+	activeTimersLock      sync.RWMutex
+	activeReminders       *sync.Map
+	remindersLock         sync.RWMutex
+	remindersStoringLock  sync.Mutex
+	reminders             map[string][]actorReminderReference
+	evaluationLock        sync.RWMutex
+	evaluationChan        chan struct{}
+	appHealthy            *atomic.Bool
+	certChain             *daprCredentials.CertChain
+	tracingSpec           configuration.TracingSpec
+	resiliency            resiliency.Provider
+	storeName             string
+	compStore             *compstore.ComponentStore
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	clock                 clock.WithTicker
+	internalActors        map[string]InternalActor
+	internalActorChannel  *internalActorChannel
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -997,38 +996,35 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 // Executes a reminder or timer
 func (a *actorsRuntime) executeReminder(reminder *reminders.Reminder, isTimer bool) (err error) {
 	var (
-		b            []byte
+		data         any
 		logName      string
 		invokeMethod string
 	)
+
 	if isTimer {
 		logName = "timer"
 		invokeMethod = "timer/" + reminder.Name
-		b, err = json.Marshal(TimerResponse{
+		data = &TimerResponse{
 			Callback: reminder.Callback,
 			Data:     reminder.Data,
 			DueTime:  reminder.DueTime,
 			Period:   reminder.Period.String(),
-		})
+		}
 	} else {
 		logName = "reminder"
 		invokeMethod = "remind/" + reminder.Name
-		b, err = json.Marshal(ReminderResponse{
+		data = &ReminderResponse{
 			DueTime: reminder.DueTime,
 			Period:  reminder.Period.String(),
 			Data:    reminder.Data,
-		})
+		}
 	}
-	if err != nil {
-		return err
-	}
-
 	policyDef := a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
 
 	log.Debug("Executing " + logName + " for actor " + reminder.Key())
 	req := invokev1.NewInvokeMethodRequest(invokeMethod).
 		WithActor(reminder.ActorType, reminder.ActorID).
-		WithRawDataBytes(b).
+		WithDataObject(data).
 		WithContentType(invokev1.JSONContentType)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
@@ -1126,21 +1122,35 @@ func (m *ActorMetadata) calculateEtag(partitionID uint32) *string {
 	return m.RemindersMetadata.partitionsEtag[partitionID]
 }
 
-func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) ([]reminders.Reminder, string, *string) {
+func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) (bool, []reminders.Reminder, string, *string) {
 	// First, we find the partition
 	var partitionID uint32
+	l := len(reminderRefs)
 	if m.RemindersMetadata.PartitionCount > 0 {
+		var found bool
 		for _, reminderRef := range reminderRefs {
 			if reminderRef.reminder.ActorType == actorType && reminderRef.reminder.ActorID == actorID && reminderRef.reminder.Name == reminderName {
 				partitionID = reminderRef.actorRemindersPartitionID
+				found = true
 				break
 			}
 		}
+
+		// If the reminder doesn't exist, return without making any change
+		if !found {
+			return false, nil, "", nil
+		}
+
+		// When calculating the initial allocated size of remindersInPartitionAfterRemoval, if we have partitions assume len(reminderRefs)/PartitionCount for an initial count
+		// This is unlikely to avoid all re-allocations, but it's still better than allocating the slice with capacity 0
+		l /= m.RemindersMetadata.PartitionCount
 	}
 
-	var remindersInPartitionAfterRemoval []reminders.Reminder
+	remindersInPartitionAfterRemoval := make([]reminders.Reminder, 0, l)
+	var found bool
 	for _, reminderRef := range reminderRefs {
 		if reminderRef.reminder.ActorType == actorType && reminderRef.reminder.ActorID == actorID && reminderRef.reminder.Name == reminderName {
+			found = true
 			continue
 		}
 
@@ -1150,8 +1160,13 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminder
 		}
 	}
 
+	// If no reminder found, return false here to short-circuit the next operations
+	if !found {
+		return false, nil, "", nil
+	}
+
 	stateKey := m.calculateRemindersStateKey(actorType, partitionID)
-	return remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
+	return true, remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
 }
 
 func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderReference, reminder reminders.Reminder) ([]reminders.Reminder, actorReminderReference, string, *string) {
@@ -1205,8 +1220,12 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		return err
 	}
 
-	a.activeRemindersLock.Lock()
-	defer a.activeRemindersLock.Unlock()
+	if !a.waitForEvaluationChan() {
+		return errors.New("error creating reminder: timed out after 5s")
+	}
+
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
 
 	existing, ok := a.getReminder(req.Name, req.ActorType, req.ActorID)
 	if ok {
@@ -1218,10 +1237,6 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		} else {
 			return nil
 		}
-	}
-
-	if !a.waitForEvaluationChan() {
-		return errors.New("error creating reminder: timed out after 5s")
 	}
 
 	stop := make(chan struct{})
@@ -1425,9 +1440,9 @@ func (a *actorsRuntime) migrateRemindersForActorType(ctx context.Context, store 
 		return nil
 	}
 
-	// Nice to have: avoid conflicting migration within the same process.
-	a.remindersMigrationLock.Lock()
-	defer a.remindersMigrationLock.Unlock()
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
+
 	log.Warnf("migrating actor metadata record for actor type %s", actorType)
 
 	// Fetch all reminders for actor type.
@@ -1619,8 +1634,13 @@ func (a *actorsRuntime) saveRemindersInPartitionRequest(stateKey string, reminde
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
-	a.activeRemindersLock.Lock()
-	defer a.activeRemindersLock.Unlock()
+	if !a.waitForEvaluationChan() {
+		return errors.New("error deleting reminder: timed out after 5s")
+	}
+
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
+
 	return a.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
 }
 
@@ -1628,10 +1648,6 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 	store, err := a.stateStore()
 	if err != nil {
 		return err
-	}
-
-	if !a.waitForEvaluationChan() {
-		return errors.New("error deleting reminder: timed out after 5s")
 	}
 
 	reminderKey := constructCompositeKey(actorType, actorID, name)
@@ -1652,17 +1668,22 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		noOp := resiliency.NoOp{}
 		policyDef = noOp.EndpointPolicy("", "")
 	}
-	policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
-	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+	policyRunner := resiliency.NewRunner[bool](ctx, policyDef)
+	found, err := policyRunner(func(ctx context.Context) (bool, error) {
 		reminders, actorMetadata, rErr := a.getRemindersForActorType(ctx, actorType, false)
 		if rErr != nil {
-			return struct{}{}, fmt.Errorf("error obtaining reminders for actor type %s: %w", actorType, rErr)
+			return false, fmt.Errorf("error obtaining reminders for actor type %s: %w", actorType, rErr)
 		}
 
-		// remove from partition first.
-		remindersInPartition, stateKey, etag := actorMetadata.removeReminderFromPartition(reminders, actorType, actorID, name)
+		// Remove from partition first
+		found, remindersInPartition, stateKey, etag := actorMetadata.removeReminderFromPartition(reminders, actorType, actorID, name)
 
-		// now, we can remove from the "global" list.
+		// If the reminder doesn't exist, stop here
+		if !found {
+			return false, nil
+		}
+
+		// Now, we can remove from the "global" list.
 		n := 0
 		for _, v := range reminders {
 			if v.reminder.ActorType != actorType ||
@@ -1679,7 +1700,7 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		// Check if context is still valid
 		rErr = ctx.Err()
 		if rErr != nil {
-			return struct{}{}, fmt.Errorf("context error before saving reminders: %w", rErr)
+			return false, fmt.Errorf("context error before saving reminders: %w", rErr)
 		}
 
 		// Save the partition in the database, in a transaction where we also save the metadata.
@@ -1693,17 +1714,21 @@ func (a *actorsRuntime) doDeleteReminder(ctx context.Context, actorType, actorID
 		}
 		rErr = a.executeStateStoreTransaction(ctx, store, stateOperations, stateMetadata)
 		if rErr != nil {
-			return struct{}{}, fmt.Errorf("error saving reminders partition and metadata: %w", rErr)
+			return false, fmt.Errorf("error saving reminders partition and metadata: %w", rErr)
 		}
 
 		a.remindersLock.Lock()
 		diag.DefaultMonitoring.ActorReminders(actorType, int64(len(reminders)))
 		a.reminders[actorType] = reminders
 		a.remindersLock.Unlock()
-		return struct{}{}, nil
+		return true, nil
 	})
 	if err != nil {
 		return err
+	}
+	if !found {
+		// Reminder was not found, so nothing to do here
+		return nil
 	}
 
 	deletePolicyRunner := resiliency.NewRunner[struct{}](ctx,
@@ -1728,8 +1753,12 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 		return err
 	}
 
-	a.activeRemindersLock.Lock()
-	defer a.activeRemindersLock.Unlock()
+	if !a.waitForEvaluationChan() {
+		return errors.New("error renaming reminder: timed out after 5s")
+	}
+
+	a.remindersStoringLock.Lock()
+	defer a.remindersStoringLock.Unlock()
 
 	oldReminder, exists := a.getReminder(req.OldName, req.ActorType, req.ActorID)
 	if !exists {
@@ -1740,10 +1769,6 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 	err = a.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.OldName)
 	if err != nil {
 		return err
-	}
-
-	if !a.waitForEvaluationChan() {
-		return errors.New("error renaming reminder: timed out after 5s")
 	}
 
 	reminder := &reminders.Reminder{

@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -378,10 +377,6 @@ type testServer struct {
 	lastTimestamp      time.Time
 	recvError          error
 	isGracefulShutdown atomic.Bool
-}
-
-func (s *testServer) GetPlacementTables(ctx context.Context, empty *emptypb.Empty) (*placementv1pb.GetPlacementTablesResponse, error) {
-	return nil, nil
 }
 
 func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
