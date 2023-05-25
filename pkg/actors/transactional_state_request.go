@@ -36,8 +36,10 @@ const (
 
 // Options for the StateOperation method
 type StateOperationOpts struct {
-	Metadata        map[string]string
-	ContentType     *string
+	Metadata    map[string]string
+	ContentType *string
+
+	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
 }
 
@@ -136,6 +138,7 @@ func (t TransactionalUpsert) StateOperation(baseKey string, opts StateOperationO
 		maps.Copy(t.Metadata, opts.Metadata)
 	}
 
+	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	if !opts.StateTTLEnabled {
 		if _, ok := t.Metadata["ttlInSeconds"]; ok {
 			return op, fmt.Errorf("ttlInSeconds is not supported without the %q feature enabled", config.ActorStateTTL)
