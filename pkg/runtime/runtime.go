@@ -2526,6 +2526,8 @@ func (a *DaprRuntime) initActors() error {
 		Resiliency:       a.resiliency,
 		StateStoreName:   a.actorStateStoreName,
 		CompStore:        a.compStore,
+		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 	})
 	err = act.Init()
 	if err == nil {

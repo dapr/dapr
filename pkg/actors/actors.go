@@ -130,6 +130,9 @@ type actorsRuntime struct {
 	clock                 clock.WithTicker
 	internalActors        map[string]InternalActor
 	internalActorChannel  *internalActorChannel
+
+	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+	stateTTLEnabled bool
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -174,6 +177,9 @@ type ActorsOpts struct {
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
 
+	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+	StateTTLEnabled bool
+
 	// MockPlacement is a placement service implementation used for testing
 	MockPlacement PlacementService
 }
@@ -209,6 +215,8 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
 		compStore:            opts.CompStore,
+		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+		stateTTLEnabled: opts.StateTTLEnabled,
 	}
 }
 
@@ -651,6 +659,8 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 	for i, o := range req.Operations {
 		operations[i], err = o.StateOperation(baseKey, StateOperationOpts{
 			Metadata: metadata,
+			// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+			StateTTLEnabled: a.stateTTLEnabled,
 		})
 		if err != nil {
 			return err
