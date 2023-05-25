@@ -28,7 +28,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["pods"]
-{{- if .Values.global.operator.watchdogCanPatchPodLabels }}
+{{- if not .Values.global.operator.watchdogCanPatchPodLabels }}
     verbs: ["get", "list", "delete", "watch"]
 {{- else }}
     verbs: ["get", "list", "delete", "watch", "patch"]
