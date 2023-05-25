@@ -38,10 +38,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	streamutils "github.com/dapr/dapr/utils/streams"
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.external-app-channel")
 
 const (
 	// HTTPStatusCode is an dapr http channel status code.
