@@ -74,7 +74,7 @@ func (f *FakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) e
 	return nil
 }
 
-func (f *FakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest) error {
+func (f *FakeStateStore) BulkDelete(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
 	return nil
 }
 
@@ -130,7 +130,7 @@ func (f *FakeStateStore) GetComponentMetadata() map[string]string {
 	return map[string]string{}
 }
 
-func (f *FakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest) error {
+func (f *FakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 	return nil
 }
 

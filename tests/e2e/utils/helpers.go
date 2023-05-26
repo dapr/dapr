@@ -30,8 +30,8 @@ const (
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
 type SimpleKeyValue struct {
-	Key   interface{}
-	Value interface{}
+	Key   any
+	Value any
 }
 
 // StateTransactionKeyValue is a key-value pair with an operation type.

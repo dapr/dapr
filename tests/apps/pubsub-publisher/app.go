@@ -623,7 +623,7 @@ func formatDuration(d time.Duration) string {
 }
 
 // appRouter initializes restful api router
-func appRouter() *mux.Router {
+func appRouter() http.Handler {
 	log.Printf("Enter appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 

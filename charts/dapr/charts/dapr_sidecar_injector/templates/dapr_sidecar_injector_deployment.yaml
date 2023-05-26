@@ -3,6 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dapr-sidecar-injector
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-sidecar-injector
     {{- range $key, $value := .Values.global.k8sLabels }}

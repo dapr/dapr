@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
-func (a *UniversalAPI) getStateStore(name string) (state.Store, error) {
+func (a *UniversalAPI) GetStateStore(name string) (state.Store, error) {
 	if a.CompStore.StateStoresLen() == 0 {
 		err := messages.ErrStateStoresNotConfigured
 		a.Logger.Debug(err)
@@ -45,7 +45,7 @@ func (a *UniversalAPI) getStateStore(name string) (state.Store, error) {
 }
 
 func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.GetStateStore(in.StoreName)
 	if err != nil {
 		// Error has already been logged
 		return nil, err
