@@ -17,13 +17,6 @@
         // Necessary for components-contrib's certification tests
         "GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "ignore"
     },
-    "extensions": [
-        "davidanson.vscode-markdownlint",
-        "golang.go",
-        "ms-azuretools.vscode-dapr",
-        "ms-azuretools.vscode-docker",
-        "ms-kubernetes-tools.vscode-kubernetes-tools"
-    ],
     "features": {
         "ghcr.io/devcontainers/features/sshd:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {},
@@ -64,14 +57,25 @@
         // Run the entrypoint defined in container image.
         "--init"
     ],
-    "settings": {
-        "go.toolsManagement.checkForUpdates": "local",
-        "go.useLanguageServer": true,
-        "go.gopath": "/go",
-        "go.buildTags": "e2e,perf,conftests,unit,integration_test,certtests",
-        "git.alwaysSignOff": true,
-        "terminal.integrated.env.linux": {
-            "GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "ignore"
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "davidanson.vscode-markdownlint",
+                "golang.go",
+                "ms-azuretools.vscode-dapr",
+                "ms-azuretools.vscode-docker",
+                "ms-kubernetes-tools.vscode-kubernetes-tools"
+            ],
+            "settings": {
+                "go.toolsManagement.checkForUpdates": "local",
+                "go.useLanguageServer": true,
+                "go.gopath": "/go",
+                "go.buildTags": "e2e,perf,conftests,unit,integration_test,certtests,all_components",
+                "git.alwaysSignOff": true,
+                "terminal.integrated.env.linux": {
+                    "GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "ignore"
+                }
+            },
         }
     },
     "workspaceFolder": "/workspaces/dapr",
