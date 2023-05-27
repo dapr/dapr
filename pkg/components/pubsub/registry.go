@@ -37,6 +37,12 @@ func NewRegistry() *Registry {
 	}
 }
 
+func (p *Registry) HasComponent(name, version, logName string) bool {
+	_, ok := p.getPubSub(name, version, logName)
+
+	return ok
+}
+
 // RegisterComponent adds a new message bus to the registry.
 func (p *Registry) RegisterComponent(componentFactory func(logger.Logger) pubsub.PubSub, names ...string) {
 	for _, name := range names {

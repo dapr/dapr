@@ -125,14 +125,17 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 
 		componentName := removeExt(f.Name())
 		for _, svc := range serviceList {
-			services = append(services, service{
-				componentName: componentName,
-				protoRef:      svc,
-				dialer:        dialer,
-			})
+			// NOTE: ignore the reflection service itself.
+			if svc != reflectpb.ServerReflection_ServiceDesc.ServiceName {
+				services = append(services, service{
+					componentName: componentName,
+					protoRef:      svc,
+					dialer:        dialer,
+				})
+			}
 		}
 	}
-	log.Debugf("found %d pluggable component services", len(services)-1) // reflection api doesn't count.
+	log.Debugf("found %d pluggable component services", len(services))
 	return services, nil
 }
 

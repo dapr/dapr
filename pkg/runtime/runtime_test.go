@@ -361,7 +361,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
+		_, err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -384,7 +384,7 @@ func TestDoProcessComponent(t *testing.T) {
 		lockComponentV3.Spec.Version = "v3"
 
 		// act
-		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentV3)
+		_, err := rt.doProcessOneComponent(components.CategoryLock, lockComponentV3)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -414,7 +414,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 		}
 		// act
-		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentWithWrongStrategy)
+		_, err := rt.doProcessOneComponent(components.CategoryLock, lockComponentWithWrongStrategy)
 		// assert
 		assert.Error(t, err)
 	})
@@ -433,8 +433,9 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
+		found, err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
 		// assert
+		assert.True(t, found)
 		assert.Nil(t, err, "unexpected error")
 		// get modified key
 		key, err := lockLoader.GetModifiedLockKey("test", "mockLock", "appid-1")
@@ -462,7 +463,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
 
 		// act
-		err := rt.doProcessOneComponent(components.CategoryPubSub, pubsubComponent)
+		_, err := rt.doProcessOneComponent(components.CategoryPubSub, pubsubComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -471,9 +472,10 @@ func TestDoProcessComponent(t *testing.T) {
 
 	t.Run("test invalid category component", func(t *testing.T) {
 		// act
-		err := rt.doProcessOneComponent(components.Category("invalid"), pubsubComponent)
+		found, err := rt.doProcessOneComponent(components.Category("invalid"), pubsubComponent)
 
 		// assert
+		assert.False(t, found)
 		assert.NoError(t, err, "no error expected")
 	})
 }
@@ -847,9 +849,31 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
 		// act
-		err := rt.initState(mockStateComponent)
+		found, err := rt.initState(mockStateComponent)
 
 		// assert
+		assert.True(t, found)
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init state store, not found", func(t *testing.T) {
+		// setup
+		missingComponent := componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: TestPubsubName,
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:    "state.missingComponent",
+				Version: "v1",
+				Metadata: []componentsV1alpha1.MetadataItem{},
+			},
+		}
+
+		// act
+		found, err := rt.initState(missingComponent)
+
+		// assert
+		assert.False(t, found)
 		assert.NoError(t, err, "expected no error")
 	})
 
@@ -858,9 +882,10 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRuntime(rt, primaryKey, assert.AnError)
 
 		// act
-		err := rt.initState(mockStateComponent)
+		found, err := rt.initState(mockStateComponent)
 
 		// assert
+		assert.True(t, found)
 		assert.Error(t, err, "expected error")
 		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
@@ -870,10 +895,11 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRuntime(rt, primaryKey, nil)
 
 		// act
-		err := rt.initState(mockStateComponent)
+		found, err := rt.initState(mockStateComponent)
 		ok := encryption.EncryptedStateStore("mockState")
 
 		// assert
+		assert.True(t, found)
 		assert.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -884,10 +910,11 @@ func TestInitState(t *testing.T) {
 
 		rt.compStore.AddSecretStore("mockSecretStore", &mockSecretStore{})
 
-		err := rt.initState(mockStateComponent)
+		found, err := rt.initState(mockStateComponent)
 		ok := encryption.EncryptedStateStore("testpubsub")
 
 		// assert
+		assert.True(t, found)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -1525,6 +1552,29 @@ func TestInitPubSub(t *testing.T) {
 
 		return mockPubSub, mockPubSub2
 	}
+
+	t.Run("registered pubsub components", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		for _, comp := range pubsubComponents {
+			found, err := rt.initPubSub(comp)
+			assert.True(t, found)
+			assert.NoError(t, err)
+		}
+	})
+
+	t.Run("no registered pubsub component", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r.pubSubRegistry = pubsubLoader.NewRegistry()
+		defer stopRuntime(t, r)
+
+		c := componentsV1alpha1.Component{}
+		c.ObjectMeta.Name = "testPubSubBinding"
+		c.Spec.Type = "bindings.testPubSubBinding"
+		found, err := r.initPubSub(c)
+		assert.False(t, found)
+		assert.NoError(t, err)
+	})
 
 	t.Run("subscribe 2 topics", func(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
@@ -3863,7 +3913,8 @@ func TestPubsubWithResiliency(t *testing.T) {
 	component.ObjectMeta.Name = "failPubsub"
 	component.Spec.Type = "pubsub.failingPubsub"
 
-	err := r.initPubSub(component)
+	found, err := r.initPubSub(component)
+	assert.True(t, found)
 	assert.NoError(t, err)
 
 	t.Run("pubsub publish retries with resiliency", func(t *testing.T) {
@@ -4100,10 +4151,12 @@ func TestPubSubDeadLetter(t *testing.T) {
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).
 			Return(nil, errors.New("failed to send"))
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		err := rt.Publish(&pubsub.PublishRequest{
+		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"id":"1"}`),
@@ -4149,10 +4202,12 @@ func TestPubSubDeadLetter(t *testing.T) {
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).
 			Return(nil, errors.New("failed to send"))
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		err := rt.Publish(&pubsub.PublishRequest{
+		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"id":"1"}`),
@@ -5024,7 +5079,8 @@ func TestInitBindings(t *testing.T) {
 		c := componentsV1alpha1.Component{}
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
-		err := r.initBinding(c)
+		found, err := r.initBinding(c)
+		assert.True(t, found)
 		assert.NoError(t, err)
 	})
 
@@ -5042,7 +5098,8 @@ func TestInitBindings(t *testing.T) {
 		c := componentsV1alpha1.Component{}
 		c.ObjectMeta.Name = "testOutputBinding"
 		c.Spec.Type = "bindings.testOutputBinding"
-		err := r.initBinding(c)
+		found, err := r.initBinding(c)
+		assert.True(t, found)
 		assert.NoError(t, err)
 	})
 
@@ -5067,13 +5124,28 @@ func TestInitBindings(t *testing.T) {
 		input := componentsV1alpha1.Component{}
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
-		err := r.initBinding(input)
+		found, err := r.initBinding(input)
+		assert.True(t, found)
 		assert.NoError(t, err)
 
 		output := componentsV1alpha1.Component{}
 		output.ObjectMeta.Name = "testinput"
 		output.Spec.Type = "bindings.testoutput"
-		err = r.initBinding(output)
+		found, err = r.initBinding(output)
+		assert.True(t, found)
+		assert.NoError(t, err)
+	})
+
+	t.Run("no registered binding", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r.bindingsRegistry = bindingsLoader.NewRegistry()
+		defer stopRuntime(t, r)
+
+		c := componentsV1alpha1.Component{}
+		c.ObjectMeta.Name = "testInputBinding"
+		c.Spec.Type = "bindings.testBinding"
+		found, err := r.initBinding(c)
+		assert.False(t, found)
 		assert.NoError(t, err)
 	})
 }
@@ -5168,7 +5240,8 @@ func TestBindingResiliency(t *testing.T) {
 	output := componentsV1alpha1.Component{}
 	output.ObjectMeta.Name = "failOutput"
 	output.Spec.Type = "bindings.failingoutput"
-	err := r.initBinding(output)
+	found, err := r.initBinding(output)
+	assert.True(t, found)
 	assert.NoError(t, err)
 
 	t.Run("output binding retries on failure with resiliency", func(t *testing.T) {
@@ -5458,12 +5531,21 @@ func TestStopWithErrors(t *testing.T) {
 	}
 
 	require.NoError(t, rt.initOutputBinding(mockOutputBindingComponent))
-	require.NoError(t, rt.initPubSub(mockPubSubComponent))
-	require.NoError(t, rt.initState(mockStateComponent))
-	require.NoError(t, rt.initSecretStore(mockSecretsComponent))
+
+	found, err := rt.initPubSub(mockPubSubComponent)
+	require.True(t, found)
+	require.NoError(t, err)
+
+	found, err = rt.initState(mockStateComponent)
+	require.True(t, found)
+	require.NoError(t, err)
+
+	found, err = rt.initSecretStore(mockSecretsComponent)
+	require.True(t, found)
+	require.NoError(t, err)
 	rt.nameResolver = &mockNameResolver{closeErr: testErr}
 
-	err := rt.shutdownOutputComponents()
+	err = rt.shutdownOutputComponents()
 	require.Error(t, err)
 	assert.Len(t, strings.Split(err.Error(), "\n"), 5)
 }
@@ -5686,9 +5768,18 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 
 	require.NoError(t, rt.initInputBinding(cin))
 	require.NoError(t, rt.initOutputBinding(cout))
-	require.NoError(t, rt.initPubSub(cPubSub))
-	require.NoError(t, rt.initState(cStateStore))
-	require.NoError(t, rt.initSecretStore(cSecretStore))
+
+	found, err := rt.initPubSub(cPubSub)
+	require.True(t, found)
+	require.NoError(t, err)
+
+	found, err = rt.initState(cStateStore)
+	require.True(t, found)
+	require.NoError(t, err)
+
+	found, err = rt.initSecretStore(cSecretStore)
+	require.True(t, found)
+	require.NoError(t, err)
 
 	capabilities := rt.getComponentsCapabilitesMap()
 	assert.Equal(t, 5, len(capabilities),
@@ -5851,7 +5942,9 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel := new(channelt.MockAppChannel)
 	rt.appChannel = mockAppChannel
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
-	require.NoError(t, rt.initPubSub(cPubSub))
+	found, err := rt.initPubSub(cPubSub)
+	require.True(t, found)
+	require.NoError(t, err)
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.startSubscriptions()
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
@@ -5942,9 +6035,10 @@ func TestGracefulShutdownActors(t *testing.T) {
 	initMockStateStoreForRuntime(rt, encryptKey, nil)
 
 	// act
-	err := rt.initState(mockStateComponent)
+	found, err := rt.initState(mockStateComponent)
 
 	// assert
+	assert.True(t, found)
 	assert.NoError(t, err, "expected no error")
 
 	rt.namespace = "test"

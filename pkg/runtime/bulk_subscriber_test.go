@@ -140,10 +140,12 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		err := rt.Publish(&pubsub.PublishRequest{
+		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"orderId":"1"}`),
@@ -186,12 +188,14 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
 		order := `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
 
-		err := rt.Publish(&pubsub.PublishRequest{
+		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Data:       []byte(order),
@@ -235,12 +239,14 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(2)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -299,12 +305,14 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(2)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -364,7 +372,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt.appChannel = mockAppChannel
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(10)
@@ -403,7 +413,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders1")).Return(respInvoke1, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders2")).Return(respInvoke2, nil)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -473,7 +483,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt.appChannel = mockAppChannel
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(4)
@@ -495,7 +507,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders")).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -555,7 +567,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt.appChannel = mockAppChannel
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(5)
@@ -582,7 +596,7 @@ func TestBulkSubscribe(t *testing.T) {
 			matchDaprRequestMethod("orders"),
 		).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -641,7 +655,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt.appChannel = mockAppChannel
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(5)
@@ -667,7 +683,7 @@ func TestBulkSubscribe(t *testing.T) {
 			matchDaprRequestMethod("orders"),
 		).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -772,10 +788,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		// properly close the app channel created
 		defer rt.grpc.CloseAppClient()
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -885,10 +903,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		rt.createAppChannel()
 		defer rt.grpc.CloseAppClient()
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -974,10 +994,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		rt.createAppChannel()
 		defer rt.grpc.CloseAppClient()
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1065,10 +1087,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		rt.createAppChannel()
 		defer rt.grpc.CloseAppClient()
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1151,10 +1175,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		rt.createAppChannel()
 		defer rt.grpc.CloseAppClient()
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1223,10 +1249,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		rt.createAppChannel()
 		defer rt.grpc.CloseAppClient()
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		found, err := rt.initPubSub(pubsubComponent)
+		require.True(t, found)
+		require.NoError(t, err)
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1321,4 +1349,9 @@ func verifyBulkSubscribeRequest(expectedData []string, expectedExtension Expecte
 		}
 	}
 	return true
+}
+
+func verifyComponentInit(t require.TestingT, found bool, err error) {
+	require.True(t, found)
+	require.NoError(t, err)
 }
