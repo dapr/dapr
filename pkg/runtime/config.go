@@ -210,7 +210,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 	}
 
 	if configErr != nil {
-		log.Fatalf("error loading configuration: %s", configErr)
+		return nil, fmt.Errorf("error loading configuration: %s", configErr)
 	}
 	if globalConfig == nil {
 		log.Info("loading default configuration")
@@ -252,7 +252,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		intc.applicationProtocol.IsHTTP(),
 	)
 	if err != nil {
-		log.Fatalf(err.Error())
+  return nil, err
 	}
 
 	// API logging can be enabled for this app or for every app, globally in the config
