@@ -4,6 +4,11 @@ global:
       username: postgres
       postgresPassword: example
       database: dapr_test
+primary:
+  initdb:
+    scripts:
+      init.sql: |
+        CREATE TABLE IF NOT EXISTS configtable (KEY VARCHAR NOT NULL, VALUE VARCHAR NOT NULL, VERSION VARCHAR NOT NULL, METADATA JSON);
 persistentVolume:
   enabled: false
 tls:
