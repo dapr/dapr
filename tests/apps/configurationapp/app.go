@@ -46,7 +46,7 @@ const (
 	postgresComponent          = "postgres"
 	redisComponent             = "redis"
 	postgresChannel            = "config"
-	postgresConnectionString   = "host=postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"
+	postgresConnectionString   = "host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"
 	postgresConfigTable        = "configtable"
 )
 
