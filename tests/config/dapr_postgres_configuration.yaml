@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: postgres-configstore
+  name: configstore
 spec:
   type: configuration.postgres
   version: v1

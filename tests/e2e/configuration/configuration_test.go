@@ -39,10 +39,7 @@ const (
 	v1                  = "1.0.0"
 	numHealthChecks     = 60              // Number of times to check for endpoint health per app.
 	defaultWaitTime     = 5 * time.Second // Time to wait for app to receive the updates
-	redisComponent      = "redis"
-	redisConfigStore    = "redis-configstore"
-	postgresComponent   = "postgres"
-	postgresConfigStore = "postgres-configstore"
+	configStore         = "configstore"
 )
 
 var (
@@ -278,17 +275,6 @@ type componentType struct {
 	configStore string
 }
 
-var components []componentType = []componentType{
-	{
-		name:        redisComponent,
-		configStore: redisConfigStore,
-	},
-	{
-		name:        postgresComponent,
-		configStore: postgresConfigStore,
-	},
-}
-
 var protocols []string = []string{
 	"http",
 	"grpc",
@@ -309,21 +295,26 @@ func TestConfiguration(t *testing.T) {
 		_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 		require.NoError(t, err)
 
-		// Run whole test-suite for each component (redis, postgres)
-		for _, component := range components {
-			// Initialize the configuration updater
-			url := fmt.Sprintf("http://%s/initialize-updater", externalURL)
-			componentNameInBytes, _ := json.Marshal(component.name)
-			resp, statusCode, err := utils.HTTPPostWithStatus(url, componentNameInBytes)
-			require.NoError(t, err, "error initializing configuration updater")
-			require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
-			for _, protocol := range protocols {
-				for _, endpointType := range endpointTypes {
-					for _, tt := range configurationTests {
-						t.Run(tt.name, func(t *testing.T) {
-							tt.handler(t, externalURL, protocol, endpointType, component)
-						})
-					}
+		component := componentType{
+			name:        os.Getenv("DAPR_TEST_CONFIG_STORE"),
+			configStore: configStore,
+		}
+		if component.name == "" {
+			component.name = "redis"
+		}
+
+		// Initialize the configuration updater
+		url := fmt.Sprintf("http://%s/initialize-updater", externalURL)
+		componentNameInBytes, _ := json.Marshal(component.name)
+		resp, statusCode, err := utils.HTTPPostWithStatus(url, componentNameInBytes)
+		require.NoError(t, err, "error initializing configuration updater")
+		require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
+		for _, protocol := range protocols {
+			for _, endpointType := range endpointTypes {
+				for _, tt := range configurationTests {
+					t.Run(tt.name, func(t *testing.T) {
+						tt.handler(t, externalURL, protocol, endpointType, component)
+					})
 				}
 			}
 		}

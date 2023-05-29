@@ -14,7 +14,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: redis-configstore
+  name: configstore
 spec:
   type: configuration.redis
   version: v1
