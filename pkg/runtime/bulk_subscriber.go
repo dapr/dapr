@@ -647,7 +647,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 		bscData.bulkSubDiag.elapsed = elapsed
 		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 		// on error from application, return error for redelivery of event
-		return nil
+		return err
 	}
 
 	hasAnyError := false
