@@ -3985,6 +3985,7 @@ func (m *mockSubscribePubSub) Init(ctx context.Context, metadata pubsub.Metadata
 // Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
 func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.pubCount[req.Topic]++
+	var err error
 	if handler, ok := m.handlers[req.Topic]; ok {
 		pubsubMsg := &pubsub.NewMessage{
 			Data:  req.Data,
@@ -4002,9 +4003,9 @@ func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRe
 			Entries: msgArr,
 			Topic:   req.Topic,
 		}
-		bulkHandler(context.Background(), nbm)
+		_, err = bulkHandler(context.Background(), nbm)
 	}
-	return nil
+	return err
 }
 
 // BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
@@ -4056,6 +4057,10 @@ func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.Subs
 
 func (m *mockSubscribePubSub) GetComponentMetadata() map[string]string {
 	return map[string]string{}
+}
+
+func (m *mockSubscribePubSub) GetBulkResponse() pubsub.BulkSubscribeResponse {
+	return m.bulkReponse
 }
 
 func TestPubSubDeadLetter(t *testing.T) {
