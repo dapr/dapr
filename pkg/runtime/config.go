@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
@@ -226,7 +227,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	if globalConfig.Spec.MetricSpec.Enabled {
 		if mErr := diag.InitMetrics(intc.id, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
-			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
+			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", mErr).Error())
 		}
 	}
 
@@ -252,7 +253,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		intc.applicationProtocol.IsHTTP(),
 	)
 	if err != nil {
-  return nil, err
+		return nil, err
 	}
 
 	// API logging can be enabled for this app or for every app, globally in the config

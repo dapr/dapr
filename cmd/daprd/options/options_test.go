@@ -18,8 +18,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/modes"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/modes"
 )
 
 func TestAppFlag(t *testing.T) {
