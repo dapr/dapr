@@ -44,7 +44,7 @@ import (
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
-func FromFlags() (*DaprRuntime, error) {
+func FromFlags(args []string) (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", strconv.Itoa(DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
@@ -92,14 +92,15 @@ func FromFlags() (*DaprRuntime, error) {
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	// Finally parse the CLI flags!
-	flag.Parse()
+	// Ignore errors; CommandLine is set for ExitOnError.
+	flag.CommandLine.Parse(args)
 
 	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
 	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
 	// It's not the prettiest approach, but…
 	if !*enableAPILogging {
 		enableAPILogging = nil
-		for _, v := range os.Args {
+		for _, v := range args {
 			if strings.HasPrefix(v, "--enable-api-logging") || strings.HasPrefix(v, "-enable-api-logging") {
 				// This means that enable-api-logging was explicitly set to false
 				enableAPILogging = ptr.Of(false)

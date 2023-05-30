@@ -14,6 +14,8 @@ limitations under the License.
 package main
 
 import (
+	"os"
+
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
@@ -43,7 +45,7 @@ func main() {
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 
-	rt, err := runtime.FromFlags()
+	rt, err := runtime.FromFlags(os.Args[1:])
 	if err != nil {
 		log.Fatal(err)
 	}

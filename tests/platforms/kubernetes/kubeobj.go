@@ -151,6 +151,13 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.InjectPluggableComponents {
 		annotationObject["dapr.io/inject-pluggable-components"] = "true"
 	}
+	if appDesc.SidecarImage != "" {
+		annotationObject["dapr.io/sidecar-image"] = appDesc.SidecarImage
+	}
+
+	if appDesc.MaxRequestSizeMB != 0 {
+		annotationObject["dapr.io/http-max-request-size"] = strconv.Itoa(appDesc.MaxRequestSizeMB)
+	}
 
 	return annotationObject
 }

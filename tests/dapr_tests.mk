@@ -76,6 +76,7 @@ state_get_http \
 pubsub_publish_grpc \
 pubsub_publish_http \
 pubsub_bulk_publish_grpc \
+pubsub_bulk_publish_http \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
@@ -557,6 +558,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/grpcproxyserverexternal_service.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/omithealthchecks_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

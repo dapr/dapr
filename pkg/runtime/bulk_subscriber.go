@@ -368,8 +368,10 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			var span trace.Span
 			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, a.globalConfig.Spec.TracingSpec)
-			spans[n] = span
-			n++
+			if span != nil {
+				spans[n] = span
+				n++
+			}
 		}
 	}
 	spans = spans[:n]
@@ -380,7 +382,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	if err != nil {
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
 	}
 	defer resp.Close()
@@ -388,11 +390,9 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	statusCode := int(resp.Status().Code)
 
 	for _, span := range spans {
-		if span != nil {
-			m := diag.ConstructSubscriptionSpanAttributes(psm.topic)
-			diag.AddAttributesToSpan(span, m)
-			diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
-		}
+		m := diag.ConstructSubscriptionSpanAttributes(psm.topic)
+		diag.AddAttributesToSpan(span, m)
+		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
 	}
 
 	if (statusCode >= 200) && (statusCode <= 299) {
@@ -402,7 +402,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 		if err != nil {
 			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 			bscData.bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+			populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 			return fmt.Errorf("failed unmarshalling app response for bulk subscribe: %w", err)
 		}
 
@@ -474,7 +474,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, nil)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
 		return nil
 	}
 
@@ -484,7 +484,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	log.Warn(retriableErrorStr)
 	bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 	bscData.bulkSubDiag.elapsed = elapsed
-	populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, retriableError)
+	populateBulkSubscribeResponsesWithError(psm, bulkResponses, retriableError)
 	return retriableError
 }
 
@@ -561,8 +561,12 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 		items[i] = item
 	}
 
+	uuidObj, err := uuid.NewRandom()
+	if err != nil {
+		return fmt.Errorf("failed to generate UUID: %w", err)
+	}
 	envelope := &runtimev1pb.TopicEventBulkRequest{
-		Id:         uuid.New().String(),
+		Id:         uuidObj.String(),
 		Entries:    items,
 		Metadata:   psm.metadata,
 		Topic:      psm.topic,
@@ -586,9 +590,11 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 				// no ops if trace is off
 				var span trace.Span
 				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, a.globalConfig.Spec.TracingSpec)
-				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-				spans[n] = span
-				n++
+				if span != nil {
+					ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+					spans[n] = span
+					n++
+				}
 			} else {
 				log.Warnf("ignored non-string traceid value: %v", iTraceID)
 			}
@@ -610,11 +616,9 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 	elapsed := diag.ElapsedSince(start)
 
 	for _, span := range spans {
-		if span != nil {
-			m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
-			diag.AddAttributesToSpan(span, m)
-			diag.UpdateSpanStatusFromGRPCError(span, err)
-		}
+		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
+		diag.AddAttributesToSpan(span, m)
+		diag.UpdateSpanStatusFromGRPCError(span, err)
 	}
 
 	if err != nil {
@@ -624,7 +628,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
 			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(psm.pubSubMessages))
 			bscData.bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, nil)
+			populateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
 			return nil
 		}
 
@@ -632,9 +636,9 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 		log.Debug(err)
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(psm.pubSubMessages))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 		// on error from application, return error for redelivery of event
-		return nil
+		return err
 	}
 
 	hasAnyError := false

@@ -3984,6 +3984,7 @@ func (m *mockSubscribePubSub) Init(ctx context.Context, metadata pubsub.Metadata
 // Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
 func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.pubCount[req.Topic]++
+	var err error
 	if handler, ok := m.handlers[req.Topic]; ok {
 		pubsubMsg := &pubsub.NewMessage{
 			Data:  req.Data,
@@ -4001,9 +4002,9 @@ func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRe
 			Entries: msgArr,
 			Topic:   req.Topic,
 		}
-		bulkHandler(context.Background(), nbm)
+		_, err = bulkHandler(context.Background(), nbm)
 	}
-	return nil
+	return err
 }
 
 // BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
@@ -4055,6 +4056,10 @@ func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.Subs
 
 func (m *mockSubscribePubSub) GetComponentMetadata() map[string]string {
 	return map[string]string{}
+}
+
+func (m *mockSubscribePubSub) GetBulkResponse() pubsub.BulkSubscribeResponse {
+	return m.bulkReponse
 }
 
 func TestPubSubDeadLetter(t *testing.T) {
@@ -5955,12 +5960,12 @@ func TestGracefulShutdownActors(t *testing.T) {
 	go sendSigterm(rt)
 	<-time.After(rt.runtimeConfig.GracefulShutdownDuration + 3*time.Second)
 
-	var activeActCount int
+	var activeActCount int32
 	activeActors := rt.actor.GetActiveActorsCount(rt.ctx)
 	for _, v := range activeActors {
 		activeActCount += v.Count
 	}
-	assert.Equal(t, activeActCount, 0)
+	assert.Equal(t, activeActCount, int32(0))
 }
 
 func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *daprt.MockStateStore {
