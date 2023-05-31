@@ -36,13 +36,6 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "application/json", string(ctx.Response.Header.ContentType()))
 	})
 
-	t.Run("Respond with metadata and JSON", func(t *testing.T) {
-		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
-		fasthttpRespond(ctx, fasthttpResponseWithJSON(200, nil), fasthttpResponseWithMetadata(map[string]string{"key": "value"}))
-
-		assert.Equal(t, "value", string(ctx.Response.Header.Peek(metadataPrefix+"key")))
-	})
-
 	t.Run("Respond with custom content type", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 		customContentType := "custom"

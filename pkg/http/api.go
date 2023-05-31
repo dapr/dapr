@@ -507,7 +507,10 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	if resp == nil {
 		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithMetadata(resp.Metadata), fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+		for k, v := range resp.Metadata {
+			reqCtx.Response.Header.Add(metadataPrefix+k, v)
+		}
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
 	}
 }
 
@@ -824,7 +827,10 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		reqCtx.Response.Header.Add(etagHeader, *resp.ETag)
 	}
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data), fasthttpResponseWithMetadata(resp.Metadata))
+	for k, v := range resp.Metadata {
+		reqCtx.Response.Header.Add(metadataPrefix+k, v)
+	}
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
@@ -1915,7 +1921,7 @@ type bulkPublishMessageEntry struct {
 func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	thepubsub, pubsubName, topic, sc, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
 	if errRes != nil {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(sc, *errRes))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(sc, errRes))
 
 		return
 	}

@@ -15,7 +15,9 @@ package http
 
 import (
 	"encoding/json"
+	"net/http"
 
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/valyala/fasthttp"
 )
 
@@ -23,6 +25,8 @@ const (
 	jsonContentTypeHeader = "application/json"
 	etagHeader            = "ETag"
 	metadataPrefix        = "metadata."
+	headerContentType     = "content-type"
+	headerContentLength   = "content-length"
 )
 
 // BulkGetResponse is the response object for a state bulk get operation.
@@ -61,16 +65,53 @@ type QueryItem struct {
 	Error string          `json:"error,omitempty"`
 }
 
-type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
-
-// fasthttpResponseWithMetadata sets metadata headers.
-func fasthttpResponseWithMetadata(metadata map[string]string) fasthttpResponseOption {
-	return func(ctx *fasthttp.RequestCtx) {
-		for k, v := range metadata {
-			ctx.Response.Header.Add(metadataPrefix+k, v)
-		}
+// respondWithJSON sends a response with an object that will be encoded as JSON.
+func respondWithJSON(w http.ResponseWriter, code int, obj any) {
+	w.Header().Set(headerContentType, jsonContentTypeHeader)
+	w.WriteHeader(code)
+	err := json.NewEncoder(w).Encode(obj)
+	if err != nil {
+		log.Error("Failed to encode response as JSON:", err)
 	}
 }
+
+// respondWithData sends a response using the passed byte slice for the body.
+func respondWithData(w http.ResponseWriter, code int, data []byte) {
+	if w.Header().Get(headerContentType) == "" {
+		w.Header().Set(headerContentType, jsonContentTypeHeader)
+	}
+	w.WriteHeader(code)
+	_, err := w.Write(data)
+	if err != nil {
+		log.Error("Failed to write response data:", err)
+	}
+}
+
+// respondWithEmpty sends an empty response with 204 status code.
+func respondWithEmpty(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// respondWithError responds with an error.
+// Normally, this is used with messages.APIError.
+func respondWithError(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+
+	// Check if it's an APIError object
+	apiErr, ok := err.(messages.APIError)
+	if ok {
+		respondWithData(w, apiErr.HTTPCode(), apiErr.JSONErrorValue())
+		return
+	}
+
+	// Respond with a generic error
+	msg := NewErrorResponse("ERROR", err.Error())
+	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
+}
+
+type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
 
 // fasthttpResponseWithJSON overrides the content-type with application/json.
 func fasthttpResponseWithJSON(code int, obj []byte) fasthttpResponseOption {
@@ -82,7 +123,7 @@ func fasthttpResponseWithJSON(code int, obj []byte) fasthttpResponseOption {
 }
 
 // fasthttpResponseWithError sets error code and jsonized error message.
-func fasthttpResponseWithError(code int, resp ErrorResponse) fasthttpResponseOption {
+func fasthttpResponseWithError(code int, resp errorResponseValue) fasthttpResponseOption {
 	b, _ := json.Marshal(&resp)
 	return fasthttpResponseWithJSON(code, b)
 }

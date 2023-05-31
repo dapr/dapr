@@ -79,7 +79,7 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 				err = pjsonDec.Unmarshal(body, in)
 				if err != nil {
 					msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-					fasthttpRespond(reqCtx, fasthttpResponseWithError(fasthttp.StatusBadRequest, msg))
+					fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusBadRequest, msg))
 					log.Debug(msg)
 					return
 				}
@@ -114,7 +114,7 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 
 		// Set success status code to 200 if none is specified
 		if opts.SuccessStatusCode == 0 {
-			opts.SuccessStatusCode = fasthttp.StatusOK
+			opts.SuccessStatusCode = http.StatusOK
 		}
 
 		// If we do not have an output modifier, respond right away
@@ -166,12 +166,12 @@ func universalHTTPRawResponder(w http.ResponseWriter, m *UniversalHTTPRawRespons
 
 	headers := w.Header()
 	if m.ContentType != "" {
-		headers.Set("Content-Type", m.ContentType)
-	} else if headers.Get("Content-Type") == "" {
-		headers.Set("Content-Type", jsonContentTypeHeader)
+		headers.Set(headerContentType, m.ContentType)
+	} else if headers.Get(headerContentType) == "" {
+		headers.Set(headerContentType, jsonContentTypeHeader)
 	}
-	if headers.Get("Content-Length") == "" {
-		headers.Set("Content-Length", strconv.Itoa(len(m.Body)))
+	if headers.Get(headerContentLength) == "" {
+		headers.Set(headerContentLength, strconv.Itoa(len(m.Body)))
 	}
 
 	w.WriteHeader(statusCode)
@@ -189,6 +189,21 @@ func universalFastHTTPRawResponder(reqCtx *fasthttp.RequestCtx, m *UniversalHTTP
 	fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, m.Body))
 }
 
+func universalHTTPProtoResponder(w http.ResponseWriter, m protoreflect.ProtoMessage, statusCode int, emitUnpopulated bool) {
+	// Encode the response as JSON using protojson
+	respBytes, err := protojson.MarshalOptions{
+		EmitUnpopulated: emitUnpopulated,
+	}.Marshal(m)
+	if err != nil {
+		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
+		respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
+		log.Debug(msg)
+		return
+	}
+
+	respondWithData(w, statusCode, respBytes)
+}
+
 func universalFastHTTPProtoResponder(reqCtx *fasthttp.RequestCtx, m protoreflect.ProtoMessage, statusCode int, emitUnpopulated bool) {
 	// Encode the response as JSON using protojson
 	respBytes, err := protojson.MarshalOptions{
@@ -196,7 +211,7 @@ func universalFastHTTPProtoResponder(reqCtx *fasthttp.RequestCtx, m protoreflect
 	}.Marshal(m)
 	if err != nil {
 		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(fasthttp.StatusInternalServerError, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
@@ -209,7 +224,7 @@ func universalFastHTTPJSONResponder(reqCtx *fasthttp.RequestCtx, m any, statusCo
 	respBytes, err := json.Marshal(m)
 	if err != nil {
 		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(fasthttp.StatusInternalServerError, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
@@ -225,12 +240,11 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
 	if ok {
-		msg := NewErrorResponse(apiErr.Tag(), apiErr.Message())
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), apiErr))
 		return
 	}
 
 	// Respond with a generic error
 	msg := NewErrorResponse("ERROR", err.Error())
-	fasthttpRespond(reqCtx, fasthttpResponseWithError(fasthttp.StatusInternalServerError, msg))
+	fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
 }
