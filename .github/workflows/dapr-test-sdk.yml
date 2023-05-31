@@ -79,8 +79,6 @@ jobs:
         with:
           header: ${{ github.run_id }}-python
           number: ${{ env.PR_NUMBER }}
-          hide: true
-          hide_classify: OUTDATED
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
             # Dapr SDK Python test
@@ -210,8 +208,6 @@ jobs:
         with:
           header: ${{ github.run_id }}-java
           number: ${{ env.PR_NUMBER }}
-          hide: true
-          hide_classify: OUTDATED
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
             # Dapr SDK Java test
@@ -370,8 +366,6 @@ jobs:
         with:
           header: ${{ github.run_id }}-js
           number: ${{ env.PR_NUMBER }}
-          hide: true
-          hide_classify: OUTDATED
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
             # Dapr SDK JS test
