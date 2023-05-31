@@ -341,6 +341,19 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_VER: 18
+    services:
+      emqx:
+        image: emqx/emqx
+        ports:
+          - 1883:1883
+          - 8081:8081
+          - 8083:8083
+          - 8883:8883
+          - 18083:18083
+      mongodb:
+        image: mongo
+        ports:
+          - 27017:27017
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -412,7 +425,7 @@ jobs:
       - name: Override placement service
         run: |
           docker stop dapr_placement
-          ./dist/linux_amd64/release/placement --healthz-port 9091 &
+          ./dist/linux_amd64/release/placement &
       - name: Build Package
         run: cd js-sdk && npm run build
       - name: Run E2E tests
@@ -420,7 +433,7 @@ jobs:
         run: cd js-sdk && npm run test:e2e:all
       - name: Run E2E test to show successful TypeScript build
         run: |
-          cd js-sdk test/e2e/typescript-build
+          cd js-sdk/test/e2e/typescript-build
           npm install
           dapr run --app-id typescript-build npm run start
       - name: Update PR comment for success
