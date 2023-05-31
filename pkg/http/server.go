@@ -214,7 +214,12 @@ func (s *server) Close() error {
 	for _, ln := range s.servers {
 		// This calls `Close()` on the underlying listener.
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		err = errors.Join(err, ln.Shutdown(ctx))
+		shutdownErr := ln.Shutdown(ctx)
+		// Error will be ErrServerClosed if everything went well
+		if errors.Is(shutdownErr, http.ErrServerClosed) {
+			shutdownErr = nil
+		}
+		err = errors.Join(err, shutdownErr)
 		cancel()
 	}
 
