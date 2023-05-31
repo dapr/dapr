@@ -433,7 +433,7 @@ jobs:
         run: cd js-sdk && npm run test:e2e:all
       - name: Run E2E test to show successful TypeScript build
         run: |
-          cd js-sdk test/e2e/typescript-build
+          cd js-sdk/test/e2e/typescript-build
           npm install
           dapr run --app-id typescript-build npm run start
       - name: Update PR comment for success
