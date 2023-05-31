@@ -63,15 +63,6 @@ type QueryItem struct {
 
 type option = func(ctx *fasthttp.RequestCtx)
 
-// withEtag sets etag header.
-func withEtag(etag *string) option {
-	return func(ctx *fasthttp.RequestCtx) {
-		if etag != nil {
-			ctx.Response.Header.Add(etagHeader, *etag)
-		}
-	}
-}
-
 // withMetadata sets metadata headers.
 func withMetadata(metadata map[string]string) option {
 	return func(ctx *fasthttp.RequestCtx) {

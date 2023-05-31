@@ -820,7 +820,11 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		resp.Data = val
 	}
 
-	respond(reqCtx, withJSON(nethttp.StatusOK, resp.Data), withEtag(resp.ETag), withMetadata(resp.Metadata))
+	if resp.ETag != nil {
+		reqCtx.Response.Header.Add(etagHeader, *resp.ETag)
+	}
+
+	respond(reqCtx, withJSON(nethttp.StatusOK, resp.Data), withMetadata(resp.Metadata))
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {

@@ -18,11 +18,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/valyala/fasthttp"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/kit/logger"
-	"github.com/valyala/fasthttp"
 )
 
 type daprContextKey string
