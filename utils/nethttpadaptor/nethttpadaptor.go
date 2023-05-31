@@ -22,6 +22,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -71,14 +72,20 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 			}
 		}
 
-		ctx := r.Context()
-		reqCtx, ok := ctx.(*fasthttp.RequestCtx)
-		if ok {
+		// Ensure user values are propagated if the context is a fasthttp.RequestCtx already
+		if reqCtx, ok := r.Context().(*fasthttp.RequestCtx); ok {
 			reqCtx.VisitUserValuesAll(func(k any, v any) {
 				c.SetUserValue(k, v)
 			})
 		}
 
+		// Propagate the context
+		span := diagUtils.SpanFromContext(r.Context())
+		if span != nil {
+			diagUtils.AddSpanToFasthttpContext(&c, span)
+		}
+
+		// Invoke the handler
 		h(&c)
 
 		if uvw, ok := w.(interface{ SetUserValue(key any, value any) }); ok {

@@ -46,7 +46,7 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 			return
 		}
 
-		ctx, span := startTracingClientSpanFromHTTPRequest(r, path, spec)
+		span := startTracingClientSpanFromHTTPRequest(r, path, spec)
 
 		// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
 		rw := responsewriter.EnsureResponseWriter(w)
@@ -55,7 +55,7 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 		rw.Before(func(rw responsewriter.ResponseWriter) {
 			// Add span attributes only if it is sampled, which reduced the perf impact.
 			if span.SpanContext().IsSampled() {
-				AddAttributesToSpan(span, userDefinedHTTPHeaders(ctx))
+				AddAttributesToSpan(span, userDefinedHTTPHeaders(r))
 				spanAttr := spanAttributesMapFromHTTPContext(rw, r)
 				AddAttributesToSpan(span, spanAttr)
 
@@ -101,13 +101,13 @@ func userDefinedHTTPHeaders(r *http.Request) map[string]string {
 	return m
 }
 
-func startTracingClientSpanFromHTTPRequest(r *http.Request, spanName string, spec config.TracingSpec) (*http.Request, trace.Span) {
+func startTracingClientSpanFromHTTPRequest(r *http.Request, spanName string, spec config.TracingSpec) trace.Span {
 	sc := SpanContextFromRequest(r)
 	ctx := trace.ContextWithRemoteSpanContext(r.Context(), sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
 	_, span := tracer.Start(ctx, spanName, kindOption)
 	diagUtils.AddSpanToRequest(r, span)
-	return r, span
+	return span
 }
 
 func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace.Span) trace.Span {

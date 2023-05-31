@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/kit/logger"
+	"github.com/valyala/fasthttp"
 )
 
 type daprContextKey string
@@ -94,9 +95,16 @@ func IsTracingEnabled(rate string) bool {
 	return GetTraceSamplingRate(rate) != 0
 }
 
-// SpanFromContext returns the SpanContext stored in a context, or nil or trace.nooSpan{} if there isn't one.
+// SpanFromContext returns the Span stored in a context, or nil or trace.noopSpan{} if there isn't one.
 func SpanFromContext(ctx context.Context) trace.Span {
-	val := ctx.Value(spanContextKey)
+	// TODO: Remove fasthttp compatibility when no HTTP API using contexts depend on fasthttp
+	var val any
+	if reqCtx, ok := ctx.(*fasthttp.RequestCtx); ok {
+		val = reqCtx.UserValue(spanContextKey)
+	} else {
+		val = ctx.Value(spanContextKey)
+	}
+
 	if val != nil {
 		span, ok := val.(trace.Span)
 		if ok {
@@ -104,8 +112,14 @@ func SpanFromContext(ctx context.Context) trace.Span {
 		}
 	}
 
-	span := trace.SpanFromContext(ctx)
-	return span
+	// Return the default span, which can be a noop
+	return trace.SpanFromContext(ctx)
+}
+
+// AddSpanToFasthttpContext adds the span to the fasthttp request context.
+// TODO: Remove fasthttp compatibility when no HTTP API using contexts depend on fasthttp.
+func AddSpanToFasthttpContext(ctx *fasthttp.RequestCtx, span trace.Span) {
+	ctx.SetUserValue(spanContextKey, span)
 }
 
 // AddSpanToRequest sets span into a request context.
