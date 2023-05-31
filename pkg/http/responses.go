@@ -61,10 +61,10 @@ type QueryItem struct {
 	Error string          `json:"error,omitempty"`
 }
 
-type option = func(ctx *fasthttp.RequestCtx)
+type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
 
-// withMetadata sets metadata headers.
-func withMetadata(metadata map[string]string) option {
+// fasthttpResponseWithMetadata sets metadata headers.
+func fasthttpResponseWithMetadata(metadata map[string]string) fasthttpResponseOption {
 	return func(ctx *fasthttp.RequestCtx) {
 		for k, v := range metadata {
 			ctx.Response.Header.Add(metadataPrefix+k, v)
@@ -72,8 +72,8 @@ func withMetadata(metadata map[string]string) option {
 	}
 }
 
-// withJSON overrides the content-type with application/json.
-func withJSON(code int, obj []byte) option {
+// fasthttpResponseWithJSON overrides the content-type with application/json.
+func fasthttpResponseWithJSON(code int, obj []byte) fasthttpResponseOption {
 	return func(ctx *fasthttp.RequestCtx) {
 		ctx.Response.SetStatusCode(code)
 		ctx.Response.SetBody(obj)
@@ -81,22 +81,22 @@ func withJSON(code int, obj []byte) option {
 	}
 }
 
-// withError sets error code and jsonized error message.
-func withError(code int, resp ErrorResponse) option {
+// fasthttpResponseWithError sets error code and jsonized error message.
+func fasthttpResponseWithError(code int, resp ErrorResponse) fasthttpResponseOption {
 	b, _ := json.Marshal(&resp)
-	return withJSON(code, b)
+	return fasthttpResponseWithJSON(code, b)
 }
 
-// withEmpty sets 204 status code.
-func withEmpty() option {
+// fasthttpResponseWithEmpty sets 204 status code.
+func fasthttpResponseWithEmpty() fasthttpResponseOption {
 	return func(ctx *fasthttp.RequestCtx) {
 		ctx.Response.SetBody(nil)
 		ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
 	}
 }
 
-// with sets a default application/json content type if content type is not present.
-func with(code int, obj []byte) option {
+// fasthttpResponseWith sets a default application/json content type if content type is not present.
+func fasthttpResponseWith(code int, obj []byte) fasthttpResponseOption {
 	return func(ctx *fasthttp.RequestCtx) {
 		ctx.Response.SetStatusCode(code)
 		ctx.Response.SetBody(obj)
@@ -107,7 +107,7 @@ func with(code int, obj []byte) option {
 	}
 }
 
-func respond(ctx *fasthttp.RequestCtx, options ...option) {
+func fasthttpRespond(ctx *fasthttp.RequestCtx, options ...fasthttpResponseOption) {
 	for _, option := range options {
 		option(ctx)
 	}

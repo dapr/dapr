@@ -127,7 +127,7 @@ func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 	reqCtx.Response.Header.SetContentType("application/octet-stream")
-	respond(reqCtx, with(fasthttp.StatusOK, resBody))
+	fasthttpRespond(reqCtx, fasthttpResponseWith(fasthttp.StatusOK, resBody))
 }
 
 // Handler for crypto/<component-name>/decrypt
@@ -175,7 +175,7 @@ func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 	reqCtx.Response.Header.SetContentType("application/octet-stream")
-	respond(reqCtx, with(fasthttp.StatusOK, resBody))
+	fasthttpRespond(reqCtx, fasthttpResponseWith(fasthttp.StatusOK, resBody))
 }
 
 func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCrypto, error) {
