@@ -1779,7 +1779,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			}
 
 			resp, err := client.SubscribeConfigurationAlpha1(context.Background(), req)
-			assert.Nil(t, err, "Error should be nil")
+			assert.NoError(t, err, "Error should be nil")
 			retry := 3
 			count := 0
 			var subscribeID string
@@ -1790,8 +1790,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
-				assert.NotNil(t, rsp)
-				assert.NoError(t, recvErr)
+				require.NoError(t, recvErr)
+				require.NotNil(t, rsp)
 				if rsp.Items != nil {
 					assert.Equal(t, tt.expectedResponse, rsp.Items)
 				} else {
@@ -1799,12 +1799,12 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 				subscribeID = rsp.Id
 			}
-			assert.Nil(t, err, "Error should be nil")
+			assert.NoError(t, err, "Error should be nil")
 			_, err = client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Id:        subscribeID,
 			})
-			assert.Nil(t, err, "Error should be nil")
+			assert.NoError(t, err, "Error should be nil")
 			count = 0
 			for {
 				if err != nil && err.Error() == "EOF" {
@@ -1827,7 +1827,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			}
 
 			resp, err := client.SubscribeConfiguration(context.Background(), req)
-			assert.Nil(t, err, "Error should be nil")
+			assert.NoError(t, err, "Error should be nil")
 			retry := 3
 			count := 0
 			var subscribeID string
@@ -1847,12 +1847,12 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 				subscribeID = rsp.Id
 			}
-			assert.Nil(t, err, "Error should be nil")
+			assert.NoError(t, err, "Error should be nil")
 			_, err = client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Id:        subscribeID,
 			})
-			assert.Nil(t, err, "Error should be nil")
+			assert.NoError(t, err, "Error should be nil")
 			count = 0
 			for {
 				if err != nil && err.Error() == "EOF" {
@@ -2370,7 +2370,7 @@ func TestPublishTopic(t *testing.T) {
 			PubsubName: "pubsub",
 			Topic:      "topic",
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("no err: publish event request with topic, pubsub and ce metadata override", func(t *testing.T) {
@@ -2383,7 +2383,7 @@ func TestPublishTopic(t *testing.T) {
 				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
 			},
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("err: publish event request with error-topic and pubsub", func(t *testing.T) {
@@ -2473,7 +2473,7 @@ func TestPublishTopic(t *testing.T) {
 			PubsubName: "pubsub",
 			Topic:      "topic",
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("err: bulk publish event request with error-topic and pubsub", func(t *testing.T) {
@@ -2561,7 +2561,7 @@ func TestBulkPublish(t *testing.T) {
 			Topic:      "topic",
 			Entries:    sampleEntries,
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 	})
 
@@ -2576,7 +2576,7 @@ func TestBulkPublish(t *testing.T) {
 				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
 			},
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 	})
 
@@ -2588,7 +2588,7 @@ func TestBulkPublish(t *testing.T) {
 		})
 		t.Log(res)
 		// Full failure from component, so expecting no error
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, res)
 		assert.Equal(t, 4, len(res.FailedEntries))
 	})
@@ -2600,7 +2600,7 @@ func TestBulkPublish(t *testing.T) {
 			Entries:    sampleEntries,
 		})
 		// Partial failure, so expecting no error
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, res)
 		assert.Equal(t, 2, len(res.FailedEntries))
 	})
@@ -2623,13 +2623,13 @@ func TestInvokeBinding(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 	_, err := client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{})
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	_, err = client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
 	ctx := grpcMetadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Contains(t, resp.Metadata, "traceparent")
 	assert.Equal(t, resp.Metadata["traceparent"], "Test")
@@ -4089,7 +4089,7 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 1,
 		}
 		resp, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, true, resp.Success)
 	})
 }
