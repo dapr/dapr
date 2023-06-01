@@ -15,8 +15,6 @@ package http
 
 import (
 	"encoding/json"
-	"io"
-	"net"
 
 	"github.com/valyala/fasthttp"
 )
@@ -65,15 +63,6 @@ type QueryItem struct {
 
 type option = func(ctx *fasthttp.RequestCtx)
 
-// withEtag sets etag header.
-func withEtag(etag *string) option {
-	return func(ctx *fasthttp.RequestCtx) {
-		if etag != nil {
-			ctx.Response.Header.Add(etagHeader, *etag)
-		}
-	}
-}
-
 // withMetadata sets metadata headers.
 func withMetadata(metadata map[string]string) option {
 	return func(ctx *fasthttp.RequestCtx) {
@@ -115,42 +104,6 @@ func with(code int, obj []byte) option {
 		if len(ctx.Response.Header.ContentType()) == 0 {
 			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 		}
-	}
-}
-
-// withStream is like "with" but accepts a stream
-// The stream is closed at the end if it implements the Close() method
-func withStream(code int, r io.Reader, onDone func()) option {
-	return func(ctx *fasthttp.RequestCtx) {
-		if len(ctx.Response.Header.ContentType()) == 0 {
-			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-		}
-		ctx.Response.SetStatusCode(code)
-
-		// This is a bit hacky (there's literally "hijack" in the name), but it seems to be the only way we can actually send data to the client in a streamed way
-		// (believe me, I've spent over a day on this and I'm not exaggerating)
-		ctx.HijackSetNoResponse(true)
-		ctx.Hijack(func(c net.Conn) {
-			// Write the headers
-			c.Write(ctx.Response.Header.Header())
-
-			// Send the data as a stream
-			_, err := io.Copy(c, r)
-			if err != nil {
-				log.Warn("Error while copying response into connection: ", err)
-			}
-
-			// Close the stream if it implements io.Closer
-			if rc, ok := r.(io.Closer); ok {
-				_ = rc.Close()
-			}
-
-			// Call the "onDone" method (usually a context.Cancel function)
-			// Note: "c" (net.Conn) is closed automatically, no need to close that
-			if onDone != nil {
-				onDone()
-			}
-		})
 	}
 }
 

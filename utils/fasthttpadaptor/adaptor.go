@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/utils/responsewriter"
 )
 
 // NewFastHTTPHandlerFunc wraps net/http handler func to fasthttp
@@ -54,10 +56,10 @@ func NewFastHTTPHandler(h http.Handler) fasthttp.RequestHandler {
 			return
 		}
 
-		w := NetHTTPResponseWriter{w: ctx.Response.BodyWriter()}
-		h.ServeHTTP(&w, r.WithContext(ctx))
+		w := responsewriter.EnsureResponseWriter(&NetHTTPResponseWriter{w: ctx.Response.BodyWriter()})
+		h.ServeHTTP(w, r.WithContext(ctx))
 
-		ctx.SetStatusCode(w.StatusCode())
+		ctx.SetStatusCode(w.Status())
 		haveContentType := false
 		for k, vv := range w.Header() {
 			if k == fasthttp.HeaderContentType {
@@ -80,7 +82,7 @@ func NewFastHTTPHandler(h http.Handler) fasthttp.RequestHandler {
 			ctx.Response.Header.Set(fasthttp.HeaderContentType, http.DetectContentType(b[:l]))
 		}
 
-		for k, v := range w.userValues {
+		for k, v := range w.AllUserValues() {
 			ctx.SetUserValue(k, v)
 		}
 	}
@@ -90,7 +92,6 @@ type NetHTTPResponseWriter struct {
 	statusCode int
 	h          http.Header
 	w          io.Writer
-	userValues map[any]any
 }
 
 func (w *NetHTTPResponseWriter) StatusCode() int {
@@ -114,12 +115,3 @@ func (w *NetHTTPResponseWriter) WriteHeader(statusCode int) {
 func (w *NetHTTPResponseWriter) Write(p []byte) (int, error) {
 	return w.w.Write(p)
 }
-
-func (w *NetHTTPResponseWriter) SetUserValue(key any, value any) {
-	if w.userValues == nil {
-		w.userValues = map[any]any{}
-	}
-	w.userValues[key] = value
-}
-
-func (w *NetHTTPResponseWriter) Flush() {}

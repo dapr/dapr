@@ -14,6 +14,7 @@ limitations under the License.
 package nethttpadaptor
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -21,7 +22,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/dapr/dapr/utils/fasthttpadaptor"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -41,7 +42,9 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 		if r.Body != nil {
 			reqBody, err := io.ReadAll(r.Body)
 			if err != nil {
-				log.Errorf("error reading request body, %+v", err)
+				msg := fmt.Sprintf("error reading request body: %v", err)
+				log.Errorf(msg)
+				http.Error(w, msg, http.StatusBadRequest)
 				return
 			}
 			c.Request.SetBody(reqBody)
@@ -69,19 +72,25 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 			}
 		}
 
-		ctx := r.Context()
-		reqCtx, ok := ctx.(*fasthttp.RequestCtx)
-		if ok {
+		// Ensure user values are propagated if the context is a fasthttp.RequestCtx already
+		if reqCtx, ok := r.Context().(*fasthttp.RequestCtx); ok {
 			reqCtx.VisitUserValuesAll(func(k any, v any) {
 				c.SetUserValue(k, v)
 			})
 		}
 
+		// Propagate the context
+		span := diagUtils.SpanFromContext(r.Context())
+		if span != nil {
+			diagUtils.AddSpanToFasthttpContext(&c, span)
+		}
+
+		// Invoke the handler
 		h(&c)
 
-		if faw, ok := w.(*fasthttpadaptor.NetHTTPResponseWriter); ok {
+		if uvw, ok := w.(interface{ SetUserValue(key any, value any) }); ok {
 			c.VisitUserValuesAll(func(k any, v any) {
-				faw.SetUserValue(k, v)
+				uvw.SetUserValue(k, v)
 			})
 		}
 
