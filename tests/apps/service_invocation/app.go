@@ -1271,7 +1271,7 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 // echoPathHandler is a test endpoint that returns the path of the request as
 // is.
 func echoPathHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, r.URL.EscapedPath())
+	fmt.Fprint(w, r.URL.EscapedPath())
 	w.WriteHeader(http.StatusOK)
 }
 
