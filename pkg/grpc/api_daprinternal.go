@@ -170,9 +170,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// Submit the request to the app
 	res, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
+		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
 	defer res.Close()
+	statusCode = res.Status().Code
 
 	// Respond to the caller
 	buf := invokev1.BufPool.Get().(*[]byte)
