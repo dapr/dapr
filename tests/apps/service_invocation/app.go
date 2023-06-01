@@ -387,6 +387,12 @@ func appRouter() http.Handler {
 	router.HandleFunc("/badservicecalltesthttp", badServiceCallTestHTTP).Methods("POST")
 	router.HandleFunc("/badservicecalltestgrpc", badServiceCallTestGrpc).Methods("POST")
 
+	// called by Dapr invocation to ensure path separators are correctly
+	// normalized, but not path segment contents.
+	router.HandleFunc("/foo/%2E.", echoPathHandler).Methods("GET", "POST")
+	router.HandleFunc("/foo/%2Fbbb%2F%2E.", echoPathHandler).Methods("GET", "POST")
+	router.HandleFunc("/foo/%2Fb/bb%2F%2E.", echoPathHandler).Methods("GET", "POST")
+
 	// service invocation v1 e2e tests
 	router.HandleFunc("/tests/dapr_id_httptohttptest", testDaprIDRequestHTTPToHTTP).Methods("POST")
 	router.HandleFunc("/tests/v1_httptohttptest", testV1RequestHTTPToHTTP).Methods("POST")
@@ -1260,6 +1266,13 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(testResponse)
+}
+
+// echoPathHandler is a test endpoint that returns the path of the request as
+// is.
+func echoPathHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, r.URL.Path)
+	w.WriteHeader(http.StatusOK)
 }
 
 func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
