@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package runtime
+package errors
 
 import (
 	"fmt"
@@ -43,8 +43,8 @@ func (e *InitError) Unwrap() error {
 	return e.err
 }
 
-// NewInitError returns an InitError wrapping an existing context error.
-func NewInitError(kind InitErrorKind, entity string, err error) *InitError {
+// NewInit returns an InitError wrapping an existing context error.
+func NewInit(kind InitErrorKind, entity string, err error) *InitError {
 	return &InitError{
 		err:    err,
 		kind:   kind,
