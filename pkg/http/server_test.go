@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"testing"
 	"time"
@@ -35,17 +37,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-type mockHost struct {
-	hasCORS bool
-}
-
-func (m *mockHost) mockHandler() fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		b := ctx.Response.Header.Peek("Access-Control-Allow-Origin")
-		m.hasCORS = len(b) > 0
-	}
-}
-
 func newServer() server {
 	return server{
 		config: ServerConfig{},
@@ -53,33 +44,42 @@ func newServer() server {
 }
 
 func TestCorsHandler(t *testing.T) {
+	hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	t.Run("with default cors, middleware not enabled", func(t *testing.T) {
 		srv := newServer()
 		srv.config.AllowedOrigins = cors.DefaultAllowedOrigins
 
-		mh := mockHost{}
-		h := srv.useCors(mh.mockHandler())
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
+		h := srv.useCors(hf)
+		w := httptest.NewRecorder()
+		r := &http.Request{
+			Method: http.MethodOptions,
+			Header: http.Header{
+				"Origin": []string{"*"},
+			},
 		}
-		r.Request.Header.Set("Origin", "*")
-		h(r)
+		h.ServeHTTP(w, r)
 
-		assert.False(t, mh.hasCORS)
+		assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
 	})
 
 	t.Run("with custom cors, middleware enabled", func(t *testing.T) {
 		srv := newServer()
 		srv.config.AllowedOrigins = "http://test.com"
 
-		mh := mockHost{}
-		h := srv.useCors(mh.mockHandler())
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
+		h := srv.useCors(hf)
+		w := httptest.NewRecorder()
+		r := &http.Request{
+			Method: http.MethodOptions,
+			Header: http.Header{
+				"Origin": []string{"http://test.com"},
+			},
 		}
-		r.Request.Header.Set("Origin", "http://test.com")
-		h(r)
-		assert.True(t, mh.hasCORS)
+		h.ServeHTTP(w, r)
+
+		assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Origin"))
 	})
 }
 
@@ -411,13 +411,13 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:              "test",
-			HostAddress:        "127.0.0.1",
-			Port:               port,
-			APIListenAddresses: []string{"127.0.0.1"},
-			MaxRequestBodySize: 4,
-			ReadBufferSize:     4,
-			EnableAPILogging:   true,
+			AppID:                "test",
+			HostAddress:          "127.0.0.1",
+			Port:                 port,
+			APIListenAddresses:   []string{"127.0.0.1"},
+			MaxRequestBodySizeMB: 4,
+			ReadBufferSizeKB:     4,
+			EnableAPILogging:     true,
 		}
 		a := &api{}
 		server := NewServer(NewServerOpts{
@@ -437,13 +437,13 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:              "test",
-			HostAddress:        "127.0.0.1",
-			Port:               port,
-			APIListenAddresses: []string{"127.0.0.1"},
-			MaxRequestBodySize: 4,
-			ReadBufferSize:     4,
-			EnableAPILogging:   false,
+			AppID:                "test",
+			HostAddress:          "127.0.0.1",
+			Port:                 port,
+			APIListenAddresses:   []string{"127.0.0.1"},
+			MaxRequestBodySizeMB: 4,
+			ReadBufferSizeKB:     4,
+			EnableAPILogging:     false,
 		}
 		a := &api{}
 		server := NewServer(NewServerOpts{

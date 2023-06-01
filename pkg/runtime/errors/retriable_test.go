@@ -11,22 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package errors
 
-// ServerConfig holds config values for an HTTP server.
-type ServerConfig struct {
-	AppID                   string
-	HostAddress             string
-	Port                    int
-	APIListenAddresses      []string
-	PublicPort              *int
-	ProfilePort             int
-	AllowedOrigins          string
-	EnableProfiling         bool
-	MaxRequestBodySizeMB    int
-	UnixDomainSocket        string
-	ReadBufferSizeKB        int
-	EnableAPILogging        bool
-	APILoggingObfuscateURLs bool
-	APILogHealthChecks      bool
+import "testing"
+
+func TestRetriableError(t *testing.T) {
+	var _ error = new(RetriableError)
 }

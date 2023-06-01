@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"testing"
@@ -389,17 +390,19 @@ func TestFasthttpHeadersToInternalMetadata(t *testing.T) {
 	assert.Equal(t, []string{"test2", "test3"}, imd["Bar"].Values)
 }
 
-func TestFasthttpHeadersToMap(t *testing.T) {
-	header := &fasthttp.RequestHeader{}
+func TestHttpHeadersToInternalMetadata(t *testing.T) {
+	header := http.Header{}
 	header.Add("foo", "test")
 	header.Add("bar", "test2")
 	header.Add("bar", "test3")
 
-	md := fasthttpHeadersToMap(header)
+	imd := httpHeadersToInternalMetadata(header)
 
-	require.NotEmpty(t, md)
-	require.NotEmpty(t, md["Foo"])
-	assert.Equal(t, []string{"test"}, md["Foo"])
-	require.NotEmpty(t, md["Bar"])
-	assert.Equal(t, []string{"test2", "test3"}, md["Bar"])
+	require.NotEmpty(t, imd)
+	require.NotEmpty(t, imd["Foo"])
+	require.NotEmpty(t, imd["Foo"].Values)
+	assert.Equal(t, []string{"test"}, imd["Foo"].Values)
+	require.NotEmpty(t, imd["Bar"])
+	require.NotEmpty(t, imd["Bar"].Values)
+	assert.Equal(t, []string{"test2", "test3"}, imd["Bar"].Values)
 }

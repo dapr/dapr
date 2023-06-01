@@ -1,34 +1,34 @@
 package diagnostics
 
 import (
-	"net"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/valyala/fasthttp"
 	"go.opencensus.io/stats/view"
 )
 
-func TestFastHTTPMiddleware(t *testing.T) {
+func TestHTTPMiddleware(t *testing.T) {
 	requestBody := "fake_requestDaprBody"
 	responseBody := "fake_responseDaprBody"
 
-	testRequestCtx := fakeFastHTTPRequestCtx(requestBody)
-
-	fakeHandler := func(ctx *fasthttp.RequestCtx) {
-		time.Sleep(100 * time.Millisecond)
-		ctx.Response.SetBodyRaw([]byte(responseBody))
-	}
+	testRequest := fakeHTTPRequest(requestBody)
 
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	testHTTP.Init("fakeID")
 
-	handler := testHTTP.FastHTTPMiddleware(fakeHandler)
+	handler := testHTTP.HTTPMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.Write([]byte(responseBody))
+	})
 
 	// act
-	handler(testRequestCtx)
+	handler(httptest.NewRecorder(), testRequest)
 
 	// assert
 	rows, err := view.RetrieveData("http/server/request_count")
@@ -46,12 +46,12 @@ func TestFastHTTPMiddleware(t *testing.T) {
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
-	assert.True(t, (rows[0].Data).(*view.DistributionData).Min == float64(len([]byte(requestBody))))
+	assert.Equal(t, float64(len(requestBody)), (rows[0].Data).(*view.DistributionData).Min)
 
 	rows, err = view.RetrieveData("http/server/response_bytes")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
-	assert.True(t, (rows[0].Data).(*view.DistributionData).Min == float64(len([]byte(responseBody))))
+	assert.Equal(t, float64(len(responseBody)), (rows[0].Data).(*view.DistributionData).Min)
 
 	rows, err = view.RetrieveData("http/server/latency")
 	assert.NoError(t, err)
@@ -59,16 +59,11 @@ func TestFastHTTPMiddleware(t *testing.T) {
 	assert.True(t, (rows[0].Data).(*view.DistributionData).Min >= 100.0)
 }
 
-func TestFastHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
+func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	requestBody := "fake_requestDaprBody"
 	responseBody := "fake_responseDaprBody"
 
-	testRequestCtx := fakeFastHTTPRequestCtx(requestBody)
-
-	fakeHandler := func(ctx *fasthttp.RequestCtx) {
-		time.Sleep(100 * time.Millisecond)
-		ctx.Response.SetBodyRaw([]byte(responseBody))
-	}
+	testRequest := fakeHTTPRequest(requestBody)
 
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
@@ -79,10 +74,13 @@ func TestFastHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	views := []*view.View{v}
 	view.Unregister(views...)
 
-	handler := testHTTP.FastHTTPMiddleware(fakeHandler)
+	handler := testHTTP.HTTPMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.Write([]byte(responseBody))
+	})
 
 	// act
-	handler(testRequestCtx)
+	handler(httptest.NewRecorder(), testRequest)
 
 	// assert
 	rows, err := view.RetrieveData("http/server/request_count")
@@ -121,34 +119,16 @@ func TestConvertPathToMethodName(t *testing.T) {
 	}
 }
 
-func fakeFastHTTPRequestCtx(expectedBody string) *fasthttp.RequestCtx {
-	expectedMethod := fasthttp.MethodPost
-	expectedRequestURI := "/invoke/method/testmethod"
-	expectedTransferEncoding := "encoding"
-	expectedHost := "dapr.io"
-	expectedRemoteAddr := "1.2.3.4:6789"
-	expectedHeader := map[string]string{
-		"Correlation-ID":  "e6f4bb20-96c0-426a-9e3d-991ba16a3ebb",
-		"XXX-Remote-Addr": "192.168.0.100",
+func fakeHTTPRequest(body string) *http.Request {
+	req, err := http.NewRequest(http.MethodPost, "http://dapr.io/invoke/method/testmethod", strings.NewReader(body))
+	if err != nil {
+		panic(err)
 	}
+	req.Header.Set("Correlation-ID", "e6f4bb20-96c0-426a-9e3d-991ba16a3ebb")
+	req.Header.Set("XXX-Remote-Addr", "192.168.0.100")
+	req.Header.Set("Transfer-Encoding", "encoding")
+	// This is normally set automatically when the request is sent to a server, but in this case we are not using a real server
+	req.Header.Set("Content-Length", strconv.FormatInt(req.ContentLength, 10))
 
-	var ctx fasthttp.RequestCtx
-	var req fasthttp.Request
-
-	req.Header.SetMethod(expectedMethod)
-	req.SetRequestURI(expectedRequestURI)
-	req.Header.SetHost(expectedHost)
-	req.Header.Add(fasthttp.HeaderTransferEncoding, expectedTransferEncoding)
-	req.Header.SetContentLength(len([]byte(expectedBody)))
-	req.BodyWriter().Write([]byte(expectedBody)) //nolint:errcheck
-
-	for k, v := range expectedHeader {
-		req.Header.Set(k, v)
-	}
-
-	remoteAddr, _ := net.ResolveTCPAddr("tcp", expectedRemoteAddr)
-
-	ctx.Init(&req, remoteAddr, nil)
-
-	return &ctx
+	return req
 }
