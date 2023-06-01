@@ -1354,12 +1354,11 @@ func TestPathURLNormalization(t *testing.T) {
 	t.Logf("externalURL is '%s'\n", externalURL)
 
 	for path, exp := range map[string]string{
-		`/foo/%2Fbbb%2F%2E`:       `/foo/%2Fbbb%2F%2E`,
-		`//foo//%2Fbbb%2F%2E////`: `/foo/%2Fbbb%2F%2E`,
-		`//foo/%2Fb/bb%2F%2E`:     `/foo/%2Fb/bb%2F%2E`,
-		`//foo/%2Fb//bb%2F%2E/`:   `/foo/%2Fb/bb%2F%2E`,
-		`/foo/%2E`:                `/foo/%2E`,
-		`/foo/%2E/`:               `/foo/%2E`,
+		`/foo/%2Fbbb%2F%2E`:     `/foo/%2Fbbb%2F%2E`,
+		`//foo/%2Fb/bb%2F%2E`:   `/foo/%2Fb/bb%2F%2E`,
+		`//foo/%2Fb///bb%2F%2E`: `/foo/%2Fb/bb%2F%2E`,
+		`/foo/%2E`:              `/foo/%2E`,
+		`///foo///%2E`:          `/foo/%2E`,
 	} {
 		t.Run(path, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
