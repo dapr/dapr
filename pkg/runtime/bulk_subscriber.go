@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/labstack/gommon/log"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -151,7 +150,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.applicationProtocol.Protocol.IsHTTP() {
+				if rPath == "" && a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
@@ -190,7 +189,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.applicationProtocol.Protocol.IsHTTP() {
+				if rPath == "" && a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 					continue
 				}
 				if message.ContentType == "" {

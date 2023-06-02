@@ -914,7 +914,7 @@ func TestInitNameResolution(t *testing.T) {
 			Properties: map[string]string{
 				nameresolution.DaprHTTPPort: strconv.Itoa(rt.runtimeConfig.httpPort),
 				nameresolution.DaprPort:     strconv.Itoa(rt.runtimeConfig.internalGRPCPort),
-				nameresolution.AppPort:      strconv.Itoa(rt.runtimeConfig.applicationPort),
+				nameresolution.AppPort:      strconv.Itoa(rt.runtimeConfig.appConnectionConfig.Port),
 				nameresolution.HostAddress:  rt.hostAddress,
 				nameresolution.AppID:        rt.runtimeConfig.id,
 			},
@@ -4348,25 +4348,28 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 	return rt
 }
 
-func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *internalConfig {
+func NewTestDaprRuntimeConfig(mode modes.DaprMode, appProtocol string, appPort int) *internalConfig {
 	return &internalConfig{
 		id:                 TestRuntimeConfigID,
 		placementAddresses: []string{"10.10.10.12"},
 		kubernetes: modeconfig.KubernetesConfig{
 			ControlPlaneAddress: "10.10.10.11",
 		},
-		allowedOrigins:               cors.DefaultAllowedOrigins,
-		applicationProtocol:          Protocol(protocol),
+		allowedOrigins: cors.DefaultAllowedOrigins,
+		appConnectionConfig: config.AppConnectionConfig{
+			Protocol:       protocol.Protocol(appProtocol),
+			Port:           appPort,
+			MaxConcurrency: -1,
+			ChannelAddress: "127.0.0.1",
+		},
 		mode:                         mode,
 		httpPort:                     DefaultDaprHTTPPort,
 		internalGRPCPort:             0,
 		apiGRPCPort:                  DefaultDaprAPIGRPCPort,
 		apiListenAddresses:           []string{DefaultAPIListenAddress},
 		publicPort:                   nil,
-		applicationPort:              appPort,
 		profilePort:                  DefaultProfilePort,
 		enableProfiling:              false,
-		maxConcurrency:               -1,
 		mTLSEnabled:                  false,
 		sentryServiceAddress:         "",
 		maxRequestBodySize:           4,
@@ -4375,7 +4378,6 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int)
 		gracefulShutdownDuration:     time.Second,
 		enableAPILogging:             ptr.Of(true),
 		disableBuiltinK8sSecretStore: false,
-		appChannelAddress:            "127.0.0.1",
 	}
 }
 
@@ -4849,7 +4851,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPSProtocol), 1024)
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(protocol.HTTPSProtocol), 1024)
 		rt := newDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
@@ -5124,7 +5126,7 @@ func TestInitBindings(t *testing.T) {
 	})
 
 	t.Run("one not exist binding", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
 		// no binding registered, just try to init a not exist binding

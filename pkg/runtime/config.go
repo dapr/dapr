@@ -23,11 +23,11 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
-	config "github.com/dapr/dapr/pkg/config/modes"
+	configmodes "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -39,7 +39,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
-	"github.com/labstack/gommon/log"
 )
 
 const (
@@ -114,15 +113,14 @@ type internalConfig struct {
 	enableProfiling              bool
 	apiGRPCPort                  int
 	internalGRPCPort             int
-	applicationPort              int
 	apiListenAddresses           []string
-	applicationProtocol          Protocol
+	appConnectionConfig          config.AppConnectionConfig
+	appConfig                    config.ApplicationConfig
 	mode                         modes.DaprMode
 	placementAddresses           []string
 	allowedOrigins               string
-	standalone                   config.StandaloneConfig
-	kubernetes                   config.KubernetesConfig
-	maxConcurrency               int
+	standalone                   configmodes.StandaloneConfig
+	kubernetes                   configmodes.KubernetesConfig
 	mTLSEnabled                  bool
 	sentryServiceAddress         string
 	maxRequestBodySize           int
@@ -131,9 +129,6 @@ type internalConfig struct {
 	gracefulShutdownDuration     time.Duration
 	enableAPILogging             *bool
 	disableBuiltinK8sSecretStore bool
-	appHealthCheck               *apphealth.Config
-	appHealthCheckHTTPPath       string
-	appChannelAddress            string
 	configPath                   string
 	certChain                    *credentials.CertChain
 }
@@ -160,7 +155,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 
 	variables := map[string]string{
 		env.AppID:           intc.id,
-		env.AppPort:         strconv.Itoa(intc.applicationPort),
+		env.AppPort:         strconv.Itoa(intc.appConnectionConfig.Port),
 		env.HostAddress:     host,
 		env.DaprPort:        strconv.Itoa(intc.internalGRPCPort),
 		env.DaprGRPCPort:    strconv.Itoa(intc.apiGRPCPort),
@@ -250,7 +245,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 
 	accessControlList, err = acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
-		intc.applicationProtocol.IsHTTP(),
+		intc.appConnectionConfig.Protocol.IsHTTP(),
 	)
 	if err != nil {
 		return nil, err
@@ -271,22 +266,24 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		configPath:           c.ConfigPath,
 		sentryServiceAddress: c.SentryAddress,
 		allowedOrigins:       c.AllowedOrigins,
-		kubernetes: config.KubernetesConfig{
+		kubernetes: configmodes.KubernetesConfig{
 			ControlPlaneAddress: c.ControlPlaneAddress,
 		},
-		standalone: config.StandaloneConfig{
+		standalone: configmodes.StandaloneConfig{
 			ResourcesPath: c.ResourcesPath,
 		},
 		enableProfiling:              c.EnableProfiling,
 		mTLSEnabled:                  c.EnableMTLS,
-		appChannelAddress:            c.AppChannelAddress,
-		appHealthCheckHTTPPath:       c.AppHealthCheckPath,
 		disableBuiltinK8sSecretStore: c.DisableBuiltinK8sSecretStore,
 		unixDomainSocket:             c.UnixDomainSocket,
-		maxConcurrency:               c.AppMaxConcurrency,
 		maxRequestBodySize:           c.DaprHTTPMaxRequestSize,
 		readBufferSize:               c.DaprHTTPReadBufferSize,
 		enableAPILogging:             c.EnableAPILogging,
+		appConnectionConfig: config.AppConnectionConfig{
+			ChannelAddress:      c.AppChannelAddress,
+			HealthCheckHTTPPath: c.AppHealthCheckPath,
+			MaxConcurrency:      c.AppMaxConcurrency,
+		},
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -340,18 +337,18 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.publicPort = &port
 	}
 
-	if c.AppProtocol != "" {
-		intc.applicationPort, err = strconv.Atoi(c.ApplicationPort)
+	if c.ApplicationPort != "" {
+		intc.appConnectionConfig.Port, err = strconv.Atoi(c.ApplicationPort)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing app-port: %w", err)
 		}
 	}
 
-	if intc.applicationPort == intc.httpPort {
+	if intc.appConnectionConfig.Port == intc.httpPort {
 		return nil, fmt.Errorf("the 'dapr-http-port' argument value %d conflicts with 'app-port'", intc.httpPort)
 	}
 
-	if intc.applicationPort == intc.apiGRPCPort {
+	if intc.appConnectionConfig.Port == intc.apiGRPCPort {
 		return nil, fmt.Errorf("the 'dapr-grpc-port' argument value %d conflicts with 'app-port'", intc.apiGRPCPort)
 	}
 
@@ -373,37 +370,37 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.placementAddresses = parsePlacementAddr(c.PlacementServiceHostAddr)
 	}
 
-	if intc.maxConcurrency == -1 {
-		intc.maxConcurrency = 0
+	if intc.appConnectionConfig.MaxConcurrency == -1 {
+		intc.appConnectionConfig.MaxConcurrency = 0
 	}
 
 	switch p := strings.ToLower(c.AppProtocol); p {
-	case string(GRPCSProtocol):
-		intc.applicationProtocol = GRPCSProtocol
-	case string(HTTPSProtocol):
-		intc.applicationProtocol = HTTPSProtocol
-	case string(H2CProtocol):
-		intc.applicationProtocol = H2CProtocol
-	case string(HTTPProtocol):
+	case string(protocol.GRPCSProtocol):
+		intc.appConnectionConfig.Protocol = protocol.GRPCSProtocol
+	case string(protocol.HTTPSProtocol):
+		intc.appConnectionConfig.Protocol = protocol.HTTPSProtocol
+	case string(protocol.H2CProtocol):
+		intc.appConnectionConfig.Protocol = protocol.H2CProtocol
+	case string(protocol.HTTPProtocol):
 		// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
 		// TODO: Remove in a future Dapr version
 		if c.AppSSL {
 			log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=https' instead")
-			intc.applicationProtocol = HTTPSProtocol
+			intc.appConnectionConfig.Protocol = protocol.HTTPSProtocol
 		} else {
-			intc.applicationProtocol = HTTPProtocol
+			intc.appConnectionConfig.Protocol = protocol.HTTPProtocol
 		}
-	case string(GRPCProtocol):
+	case string(protocol.GRPCProtocol):
 		// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
 		// TODO: Remove in a future Dapr version
 		if c.AppSSL {
 			log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=grpcs' instead")
-			intc.applicationProtocol = GRPCSProtocol
+			intc.appConnectionConfig.Protocol = protocol.GRPCSProtocol
 		} else {
-			intc.applicationProtocol = GRPCProtocol
+			intc.appConnectionConfig.Protocol = protocol.GRPCProtocol
 		}
 	case "":
-		intc.applicationProtocol = HTTPProtocol
+		intc.appConnectionConfig.Protocol = protocol.HTTPProtocol
 	default:
 		return nil, fmt.Errorf("invalid value for 'app-protocol': %v", c.AppProtocol)
 	}
@@ -415,12 +412,12 @@ func (c *Config) toInternal() (*internalConfig, error) {
 
 	healthProbeInterval := time.Duration(c.AppHealthProbeInterval) * time.Second
 	if c.AppHealthProbeInterval <= 0 {
-		healthProbeInterval = apphealth.DefaultProbeInterval
+		healthProbeInterval = config.AppHealthConfigDefaultProbeInterval
 	}
 
 	healthProbeTimeout := time.Duration(c.AppHealthProbeTimeout) * time.Millisecond
 	if c.AppHealthProbeTimeout <= 0 {
-		healthProbeTimeout = apphealth.DefaultProbeTimeout
+		healthProbeTimeout = config.AppHealthConfigDefaultProbeTimeout
 	}
 
 	if healthProbeTimeout > healthProbeInterval {
@@ -430,11 +427,11 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	// Also check to ensure no overflow with int32
 	healthThreshold := int32(c.AppHealthThreshold)
 	if c.AppHealthThreshold < 1 || int32(c.AppHealthThreshold+1) < 0 {
-		healthThreshold = apphealth.DefaultThreshold
+		healthThreshold = config.AppHealthConfigDefaultThreshold
 	}
 
 	if c.EnableAppHealthCheck {
-		intc.appHealthCheck = &apphealth.Config{
+		intc.appConnectionConfig.HealthCheck = &config.AppHealthConfig{
 			ProbeInterval: healthProbeInterval,
 			ProbeTimeout:  healthProbeTimeout,
 			ProbeOnly:     true,

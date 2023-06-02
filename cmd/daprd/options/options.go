@@ -20,7 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/dapr/pkg/apphealth"
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/cors"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -83,7 +84,7 @@ func New(args []string) *Options {
 	flag.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	flag.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")
 	flag.StringVar(&opts.ProfilePort, "profile-port", strconv.Itoa(runtime.DefaultProfilePort), "The port for the profile server")
-	flag.StringVar(&opts.AppProtocol, "app-protocol", string(runtime.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
+	flag.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
 	flag.StringVar(&opts.ComponentsPath, "components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
 	flag.Var(&opts.ResourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
 	flag.StringVar(&opts.ConfigPath, "config", "", "Path to config file, or name of a configuration object")
@@ -107,9 +108,9 @@ func New(args []string) *Options {
 	flag.BoolVar(&opts.DisableBuiltinK8sSecretStore, "disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
 	flag.BoolVar(&opts.EnableAppHealthCheck, "enable-app-health-check", false, "Enable health checks for the application using the protocol defined with app-protocol")
 	flag.StringVar(&opts.AppHealthCheckPath, "app-health-check-path", runtime.DefaultAppHealthCheckPath, "Path used for health checks; HTTP only")
-	flag.IntVar(&opts.AppHealthProbeInterval, "app-health-probe-interval", int(apphealth.DefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
-	flag.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(apphealth.DefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
-	flag.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(apphealth.DefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
+	flag.IntVar(&opts.AppHealthProbeInterval, "app-health-probe-interval", int(config.AppHealthConfigDefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
+	flag.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
+	flag.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 	flag.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
 
 	opts.Logger = logger.DefaultOptions()

@@ -541,11 +541,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 	a.directMessaging.SetAppChannel(a.appChannel)
 
-	err = a.createHTTPEndpointsAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app for external service invocation: %s", string(a.runtimeConfig.applicationProtocol), err)
-	}
-
 	// add another app channel dedicated to external service invocation
 	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
@@ -554,13 +549,13 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
-		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.maxConcurrency)
+		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
 	}
 
 	a.appHealthReady = func() {
 		a.appHealthReadyInit(opts)
 	}
-	if a.runtimeConfig.appConnectionConfig.appHealthCheck != nil && a.appChannel != nil {
+	if a.runtimeConfig.appConnectionConfig.HealthCheck != nil && a.appChannel != nil {
 		// We can't just pass "a.appChannel.HealthProbe" because appChannel may be re-created
 		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (bool, error) {
 			return a.appChannel.HealthProbe(ctx)
@@ -1547,7 +1542,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
 		MaxRequestBodySize:          int64(a.runtimeConfig.maxRequestBodySize) << 20, // Convert from MB to bytes
 		CompStore:                   a.compStore,
-		AppConnectionConfig:         a.runtimeConfig.AppConnectionConfig,
+		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
 	})
 
@@ -1639,11 +1634,10 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		SendToOutputBindingFn:       a.sendToOutputBinding,
 		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
 		AccessControlList:           a.accessControlList,
-		AppProtocolIsHTTP:           a.runtimeConfig.applicationProtocol.IsHTTP(),
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
 		CompStore:                   a.compStore,
-		AppConnectionConfig:         a.runtimeConfig.AppConnectionConfig,
+		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
 	})
 }
@@ -1674,7 +1668,7 @@ func (a *DaprRuntime) getSubscribedBindingsGRPC() ([]string, error) {
 
 func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	// if gRPC, looks for the binding in the list of bindings returned from the app
-	if !a.runtimeConfig.applicationConfig.Protocol.IsHTTP() {
+	if !a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 		if a.subscribeBindingList == nil {
 			list, err := a.getSubscribedBindingsGRPC()
 			if err != nil {
@@ -1980,7 +1974,7 @@ func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
 	}
 
 	// handle app subscriptions
-	if a.runtimeConfig.applicationConfig.Protocol.IsHTTP() {
+	if a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency)
 	} else {
 		var conn gogrpc.ClientConnInterface
@@ -2254,7 +2248,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	resolverMetadata.Properties = map[string]string{
 		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.httpPort),
 		nr.DaprPort:     strconv.Itoa(a.runtimeConfig.internalGRPCPort),
-		nr.AppPort:      strconv.Itoa(a.runtimeConfig.applicationPort),
+		nr.AppPort:      strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port),
 		nr.HostAddress:  a.hostAddress,
 		nr.AppID:        a.runtimeConfig.id,
 	}
@@ -3122,13 +3116,13 @@ func (a *DaprRuntime) authSecretStoreOrDefault(resource resourceWithMetadata) st
 }
 
 func (a *DaprRuntime) blockUntilAppIsReady() {
-	if a.runtimeConfig.applicationPort <= 0 {
+	if a.runtimeConfig.appConnectionConfig.Port <= 0 {
 		return
 	}
 
-	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.appConnection.Config.Protocol), a.runtimeConfig.applicationPort)
+	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.appConnectionConfig.Protocol), a.runtimeConfig.appConnectionConfig.Port)
 
-	dialAddr := a.runtimeConfig.AppConnectionConfig.ChannelAddress + ":" + strconv.Itoa(a.runtimeConfig.ApplicationPort)
+	dialAddr := a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port)
 
 	stopCh := ShutdownSignal()
 	defer signal.Stop(stopCh)
@@ -3152,7 +3146,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		dialer := &net.Dialer{
 			Timeout: 500 * time.Millisecond,
 		}
-		if a.runtimeConfig.AppConnectionConfig.Protocol.HasTLS() {
+		if a.runtimeConfig.appConnectionConfig.Protocol.HasTLS() {
 			conn, err = tls.DialWithDialer(dialer, "tcp", dialAddr, &tls.Config{
 				InsecureSkipVerify: true, //nolint:gosec
 			})
@@ -3167,7 +3161,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		time.Sleep(time.Millisecond * 100)
 	}
 
-	log.Infof("application discovered on port %v", a.runtimeConfig.applicationPort)
+	log.Infof("application discovered on port %v", a.runtimeConfig.appConnectionConfig.Port)
 }
 
 func (a *DaprRuntime) loadAppConfiguration() {
@@ -3186,86 +3180,13 @@ func (a *DaprRuntime) loadAppConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) createAppChannel() (err error) {
-	if a.runtimeConfig.applicationPort == 0 {
-		log.Warn("App channel is not initialized. Did you configure an app-port?")
-		return nil
-	}
-
-	var ch channel.AppChannel
-	if !a.runtimeConfig.applicationProtocol.IsHTTP() {
-		// create gRPC app channel
-		ch, err = a.grpc.GetAppChannel()
-		if err != nil {
-			return err
-		}
-	} else {
-		// create http app channel
-		pipeline, err := a.buildAppHTTPPipeline()
-		if err != nil {
-			return err
-		}
-		config := a.getAppHTTPChannelConfig(pipeline)
-		ch, err = httpChannel.CreateLocalChannel(config)
-		if err != nil {
-			return err
-		}
-		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.appHealthCheckHTTPPath)
-	}
-
-	a.appChannel = ch
-
-	return nil
-}
-
-func (a *DaprRuntime) createHTTPEndpointsAppChannel() (err error) {
-	if a.runtimeConfig.applicationPort == 0 {
-		log.Warn("App channel is not initialized. Did you configure an app-port?")
-		return nil
-	}
-
-	var ch channel.HTTPEndpointAppChannel
-	// create http app channel
-	pipeline, err := a.buildAppHTTPPipeline()
-	if err != nil {
-		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
-	}
-
-	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
-	if err != nil {
-		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
-	}
-
-	if a.runtimeConfig.ApplicationPort == 0 {
-		log.Warn("App channel is not initialized. Did you configure an app-port?")
-		return nil
-	}
-
-	if a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP() {
-		// Create a HTTP channel
-		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
-		if err != nil {
-			return fmt.Errorf("failed to create HTTP app channel: %w", err)
-		}
-		a.appChannel.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppConnectionConfig.HealthCheckHTTPPath)
-	} else {
-		// create gRPC app channel
-		a.appChannel, err = a.grpc.GetAppChannel()
-		if err != nil {
-			return fmt.Errorf("failed to create gRPC app channel: %w", err)
-		}
-	}
-
-	return nil
-}
-
 // Returns the HTTP endpoint for the app.
 func (a *DaprRuntime) getAppHTTPEndpoint() string {
 	// Application protocol is "http" or "https"
-	port := strconv.Itoa(a.runtimeConfig.applicationPort)
-	switch a.runtimeConfig.applicationConfig.Protocol {
+	port := strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port)
+	switch a.runtimeConfig.appConnectionConfig.Protocol {
 	case protocol.HTTPProtocol, protocol.H2CProtocol:
-		return "http://" + a.runtimeConfig.appChannelConfig.ChannelAddress + ":" + port
+		return "http://" + a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + port
 	case protocol.HTTPSProtocol:
 		return "https://" + a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + port
 	default:
@@ -3322,22 +3243,10 @@ func (a *DaprRuntime) initAppHTTPClient() {
 	}
 }
 
-func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) httpChannel.ChannelConfiguration {
-	return httpChannel.ChannelConfiguration{
-		Client:               a.appHTTPClient,
-		Endpoint:             a.getAppHTTPEndpoint(),
-		MaxConcurrency:       a.runtimeConfig.maxConcurrency,
-		Pipeline:             pipeline,
-		TracingSpec:          a.globalConfig.Spec.TracingSpec,
-		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
-	}
-}
-
-func (a *DaprRuntime) getAppHTTPChannelForHTTPEndpointsConfig(pipeline httpMiddleware.Pipeline) httpEndpointChannel.ChannelConfigurationForHTTPEndpoints {
-	return httpEndpointChannel.ChannelConfigurationForHTTPEndpoints{
-		Client:               a.appHTTPClient,
+func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, isExternal bool) httpChannel.ChannelConfiguration {
+	conf := httpChannel.ChannelConfiguration{
 		CompStore:            a.compStore,
-		MaxConcurrency:       a.runtimeConfig.maxConcurrency,
+		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
 		Pipeline:             pipeline,
 		TracingSpec:          a.globalConfig.Spec.TracingSpec,
 		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
@@ -3598,7 +3507,7 @@ func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Confi
 		grpcAppChannelConfig.AllowInsecureTLS = globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS)
 	}
 	if runtimeConfig != nil {
-		grpcAppChannelConfig.Port = runtimeConfig.applicationPort
+		grpcAppChannelConfig.Port = runtimeConfig.appConnectionConfig.Port
 		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.appConnectionConfig.MaxConcurrency
 		grpcAppChannelConfig.EnableTLS = (runtimeConfig.appConnectionConfig.Protocol == protocol.GRPCSProtocol)
 		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.maxRequestBodySize
@@ -3634,4 +3543,39 @@ func ShutdownSignal() chan os.Signal {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
 	return stop
+}
+
+func (a *DaprRuntime) createChannels() (err error) {
+	// Create a HTTP channel for external HTTP endpoint invocation
+	pipeline, err := a.buildAppHTTPPipeline()
+	if err != nil {
+		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
+	}
+
+	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+	if err != nil {
+		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
+	}
+
+	if a.runtimeConfig.appConnectionConfig.Port == 0 {
+		log.Warn("App channel is not initialized. Did you configure an app-port?")
+		return nil
+	}
+
+	if a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
+		// Create a HTTP channel
+		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+		if err != nil {
+			return fmt.Errorf("failed to create HTTP app channel: %w", err)
+		}
+		a.appChannel.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.appConnectionConfig.HealthCheckHTTPPath)
+	} else {
+		// create gRPC app channel
+		a.appChannel, err = a.grpc.GetAppChannel()
+		if err != nil {
+			return fmt.Errorf("failed to create gRPC app channel: %w", err)
+		}
+	}
+
+	return nil
 }
