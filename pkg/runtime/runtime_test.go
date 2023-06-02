@@ -92,6 +92,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -365,7 +366,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testlock (lock.mockLock/v1)", assert.AnError).Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testlock (lock.mockLock/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test error when lock version invalid", func(t *testing.T) {
@@ -388,7 +389,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), NewInitError(CreateComponentFailure, "testlock (lock.mockLock/v3)", fmt.Errorf("couldn't find lock store lock.mockLock/v3")).Error())
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.CreateComponentFailure, "testlock (lock.mockLock/v3)", fmt.Errorf("couldn't find lock store lock.mockLock/v3")).Error())
 	})
 
 	t.Run("test error when lock prefix strategy invalid", func(t *testing.T) {
@@ -466,7 +467,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (pubsub.mockPubSub/v1)", assert.AnError).Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testpubsub (pubsub.mockPubSub/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test invalid category component", func(t *testing.T) {
@@ -862,7 +863,7 @@ func TestInitState(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected error")
-		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
@@ -3184,7 +3185,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), NewRetriableError(nil))
+		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), rterrors.NewRetriable(nil))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3280,7 +3281,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		expectedError := fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", NewRetriableError(invokeError))
+		expectedError := fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", rterrors.NewRetriable(invokeError))
 		assert.Equal(t, expectedError.Error(), err.Error(), "expected errors to match")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3322,7 +3323,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
 		errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
-		expectedClientError := NewRetriableError(errors.New(errMsg))
+		expectedClientError := rterrors.NewRetriable(errors.New(errMsg))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3394,7 +3395,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			expectedError: fmt.Errorf(
 				"error returned from app while processing pub/sub event %v: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
-				NewRetriableError(status.Error(codes.Unknown, assert.AnError.Error())),
+				rterrors.NewRetriable(status.Error(codes.Unknown, assert.AnError.Error())),
 			),
 		},
 		{
@@ -3419,7 +3420,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			expectedError: fmt.Errorf(
 				"RETRY status returned from app while processing pub/sub event %v: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
-				NewRetriableError(nil),
+				rterrors.NewRetriable(nil),
 			),
 		},
 		{
@@ -3435,7 +3436,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				"unknown status returned from app while processing pub/sub event %v, status: %v, err: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
 				runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
-				NewRetriableError(nil),
+				rterrors.NewRetriable(nil),
 			),
 		},
 		{
