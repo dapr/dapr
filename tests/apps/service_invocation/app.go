@@ -196,7 +196,12 @@ func withBodyHandler(w http.ResponseWriter, r *http.Request) {
 		onBadRequest(w, err)
 		return
 	}
-	fmt.Printf("withBodyHandler body: %s\n", string(body))
+
+	if len(body) > 100 {
+		fmt.Printf("withBodyHandler body (first 100 bytes): %s\n", string(body[:100]))
+	} else {
+		fmt.Printf("withBodyHandler body: %s\n", string(body))
+	}
 	var s string
 	err = json.Unmarshal(body, &s)
 	if err != nil {
@@ -1363,7 +1368,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 			name: "4MB",
 		},
 		{
-			size: 1024*1024*3 - 1,
+			size: 1024*1024*3 + 10,
 			name: "4MB+",
 		},
 		{
@@ -1379,7 +1384,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 
 		body := make([]byte, test.size)
 		jsonBody, _ := json.Marshal(body)
-		fmt.Printf("largeDataErrorServiceCall - Request size: %d\n", len(jsonBody))
+		fmt.Printf("largeDataErrorServiceCall %s - Request size: %d\n", test.name, len(jsonBody))
 
 		if isHTTP {
 			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewReader(jsonBody))

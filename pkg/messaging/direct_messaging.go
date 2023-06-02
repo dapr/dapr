@@ -440,7 +440,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		}
 		return nil, err
 	}
-	if chunk.Response == nil || chunk.Response.Status == nil || chunk.Response.Headers == nil {
+	if chunk.Response == nil || chunk.Response.Status == nil {
 		return nil, errors.New("response does not contain the required fields in the leading chunk")
 	}
 	pr, pw := io.Pipe()
