@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/valyala/fasthttp"
@@ -83,6 +84,12 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 // WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
 	imr.r.Metadata = metadataToInternalMetadata(md)
+	return imr
+}
+
+// WithHTTPHeaders sets HTTP request headers.
+func (imr *InvokeMethodRequest) WithHTTPHeaders(header http.Header) *InvokeMethodRequest {
+	imr.r.Metadata = httpHeadersToInternalMetadata(header)
 	return imr
 }
 
