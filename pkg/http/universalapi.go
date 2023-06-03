@@ -64,6 +64,8 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 	}
 
 	return func(reqCtx *fasthttp.RequestCtx) {
+		var err error
+
 		// Need to use some reflection magic to allocate a value for the pointer of the generic type T
 		in := reflect.New(rt).Interface().(T)
 
@@ -72,7 +74,7 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 			// Read the response body and decode it as JSON using protojson
 			body := reqCtx.PostBody()
 			if len(body) > 0 {
-				err := pjsonDec.Unmarshal(body, in)
+				err = pjsonDec.Unmarshal(body, in)
 				if err != nil {
 					msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 					respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -81,8 +83,6 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 				}
 			}
 		}
-
-		var err error
 
 		// If we have an inModifier function, invoke it now
 		if opts.InModifier != nil {
