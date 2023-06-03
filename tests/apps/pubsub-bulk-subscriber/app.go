@@ -41,6 +41,8 @@ const (
 	pubsubDeadBulkSubTopic       = "pubsub-dead-bulk-sub-topic-http"
 	pubsubDeadLetterBulkSubTopic = "pubsub-deadletter-bulk-sub-topic-http"
 	PubSubEnvVar                 = "DAPR_TEST_PUBSUB_NAME"
+	statusSuccess                = "SUCCESS"
+	statusDrop                   = "DROP"
 )
 
 var pubsubkafkaName = "kafka-messagebus"
@@ -316,7 +318,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
-			Status:  "DROP",
+			Status:  statusDrop,
 		})
 		return
 	}
@@ -337,7 +339,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: errorMessage,
-			Status:  "DROP",
+			Status:  statusDrop,
 		})
 		return
 	}
@@ -349,7 +351,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("(%s) Responding with SUCCESS", reqID)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: "consumed",
-			Status:  "SUCCESS",
+			Status:  statusSuccess,
 		})
 	}
 }
@@ -372,7 +374,7 @@ func bulkSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 		for i, msg := range msgs {
 			entryResponse := BulkSubscribeResponseEntry{}
 			entryResponse.EntryId = msg.EntryId
-			entryResponse.Status = "DROP"
+			entryResponse.Status = statusDrop
 			bulkResponseEntries[i] = entryResponse
 		}
 		json.NewEncoder(w).Encode(BulkSubscribeResponse{
@@ -381,15 +383,17 @@ func bulkSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	returnStatus := "SUCCESS"
+	// Success is the default status for this handler, can be overridden by the desiredResponse.
+	// Supported values are "SUCCESS", "DROP" and "RETRY".
+	returnStatus := statusSuccess
 	if desiredResponse == respondWithDrop {
-		returnStatus = "DROP"
+		returnStatus = statusDrop
 	}
 
 	for i, msg := range msgs {
 		entryResponse := BulkSubscribeResponseEntry{}
 		log.Printf("(%s) bulkSubscribeHandler called %s.Index: %d, Message: %s", reqID, r.URL, i, msg)
-		log.Printf("(%s) Responding with SUCCESS for entryId %s", reqID, msg.EntryId)
+		log.Printf("(%s) Responding with %s for entryId %s", reqID, returnStatus, msg.EntryId)
 		entryResponse.EntryId = msg.EntryId
 		entryResponse.Status = returnStatus
 		bulkResponseEntries[i] = entryResponse
@@ -408,7 +412,7 @@ func bulkSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 			errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message during bulk subscribe from %s", r.URL.String())
 			log.Printf("(%s) Responding with DROP during bulk subscribe. %s", reqID, errorMessage)
-			entryResponse.Status = "DROP"
+			entryResponse.Status = statusDrop
 		}
 	}
 
