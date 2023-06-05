@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
@@ -404,7 +405,7 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	if globalConfig.Spec.MetricSpec.Enabled {
 		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
-			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
+			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", mErr).Error())
 		}
 	}
 
