@@ -33,7 +33,6 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
-	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
@@ -266,23 +265,21 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	})
 }
 
-func (s *server) apiLoggingInfo(route string) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fields := make(map[string]any, 2)
-			if s.config.APILoggingObfuscateURLs {
-				fields["method"] = r.Method + " " + route
-			} else {
-				fields["method"] = r.Method + " " + r.URL.Path
-			}
-			if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
-				fields["useragent"] = userAgent
-			}
+func (s *server) apiLoggingInfo(route string, next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fields := make(map[string]any, 2)
+		if s.config.APILoggingObfuscateURLs {
+			fields["method"] = r.Method + " " + route
+		} else {
+			fields["method"] = r.Method + " " + r.URL.Path
+		}
+		if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
+			fields["useragent"] = userAgent
+		}
 
-			infoLog.WithFields(fields).Info("HTTP API Called")
-			next.ServeHTTP(w, r)
-		})
-	}
+		infoLog.WithFields(fields).Info("HTTP API Called")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *server) useComponents(r chi.Router) {
@@ -327,65 +324,28 @@ func (s *server) useAPIAuthentication(r chi.Router) {
 	})
 }
 
-func (s *server) unescapeRequestParametersHandler(next http.Handler) http.Handler {
+func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, next http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chiCtx := chi.RouteContext(r.Context())
+		if chiCtx != nil {
+			var err error
+			for i, key := range chiCtx.URLParams.Keys {
+				if keepWildcardUnescaped && key == "*" {
+					continue
+				}
+
+				chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
+				if err != nil {
+					errorMessage := fmt.Sprintf("failed to unescape request parameter %q. Error: %v", key, err)
+					log.Debug(errorMessage)
+					http.Error(w, errorMessage, http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
 		next.ServeHTTP(w, r)
 	})
-	/*return func(ctx *fasthttp.RequestCtx) {
-		parseError := false
-		unescapeRequestParameters := func(parameter []byte, valI interface{}) {
-			value, ok := valI.(string)
-			if !ok {
-				return
-			}
-
-			if !parseError {
-				parameterUnescapedValue, err := url.QueryUnescape(value)
-				if err == nil {
-					ctx.SetUserValueBytes(parameter, parameterUnescapedValue)
-				} else {
-					parseError = true
-					errorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %s. Error: %s", parameter, value, err.Error())
-					log.Debug(errorMessage)
-					ctx.Error(errorMessage, fasthttp.StatusBadRequest)
-				}
-			}
-		}
-		ctx.VisitUserValues(unescapeRequestParameters)
-
-		if !parseError {
-			next(ctx)
-		}
-	}*/
-}
-
-func (s *server) unescapeRequestParametersHandlerFastHTTP(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		parseError := false
-		unescapeRequestParameters := func(parameter []byte, valI interface{}) {
-			value, ok := valI.(string)
-			if !ok {
-				return
-			}
-
-			if !parseError {
-				parameterUnescapedValue, err := url.QueryUnescape(value)
-				if err == nil {
-					ctx.SetUserValueBytes(parameter, parameterUnescapedValue)
-				} else {
-					parseError = true
-					errorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %s. Error: %s", parameter, value, err.Error())
-					log.Debug(errorMessage)
-					ctx.Error(errorMessage, fasthttp.StatusBadRequest)
-				}
-			}
-		}
-		ctx.VisitUserValues(unescapeRequestParameters)
-
-		if !parseError {
-			next(ctx)
-		}
-	}
 }
 
 func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
@@ -416,14 +376,13 @@ func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string,
 		handler = nethttpadaptor.NewNetHTTPHandlerFunc(e.FastHTTPHandler)
 	}
 
-	if parameterFinder.MatchString(path) && !e.KeepWildcardUnescaped {
-		// TODO
-		//handler = s.unescapeRequestParametersHandler(handler)
+	if parameterFinder.MatchString(path) {
+		handler = s.unescapeRequestParametersHandler(e.KeepWildcardUnescaped, handler)
 	}
 
 	// Add API logging inline middleware
 	if s.config.EnableAPILogging && (!e.IsHealthCheck || s.config.APILogHealthChecks) {
-		r = r.With(s.apiLoggingInfo(path))
+		handler = s.apiLoggingInfo(path, handler)
 	}
 
 	// If no method is defined, match any method
@@ -437,7 +396,16 @@ func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string,
 
 	// Set as fallback method
 	if e.IsFallback {
-		r.NotFound(handler)
-		r.MethodNotAllowed(handler)
+		fallbackHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Populate the wildcard path with the full path
+			chiCtx := chi.RouteContext(r.Context())
+			if chiCtx != nil {
+				chiCtx.URLParams.Add("*", strings.TrimPrefix(r.URL.RawPath, "/"))
+			}
+
+			handler(w, r)
+		})
+		r.NotFound(fallbackHandler)
+		r.MethodNotAllowed(fallbackHandler)
 	}
 }
