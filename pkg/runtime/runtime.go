@@ -713,16 +713,24 @@ func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
 }
 
 func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
+	found := false
 	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initOutputBinding(c); err != nil {
 			return err
 		}
+		found = true
 	}
 
 	if a.bindingsRegistry.HasInputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initInputBinding(c); err != nil {
 			return err
 		}
+		found = true
+	}
+
+	if !found {
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		return fmt.Errorf("couldn't find binding %s/%s", c.Spec.Type, c.Spec.Version)
 	}
 	return nil
 }
