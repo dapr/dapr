@@ -16,10 +16,11 @@ package http
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/valyala/fasthttp"
+	"strconv"
 
 	"github.com/dapr/dapr/pkg/messages"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
@@ -93,6 +94,40 @@ func respondWithEmpty(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func respondWithHTTPRawResponse(w http.ResponseWriter, m *UniversalHTTPRawResponse, statusCode int) {
+	if m.StatusCode > 0 {
+		statusCode = m.StatusCode
+	}
+
+	headers := w.Header()
+	if m.ContentType != "" {
+		headers.Set(headerContentType, m.ContentType)
+	} else if headers.Get(headerContentType) == "" {
+		headers.Set(headerContentType, jsonContentTypeHeader)
+	}
+	if headers.Get(headerContentLength) == "" {
+		headers.Set(headerContentLength, strconv.Itoa(len(m.Body)))
+	}
+
+	w.WriteHeader(statusCode)
+	w.Write(m.Body)
+}
+
+func respondWithProto(w http.ResponseWriter, m protoreflect.ProtoMessage, statusCode int, emitUnpopulated bool) {
+	// Encode the response as JSON using protojson
+	respBytes, err := protojson.MarshalOptions{
+		EmitUnpopulated: emitUnpopulated,
+	}.Marshal(m)
+	if err != nil {
+		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
+		respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
+		log.Debug(msg)
+		return
+	}
+
+	respondWithData(w, statusCode, respBytes)
+}
+
 // respondWithError responds with an error.
 // Normally, this is used with messages.APIError.
 func respondWithError(w http.ResponseWriter, err error) {
@@ -110,46 +145,4 @@ func respondWithError(w http.ResponseWriter, err error) {
 	// Respond with a generic error
 	msg := NewErrorResponse("ERROR", err.Error())
 	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
-}
-
-type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
-
-// fasthttpResponseWithJSON overrides the content-type with application/json.
-func fasthttpResponseWithJSON(code int, obj []byte) fasthttpResponseOption {
-	return func(ctx *fasthttp.RequestCtx) {
-		ctx.Response.SetStatusCode(code)
-		ctx.Response.SetBody(obj)
-		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-	}
-}
-
-// fasthttpResponseWithError sets error code and jsonized error message.
-func fasthttpResponseWithError(code int, resp errorResponseValue) fasthttpResponseOption {
-	return fasthttpResponseWithJSON(code, resp.JSONErrorValue())
-}
-
-// fasthttpResponseWithEmpty sets 204 status code.
-func fasthttpResponseWithEmpty() fasthttpResponseOption {
-	return func(ctx *fasthttp.RequestCtx) {
-		ctx.Response.SetBody(nil)
-		ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
-	}
-}
-
-// fasthttpResponseWith sets a default application/json content type if content type is not present.
-func fasthttpResponseWith(code int, obj []byte) fasthttpResponseOption {
-	return func(ctx *fasthttp.RequestCtx) {
-		ctx.Response.SetStatusCode(code)
-		ctx.Response.SetBody(obj)
-
-		if len(ctx.Response.Header.ContentType()) == 0 {
-			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-		}
-	}
-}
-
-func fasthttpRespond(ctx *fasthttp.RequestCtx, options ...fasthttpResponseOption) {
-	for _, option := range options {
-		option(ctx)
-	}
 }

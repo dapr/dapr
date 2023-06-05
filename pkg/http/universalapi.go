@@ -19,7 +19,6 @@ import (
 	"io"
 	"net/http"
 	"reflect"
-	"strconv"
 
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -60,7 +59,7 @@ type UniversalHTTPHandlerOpts[T proto.Message, U proto.Message] struct {
 	ProtoResponseEmitUnpopulated bool
 }
 
-// UniversalFastHTTPHandler wraps a UniversalAPI method into a HTTP handler.
+// UniversalFastHTTPHandler wraps a Universal API method into a HTTP handler.
 func UniversalHTTPHandler[T proto.Message, U proto.Message](
 	handler func(ctx context.Context, in T) (U, error),
 	opts UniversalHTTPHandlerOpts[T, U],
@@ -79,7 +78,7 @@ func UniversalHTTPHandler[T proto.Message, U proto.Message](
 		in := reflect.New(rt).Interface().(T)
 
 		// Parse the body as JSON
-		if !opts.SkipInputBody {
+		if !opts.SkipInputBody && r.Body != nil {
 			var body []byte
 			// Read the request body and decode it as JSON using protojson
 			body, err = io.ReadAll(r.Body)
@@ -265,25 +264,6 @@ type UniversalHTTPRawResponse struct {
 	StatusCode int
 }
 
-func respondWithHTTPRawResponse(w http.ResponseWriter, m *UniversalHTTPRawResponse, statusCode int) {
-	if m.StatusCode > 0 {
-		statusCode = m.StatusCode
-	}
-
-	headers := w.Header()
-	if m.ContentType != "" {
-		headers.Set(headerContentType, m.ContentType)
-	} else if headers.Get(headerContentType) == "" {
-		headers.Set(headerContentType, jsonContentTypeHeader)
-	}
-	if headers.Get(headerContentLength) == "" {
-		headers.Set(headerContentLength, strconv.Itoa(len(m.Body)))
-	}
-
-	w.WriteHeader(statusCode)
-	w.Write(m.Body)
-}
-
 func universalFastHTTPRawResponder(reqCtx *fasthttp.RequestCtx, m *UniversalHTTPRawResponse, statusCode int) {
 	if m.StatusCode > 0 {
 		statusCode = m.StatusCode
@@ -293,21 +273,6 @@ func universalFastHTTPRawResponder(reqCtx *fasthttp.RequestCtx, m *UniversalHTTP
 	}
 
 	fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, m.Body))
-}
-
-func respondWithProto(w http.ResponseWriter, m protoreflect.ProtoMessage, statusCode int, emitUnpopulated bool) {
-	// Encode the response as JSON using protojson
-	respBytes, err := protojson.MarshalOptions{
-		EmitUnpopulated: emitUnpopulated,
-	}.Marshal(m)
-	if err != nil {
-		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
-		respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
-		log.Debug(msg)
-		return
-	}
-
-	respondWithData(w, statusCode, respBytes)
 }
 
 func universalFastHTTPProtoResponder(reqCtx *fasthttp.RequestCtx, m protoreflect.ProtoMessage, statusCode int, emitUnpopulated bool) {

@@ -20,7 +20,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-func TestHeaders(t *testing.T) {
+func TestFastHTTPReponses(t *testing.T) {
 	t.Run("Respond with JSON", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 		fasthttpRespond(ctx, fasthttpResponseWithJSON(200, nil))
