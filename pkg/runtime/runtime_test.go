@@ -5082,6 +5082,19 @@ func TestInitBindings(t *testing.T) {
 		err = r.initBinding(output)
 		assert.NoError(t, err)
 	})
+
+	t.Run("one not exist binding", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r.bindingsRegistry = bindingsLoader.NewRegistry()
+		defer stopRuntime(t, r)
+		// no binding registered, just try to init a not exist binding
+
+		c := componentsV1alpha1.Component{}
+		c.ObjectMeta.Name = "testNotExistBinding"
+		c.Spec.Type = "bindings.testNotExistBinding"
+		err := r.initBinding(c)
+		assert.Error(t, err)
+	})
 }
 
 func TestBindingTracingHttp(t *testing.T) {
