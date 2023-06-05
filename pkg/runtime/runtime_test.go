@@ -6124,3 +6124,103 @@ func TestHTTPEndpointsUpdate(t *testing.T) {
 	_, exists = rt.compStore.GetHTTPEndpoint(endpoint3.Name)
 	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
 }
+
+func TestIsBindingOfDirection(t *testing.T) {
+	t.Run("no direction in metadata for input binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{}
+		r := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("no direction in metadata for output binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{}
+		r := isBindingOfDirection("output", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("input direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("input"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("input", m)
+		f := isBindingOfDirection("output", m)
+
+		assert.True(t, r)
+		assert.False(t, f)
+	})
+
+	t.Run("output direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("output"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("output", m)
+		f := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+		assert.False(t, f)
+	})
+
+	t.Run("input and output direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("input, output"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("output", m)
+		f := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+		assert.True(t, f)
+	})
+
+	t.Run("invalid direction for input binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("aaa"),
+					},
+				},
+			},
+		}
+		f := isBindingOfDirection("input", m)
+		assert.False(t, f)
+	})
+
+	t.Run("invalid direction for output binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("aaa"),
+					},
+				},
+			},
+		}
+		f := isBindingOfDirection("output", m)
+		assert.False(t, f)
+	})
+}

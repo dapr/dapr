@@ -1697,7 +1697,30 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	return false, nil
 }
 
+func isBindingOfDirection(direction string, metadata []componentsV1alpha1.MetadataItem) bool {
+	directionFound := false
+
+	for _, m := range metadata {
+		if strings.ToLower(m.Name) == "direction" {
+			directionFound = true
+
+			directions := strings.Split(string(m.Value.Raw), ",")
+			for _, d := range directions {
+				if strings.TrimSpace(strings.ToLower(d)) == direction {
+					return true
+				}
+			}
+		}
+	}
+
+	return !directionFound
+}
+
 func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
+	if !isBindingOfDirection("input", c.Spec.Metadata) {
+		return nil
+	}
+
 	fName := c.LogName()
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
@@ -1724,6 +1747,10 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 }
 
 func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
+	if !isBindingOfDirection("output", c.Spec.Metadata) {
+		return nil
+	}
+
 	fName := c.LogName()
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
