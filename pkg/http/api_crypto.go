@@ -39,16 +39,16 @@ func (a *api) constructCryptoEndpoints() []Endpoint {
 	// These APIs are not implemented as Universal because the gRPC APIs are stream-based.
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodPut},
-			Route:   "crypto/{name}/encrypt",
-			Version: apiVersionV1alpha1,
-			Handler: a.onCryptoEncrypt,
+			Methods:         []string{fasthttp.MethodPut},
+			Route:           "crypto/{name}/encrypt",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onCryptoEncrypt,
 		},
 		{
-			Methods: []string{fasthttp.MethodPut},
-			Route:   "crypto/{name}/decrypt",
-			Version: apiVersionV1alpha1,
-			Handler: a.onCryptoDecrypt,
+			Methods:         []string{fasthttp.MethodPut},
+			Route:           "crypto/{name}/decrypt",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onCryptoDecrypt,
 		},
 	}
 }

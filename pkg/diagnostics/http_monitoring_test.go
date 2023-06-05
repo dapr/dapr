@@ -22,13 +22,13 @@ func TestHTTPMiddleware(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.Init("fakeID")
 
-	handler := testHTTP.HTTPMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 		w.Write([]byte(responseBody))
-	})
+	}))
 
 	// act
-	handler(httptest.NewRecorder(), testRequest)
+	handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 
 	// assert
 	rows, err := view.RetrieveData("http/server/request_count")
@@ -74,13 +74,13 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	views := []*view.View{v}
 	view.Unregister(views...)
 
-	handler := testHTTP.HTTPMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 		w.Write([]byte(responseBody))
-	})
+	}))
 
 	// act
-	handler(httptest.NewRecorder(), testRequest)
+	handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 
 	// assert
 	rows, err := view.RetrieveData("http/server/request_count")

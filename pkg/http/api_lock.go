@@ -25,16 +25,16 @@ import (
 func (a *api) constructDistributedLockEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "lock/{storeName}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onTryLockAlpha1(),
+			Methods:         []string{fasthttp.MethodPost},
+			Route:           "lock/{storeName}",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onTryLockAlpha1(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "unlock/{storeName}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onUnlockAlpha1(),
+			Methods:         []string{fasthttp.MethodPost},
+			Route:           "unlock/{storeName}",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onUnlockAlpha1(),
 		},
 	}
 }

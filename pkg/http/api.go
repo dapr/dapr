@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fasthttp/router"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
@@ -91,7 +90,7 @@ const (
 	apiVersionV1             = "v1.0"
 	apiVersionV1alpha1       = "v1.0-alpha1"
 	idParam                  = "id"
-	methodParam              = "method"
+	methodParam              = "*"
 	topicParam               = "topic"
 	actorTypeParam           = "actorType"
 	actorIDParam             = "actorId"
@@ -204,46 +203,46 @@ func (a *api) MarkStatusAsOutboundReady() {
 func (a *api) constructWorkflowEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "workflows/{workflowComponent}/{instanceID}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onGetWorkflowHandler(),
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "workflows/{workflowComponent}/{instanceID}",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onGetWorkflowHandler(),
 		},
 		{
-			Methods: []string{nethttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onRaiseEventWorkflowHandler(),
+			Methods:         []string{nethttp.MethodPost},
+			Route:           "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onRaiseEventWorkflowHandler(),
 		},
 		{
-			Methods: []string{nethttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{workflowName}/start",
-			Version: apiVersionV1alpha1,
-			Handler: a.onStartWorkflowHandler(),
+			Methods:         []string{nethttp.MethodPost},
+			Route:           "workflows/{workflowComponent}/{workflowName}/start",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onStartWorkflowHandler(),
 		},
 		{
-			Methods: []string{nethttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
-			Version: apiVersionV1alpha1,
-			Handler: a.onPauseWorkflowHandler(),
+			Methods:         []string{nethttp.MethodPost},
+			Route:           "workflows/{workflowComponent}/{instanceID}/pause",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onPauseWorkflowHandler(),
 		},
 		{
-			Methods: []string{nethttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
-			Version: apiVersionV1alpha1,
-			Handler: a.onResumeWorkflowHandler(),
+			Methods:         []string{nethttp.MethodPost},
+			Route:           "workflows/{workflowComponent}/{instanceID}/resume",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onResumeWorkflowHandler(),
 		},
 		{
-			Methods: []string{nethttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
-			Version: apiVersionV1alpha1,
-			Handler: a.onTerminateWorkflowHandler(),
+			Methods:         []string{nethttp.MethodPost},
+			Route:           "workflows/{workflowComponent}/{instanceID}/terminate",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onTerminateWorkflowHandler(),
 		},
 		{
-			Methods: []string{nethttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{instanceID}/purge",
-			Version: apiVersionV1alpha1,
-			Handler: a.onPurgeWorkflowHandler(),
+			Methods:         []string{nethttp.MethodPost},
+			Route:           "workflows/{workflowComponent}/{instanceID}/purge",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onPurgeWorkflowHandler(),
 		},
 	}
 }
@@ -251,40 +250,40 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 func (a *api) constructStateEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "state/{storeName}/{key}",
-			Version: apiVersionV1,
-			Handler: a.onGetState,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "state/{storeName}/{key}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onGetState,
 		},
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "state/{storeName}",
-			Version: apiVersionV1,
-			Handler: a.onPostState,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "state/{storeName}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onPostState,
 		},
 		{
-			Methods: []string{nethttp.MethodDelete},
-			Route:   "state/{storeName}/{key}",
-			Version: apiVersionV1,
-			Handler: a.onDeleteState,
+			Methods:         []string{nethttp.MethodDelete},
+			Route:           "state/{storeName}/{key}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onDeleteState,
 		},
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "state/{storeName}/bulk",
-			Version: apiVersionV1,
-			Handler: a.onBulkGetState,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "state/{storeName}/bulk",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onBulkGetState,
 		},
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "state/{storeName}/transaction",
-			Version: apiVersionV1,
-			Handler: a.onPostStateTransaction,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "state/{storeName}/transaction",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onPostStateTransaction,
 		},
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "state/{storeName}/query",
-			Version: apiVersionV1alpha1,
-			Handler: a.onQueryStateHandler(),
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "state/{storeName}/query",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onQueryStateHandler(),
 		},
 	}
 }
@@ -292,16 +291,16 @@ func (a *api) constructStateEndpoints() []Endpoint {
 func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "publish/{pubsubname}/{topic:*}",
-			Version: apiVersionV1,
-			Handler: a.onPublish,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "publish/{pubsubname}/{topic}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onPublish,
 		},
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "publish/bulk/{pubsubname}/{topic:*}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onBulkPublish,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "publish/bulk/{pubsubname}/{topic}",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onBulkPublish,
 		},
 	}
 }
@@ -309,10 +308,10 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 func (a *api) constructBindingsEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "bindings/{name}",
-			Version: apiVersionV1,
-			Handler: a.onOutputBindingMessage,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "bindings/{name}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onOutputBindingMessage,
 		},
 	}
 }
@@ -320,12 +319,14 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods:           []string{router.MethodWild},
-			Route:             "invoke/{id}/method/{method:*}",
-			Alias:             "{method:*}",
-			Version:           apiVersionV1,
-			KeepParamUnescape: true,
-			Handler:           a.onDirectMessage,
+			// No method is defined here to match any method
+			Methods: []string{},
+			Route:   "invoke/{id}/method/*",
+			// This is the fallback route for when no other method is matched by the router
+			IsFallback:            true,
+			Version:               apiVersionV1,
+			KeepWildcardUnescaped: true,
+			FastHTTPHandler:       a.onDirectMessage,
 		},
 	}
 }
@@ -333,58 +334,58 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 func (a *api) constructActorEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "actors/{actorType}/{actorId}/state",
-			Version: apiVersionV1,
-			Handler: a.onActorStateTransaction,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "actors/{actorType}/{actorId}/state",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onActorStateTransaction,
 		},
 		{
-			Methods: []string{nethttp.MethodGet, nethttp.MethodPost, nethttp.MethodDelete, nethttp.MethodPut},
-			Route:   "actors/{actorType}/{actorId}/method/{method}",
-			Version: apiVersionV1,
-			Handler: a.onDirectActorMessage,
+			Methods:         []string{nethttp.MethodGet, nethttp.MethodPost, nethttp.MethodDelete, nethttp.MethodPut},
+			Route:           "actors/{actorType}/{actorId}/method/{method}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onDirectActorMessage,
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "actors/{actorType}/{actorId}/state/{key}",
-			Version: apiVersionV1,
-			Handler: a.onGetActorState,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "actors/{actorType}/{actorId}/state/{key}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onGetActorState,
 		},
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
-			Version: apiVersionV1,
-			Handler: a.onCreateActorReminder,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onCreateActorReminder,
 		},
 		{
-			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:   "actors/{actorType}/{actorId}/timers/{name}",
-			Version: apiVersionV1,
-			Handler: a.onCreateActorTimer,
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:           "actors/{actorType}/{actorId}/timers/{name}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onCreateActorTimer,
 		},
 		{
-			Methods: []string{nethttp.MethodDelete},
-			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
-			Version: apiVersionV1,
-			Handler: a.onDeleteActorReminder,
+			Methods:         []string{nethttp.MethodDelete},
+			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onDeleteActorReminder,
 		},
 		{
-			Methods: []string{nethttp.MethodDelete},
-			Route:   "actors/{actorType}/{actorId}/timers/{name}",
-			Version: apiVersionV1,
-			Handler: a.onDeleteActorTimer,
+			Methods:         []string{nethttp.MethodDelete},
+			Route:           "actors/{actorType}/{actorId}/timers/{name}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onDeleteActorTimer,
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
-			Version: apiVersionV1,
-			Handler: a.onGetActorReminder,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onGetActorReminder,
 		},
 		{
-			Methods: []string{nethttp.MethodPatch},
-			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
-			Version: apiVersionV1,
-			Handler: a.onRenameActorReminder,
+			Methods:         []string{nethttp.MethodPatch},
+			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onRenameActorReminder,
 		},
 	}
 }
@@ -392,20 +393,20 @@ func (a *api) constructActorEndpoints() []Endpoint {
 func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods:       []string{nethttp.MethodGet},
-			Route:         "healthz",
-			Version:       apiVersionV1,
-			Handler:       a.onGetHealthz,
-			AlwaysAllowed: true,
-			IsHealthCheck: true,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "healthz",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onGetHealthz,
+			AlwaysAllowed:   true,
+			IsHealthCheck:   true,
 		},
 		{
-			Methods:       []string{nethttp.MethodGet},
-			Route:         "healthz/outbound",
-			Version:       apiVersionV1,
-			Handler:       a.onGetOutboundHealthz,
-			AlwaysAllowed: true,
-			IsHealthCheck: true,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "healthz/outbound",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onGetOutboundHealthz,
+			AlwaysAllowed:   true,
+			IsHealthCheck:   true,
 		},
 	}
 }
@@ -413,40 +414,40 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 func (a *api) constructConfigurationEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "configuration/{storeName}",
-			Version: apiVersionV1alpha1,
-			Handler: a.onGetConfiguration,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "configuration/{storeName}",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onGetConfiguration,
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "configuration/{storeName}",
-			Version: apiVersionV1,
-			Handler: a.onGetConfiguration,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "configuration/{storeName}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onGetConfiguration,
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "configuration/{storeName}/subscribe",
-			Version: apiVersionV1alpha1,
-			Handler: a.onSubscribeConfiguration,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "configuration/{storeName}/subscribe",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onSubscribeConfiguration,
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "configuration/{storeName}/subscribe",
-			Version: apiVersionV1,
-			Handler: a.onSubscribeConfiguration,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "configuration/{storeName}/subscribe",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onSubscribeConfiguration,
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
-			Version: apiVersionV1alpha1,
-			Handler: a.onUnsubscribeConfiguration,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onUnsubscribeConfiguration,
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
-			Version: apiVersionV1,
-			Handler: a.onUnsubscribeConfiguration,
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onUnsubscribeConfiguration,
 		},
 	}
 }
@@ -1286,7 +1287,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
 		// overwritten URL, so targetID = baseURL
 		invokeMethodNameWithPrefix := reqCtx.UserValue(methodParam).(string)
-		prefix := "v1.0/invoke/" + targetID + "/" + methodParam
+		prefix := "v1.0/invoke/" + targetID + "/method"
 		if len(invokeMethodNameWithPrefix) <= len(prefix) {
 			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))

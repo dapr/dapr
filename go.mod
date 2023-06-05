@@ -12,6 +12,7 @@ require (
 	github.com/dapr/kit v0.0.5
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/fasthttp/router v1.4.18
+	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-chi/cors v1.2.1
 	github.com/go-logr/logr v1.2.4
 	github.com/golang/mock v1.6.0

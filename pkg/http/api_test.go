@@ -4204,12 +4204,12 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		for _, m := range e.Methods {
-			router.Handle(m, path, e.Handler)
+			router.Handle(m, path, e.FastHTTPHandler)
 		}
 		if e.Alias != "" {
 			path = fmt.Sprintf("/%s", e.Alias)
 			for _, m := range e.Methods {
-				router.Handle(m, path, e.Handler)
+				router.Handle(m, path, e.FastHTTPHandler)
 			}
 		}
 	}

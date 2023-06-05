@@ -24,16 +24,16 @@ import (
 func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "secrets/{secretStoreName}/bulk",
-			Version: apiVersionV1,
-			Handler: a.onBulkGetSecretHandler(),
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "secrets/{secretStoreName}/bulk",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onBulkGetSecretHandler(),
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
-			Route:   "secrets/{secretStoreName}/{key}",
-			Version: apiVersionV1,
-			Handler: a.onGetSecretHandler(),
+			Methods:         []string{nethttp.MethodGet},
+			Route:           "secrets/{secretStoreName}/{key}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onGetSecretHandler(),
 		},
 	}
 }

@@ -23,16 +23,16 @@ import (
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "metadata",
-			Version: apiVersionV1,
-			Handler: a.onGetMetadata(),
+			Methods:         []string{fasthttp.MethodGet},
+			Route:           "metadata",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onGetMetadata(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPut},
-			Route:   "metadata/{key}",
-			Version: apiVersionV1,
-			Handler: a.onPutMetadata(),
+			Methods:         []string{fasthttp.MethodPut},
+			Route:           "metadata/{key}",
+			Version:         apiVersionV1,
+			FastHTTPHandler: a.onPutMetadata(),
 		},
 	}
 }

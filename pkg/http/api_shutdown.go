@@ -24,7 +24,7 @@ func (a *api) constructShutdownEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
-			Handler: UniversalFastHTTPHandler(
+			FastHTTPHandler: UniversalFastHTTPHandler(
 				a.universal.Shutdown,
 				UniversalHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
 					OutModifier: func(out *emptypb.Empty) (any, error) {
