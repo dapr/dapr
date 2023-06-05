@@ -401,10 +401,10 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.11.0-rc.9 h1:Kz6SY553Cf3Km3E9ZSSTdyS/iMgSnMxVASGKBmvXc0Q=
-github.com/dapr/components-contrib v1.11.0-rc.9/go.mod h1:t+TU1OsfDjtmNKoFIofIS96HTdDT77Gpepq+KJC10Dg=
-github.com/dapr/kit v0.11.0 h1:bBceMtxsek9RTrMrZOWw6tAZw0ch+5etClX+VNR3g8s=
-github.com/dapr/kit v0.11.0/go.mod h1:dqcCSK9ethcPW4L9jC2t4WrPUU3mPA4oa53fJRhl34E=
+github.com/dapr/components-contrib v1.11.0-rc.11 h1:PFUTCCfZ+99BIorCNR+mB/CEGnGFNMbI0OhQQ9pbq3E=
+github.com/dapr/components-contrib v1.11.0-rc.11/go.mod h1:prx2ATX6wFnR6Cp1xXGW3J9s5Gyz9AtOrG0xBf7QnHI=
+github.com/dapr/kit v0.11.1 h1:qwV9HMVFAwS/KK//xEqJ+Ef9UjXdocrUGSgjsP5UCMM=
+github.com/dapr/kit v0.11.1/go.mod h1:dqcCSK9ethcPW4L9jC2t4WrPUU3mPA4oa53fJRhl34E=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -1604,8 +1604,8 @@ go.etcd.io/etcd/client/v3 v3.5.5/go.mod h1:aApjR4WGlSumpnJ2kloS75h6aHUmAyaPLjHMx
 go.etcd.io/etcd/pkg/v3 v3.5.0-alpha.0/go.mod h1:tV31atvwzcybuqejDoY3oaNRTtlD2l/Ot78Pc9w7DMY=
 go.etcd.io/etcd/raft/v3 v3.5.0-alpha.0/go.mod h1:FAwse6Zlm5v4tEWZaTjmNhe17Int4Oxbu7+2r0DiD3w=
 go.etcd.io/etcd/server/v3 v3.5.0-alpha.0/go.mod h1:tsKetYpt980ZTpzl/gb+UOJj9RkIyCb1u4wjzMg90BQ=
-go.mongodb.org/mongo-driver v1.11.2 h1:+1v2rDQUWNcGW7/7E0Jvdz51V38XXxJfhzbV17aNHCw=
-go.mongodb.org/mongo-driver v1.11.2/go.mod h1:s7p5vEtfbeR1gYi6pnj3c3/urpbLv2T5Sfd6Rp2HBB8=
+go.mongodb.org/mongo-driver v1.11.6 h1:XM7G6PjiGAO5betLF13BIa5TlLUUE3uJ/2Ox3Lz1K+o=
+go.mongodb.org/mongo-driver v1.11.6/go.mod h1:G9TgswdsWjX4tmDA5zfs2+6AEPpYJwqblyjsfuh8oXY=
 go.opencensus.io v0.20.1/go.mod h1:6WKK9ahsWS3RSO+PY9ZHZUfv2irvY6gN279GOPZjmmk=
 go.opencensus.io v0.20.2/go.mod h1:6WKK9ahsWS3RSO+PY9ZHZUfv2irvY6gN279GOPZjmmk=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=

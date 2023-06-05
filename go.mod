@@ -9,8 +9,8 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/dapr/components-contrib v1.11.0-rc.9
-	github.com/dapr/kit v0.11.0
+	github.com/dapr/components-contrib v1.11.0-rc.11
+	github.com/dapr/kit v0.11.1
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/fasthttp/router v1.4.18
 	github.com/go-logr/logr v1.2.4
@@ -368,7 +368,7 @@ require (
 	go.etcd.io/etcd/api/v3 v3.5.5 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.5 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.5 // indirect
-	go.mongodb.org/mongo-driver v1.11.2 // indirect
+	go.mongodb.org/mongo-driver v1.11.6 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.14.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
