@@ -17,8 +17,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/dapr/dapr/pkg/messages"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/messages"
 )
 
 const (
@@ -124,8 +125,7 @@ func fasthttpResponseWithJSON(code int, obj []byte) fasthttpResponseOption {
 
 // fasthttpResponseWithError sets error code and jsonized error message.
 func fasthttpResponseWithError(code int, resp errorResponseValue) fasthttpResponseOption {
-	b, _ := json.Marshal(&resp)
-	return fasthttpResponseWithJSON(code, b)
+	return fasthttpResponseWithJSON(code, resp.JSONErrorValue())
 }
 
 // fasthttpResponseWithEmpty sets 204 status code.

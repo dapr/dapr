@@ -26,7 +26,7 @@ func (a *api) constructShutdownEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: UniversalFastHTTPHandler(
 				a.universal.Shutdown,
-				UniversalFastHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
+				UniversalHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
 					OutModifier: func(out *emptypb.Empty) (any, error) {
 						// Nullify the response so status code is 204
 						return nil, nil

@@ -40,7 +40,7 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 func (a *api) onGetMetadata() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.GetMetadata,
-		UniversalFastHTTPHandlerOpts[*emptypb.Empty, *runtimev1pb.GetMetadataResponse]{
+		UniversalHTTPHandlerOpts[*emptypb.Empty, *runtimev1pb.GetMetadataResponse]{
 			OutModifier: func(out *runtimev1pb.GetMetadataResponse) (any, error) {
 				// In the protos, the property subscriptions[*].rules is serialized as subscriptions[*].rules.rules
 				// To maintain backwards-compatibility, we need to copy into a custom struct and marshal that instead
@@ -86,9 +86,9 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 func (a *api) onPutMetadata() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.SetMetadata,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SetMetadataRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SetMetadataRequest, *emptypb.Empty]{
 			SkipInputBody: true,
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.SetMetadataRequest) (*runtimev1pb.SetMetadataRequest, error) {
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.SetMetadataRequest) (*runtimev1pb.SetMetadataRequest, error) {
 				in.Key = reqCtx.UserValue("key").(string)
 				in.Value = string(reqCtx.Request.Body())
 				return in, nil

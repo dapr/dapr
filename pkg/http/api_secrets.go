@@ -41,8 +41,8 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.GetSecret,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetSecretRequest, *runtimev1pb.GetSecretResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetSecretRequest, *runtimev1pb.GetSecretResponse]{
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretRequest, error) {
 				in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
 				in.Key = reqCtx.UserValue(secretNameParam).(string)
 				in.Metadata = getMetadataFromRequest(reqCtx)
@@ -64,8 +64,8 @@ func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
 func (a *api) onBulkGetSecretHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.GetBulkSecret,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetBulkSecretRequest, *runtimev1pb.GetBulkSecretResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetBulkSecretRequest, *runtimev1pb.GetBulkSecretResponse]{
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretRequest, error) {
 				in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
 				in.Metadata = getMetadataFromRequest(reqCtx)
 				return in, nil

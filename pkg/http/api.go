@@ -458,8 +458,8 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	var req OutputBindingRequest
 	err := json.Unmarshal(body, &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		msg := messages.ErrMalformedRequest.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -524,8 +524,8 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	var req BulkGetRequest
 	err = json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		msg := messages.ErrMalformedRequest.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -552,8 +552,8 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	for i, k := range req.Keys {
 		key, err = stateLoader.GetModifiedStateKey(k, storeName, a.universal.AppID)
 		if err != nil {
-			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+			msg := messages.ErrMalformedRequest.WithFormat(err)
+			universalFastHTTPErrorResponder(reqCtx, msg)
 			log.Debug(err)
 			return
 		}
@@ -646,10 +646,10 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.StartWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.StartWorkflowRequest, *runtimev1pb.StartWorkflowResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.StartWorkflowRequest, *runtimev1pb.StartWorkflowResponse]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
 				in.WorkflowName = reqCtx.UserValue(workflowName).(string)
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 
@@ -677,8 +677,8 @@ func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
 func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.GetWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetWorkflowRequest, *runtimev1pb.GetWorkflowResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetWorkflowRequest, *runtimev1pb.GetWorkflowResponse]{
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
@@ -690,8 +690,8 @@ func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
 func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.TerminateWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
@@ -704,10 +704,10 @@ func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
 func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.RaiseEventWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *emptypb.Empty]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.EventName = reqCtx.UserValue(eventName).(string)
@@ -725,8 +725,8 @@ func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
 func (a *api) onPauseWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.PauseWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.PauseWorkflowRequest, *emptypb.Empty]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.PauseWorkflowRequest) (*runtimev1pb.PauseWorkflowRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.PauseWorkflowRequest, *emptypb.Empty]{
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.PauseWorkflowRequest) (*runtimev1pb.PauseWorkflowRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
@@ -739,8 +739,8 @@ func (a *api) onPauseWorkflowHandler() fasthttp.RequestHandler {
 func (a *api) onResumeWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.ResumeWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.ResumeWorkflowRequest, *emptypb.Empty]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.ResumeWorkflowRequest) (*runtimev1pb.ResumeWorkflowRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.ResumeWorkflowRequest, *emptypb.Empty]{
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.ResumeWorkflowRequest) (*runtimev1pb.ResumeWorkflowRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
@@ -752,8 +752,8 @@ func (a *api) onResumeWorkflowHandler() fasthttp.RequestHandler {
 func (a *api) onPurgeWorkflowHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.PurgeWorkflowAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.PurgeWorkflowRequest, *emptypb.Empty]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.PurgeWorkflowRequest, *emptypb.Empty]{
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
 				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
 				in.InstanceId = reqCtx.UserValue(instanceID).(string)
 				return in, nil
@@ -775,8 +775,8 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		msg := messages.ErrMalformedRequest.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(err)
 		return
 	}
@@ -1468,8 +1468,8 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	var req actors.CreateReminderRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		msg := messages.ErrMalformedRequest.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -1502,8 +1502,8 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 	var req actors.RenameReminderRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		msg := messages.ErrMalformedRequest.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -1537,8 +1537,8 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	var req actors.CreateTimerRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		msg := messages.ErrMalformedRequest.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -2214,8 +2214,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	var req stateTransactionRequestBody
 	if err := json.Unmarshal(body, &req); err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		msg := messages.ErrMalformedRequest.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -2241,16 +2241,15 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			var upsertReq state.SetRequest
 			err := mapstructure.Decode(o.Request, &upsertReq)
 			if err != nil {
-				msg := NewErrorResponse("ERR_MALFORMED_REQUEST",
-					fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
-				fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+				msg := messages.ErrMalformedRequest.WithFormat(err)
+				universalFastHTTPErrorResponder(reqCtx, msg)
 				log.Debug(msg)
 				return
 			}
 			upsertReq.Key, err = stateLoader.GetModifiedStateKey(upsertReq.Key, storeName, a.universal.AppID)
 			if err != nil {
-				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-				fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+				msg := messages.ErrMalformedRequest.WithFormat(err)
+				universalFastHTTPErrorResponder(reqCtx, msg)
 				log.Debug(err)
 				return
 			}
@@ -2259,9 +2258,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			var delReq state.DeleteRequest
 			err := mapstructure.Decode(o.Request, &delReq)
 			if err != nil {
-				msg := NewErrorResponse("ERR_MALFORMED_REQUEST",
-					fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
-				fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+				msg := messages.ErrMalformedRequest.WithFormat(err)
+				universalFastHTTPErrorResponder(reqCtx, msg)
 				log.Debug(msg)
 				return
 			}
@@ -2331,10 +2329,10 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 	return UniversalFastHTTPHandler(
 		a.universal.QueryStateAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.QueryStateRequest, *runtimev1pb.QueryStateResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.QueryStateRequest, *runtimev1pb.QueryStateResponse]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateRequest, error) {
+			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateRequest, error) {
 				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
 				in.Metadata = getMetadataFromRequest(reqCtx)
 				in.Query = string(reqCtx.PostBody())
