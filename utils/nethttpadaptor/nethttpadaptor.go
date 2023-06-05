@@ -23,6 +23,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/utils/nethttpadaptor/uri"
 	"github.com/dapr/kit/logger"
 )
 
@@ -49,8 +50,13 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 			}
 			c.Request.SetBody(reqBody)
 		}
+
+		// Normalize path ourselves so that we can preserve the encoded path
+		// segments, but clean up URI separators.
+		// Use EscapePath() to preserve the encoded path segments.
+		c.Request.URI().DisablePathNormalizing = true
 		c.Request.URI().SetQueryString(r.URL.RawQuery)
-		c.Request.URI().SetPath(r.URL.Path)
+		c.Request.URI().SetPathBytes(uri.NormalizePath(c.Request.URI().PathOriginal(), []byte(r.URL.EscapedPath())))
 		c.Request.URI().SetScheme(r.URL.Scheme)
 		c.Request.SetHost(r.Host)
 		c.Request.Header.SetMethod(r.Method)
