@@ -21,11 +21,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/messages"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"github.com/dapr/dapr/pkg/messages"
 )
 
 func TestUniversalHTTPHandler(t *testing.T) {
@@ -54,8 +55,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("GET", "http://localhost/test", nil)
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodGet, "http://localhost/test", nil)
 
 		// Execute the handler
 		w := httptest.NewRecorder()
@@ -63,6 +63,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
@@ -82,8 +83,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"ping"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"ping"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -92,6 +92,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
@@ -111,8 +112,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`not-some-json`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`not-some-json`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -121,6 +121,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
@@ -140,8 +141,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"fail"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"fail"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -150,6 +150,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, messages.ErrBadRequest.HTTPCode(), resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
@@ -169,8 +170,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"empty"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"empty"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -179,6 +179,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
@@ -199,8 +200,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"ping"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"ping"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -209,6 +209,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
@@ -235,8 +236,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"ping"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"ping"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -245,6 +245,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
@@ -269,8 +270,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"ping"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"ping"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -279,6 +279,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
@@ -302,8 +303,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"ping"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"ping"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -312,6 +312,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
@@ -334,8 +335,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"ping"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"ping"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -344,6 +344,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
@@ -371,8 +372,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		require.NotNil(t, h)
 
 		// Create the request
-		r, err := http.NewRequest("POST", "http://localhost/test", strings.NewReader(`"ping"`))
-		require.NoError(t, err)
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"ping"`))
 		r.Header.Set("content-type", "application/json")
 
 		// Execute the handler
@@ -381,6 +381,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 
 		// Assertions
 		resp := w.Result()
+		defer resp.Body.Close()
 		require.NotNil(t, resp)
 		assert.Equal(t, http.StatusTeapot, resp.StatusCode)
 		assert.Equal(t, "text/plain", resp.Header.Get("content-type"))

@@ -11,13 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-//nolint:forbidigo
 package http
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -257,44 +257,47 @@ func TestAPILogging(t *testing.T) {
 
 	body := []byte("👋")
 
-	mh := func(reqCtx *fasthttp.RequestCtx) {
-		reqCtx.Response.SetBody(body)
-	}
 	endpoints := []Endpoint{
 		{
-			Methods:         []string{fasthttp.MethodGet, fasthttp.MethodPost},
-			Route:           "state/{storeName}/{key}",
-			Version:         apiVersionV1,
-			FastHTTPHandler: mh,
+			Methods: []string{http.MethodGet, http.MethodPost},
+			Route:   "state/{storeName}/{key}",
+			Version: apiVersionV1,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(body)
+			}),
 		},
 	}
 	srv := newServer()
 	srv.config.EnableAPILogging = true
-	router := srv.getRouter(endpoints)
 
-	r := &fasthttp.RequestCtx{
-		Request: fasthttp.Request{},
-	}
+	router := chi.NewRouter()
+	srv.setupRoutes(router, endpoints)
+
 	dec := json.NewDecoder(logDest)
 
 	runTest := func(userAgent string, obfuscateURL bool) func(t *testing.T) {
 		return func(t *testing.T) {
 			srv.config.APILoggingObfuscateURLs = obfuscateURL
-			r.Request.Header.Set("User-Agent", userAgent)
 
 			for _, e := range endpoints {
 				routePath := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 				path := fmt.Sprintf("/%s/%s", e.Version, "state/mystate/mykey")
 				for _, m := range e.Methods {
-					handler, _ := router.Lookup(m, path, r)
-					r.Request.Header.SetMethod(m)
-					r.Request.Header.SetRequestURI(path)
-					handler(r)
+					req := httptest.NewRequest(m, path, nil)
+					req.Header.Set("user-agent", userAgent)
+					rw := httptest.NewRecorder()
 
-					assert.Equal(t, body, r.Response.Body())
+					router.ServeHTTP(rw, req)
+
+					resp := rw.Result()
+					defer resp.Body.Close()
+
+					respBody, err := io.ReadAll(resp.Body)
+					require.NoError(t, err)
+					assert.Equal(t, body, respBody)
 
 					logData := map[string]string{}
-					err := dec.Decode(&logData)
+					err = dec.Decode(&logData)
 					require.NoError(t, err)
 
 					assert.Equal(t, "test-api-logging", logData["scope"])
@@ -336,43 +339,49 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 
 	body := []byte("👋")
 
-	mh := func(reqCtx *fasthttp.RequestCtx) {
-		reqCtx.Response.SetBody(body)
-	}
 	endpoints := []Endpoint{
 		{
-			Methods:         []string{fasthttp.MethodGet},
-			Route:           "log",
-			Version:         apiVersionV1,
-			FastHTTPHandler: mh,
-			IsHealthCheck:   false,
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "log",
+			Version: apiVersionV1,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(body)
+			}),
+			IsHealthCheck: false,
 		},
 		{
-			Methods:         []string{fasthttp.MethodGet},
-			Route:           "nolog",
-			Version:         apiVersionV1,
-			FastHTTPHandler: mh,
-			IsHealthCheck:   true,
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "nolog",
+			Version: apiVersionV1,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(body)
+			}),
+			IsHealthCheck: true,
 		},
 	}
 	srv := newServer()
 	srv.config.EnableAPILogging = true
 	srv.config.APILogHealthChecks = false
-	router := srv.getRouter(endpoints)
 
-	r := &fasthttp.RequestCtx{
-		Request: fasthttp.Request{},
-	}
+	router := chi.NewRouter()
+	srv.setupRoutes(router, endpoints)
+
 	dec := json.NewDecoder(logDest)
 
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		handler, _ := router.Lookup(fasthttp.MethodGet, path, r)
-		r.Request.Header.SetMethod(fasthttp.MethodGet)
-		r.Request.Header.SetRequestURI(path)
-		handler(r)
 
-		assert.Equal(t, body, r.Response.Body())
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rw := httptest.NewRecorder()
+
+		router.ServeHTTP(rw, req)
+
+		resp := rw.Result()
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, body, respBody)
 
 		if e.Route == "log" {
 			logData := map[string]string{}

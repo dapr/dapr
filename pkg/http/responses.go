@@ -18,9 +18,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/dapr/dapr/pkg/messages"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"github.com/dapr/dapr/pkg/messages"
 )
 
 const (

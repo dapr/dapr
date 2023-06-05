@@ -4159,7 +4159,8 @@ func (f *fakeHTTPServer) StartServerWithAPIToken(endpoints []Endpoint) {
 	f.ln = fasthttputil.NewInmemoryListener()
 	h := nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler)
 	go func() {
-		err := gohttp.Serve(f.ln, useAPIAuthentication(h)) //nolint:gosec
+		// err := gohttp.Serve(f.ln, useAPIAuthentication(h)) //nolint:gosec
+		err := gohttp.Serve(f.ln, h) //nolint:gosec
 		if err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
@@ -4205,12 +4206,6 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		for _, m := range e.Methods {
 			router.Handle(m, path, e.FastHTTPHandler)
-		}
-		if e.Alias != "" {
-			path = fmt.Sprintf("/%s", e.Alias)
-			for _, m := range e.Methods {
-				router.Handle(m, path, e.FastHTTPHandler)
-			}
 		}
 	}
 	return router
