@@ -2716,7 +2716,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	expectedBody := `{"id":"xyz","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}]}`
+	const expectedBody = `{"id":"xyz","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}]}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", "v1.0/metadata", nil, nil)

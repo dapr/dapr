@@ -193,7 +193,7 @@ func UniversalFastHTTPHandler[T proto.Message, U proto.Message](
 		}
 
 		// If we have an inModifier function, invoke it now
-		if opts.InModifier != nil {
+		if opts.InModifierFastHTTP != nil {
 			in, err = opts.InModifierFastHTTP(reqCtx, in)
 			if err != nil {
 				universalFastHTTPErrorResponder(reqCtx, err)
