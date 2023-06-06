@@ -27,17 +27,16 @@ import (
 	"testing"
 	"time"
 
-	routing "github.com/fasthttp/router"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
-	"github.com/valyala/fasthttp/fasthttputil"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,6 +74,8 @@ import (
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
+
+const bufconnBufSize = 2 << 20 // 2MB
 
 var invalidJSON = []byte{0x7b, 0x7b}
 
@@ -171,7 +172,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			},
 		},
 	}
-	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
+	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
 	t.Run("Publish successfully - 204 No Content", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
@@ -345,7 +346,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			},
 		},
 	}
-	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
+	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
 	bulkRequest := []bulkPublishMessageEntry{
 		{
@@ -783,7 +784,7 @@ func TestShutdownEndpoints(t *testing.T) {
 		},
 	}
 
-	fakeServer.StartServer(testAPI.constructShutdownEndpoints())
+	fakeServer.StartServer(testAPI.constructShutdownEndpoints(), nil)
 	defer fakeServer.Shutdown()
 
 	t.Run("Shutdown successfully - 204", func(t *testing.T) {
@@ -842,7 +843,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			return &bindings.InvokeResponse{Data: []byte("testresponse")}, nil
 		},
 	}
-	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
+	fakeServer.StartServer(testAPI.constructBindingsEndpoints(), nil)
 
 	t.Run("Invoke output bindings - 204 No Content empty response", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
@@ -926,7 +927,9 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
 		tracingSpec:           spec,
 	}
-	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
+	fakeServer.StartServer(testAPI.constructBindingsEndpoints(), &fakeHTTPServerOptions{
+		spec: &spec,
+	})
 
 	t.Run("Invoke output bindings - 204 OK", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
@@ -994,7 +997,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		fakeDirectMessageResponse := getFakeDirectMessageResponse()
@@ -1687,7 +1690,9 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
+		spec: &spec,
+	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		fakeDirectMessageResponse := getFakeDirectMessageResponse()
@@ -1794,7 +1799,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
 
 	t.Run("Test invoke direct message does not retry on 200", func(t *testing.T) {
 		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
@@ -1890,7 +1895,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		},
 	}
 
-	fakeServer.StartServer(testAPI.constructActorEndpoints())
+	fakeServer.StartServer(testAPI.constructActorEndpoints(), nil)
 
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
 	fakeData, _ := json.Marshal(fakeBodyObject)
@@ -2709,7 +2714,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		},
 	}
 
-	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
+	fakeServer.StartServer(testAPI.constructMetadataEndpoints(), nil)
 
 	t.Run("Set Metadata", func(t *testing.T) {
 		resp := fakeServer.DoRequest("PUT", "v1.0/metadata/foo", []byte("bar"), nil)
@@ -2759,7 +2764,9 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		resiliency:  rc,
 	}
 
-	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
+	fakeServer.StartServer(testAPI.constructActorEndpoints(), &fakeHTTPServerOptions{
+		spec: &spec,
+	})
 
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
 	fakeData, _ := json.Marshal(fakeBodyObject)
@@ -2880,7 +2887,9 @@ func TestAPIToken(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServerWithAPIToken(testAPI.constructDirectMessagingEndpoints())
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
+		apiAuth: true,
+	})
 
 	t.Run("Invoke direct messaging with token - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
@@ -3000,7 +3009,10 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
+		spec:     &spec,
+		pipeline: &pipe,
+	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
@@ -3041,7 +3053,7 @@ func TestConfigurationGet(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
+	fakeServer.StartServer(testAPI.constructConfigurationEndpoints(), nil)
 
 	t.Run("Get configurations with a good key - alpha1", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s", storeName, "good-key1")
@@ -3243,7 +3255,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
+	fakeServer.StartServer(testAPI.constructConfigurationEndpoints(), nil)
 
 	t.Run("subscribe and unsubscribe configurations - alpha1", func(t *testing.T) {
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
@@ -3345,7 +3357,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 			Resiliency: resiliencyConfig,
 		},
 	}
-	fakeServer.StartServer(testAPI.constructDistributedLockEndpoints())
+	fakeServer.StartServer(testAPI.constructDistributedLockEndpoints(), nil)
 
 	t.Run("Lock with valid request", func(t *testing.T) {
 		apiPath := apiVersionV1alpha1 + "/lock/store1"
@@ -3516,7 +3528,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		},
 	}
 
-	fakeServer.StartServer(testAPI.constructWorkflowEndpoints())
+	fakeServer.StartServer(testAPI.constructWorkflowEndpoints(), nil)
 
 	/////////////////////
 	// START API TESTS //
@@ -4013,7 +4025,10 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
+		spec:     &spec,
+		pipeline: &pipeline,
+	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
@@ -4070,7 +4085,10 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 			CompStore: compStore,
 		},
 	}
-	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
+		spec:     &spec,
+		pipeline: &pipeline,
+	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
@@ -4103,7 +4121,7 @@ func newFakeHTTPServer() *fakeHTTPServer {
 }
 
 type fakeHTTPServer struct {
-	ln     *fasthttputil.InmemoryListener
+	ln     *bufconn.Listener
 	client gohttp.Client
 }
 
@@ -4116,99 +4134,69 @@ type fakeHTTPResponse struct {
 	ErrorBody   map[string]string
 }
 
-func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
-	router := f.getRouter(endpoints)
-	f.ln = fasthttputil.NewInmemoryListener()
+type fakeHTTPServerOptions struct {
+	spec     *config.TracingSpec
+	pipeline *httpMiddleware.Pipeline
+	apiAuth  bool
+}
+
+func (f *fakeHTTPServer) StartServer(endpoints []Endpoint, opts *fakeHTTPServerOptions) {
+	if opts == nil {
+		opts = &fakeHTTPServerOptions{}
+	}
+
+	f.ln = bufconn.Listen(bufconnBufSize)
+
+	r := f.getRouter(endpoints, opts.apiAuth)
 	go func() {
-		if err := fasthttp.Serve(f.ln, router.Handler); err != nil {
-			panic(fmt.Errorf("failed to serve: %v", err))
+		var handler gohttp.Handler = r
+		if opts.pipeline != nil {
+			handler = opts.pipeline.Apply(handler)
+		}
+		if opts.spec != nil {
+			handler = diag.HTTPTraceMiddleware(handler, "fakeAppID", *opts.spec)
+		}
+		err := gohttp.Serve(f.ln, handler)
+		if err != nil && err.Error() != "closed" {
+			panic(fmt.Errorf("failed to start server: %v", err))
 		}
 	}()
 
 	f.client = gohttp.Client{
 		Transport: &gohttp.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return f.ln.Dial()
+				return f.ln.DialContext(ctx)
 			},
 		},
 	}
 }
 
-func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoints []Endpoint) {
-	router := nethttpadaptor.NewNetHTTPHandlerFunc(f.getRouter(endpoints).Handler)
-	f.ln = fasthttputil.NewInmemoryListener()
-	go func() {
-		h := fasthttpadaptor.NewFastHTTPHandler(diag.HTTPTraceMiddleware(router, "fakeAppID", spec))
-		err := fasthttp.Serve(f.ln, h)
-		if err != nil {
-			panic(fmt.Errorf("failed to set tracing span context: %v", err))
-		}
-	}()
+func (f *fakeHTTPServer) getRouter(endpoints []Endpoint, apiAuth bool) chi.Router {
+	r := chi.NewRouter()
 
-	f.client = gohttp.Client{
-		Transport: &gohttp.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return f.ln.Dial()
-			},
-		},
+	if apiAuth {
+		useAPIAuthentication(r)
 	}
-}
-
-func (f *fakeHTTPServer) StartServerWithAPIToken(endpoints []Endpoint) {
-	router := f.getRouter(endpoints)
-	f.ln = fasthttputil.NewInmemoryListener()
-	h := nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler)
-	go func() {
-		// err := gohttp.Serve(f.ln, useAPIAuthentication(h)) //nolint:gosec
-		err := gohttp.Serve(f.ln, h) //nolint:gosec
-		if err != nil {
-			panic(fmt.Errorf("failed to serve: %v", err))
-		}
-	}()
-
-	f.client = gohttp.Client{
-		Transport: &gohttp.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return f.ln.Dial()
-			},
-		},
-	}
-}
-
-func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline httpMiddleware.Pipeline, endpoints []Endpoint) {
-	router := f.getRouter(endpoints)
-	f.ln = fasthttputil.NewInmemoryListener()
-	go func() {
-		handler := fasthttpadaptor.NewFastHTTPHandler(
-			diag.HTTPTraceMiddleware(pipeline.Apply(
-				nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler),
-			), "fakeAppID", spec),
-		)
-		err := fasthttp.Serve(f.ln, handler)
-		if err != nil {
-			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
-		}
-	}()
-
-	f.client = gohttp.Client{
-		Transport: &gohttp.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return f.ln.Dial()
-			},
-		},
-	}
-}
-
-func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
-	router := routing.New()
 
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		for _, m := range e.Methods {
-			router.Handle(m, path, e.FastHTTPHandler)
+
+		handler := e.Handler
+		if handler == nil {
+			// TODO: Remove when FastHTTP is completely removed
+			handler = nethttpadaptor.NewNetHTTPHandlerFunc(e.FastHTTPHandler)
+		}
+
+		// If no method is defined, match any method
+		if len(e.Methods) == 0 {
+			r.Handle(path, handler)
+		} else {
+			for _, m := range e.Methods {
+				r.Method(m, path, handler)
+			}
 		}
 	}
-	return router
+	return r
 }
 
 func (f *fakeHTTPServer) Shutdown() {
@@ -4328,7 +4316,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			Resiliency: rc,
 		},
 	}
-	fakeServer.StartServer(testAPI.constructStateEndpoints())
+	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
 	t.Run("Get state - 400 ERR_STATE_STORE_NOT_FOUND or NOT_CONFIGURED", func(t *testing.T) {
 		apisAndMethods := map[string][]string{
@@ -4881,7 +4869,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		},
 	}
-	fakeServer.StartServer(testAPI.constructStateEndpoints())
+	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
 	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/store1/query", nil, nil)
 	// assert
@@ -4900,7 +4888,7 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		},
 	}
-	fakeServer.StartServer(testAPI.constructStateEndpoints())
+	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
 	resp := fakeServer.DoRequest("POST", "v1.0/state/store1/query", nil, nil)
 	// assert
@@ -4920,7 +4908,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 		},
 	}
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
-	fakeServer.StartServer(testAPI.constructStateEndpoints())
+	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
 	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/"+storeName+"/query", nil, nil)
 	// assert
@@ -5111,7 +5099,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 			Resiliency: res,
 		},
 	}
-	fakeServer.StartServer(testAPI.constructSecretEndpoints())
+	fakeServer.StartServer(testAPI.constructSecretEndpoints(), nil)
 	storeName := "store1"
 	deniedStoreName := "store2"
 	restrictedStore := "store3"
@@ -5445,7 +5433,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		},
 	}
 
-	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
+	fakeServer.StartServer(testAPI.constructHealthzEndpoints(), nil)
 
 	t.Run("Healthz - 500 ERR_HEALTH_NOT_READY", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
@@ -5479,7 +5467,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		},
 		resiliency: resiliency.New(nil),
 	}
-	fakeServer.StartServer(testAPI.constructStateEndpoints())
+	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
 	storeName := "store1"
 	nonTransactionalStoreName := "storeNonTransactional"

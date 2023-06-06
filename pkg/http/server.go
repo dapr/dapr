@@ -98,7 +98,7 @@ func (s *server) StartNonBlocking() error {
 	s.useMaxBodySize(r)
 	s.useTracing(r)
 	s.useMetrics(r)
-	s.useAPIAuthentication(r)
+	useAPIAuthentication(r)
 	s.useCors(r)
 	s.useComponents(r)
 
@@ -304,7 +304,7 @@ func (s *server) useCors(r chi.Router) {
 	}).Handler)
 }
 
-func (s *server) useAPIAuthentication(r chi.Router) {
+func useAPIAuthentication(r chi.Router) {
 	token := auth.GetAPIToken()
 	if token == "" {
 		return

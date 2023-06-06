@@ -90,7 +90,8 @@ const (
 	apiVersionV1             = "v1.0"
 	apiVersionV1alpha1       = "v1.0-alpha1"
 	idParam                  = "id"
-	methodParam              = "*"
+	methodParam              = "method"
+	wildcardParam            = "*"
 	topicParam               = "topic"
 	actorTypeParam           = "actorType"
 	actorIDParam             = "actorId"
@@ -1286,7 +1287,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	switch {
 	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
 		// overwritten URL, so targetID = baseURL
-		invokeMethodNameWithPrefix := reqCtx.UserValue(methodParam).(string)
+		invokeMethodNameWithPrefix := reqCtx.UserValue(wildcardParam).(string)
 		prefix := "v1.0/invoke/" + targetID + "/method"
 		if len(invokeMethodNameWithPrefix) <= len(prefix) {
 			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
@@ -1300,7 +1301,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		// http endpoint CRD resource is detected being used for service invocation
 		baseURL := a.getBaseURL(targetID)
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+baseURL)
-		invokeMethodName = reqCtx.UserValue(methodParam).(string)
+		invokeMethodName = reqCtx.UserValue(wildcardParam).(string)
 		if invokeMethodName == "" {
 			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
@@ -1309,7 +1310,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	default:
 		// regular service to service invocation
-		invokeMethodName = reqCtx.UserValue(methodParam).(string)
+		invokeMethodName = reqCtx.UserValue(wildcardParam).(string)
 		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
 	}
 

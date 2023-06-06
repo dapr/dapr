@@ -42,7 +42,7 @@ func TestCryptoEndpoints(t *testing.T) {
 		},
 	}
 
-	fakeServer.StartServer(testAPI.constructCryptoEndpoints())
+	fakeServer.StartServer(testAPI.constructCryptoEndpoints(), nil)
 	defer fakeServer.Shutdown()
 
 	const testMessage = "Respiri piano per non far rumore, ti addormenti di sera, ti risvegli con il sole, sei chiara come un'alba, sei fresca come l'aria."
