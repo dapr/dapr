@@ -41,7 +41,6 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/utils/nethttpadaptor"
 	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 )
@@ -98,7 +97,7 @@ func (s *server) StartNonBlocking() error {
 	s.useMaxBodySize(r)
 	s.useTracing(r)
 	s.useMetrics(r)
-	useAPIAuthentication(r)
+	s.useAPIAuthentication(r)
 	s.useCors(r)
 	s.useComponents(r)
 
@@ -304,7 +303,7 @@ func (s *server) useCors(r chi.Router) {
 	}).Handler)
 }
 
-func useAPIAuthentication(r chi.Router) {
+func (s *server) useAPIAuthentication(r chi.Router) {
 	token := auth.GetAPIToken()
 	if token == "" {
 		return
@@ -368,28 +367,23 @@ func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
 			continue
 		}
 
-		s.handle(e, parameterFinder, "/"+e.Version+"/"+e.Route, r)
+		path := "/" + e.Version + "/" + e.Route
+		s.handle(
+			e, path, r,
+			parameterFinder.MatchString(path),
+			s.config.EnableAPILogging && (!e.IsHealthCheck || s.config.APILogHealthChecks),
+		)
 	}
 }
 
-func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, r chi.Router) {
-	// Sanity-check to catch development-time errors
-	if (e.Handler == nil && e.FastHTTPHandler == nil) || (e.Handler != nil && e.FastHTTPHandler != nil) {
-		panic("one and only one of Handler and FastHTTPHandler must be defined for endpoint " + e.Route)
-	}
+func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameters bool, apiLogging bool) {
+	handler := e.GetHandler()
 
-	handler := e.Handler
-	if handler == nil {
-		// TODO: Remove when FastHTTP is completely removed
-		handler = nethttpadaptor.NewNetHTTPHandlerFunc(e.FastHTTPHandler)
-	}
-
-	if parameterFinder.MatchString(path) {
+	if unescapeParameters {
 		handler = s.unescapeRequestParametersHandler(e.KeepWildcardUnescaped, handler)
 	}
 
-	// Add API logging inline middleware
-	if s.config.EnableAPILogging && (!e.IsHealthCheck || s.config.APILogHealthChecks) {
+	if apiLogging {
 		handler = s.apiLoggingInfo(path, handler)
 	}
 

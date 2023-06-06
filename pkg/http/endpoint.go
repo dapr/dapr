@@ -20,6 +20,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/utils/nethttpadaptor"
 )
 
 // Endpoint is a collection of route information for an Dapr API.
@@ -33,6 +34,21 @@ type Endpoint struct {
 	Handler               http.HandlerFunc
 	AlwaysAllowed         bool // Endpoint is always allowed regardless of API access rules
 	IsHealthCheck         bool // Mark endpoint as healthcheck - for API logging purposes
+}
+
+// GetHandler returns the handler for the endpoint.
+// TODO: Remove this when FastHTTP support is removed.
+func (endpoint Endpoint) GetHandler() http.HandlerFunc {
+	// Sanity-check to catch development-time errors
+	if (endpoint.Handler == nil && endpoint.FastHTTPHandler == nil) || (endpoint.Handler != nil && endpoint.FastHTTPHandler != nil) {
+		panic("one and only one of Handler and FastHTTPHandler must be defined for endpoint " + endpoint.Route)
+	}
+
+	if endpoint.Handler != nil {
+		return endpoint.Handler
+	}
+
+	return nethttpadaptor.NewNetHTTPHandlerFunc(endpoint.FastHTTPHandler)
 }
 
 // IsAllowed returns true if the endpoint is allowed given the API allowlist/denylist.

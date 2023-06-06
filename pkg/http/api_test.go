@@ -70,7 +70,6 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/dapr/utils/nethttpadaptor"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -1028,7 +1027,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging without querystring for external invocation - 200 OK", func(t *testing.T) {
@@ -1060,7 +1059,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging without querystring for external invocation again - 200 OK", func(t *testing.T) {
@@ -1092,7 +1091,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging without querystring - 201 Created", func(t *testing.T) {
@@ -1124,7 +1123,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging without querystring for external invocation - 201 Created", func(t *testing.T) {
@@ -1156,7 +1155,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with dapr-app-id in header - 200 OK", func(t *testing.T) {
@@ -1188,7 +1187,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with headers for external invocation - 200 OK", func(t *testing.T) {
@@ -1220,7 +1219,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with dapr-app-id in basic auth - 200 OK", func(t *testing.T) {
@@ -1252,7 +1251,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with InvalidArgument Response - 400 Bad request", func(t *testing.T) {
@@ -1424,7 +1423,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with querystring for external invocation - 200 OK", func(t *testing.T) {
@@ -1456,7 +1455,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging - HEAD - 200 OK", func(t *testing.T) {
@@ -1518,7 +1517,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging route '/' - 200 OK", func(t *testing.T) {
@@ -1549,7 +1548,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE", func(t *testing.T) {
@@ -4172,29 +4171,18 @@ func (f *fakeHTTPServer) StartServer(endpoints []Endpoint, opts *fakeHTTPServerO
 }
 
 func (f *fakeHTTPServer) getRouter(endpoints []Endpoint, apiAuth bool) chi.Router {
+	srv := &server{}
+
 	r := chi.NewRouter()
 
 	if apiAuth {
-		useAPIAuthentication(r)
+		srv.useAPIAuthentication(r)
 	}
 
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 
-		handler := e.Handler
-		if handler == nil {
-			// TODO: Remove when FastHTTP is completely removed
-			handler = nethttpadaptor.NewNetHTTPHandlerFunc(e.FastHTTPHandler)
-		}
-
-		// If no method is defined, match any method
-		if len(e.Methods) == 0 {
-			r.Handle(path, handler)
-		} else {
-			for _, m := range e.Methods {
-				r.Method(m, path, handler)
-			}
-		}
+		srv.handle(e, path, r, false, false)
 	}
 	return r
 }
