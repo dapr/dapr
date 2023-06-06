@@ -11,8 +11,7 @@ require (
 	github.com/dapr/components-contrib v1.11.0-rc.4
 	github.com/dapr/kit v0.0.5
 	github.com/evanphx/json-patch/v5 v5.6.0
-	github.com/fasthttp/router v1.4.18
-	github.com/go-chi/chi/v5 v5.0.7
+	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/cors v1.2.1
 	github.com/go-logr/logr v1.2.4
 	github.com/golang/mock v1.6.0
@@ -331,7 +330,6 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
-	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.12.0+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.22.2 // indirect

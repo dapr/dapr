@@ -1295,12 +1295,12 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			return
 		}
 		invokeMethodName = invokeMethodNameWithPrefix[len(prefix):]
-		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+"/"+invokeMethodNameWithPrefix)
+		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+"/"+invokeMethodNameWithPrefix)
 
 	case a.isHTTPEndpoint(targetID):
 		// http endpoint CRD resource is detected being used for service invocation
 		baseURL := a.getBaseURL(targetID)
-		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+baseURL)
+		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+":"+baseURL)
 		invokeMethodName = reqCtx.UserValue(wildcardParam).(string)
 		if invokeMethodName == "" {
 			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
@@ -1311,7 +1311,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	default:
 		// regular service to service invocation
 		invokeMethodName = reqCtx.UserValue(wildcardParam).(string)
-		policyDef = a.resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
+		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
 	}
 
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).

@@ -40,8 +40,6 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 )
 
@@ -93,7 +91,7 @@ func NewServer(opts NewServerOpts) Server {
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
 	// Create a chi router and add middlewares
-	r := chi.NewRouter()
+	r := s.getRouter()
 	s.useMaxBodySize(r)
 	s.useTracing(r)
 	s.useMetrics(r)
@@ -149,7 +147,7 @@ func (s *server) StartNonBlocking() error {
 
 	// Start the public HTTP server
 	if s.config.PublicPort != nil {
-		publicR := chi.NewRouter()
+		publicR := s.getRouter()
 		s.useTracing(publicR)
 		s.useMetrics(publicR)
 
@@ -227,6 +225,13 @@ func (s *server) Close() error {
 	return err
 }
 
+func (s *server) getRouter() *chi.Mux {
+	r := chi.NewRouter()
+	//r.Use(middleware.CleanPath, middleware.StripSlashes)
+	r.Use(StripSlashesMiddleware)
+	return r
+}
+
 func (s *server) useTracing(r chi.Router) {
 	if !diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		return
@@ -255,13 +260,7 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
 	log.Infof("Enabled max body size HTTP middleware with size %d MB", maxSize)
 
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = streams.LimitReadCloser(r.Body, maxSize)
-
-			next.ServeHTTP(w, r)
-		})
-	})
+	r.Use(MaxBodySizeMiddleware(maxSize))
 }
 
 func (s *server) apiLoggingInfo(route string, next http.Handler) http.HandlerFunc {
@@ -310,17 +309,7 @@ func (s *server) useAPIAuthentication(r chi.Router) {
 	}
 
 	log.Info("Enabled token authentication on HTTP server")
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			v := r.Header.Get(authConsts.APITokenHeader)
-			if auth.ExcludedRoute(r.URL.String()) || v == token {
-				r.Header.Del(authConsts.APITokenHeader)
-				next.ServeHTTP(w, r)
-			} else {
-				http.Error(w, "invalid api token", http.StatusUnauthorized)
-			}
-		})
-	})
+	r.Use(APITokenAuthMiddleware(token))
 }
 
 func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, next http.Handler) http.HandlerFunc {

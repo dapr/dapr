@@ -991,9 +991,9 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		resiliency:      resiliency.New(nil),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
@@ -4173,7 +4173,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []Endpoint, opts *fakeHTTPServerO
 func (f *fakeHTTPServer) getRouter(endpoints []Endpoint, apiAuth bool) chi.Router {
 	srv := &server{}
 
-	r := chi.NewRouter()
+	r := srv.getRouter()
 
 	if apiAuth {
 		srv.useAPIAuthentication(r)
