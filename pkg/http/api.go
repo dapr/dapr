@@ -293,13 +293,13 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:           "publish/{pubsubname}/{topic}",
+			Route:           "publish/{pubsubname}/*",
 			Version:         apiVersionV1,
 			FastHTTPHandler: a.onPublish,
 		},
 		{
 			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:           "publish/bulk/{pubsubname}/{topic}",
+			Route:           "publish/bulk/{pubsubname}/*",
 			Version:         apiVersionV1alpha1,
 			FastHTTPHandler: a.onBulkPublish,
 		},
@@ -2123,7 +2123,7 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
 
-	topic := reqCtx.UserValue(topicParam).(string)
+	topic := reqCtx.UserValue(wildcardParam).(string)
 	if topic == "" {
 		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
 
