@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,6 +15,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,7 +28,6 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
@@ -86,89 +86,109 @@ func TestCorsHandler(t *testing.T) {
 	})
 }
 
-/* func TestUnescapeRequestParametersHandler(t *testing.T) {
-	mh := func(reqCtx *fasthttp.RequestCtx) {
-		pc, _, _, ok := runtime.Caller(1)
-		if !ok {
-			reqCtx.Response.SetBody([]byte("error"))
-		} else {
-			handlerFunctionName := runtime.FuncForPC(pc).Name()
-			fmt.Println(handlerFunctionName)
-			reqCtx.Response.SetBody([]byte(handlerFunctionName))
+func TestUnescapeRequestParametersHandler(t *testing.T) {
+	mh := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var param string
+		chiCtx := chi.RouteContext(r.Context())
+		if chiCtx != nil {
+			param = chiCtx.URLParam("testparam")
 		}
+		w.Write([]byte(param))
+	})
+
+	// Create a context that has a URL parameter, which will allow us to determine if the UnescapeRequestParameters middleware was invoked
+	newCtx := func() context.Context {
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("testparam", "foo%20bar")
+		return context.WithValue(context.Background(), chi.RouteCtxKey, chiCtx)
 	}
+
 	t.Run("unescapeRequestParametersHandler is added as middleware if the endpoint includes Parameters in its path", func(t *testing.T) {
 		endpoints := []Endpoint{
 			{
-				Methods:         []string{fasthttp.MethodGet},
-				Route:           "state/{storeName}/{key}",
-				Version:         apiVersionV1,
-				FastHTTPHandler: mh,
+				Methods: []string{http.MethodGet},
+				Route:   "state/{storeName}/{key}",
+				Version: apiVersionV1,
+				Handler: mh,
 			},
 			{
-				Methods:         []string{fasthttp.MethodGet},
-				Route:           "secrets/{secretStoreName}/{key}",
-				Version:         apiVersionV1,
-				FastHTTPHandler: mh,
+				Methods: []string{http.MethodGet},
+				Route:   "secrets/{secretStoreName}/{key}",
+				Version: apiVersionV1,
+				Handler: mh,
 			},
 			{
-				Methods:         []string{fasthttp.MethodPost, fasthttp.MethodPut},
-				Route:           "publish/{pubsubname}/{topic:*}",
-				Version:         apiVersionV1,
-				FastHTTPHandler: mh,
+				Methods: []string{http.MethodPost, http.MethodPut},
+				Route:   "publish/{pubsubname}/{topic:*}",
+				Version: apiVersionV1,
+				Handler: mh,
 			},
 			{
-				Methods:         []string{fasthttp.MethodGet, fasthttp.MethodPost, fasthttp.MethodDelete, fasthttp.MethodPut},
-				Route:           "actors/{actorType}/{actorId}/method/{method}",
-				Version:         apiVersionV1,
-				FastHTTPHandler: mh,
+				Methods: []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut},
+				Route:   "actors/{actorType}/{actorId}/method/{method}",
+				Version: apiVersionV1,
+				Handler: mh,
 			},
 		}
+
 		srv := newServer()
-		router := srv.getRouter(endpoints)
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
+		router := chi.NewRouter()
+		srv.setupRoutes(router, endpoints)
+
 		for _, e := range endpoints {
 			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 			for _, m := range e.Methods {
-				handler, _ := router.Lookup(m, path, r)
-				handler(r)
-				handlerFunctionName := string(r.Response.Body())
-				assert.Contains(t, handlerFunctionName, "unescapeRequestParametersHandler")
+				req := httptest.NewRequest(m, path, nil)
+				req = req.WithContext(newCtx())
+				rw := httptest.NewRecorder()
+				router.ServeHTTP(rw, req)
+
+				res := rw.Result()
+				defer res.Body.Close()
+				bodyData, err := io.ReadAll(res.Body)
+				require.NoError(t, err)
+				assert.Equal(t, "foo bar", string(bodyData))
 			}
 		}
 	})
+
 	t.Run("unescapeRequestParameterHandler is not added as middleware if the endpoint does not include Parameters in its path", func(t *testing.T) {
 		endpoints := []Endpoint{
 			{
-				Methods:         []string{fasthttp.MethodGet},
-				Route:           "metadata",
-				Version:         apiVersionV1,
-				FastHTTPHandler: mh,
+				Methods: []string{http.MethodGet},
+				Route:   "metadata",
+				Version: apiVersionV1,
+				Handler: mh,
 			},
 			{
-				Methods:         []string{fasthttp.MethodGet},
-				Route:           "healthz",
-				Version:         apiVersionV1,
-				FastHTTPHandler: mh,
+				Methods: []string{http.MethodGet},
+				Route:   "healthz",
+				Version: apiVersionV1,
+				Handler: mh,
 			},
 		}
+
 		srv := newServer()
-		router := srv.getRouter(endpoints)
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
+		router := chi.NewRouter()
+		srv.setupRoutes(router, endpoints)
+
 		for _, e := range endpoints {
 			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 			for _, m := range e.Methods {
-				handler, _ := router.Lookup(m, path, r)
-				handler(r)
-				handlerFunctionName := string(r.Response.Body())
-				assert.Contains(t, handlerFunctionName, "TestUnescapeRequestParametersHandler")
+				req := httptest.NewRequest(m, path, nil)
+				req = req.WithContext(newCtx())
+				rw := httptest.NewRecorder()
+				router.ServeHTTP(rw, req)
+
+				res := rw.Result()
+				defer res.Body.Close()
+				bodyData, err := io.ReadAll(res.Body)
+				require.NoError(t, err)
+				assert.Equal(t, "foo%20bar", string(bodyData))
 			}
 		}
 	})
+
 	t.Run("Unescape valid Parameters", func(t *testing.T) {
 		parameters := []map[string]string{
 			{
@@ -198,51 +218,43 @@ func TestCorsHandler(t *testing.T) {
 			},
 		}
 		srv := newServer()
-		h := srv.unescapeRequestParametersHandler(mh)
+
 		for _, parameter := range parameters {
-			r := &fasthttp.RequestCtx{
-				Request: fasthttp.Request{},
-			}
-			r.SetUserValue(parameter["parameterName"], parameter["parameterValue"])
-			h(r)
-			newParameterValue := r.UserValue(parameter["parameterName"])
-			assert.Equal(t, parameter["expectedParameterValue"], newParameterValue)
+			chiCtx := chi.NewRouteContext()
+			chiCtx.URLParams.Add(parameter["parameterName"], parameter["parameterValue"])
+			err := srv.unespaceRequestParametersInContext(chiCtx, false)
+			require.NoError(t, err)
+			assert.Equal(t, parameter["expectedParameterValue"], chiCtx.URLParam(parameter["parameterName"]))
 		}
 	})
+
 	t.Run("Unescape invalid Parameters", func(t *testing.T) {
 		parameters := []map[string]string{
 			{
-				"parameterName":         "stateStore",
-				"parameterValue":        "unknown%2state%20store",
-				"expectedUnescapeError": "\"%2s\"",
+				"parameterName":  "stateStore",
+				"parameterValue": "unknown%2state%20store",
 			},
 			{
-				"parameterName":         "stateStore",
-				"parameterValue":        "stateStore%2prod",
-				"expectedUnescapeError": "\"%2p\"",
+				"parameterName":  "stateStore",
+				"parameterValue": "stateStore%2prod",
 			},
 			{
-				"parameterName":         "secretStore",
-				"parameterValue":        "unknown%20secret%2store",
-				"expectedUnescapeError": "\"%2s\"",
+				"parameterName":  "secretStore",
+				"parameterValue": "unknown%20secret%2store",
 			},
 		}
+
 		srv := newServer()
-		h := srv.unescapeRequestParametersHandler(mh)
+
 		for _, parameter := range parameters {
-			r := &fasthttp.RequestCtx{
-				Request: fasthttp.Request{},
-			}
-			r.SetUserValue(parameter["parameterName"], parameter["parameterValue"])
-			h(r)
-			expectedErrorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %s. Error: invalid URL escape %s", parameter["parameterName"], parameter["parameterValue"], parameter["expectedUnescapeError"])
-			responseStatusCode := r.Response.StatusCode()
-			errorMessage := string(r.Response.Body())
-			assert.Equal(t, errorMessage, expectedErrorMessage)
-			assert.Equal(t, responseStatusCode, fasthttp.StatusBadRequest)
+			chiCtx := chi.NewRouteContext()
+			chiCtx.URLParams.Add(parameter["parameterName"], parameter["parameterValue"])
+			err := srv.unespaceRequestParametersInContext(chiCtx, false)
+			require.Error(t, err)
+			assert.ErrorContains(t, err, "failed to unescape request parameter")
 		}
 	})
-} */
+}
 
 func TestAPILogging(t *testing.T) {
 	// Replace the logger with a custom one for testing
@@ -341,7 +353,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 
 	endpoints := []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet},
+			Methods: []string{http.MethodGet},
 			Route:   "log",
 			Version: apiVersionV1,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -350,7 +362,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 			IsHealthCheck: false,
 		},
 		{
-			Methods: []string{fasthttp.MethodGet},
+			Methods: []string{http.MethodGet},
 			Route:   "nolog",
 			Version: apiVersionV1,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

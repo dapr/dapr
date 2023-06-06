@@ -328,24 +328,32 @@ func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, ne
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		chiCtx := chi.RouteContext(r.Context())
 		if chiCtx != nil {
-			var err error
-			for i, key := range chiCtx.URLParams.Keys {
-				if keepWildcardUnescaped && key == "*" {
-					continue
-				}
-
-				chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
-				if err != nil {
-					errorMessage := fmt.Sprintf("failed to unescape request parameter %q. Error: %v", key, err)
-					log.Debug(errorMessage)
-					http.Error(w, errorMessage, http.StatusBadRequest)
-					return
-				}
+			err := s.unespaceRequestParametersInContext(chiCtx, keepWildcardUnescaped)
+			if err != nil {
+				errMsg := err.Error()
+				log.Debug(errMsg)
+				http.Error(w, errMsg, http.StatusBadRequest)
+				return
 			}
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context, keepWildcardUnescaped bool) (err error) {
+	for i, key := range chiCtx.URLParams.Keys {
+		if keepWildcardUnescaped && key == "*" {
+			continue
+		}
+
+		chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
+		if err != nil {
+			return fmt.Errorf("failed to unescape request parameter %q. Error: %w", key, err)
+		}
+	}
+
+	return nil
 }
 
 func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
