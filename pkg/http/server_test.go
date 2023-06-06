@@ -52,15 +52,11 @@ func TestCorsHandler(t *testing.T) {
 		srv.config.AllowedOrigins = cors.DefaultAllowedOrigins
 
 		h := chi.NewRouter()
-		h.NotFound(hf)
 		srv.useCors(h)
+		h.Get("/", hf)
 		w := httptest.NewRecorder()
-		r := &http.Request{
-			Method: http.MethodOptions,
-			Header: http.Header{
-				"Origin": []string{"*"},
-			},
-		}
+		r := httptest.NewRequest(http.MethodOptions, "/", nil)
+		r.Header.Set("Origin", "*")
 		h.ServeHTTP(w, r)
 
 		assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
@@ -71,15 +67,11 @@ func TestCorsHandler(t *testing.T) {
 		srv.config.AllowedOrigins = "http://test.com"
 
 		h := chi.NewRouter()
-		h.NotFound(hf)
 		srv.useCors(h)
+		h.Get("/", hf)
 		w := httptest.NewRecorder()
-		r := &http.Request{
-			Method: http.MethodOptions,
-			Header: http.Header{
-				"Origin": []string{"http://test.com"},
-			},
-		}
+		r := httptest.NewRequest(http.MethodOptions, "/", nil)
+		r.Header.Set("Origin", "http://test.com")
 		h.ServeHTTP(w, r)
 
 		assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Origin"))
