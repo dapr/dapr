@@ -391,7 +391,12 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 			// Populate the wildcard path with the full path
 			chiCtx := chi.RouteContext(r.Context())
 			if chiCtx != nil {
-				chiCtx.URLParams.Add("*", strings.TrimPrefix(r.URL.RawPath, "/"))
+				// r.URL.RawPath could be empty
+				path := r.URL.RawPath
+				if path == "" {
+					path = r.URL.Path
+				}
+				chiCtx.URLParams.Add("*", strings.TrimPrefix(path, "/"))
 			}
 
 			handler(w, r)

@@ -1684,9 +1684,9 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		resiliency:      resiliency.New(nil),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
@@ -1793,9 +1793,9 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	compStore := compstore.New()
 	testAPI := &api{
 		directMessaging: failingDirectMessaging,
-		resiliency:      resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			CompStore:  compStore,
+			Resiliency: resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
@@ -2865,7 +2865,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 }
 
 func TestAPIToken(t *testing.T) {
-	token := "1234"
+	const token = "1234"
 
 	t.Setenv("DAPR_API_TOKEN", token)
 
@@ -2881,9 +2881,9 @@ func TestAPIToken(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		resiliency:      resiliency.New(nil),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
@@ -3003,9 +3003,9 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		resiliency:      resiliency.New(nil),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
@@ -4019,9 +4019,9 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		resiliency:      resiliency.New(nil),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
@@ -4079,9 +4079,9 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		resiliency:      resiliency.New(nil),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
