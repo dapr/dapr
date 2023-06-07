@@ -15,6 +15,7 @@ package kubernetes
 
 import (
 	"context"
+	"log"
 
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,6 +76,7 @@ func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 }
 
 func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
+	log.Printf("Adding component %q ...", do.component.Name)
 	return do.kubeClient.DaprComponents(DaprTestNamespace).Create(do.toComponentSpec())
 }
 
