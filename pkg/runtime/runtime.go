@@ -61,7 +61,6 @@ import (
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
-	httpEndpointChannel "github.com/dapr/dapr/pkg/channel/external"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
@@ -528,7 +527,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	a.blockUntilAppIsReady()
 
-	err = a.createAppChannel()
+	err = a.createChannels()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
@@ -536,11 +535,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 	a.directMessaging.SetAppChannel(a.appChannel)
-
-	err = a.createHTTPEndpointsAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app for external service invocation: %s", string(a.runtimeConfig.ApplicationProtocol), err)
-	}
 
 	// add another app channel dedicated to external service invocation
 	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
@@ -588,7 +582,7 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
 		if err != nil {
-			log.Warnf(err.Error())
+			log.Warn(err)
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			a.daprGRPCAPI.SetActorRuntime(a.actor)
@@ -1464,7 +1458,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			},
 		)
 		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			rResp, rErr := a.appChannel.InvokeMethod(ctx, req)
+			rResp, rErr := a.appChannel.InvokeMethod(ctx, req, "")
 			if rErr != nil {
 				return rResp, rErr
 			}
@@ -1693,7 +1687,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 		defer req.Close()
 
 		// TODO: Propagate Context
-		resp, err := a.appChannel.InvokeMethod(context.TODO(), req)
+		resp, err := a.appChannel.InvokeMethod(context.TODO(), req, "")
 		if err != nil {
 			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
@@ -2268,7 +2262,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	}
 
 	start := time.Now()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	resp, err := a.appChannel.InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {
@@ -3182,57 +3176,37 @@ func (a *DaprRuntime) loadAppConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) createAppChannel() (err error) {
-	if a.runtimeConfig.ApplicationPort == 0 {
-		log.Warn("App channel is not initialized. Did you configure an app-port?")
-		return nil
-	}
-
-	var ch channel.AppChannel
-	if !a.runtimeConfig.ApplicationProtocol.IsHTTP() {
-		// create gRPC app channel
-		ch, err = a.grpc.GetAppChannel()
-		if err != nil {
-			return err
-		}
-	} else {
-		// create http app channel
-		pipeline, err := a.buildAppHTTPPipeline()
-		if err != nil {
-			return err
-		}
-		config := a.getAppHTTPChannelConfig(pipeline)
-		ch, err = httpChannel.CreateLocalChannel(config)
-		if err != nil {
-			return err
-		}
-		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
-	}
-
-	a.appChannel = ch
-
-	return nil
-}
-
-func (a *DaprRuntime) createHTTPEndpointsAppChannel() (err error) {
-	if a.runtimeConfig.ApplicationPort == 0 {
-		log.Warn("App channel is not initialized. Did you configure an app-port?")
-		return nil
-	}
-
-	var ch channel.HTTPEndpointAppChannel
-	// create http app channel
+func (a *DaprRuntime) createChannels() (err error) {
+	// Create a HTTP channel for external HTTP endpoint invocation
 	pipeline, err := a.buildAppHTTPPipeline()
 	if err != nil {
-		return err
-	}
-	config := a.getAppHTTPChannelForHTTPEndpointsConfig(pipeline)
-	ch, err = httpEndpointChannel.CreateNonLocalChannel(config)
-	if err != nil {
-		return err
+		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
 
-	a.httpEndpointsAppChannel = ch
+	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+	if err != nil {
+		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
+	}
+
+	if a.runtimeConfig.ApplicationPort == 0 {
+		log.Warn("App channel is not initialized. Did you configure an app-port?")
+		return nil
+	}
+
+	if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
+		// Create a HTTP channel
+		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+		if err != nil {
+			return fmt.Errorf("failed to create HTTP app channel: %w", err)
+		}
+		a.appChannel.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
+	} else {
+		// create gRPC app channel
+		a.appChannel, err = a.grpc.GetAppChannel()
+		if err != nil {
+			return fmt.Errorf("failed to create gRPC app channel: %w", err)
+		}
+	}
 
 	return nil
 }
@@ -3300,26 +3274,23 @@ func (a *DaprRuntime) initAppHTTPClient() {
 	}
 }
 
-func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) httpChannel.ChannelConfiguration {
-	return httpChannel.ChannelConfiguration{
-		Client:               a.appHTTPClient,
-		Endpoint:             a.getAppHTTPEndpoint(),
-		MaxConcurrency:       a.runtimeConfig.MaxConcurrency,
-		Pipeline:             pipeline,
-		TracingSpec:          a.globalConfig.Spec.TracingSpec,
-		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
-	}
-}
-
-func (a *DaprRuntime) getAppHTTPChannelForHTTPEndpointsConfig(pipeline httpMiddleware.Pipeline) httpEndpointChannel.ChannelConfigurationForHTTPEndpoints {
-	return httpEndpointChannel.ChannelConfigurationForHTTPEndpoints{
-		Client:               a.appHTTPClient,
+func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, isExternal bool) httpChannel.ChannelConfiguration {
+	conf := httpChannel.ChannelConfiguration{
 		CompStore:            a.compStore,
 		MaxConcurrency:       a.runtimeConfig.MaxConcurrency,
 		Pipeline:             pipeline,
 		TracingSpec:          a.globalConfig.Spec.TracingSpec,
 		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
 	}
+
+	if !isExternal {
+		conf.Endpoint = a.getAppHTTPEndpoint()
+		conf.Client = a.appHTTPClient
+	} else {
+		conf.Client = nethttp.DefaultClient
+	}
+
+	return conf
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {

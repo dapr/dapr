@@ -360,7 +360,7 @@ type mockUnstableHTTPSubscriptions struct {
 	successThreshold int
 }
 
-func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	if m.alwaysError {
 		return nil, errors.New("error")
 	}
@@ -406,7 +406,7 @@ type mockHTTPSubscriptions struct {
 	channel.AppChannel
 }
 
-func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	subs := []SubscriptionJSON{
 		{
 			PubsubName: "pubsub",
