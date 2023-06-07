@@ -535,7 +535,7 @@ func getRuntimeState(actorID string, state workflowState) *backend.Orchestration
 }
 
 func getActivityActorID(workflowActorID string, taskID int32, generation uint64) string {
-	// An activity can be identified by it's name followed by it's task ID and generation. Example: SayHello::0::1, SayHello::1::1, etc.
+	// An activity can be identified by its name followed by its task ID and generation. Example: SayHello::0::1, SayHello::1::1, etc.
 	return fmt.Sprintf("%s::%d::%d", workflowActorID, taskID, generation)
 }
 
