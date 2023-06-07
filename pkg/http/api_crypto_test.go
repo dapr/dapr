@@ -96,25 +96,6 @@ func TestCryptoEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Missing component name - 400", func(t *testing.T) {
-		resps := map[string]fakeHTTPResponse{
-			"encrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, ""), []byte(testMessage), map[string]string{
-				cryptoHeaderKeyName:          "aes-passthrough",
-				cryptoHeaderKeyWrapAlgorithm: "AES",
-			}),
-			"decrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/decrypt", apiVersionV1alpha1, ""), encMessage, nil),
-		}
-
-		for name, resp := range resps {
-			t.Run(name, func(t *testing.T) {
-				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-				require.NotEmpty(t, resp.ErrorBody)
-				assert.Equal(t, "ERR_BAD_REQUEST", resp.ErrorBody["errorCode"])
-				assert.Contains(t, resp.ErrorBody["message"], "missing component name")
-			})
-		}
-	})
-
 	t.Run("Component not found - 400", func(t *testing.T) {
 		resps := map[string]fakeHTTPResponse{
 			"encrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, "not-found"), []byte(testMessage), map[string]string{

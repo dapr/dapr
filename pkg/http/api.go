@@ -89,7 +89,6 @@ type api struct {
 const (
 	apiVersionV1             = "v1.0"
 	apiVersionV1alpha1       = "v1.0-alpha1"
-	idParam                  = "id"
 	methodParam              = "method"
 	wildcardParam            = "*"
 	topicParam               = "topic"
@@ -322,7 +321,7 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 		{
 			// No method is defined here to match any method
 			Methods: []string{},
-			Route:   "invoke/{id}/method/*",
+			Route:   "invoke/*",
 			// This is the fallback route for when no other method is matched by the router
 			IsFallback:            true,
 			Version:               apiVersionV1,
@@ -1417,22 +1416,16 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 }
 
 // findTargetID tries to find ID of the target service from the following four places:
-// 1. {id} in the URL's path.
-// 2. Basic authentication, http://dapr-app-id:<service-id>@localhost:3500/path.
-// 3. HTTP header: 'dapr-app-id'.
-// 4. HTTP Endpoint baseURL override, http://localhost:3500/v1.0/invoke/<overwritten baseURL so targetID here>/method/<method>
+// 1. HTTP header 'dapr-app-id'.
+// 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/path`
+// 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
 func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
-	if id := reqCtx.UserValue(idParam); id != nil {
-		return id.(string)
-	}
-
 	if appID := reqCtx.Request.Header.Peek(daprAppID); appID != nil {
 		return string(appID)
 	}
 
-	if auth := reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization); auth != nil &&
-		strings.HasPrefix(string(auth), "Basic ") {
-		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(auth), "Basic ")); err == nil {
+	if auth := string(reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization)); strings.HasPrefix(auth, "Basic ") {
+		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && pair[0] == daprAppID {
 				return pair[1]
@@ -1441,6 +1434,7 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 	}
 
 	uri := string(reqCtx.URI().Path())
+	fmt.Println("URI HERE", uri)
 	if strings.HasPrefix(uri, "/v1.0/invoke/") {
 		parts := strings.Split(uri, "/")
 		// Example: http://localhost:3500/v1.0/invoke/http://api.github.com/method/<method>

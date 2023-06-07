@@ -232,7 +232,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish with topic name '/' - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubname//", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/%%2F", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -695,7 +695,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish with topic name '/' - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname//", apiVersionV1alpha1)
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/%%2F", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act

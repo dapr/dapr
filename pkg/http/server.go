@@ -32,6 +32,7 @@ import (
 	_ "net/http/pprof"
 
 	chi "github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -227,8 +228,8 @@ func (s *server) Close() error {
 
 func (s *server) getRouter() *chi.Mux {
 	r := chi.NewRouter()
-	//r.Use(middleware.CleanPath, middleware.StripSlashes)
-	r.Use(StripSlashesMiddleware)
+	r.Use(middleware.CleanPath, StripSlashesMiddleware)
+	//r.Use(StripSlashesMiddleware)
 	return r
 }
 
