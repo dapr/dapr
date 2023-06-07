@@ -72,7 +72,6 @@ func (w *stdwriter) Close() error {
 // before calling.
 func (w *stdwriter) flush() {
 	defer w.buf.Reset()
-
 	if b := w.buf.Bytes(); len(b) > 0 {
 		w.t.Log(w.t.Name() + ": " + string(b))
 	}
