@@ -72,9 +72,9 @@ type PodInfo struct {
 }
 
 // NewAppManager creates AppManager instance.
-func NewAppManager(kubeClients *KubeClient, namespace string, app AppDescription) *AppManager {
+func NewAppManager(client *KubeClient, namespace string, app AppDescription) *AppManager {
 	return &AppManager{
-		client:    kubeClients,
+		client:    client,
 		namespace: namespace,
 		app:       app,
 		ctx:       context.Background(),
@@ -94,11 +94,6 @@ func (m *AppManager) App() AppDescription {
 // Init installs app by AppDescription.
 func (m *AppManager) Init(runCtx context.Context) error {
 	m.ctx = runCtx
-
-	// Get or create test namespaces
-	if _, err := m.GetOrCreateNamespace(); err != nil {
-		return err
-	}
 
 	// TODO: Dispose app if option is required
 	if err := m.Dispose(true); err != nil {
@@ -721,24 +716,6 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	}
 
 	return nil
-}
-
-// GetOrCreateNamespace gets or creates namespace unless namespace exists.
-func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
-	namespaceClient := m.client.Namespaces()
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
-	ns, err := namespaceClient.Get(ctx, m.namespace, metav1.GetOptions{})
-	cancel()
-
-	if err != nil && errors.IsNotFound(err) {
-		obj := buildNamespaceObject(m.namespace)
-		ctx, cancel = context.WithTimeout(m.ctx, 15*time.Second)
-		ns, err = namespaceClient.Create(ctx, obj, metav1.CreateOptions{})
-		cancel()
-		return ns, err
-	}
-
-	return ns, err
 }
 
 // GetHostDetails returns the name and IP address of the pods running the app.
