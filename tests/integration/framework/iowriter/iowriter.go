@@ -16,27 +16,73 @@ package iowriter
 import (
 	"bytes"
 	"io"
-	"testing"
+	"sync"
 )
 
+// Logger is an interface that provides a Log method and a Name method. The Log
+// method is used to write a log message to the logger. The Name method returns
+// the name of the logger which will be prepended to each log message.
+type Logger interface {
+	Log(args ...any)
+	Name() string
+}
+
+// stdwriter is an io.WriteCloser that writes to the test logger. It buffers
+// writes until a newline is encountered, at which point it flushes the buffer
+// to the test logger.
 type stdwriter struct {
-	t *testing.T
+	t      Logger
+	buf    bytes.Buffer
+	lock   sync.Mutex
+	closed bool
 }
 
-func New(t *testing.T) io.WriteCloser {
-	return &stdwriter{t}
+func New(t Logger) io.WriteCloser {
+	return &stdwriter{
+		t:   t,
+		buf: bytes.Buffer{},
+	}
 }
 
-func (w *stdwriter) Write(p []byte) (n int, err error) {
-	for _, line := range bytes.Split(p, []byte("\n")) {
-		if len(line) == 0 {
+// Write writes the input bytes to the buffer. If the input contains a newline,
+// the buffer is flushed to the test logger.
+func (w *stdwriter) Write(inp []byte) (n int, err error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	if w.closed {
+		return 0, io.ErrClosedPipe
+	}
+
+	for _, b := range inp {
+		if b == '\n' {
+			w.flush()
 			continue
 		}
-		w.t.Log(w.t.Name() + ": " + string(line))
+		w.buf.WriteByte(b)
 	}
-	return len(p), nil
+
+	return len(inp), nil
 }
 
+// Close flushes the buffer and marks the writer as closed.
 func (w *stdwriter) Close() error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	w.flush()
+	w.closed = true
 	return nil
+}
+
+// flush writes the buffer to the test logger. Expects the lock to be held
+// before calling.
+func (w *stdwriter) flush() {
+	defer w.buf.Reset()
+	if w.closed {
+		return
+	}
+
+	if b := w.buf.Bytes(); len(b) > 0 {
+		w.t.Log(w.t.Name() + ": " + string(b))
+	}
 }
