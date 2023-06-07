@@ -15,7 +15,6 @@ package iowriter
 
 import (
 	"fmt"
-	"io"
 	"sync"
 	"testing"
 
@@ -69,8 +68,9 @@ func TestWrite(t *testing.T) {
 		writer := New(new(mockLogger)).(*stdwriter)
 		writer.Close()
 
-		_, err := writer.Write([]byte("test"))
-		assert.ErrorIs(t, err, io.ErrClosedPipe)
+		_, err := writer.Write([]byte("test\n"))
+		assert.NoError(t, err)
+		assert.Empty(t, writer.buf.String())
 	})
 }
 
@@ -82,7 +82,6 @@ func TestClose(t *testing.T) {
 		writer.Close()
 
 		assert.Equal(t, 0, writer.buf.Len())
-		assert.True(t, writer.closed)
 		_ = assert.Equal(t, 1, len(logger.msgs)) && assert.Equal(t, "TestLogger: test", logger.msgs[0])
 	})
 }

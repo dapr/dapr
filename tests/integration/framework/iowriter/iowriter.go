@@ -31,10 +31,9 @@ type Logger interface {
 // writes until a newline is encountered, at which point it flushes the buffer
 // to the test logger.
 type stdwriter struct {
-	t      Logger
-	buf    bytes.Buffer
-	lock   sync.Mutex
-	closed bool
+	t    Logger
+	buf  bytes.Buffer
+	lock sync.Mutex
 }
 
 func New(t Logger) io.WriteCloser {
@@ -49,10 +48,6 @@ func New(t Logger) io.WriteCloser {
 func (w *stdwriter) Write(inp []byte) (n int, err error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
-
-	if w.closed {
-		return 0, io.ErrClosedPipe
-	}
 
 	for _, b := range inp {
 		if b == '\n' {
@@ -70,7 +65,6 @@ func (w *stdwriter) Close() error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	w.flush()
-	w.closed = true
 	return nil
 }
 
@@ -78,9 +72,6 @@ func (w *stdwriter) Close() error {
 // before calling.
 func (w *stdwriter) flush() {
 	defer w.buf.Reset()
-	if w.closed {
-		return
-	}
 
 	if b := w.buf.Bytes(); len(b) > 0 {
 		w.t.Log(w.t.Name() + ": " + string(b))
