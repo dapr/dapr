@@ -320,7 +320,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 		req := actors.TransactionalRequest{
 			ActorType: wf.config.activityActorType,
-			ActorID:   getActivityActorID(actorID, taskID),
+			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
 			Operations: []actors.TransactionalOperation{{
 				Operation: actors.Delete,
 				Request: actors.TransactionalDelete{
@@ -417,7 +417,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return err
 			}
-			targetActorID := getActivityActorID(actorID, e.EventId)
+			targetActorID := getActivityActorID(actorID, e.EventId, state.Generation)
 
 			req := invokev1.
 				NewInvokeMethodRequest("Execute").
@@ -534,9 +534,9 @@ func getRuntimeState(actorID string, state workflowState) *backend.Orchestration
 	return backend.NewOrchestrationRuntimeState(api.InstanceID(actorID), state.History)
 }
 
-func getActivityActorID(workflowActorID string, taskID int32) string {
-	// An activity can be identified by it's name followed by it's task ID. Example: SayHello::0, SayHello::1, etc.
-	return fmt.Sprintf("%s::%d", workflowActorID, taskID)
+func getActivityActorID(workflowActorID string, taskID int32, generation uint64) string {
+	// An activity can be identified by it's name followed by it's task ID and generation. Example: SayHello::0::1, SayHello::1::1, etc.
+	return fmt.Sprintf("%s::%d::%d", workflowActorID, taskID, generation)
 }
 
 func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state workflowState, actorID string) error {
@@ -554,7 +554,7 @@ func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state wor
 		}
 		req := actors.TransactionalRequest{
 			ActorType: wf.config.activityActorType,
-			ActorID:   getActivityActorID(actorID, taskID),
+			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
 			Operations: []actors.TransactionalOperation{{
 				Operation: actors.Delete,
 				Request: actors.TransactionalDelete{
