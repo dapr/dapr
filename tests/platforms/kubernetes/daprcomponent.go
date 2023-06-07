@@ -77,11 +77,11 @@ func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 
 func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
 	log.Printf("Adding component %q ...", do.Name())
-	return do.kubeClient.DaprComponents(DaprTestNamespace).Create(do.toComponentSpec())
+	return do.kubeClient.DaprComponents(do.namespace).Create(do.toComponentSpec())
 }
 
 func (do *DaprComponent) deleteComponent() error {
-	client := do.kubeClient.DaprComponents(DaprTestNamespace)
+	client := do.kubeClient.DaprComponents(do.namespace)
 	return client.Delete(do.component.Name, &metav1.DeleteOptions{})
 }
 
