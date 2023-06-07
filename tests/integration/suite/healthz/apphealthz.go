@@ -16,8 +16,10 @@ package healthz
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -46,20 +48,17 @@ func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprd
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/foo", r.URL.Path)
-
 		if a.healthy.Load() {
 			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
+		fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
 	})
 
 	mux.HandleFunc("/myfunc", func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/myfunc", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
 	})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -91,20 +90,35 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 
 	a.healthy.Store(true)
 
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID)
+
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		require.NoError(t, err)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		return resp.StatusCode == http.StatusOK
+		return resp.StatusCode == http.StatusOK && string(body) == "GET /myfunc"
 	}, time.Second*20, 50*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
 
 	a.healthy.Store(false)
 
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		require.NoError(t, err)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		return resp.StatusCode == http.StatusInternalServerError
+		return resp.StatusCode == http.StatusInternalServerError &&
+			strings.Contains(string(body), "app is not in a healthy state")
 	}, time.Second*20, 50*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
 
 	require.NoError(t, a.server.Shutdown(ctx))

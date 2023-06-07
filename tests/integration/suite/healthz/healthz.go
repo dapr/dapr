@@ -39,16 +39,25 @@ func (h *Healthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOpt
 	return nil
 }
 
-func (h *Healthz) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
+func (h *Healthz) Run(t *testing.T, ctx context.Context, cmd *framework.Command) {
 	assert.Eventually(t, func() bool {
-		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.PublicPort))
-		return err == nil
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.PublicPort))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
 	}, time.Second*5, time.Millisecond)
 
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", cmd.PublicPort)
+
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/v1.0/healthz", cmd.PublicPort))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		require.NoError(t, err)
+
+		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		return http.StatusNoContent == resp.StatusCode
+		return resp.StatusCode == http.StatusNoContent
 	}, time.Second*10, 100*time.Millisecond)
 }
