@@ -15,7 +15,12 @@ package integration
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -23,11 +28,25 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
+	"github.com/stretchr/testify/require"
+)
+
+const (
+	defaultConcurrency = 3
+
+	envConcurrency = "DAPR_INTEGRATION_CONCURRENCY"
+	envDaprdPath   = "DAPR_INTEGRATION_DAPRD_PATH"
 )
 
 func RunIntegrationTests(t *testing.T) {
-	// Parallelise the integration tests, but don't run more than 3 at once.
-	guard := make(chan struct{}, 3)
+	// Parallelise the integration tests, but don't run more than `conc` (default
+	// 3) at once.
+	conc := concurrency(t)
+	t.Logf("running integration tests with concurrency: %d", conc)
+
+	buildDaprd(t)
+
+	guard := make(chan struct{}, conc)
 
 	for _, tcase := range suite.All() {
 		tcase := tcase
@@ -56,5 +75,51 @@ func RunIntegrationTests(t *testing.T) {
 
 			t.Log("done")
 		})
+	}
+}
+
+func concurrency(t *testing.T) int {
+	conc := defaultConcurrency
+	concS, ok := os.LookupEnv(envConcurrency)
+	if ok {
+		conc, err := strconv.Atoi(concS)
+		if err != nil {
+			t.Fatalf("failed to parse %q: %s", envConcurrency, err)
+		}
+		if conc < 1 {
+			t.Fatalf("%q must be >= 1", envConcurrency)
+		}
+	}
+
+	return conc
+}
+
+func buildDaprd(t *testing.T) {
+	if _, ok := os.LookupEnv(envDaprdPath); !ok {
+		t.Logf("%q not set, building daprd binary", envDaprdPath)
+
+		_, tfile, _, ok := runtime.Caller(0)
+		require.True(t, ok)
+		rootDir := filepath.Join(filepath.Dir(tfile), "../..")
+
+		// Use a consistent temp dir for the binary so that the binary is cached on
+		// subsequent runs.
+		daprdPath := filepath.Join(os.TempDir(), "dapr_integration_tests/daprd")
+		if runtime.GOOS == "windows" {
+			daprdPath += ".exe"
+		}
+
+		// Ensure CGO is disabled to avoid linking against system libraries.
+		t.Setenv("CGO_ENABLED", "0")
+
+		t.Logf("Root dir: %q", rootDir)
+		t.Logf("Building daprd binary to: %q", daprdPath)
+		cmd := exec.Command("go", "build", "-tags=all_components", "-v", "-o", daprdPath, filepath.Join(rootDir, "cmd/daprd"))
+		cmd.Dir = rootDir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		require.NoError(t, cmd.Run())
+
+		t.Setenv(envDaprdPath, daprdPath)
 	}
 }
