@@ -57,6 +57,6 @@ func (s *sentry) Run(t *testing.T, _ context.Context) {
 			}
 			require.NoError(t, conn.Close())
 			return true
-		}, time.Second*5, time.Millisecond, "port %s (:%d) was not available in time", name, port)
+		}, time.Second*5, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
 }

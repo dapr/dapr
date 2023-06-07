@@ -53,7 +53,7 @@ func (s *sentry) Run(t *testing.T, _ context.Context) {
 		}
 		require.NoError(t, conn.Close())
 		return true
-	}, time.Second*5, time.Millisecond, "healthz port %d not ready", s.proc.HealthzPort)
+	}, time.Second*5, 100*time.Millisecond, "healthz port %d not ready", s.proc.HealthzPort)
 
 	assert.Eventually(t, func() bool {
 		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://127.0.0.1:%d/healthz", s.proc.HealthzPort))
