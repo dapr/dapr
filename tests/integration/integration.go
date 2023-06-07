@@ -24,11 +24,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -82,7 +83,8 @@ func concurrency(t *testing.T) int {
 	conc := defaultConcurrency
 	concS, ok := os.LookupEnv(envConcurrency)
 	if ok {
-		conc, err := strconv.Atoi(concS)
+		var err error
+		conc, err = strconv.Atoi(concS)
 		if err != nil {
 			t.Fatalf("failed to parse %q: %s", envConcurrency, err)
 		}
