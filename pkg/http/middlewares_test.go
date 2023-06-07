@@ -36,7 +36,7 @@ func TestStripSlashes(t *testing.T) {
 	r.Use(StripSlashesMiddleware)
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("nothing here"))
 	})
 
@@ -59,25 +59,25 @@ func TestStripSlashes(t *testing.T) {
 	client, teardown := testServer(r)
 	defer teardown()
 
-	if _, resp := testRequest(t, client, http.MethodGet, "/", nil); resp != "root" {
+	if resp := testRequest(t, client, http.MethodGet, "/", nil); resp != "root" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "//", nil); resp != "root" {
+	if resp := testRequest(t, client, http.MethodGet, "//", nil); resp != "root" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/admin", nil); resp != "account:admin" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/admin", nil); resp != "account:admin" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/admin/", nil); resp != "account:admin" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/admin/", nil); resp != "account:admin" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts//", nil); resp != "account:" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts//", nil); resp != "account:" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/nothing-here", nil); resp != "nothing here" {
+	if resp := testRequest(t, client, http.MethodGet, "/nothing-here", nil); resp != "nothing here" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/withslash/", nil); resp != "hello" {
+	if resp := testRequest(t, client, http.MethodGet, "/withslash/", nil); resp != "hello" {
 		t.Fatal(resp)
 	}
 }
@@ -86,7 +86,7 @@ func TestStripSlashesInRoute(t *testing.T) {
 	r := chi.NewRouter()
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("nothing here"))
 	})
 
@@ -108,22 +108,22 @@ func TestStripSlashesInRoute(t *testing.T) {
 	client, teardown := testServer(r)
 	defer teardown()
 
-	if _, resp := testRequest(t, client, http.MethodGet, "/hi", nil); resp != "hi" {
+	if resp := testRequest(t, client, http.MethodGet, "/hi", nil); resp != "hi" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/hi/", nil); resp != "nothing here" {
+	if resp := testRequest(t, client, http.MethodGet, "/hi/", nil); resp != "nothing here" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/admin", nil); resp != "accounts index" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/admin", nil); resp != "accounts index" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/admin/", nil); resp != "accounts index" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/admin/", nil); resp != "accounts index" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/admin/query", nil); resp != "admin" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/admin/query", nil); resp != "admin" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/admin/query/", nil); resp != "admin" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/admin/query/", nil); resp != "admin" {
 		t.Fatal(resp)
 	}
 }
@@ -148,22 +148,22 @@ func TestStripSlashesWithNilContext(t *testing.T) {
 	client, teardown := testServer(StripSlashesMiddleware(r))
 	defer teardown()
 
-	if _, resp := testRequest(t, client, http.MethodGet, "/", nil); resp != "root" {
+	if resp := testRequest(t, client, http.MethodGet, "/", nil); resp != "root" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "//", nil); resp != "root" {
+	if resp := testRequest(t, client, http.MethodGet, "//", nil); resp != "root" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts", nil); resp != "accounts" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts", nil); resp != "accounts" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/", nil); resp != "accounts" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/", nil); resp != "accounts" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/admin", nil); resp != "admin" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/admin", nil); resp != "admin" {
 		t.Fatal(resp)
 	}
-	if _, resp := testRequest(t, client, http.MethodGet, "/accounts/admin/", nil); resp != "admin" {
+	if resp := testRequest(t, client, http.MethodGet, "/accounts/admin/", nil); resp != "admin" {
 		t.Fatal(resp)
 	}
 }
@@ -173,6 +173,7 @@ func testServer(handler http.Handler) (client *http.Client, teardown func() erro
 	teardown = ln.Close
 
 	// Run in background and ignore errors - this will be closed when the listener is closed
+	//nolint:gosec
 	go http.Serve(ln, handler)
 
 	client = &http.Client{
@@ -186,25 +187,25 @@ func testServer(handler http.Handler) (client *http.Client, teardown func() erro
 	return client, teardown
 }
 
-func testRequest(t *testing.T, client *http.Client, method, path string, body io.Reader) (*http.Response, string) {
+func testRequest(t *testing.T, client *http.Client, method, path string, body io.Reader) string {
 	req, err := http.NewRequest(method, "http://test.com"+path, body)
 	if err != nil {
 		t.Fatal(err)
-		return nil, ""
+		return ""
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
-		return nil, ""
+		return ""
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
-		return nil, ""
+		return ""
 	}
 
-	return resp, string(respBody)
+	return string(respBody)
 }
