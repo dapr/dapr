@@ -27,20 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
-	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
-	"google.golang.org/protobuf/types/known/anypb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
@@ -72,6 +58,19 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/anypb"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const bufconnBufSize = 2 << 20 // 2MB
@@ -1034,7 +1033,8 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeDirectMessageResponse := getFakeDirectMessageResponse()
 		defer fakeDirectMessageResponse.Close()
 
-		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
+		// Double slash added on purpose
+		apiPath := "v1.0//invoke/http://api.github.com/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -1520,7 +1520,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
-	t.Run("Invoke direct messaging route '/' - 200 OK", func(t *testing.T) {
+	t.Run("Invoke direct messaging route '/' for external invocation - 200 OK", func(t *testing.T) {
 		fakeDirectMessageResponse := getFakeDirectMessageResponse()
 		defer fakeDirectMessageResponse.Close()
 
@@ -3298,12 +3298,12 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		assert.Nil(t, rspMap1)
 
 		uuid, err := uuid.NewRandom()
-		assert.Nil(t, err, "unable to generate id")
+		assert.NoError(t, err, "unable to generate id")
 		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 
-		assert.Equal(t, 400, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+		assert.Equal(t, gohttp.StatusNotFound, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
 	})
 
 	t.Run("error in unsubscribe configurations", func(t *testing.T) {
@@ -3314,12 +3314,12 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		assert.Nil(t, rspMap1)
 
 		uuid, err := uuid.NewRandom()
-		assert.Nil(t, err, "unable to generate id")
+		assert.NoError(t, err, "unable to generate id")
 		apiPath2 := fmt.Sprintf("v1.0/configuration/%s/%s/unsubscribe", "", &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 
-		assert.Equal(t, 400, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+		assert.Equal(t, gohttp.StatusNotFound, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
 	})
 
 	t.Run("error in unsubscribe configurations - alpha1", func(t *testing.T) {
@@ -5722,4 +5722,79 @@ func TestExtractEtag(t *testing.T) {
 func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
+}
+
+func TestPathHasPrefix(t *testing.T) {
+	tests := []struct {
+		name         string
+		path         string
+		prefixParts  []string
+		want         int
+		wantTrailing string
+	}{
+		{name: "match one prefix", path: "/v1.0/invoke/foo", prefixParts: []string{"v1.0"}, want: 6, wantTrailing: "invoke/foo"},
+		{name: "match two prefixes", path: "/v1.0/invoke/foo", prefixParts: []string{"v1.0", "invoke"}, want: 13, wantTrailing: "foo"},
+		{name: "ignore extra slashes", path: "//v1.0///invoke//foo", prefixParts: []string{"v1.0", "invoke"}, want: 17, wantTrailing: "foo"},
+		{name: "extra slashes after match", path: "//v1.0///invoke//foo//bar", prefixParts: []string{"v1.0", "invoke"}, want: 17, wantTrailing: "foo//bar"},
+		{name: "no slash at beginning", path: "v1.0//invoke//foo", prefixParts: []string{"v1.0", "invoke"}, want: 14, wantTrailing: "foo"},
+		{name: "empty prefix", path: "/foo/bar", prefixParts: []string{}, want: 1, wantTrailing: "foo/bar"},
+		{name: "empty path", path: "", prefixParts: []string{"v1.0", "invoke"}, want: -1},
+		{name: "no match", path: "/foo/bar", prefixParts: []string{"v1.0", "invoke"}, want: -1},
+		{name: "path is slash only", path: "/", prefixParts: []string{"v1.0", "invoke"}, want: -1},
+		{name: "empty prefix skips multiple slashes", path: "///", prefixParts: []string{}, want: 3, wantTrailing: ""},
+		{name: "missing initial part", path: "/foo/bar", prefixParts: []string{"bar"}, want: -1},
+		{name: "match incomplete", path: "/v1.0", prefixParts: []string{"v1.0", "invoke"}, want: -1},
+		{name: "trailing slash is required", path: "v1.0//invoke", prefixParts: []string{"v1.0", "invoke"}, want: -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := pathHasPrefix(tt.path, tt.prefixParts...)
+			if got != tt.want {
+				t.Errorf("pathHasPrefix() = %v, want %v", got, tt.want)
+			} else if got >= 0 && tt.path[got:] != tt.wantTrailing {
+				t.Errorf("trailing = %q, want %q", tt.path[got:], tt.wantTrailing)
+			}
+		})
+	}
+}
+
+func TestFindTargetIDAndMethod(t *testing.T) {
+	tests := []struct {
+		name         string
+		path         string
+		headers      map[string]string
+		wantTargetID string
+		wantMethod   string
+	}{
+		{name: "dapr-app-id header", path: "/foo/bar", headers: map[string]string{"dapr-app-id": "myapp"}, wantTargetID: "myapp", wantMethod: "/foo/bar"},
+		{name: "basic auth", path: "/foo/bar", headers: map[string]string{"Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "auth", wantMethod: "/foo/bar"},
+		{name: "dapr-app-id header has priority over basic auth", path: "/foo/bar", headers: map[string]string{"dapr-app-id": "myapp", "Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "myapp", wantMethod: "/foo/bar"},
+		{name: "path with internal target", path: "/v1.0/invoke/myapp/method/foo", wantTargetID: "myapp", wantMethod: "/foo"},
+		{name: "basic auth has priority over path", path: "/v1.0/invoke/myapp/method/foo", headers: map[string]string{"Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "auth", wantMethod: "/v1.0/invoke/myapp/method/foo"},
+		{name: "path with '/' method", path: "/v1.0/invoke/myapp/method/", wantTargetID: "myapp", wantMethod: "/"},
+		{name: "path with missing method", path: "/v1.0/invoke/myapp/method", wantTargetID: "", wantMethod: ""},
+		{name: "path with http target unescaped", path: "/v1.0/invoke/http://example.com/method/foo", wantTargetID: "http://example.com", wantMethod: "/foo"},
+		{name: "path with https target unescaped", path: "/v1.0/invoke/https://example.com/method/foo", wantTargetID: "https://example.com", wantMethod: "/foo"},
+		{name: "path with http target escaped", path: "/v1.0/invoke/http%3A%2F%2Fexample.com/method/foo", wantTargetID: "http://example.com", wantMethod: "/foo"},
+		{name: "path with https target escaped", path: "/v1.0/invoke/https%3A%2F%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "/foo"},
+		{name: "path with https target partly escaped", path: "/v1.0/invoke/https%3A/%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "/foo"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			peekHeader := func(k string) []byte {
+				if len(tt.headers) == 0 {
+					return nil
+				}
+				return []byte(tt.headers[k])
+			}
+
+			gotTargetID, gotMethod := findTargetIDAndMethod(tt.path, peekHeader)
+			if gotTargetID != tt.wantTargetID {
+				t.Errorf("findTargetIDAndMethod() gotTargetID = %v, want %v", gotTargetID, tt.wantTargetID)
+			}
+			if gotMethod != tt.wantMethod {
+				t.Errorf("findTargetIDAndMethod() gotMethod = %v, want %v", gotMethod, tt.wantMethod)
+			}
+		})
+	}
 }

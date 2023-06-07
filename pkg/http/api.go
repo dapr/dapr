@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	nethttp "net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -1264,10 +1265,14 @@ func (a *api) getBaseURL(targetAppID string) string {
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
-	targetID := a.findTargetID(reqCtx)
-
+	targetID, invokeMethodName := findTargetIDAndMethod(string(reqCtx.URI().PathOriginal()), reqCtx.Request.Header.Peek)
 	if targetID == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
+		return
+	}
+	if invokeMethodName == "" {
+		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
 		return
 	}
@@ -1279,37 +1284,18 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var (
-		policyDef        *resiliency.PolicyDefinition
-		invokeMethodName string
-	)
+	var policyDef *resiliency.PolicyDefinition
 	switch {
 	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
-		// overwritten URL, so targetID = baseURL
-		invokeMethodNameWithPrefix := reqCtx.UserValue(wildcardParam).(string)
-		prefix := "v1.0/invoke/" + targetID + "/method"
-		if len(invokeMethodNameWithPrefix) <= len(prefix) {
-			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
-			return
-		}
-		invokeMethodName = invokeMethodNameWithPrefix[len(prefix):]
-		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+"/"+invokeMethodNameWithPrefix)
+		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+"/"+invokeMethodName)
 
 	case a.isHTTPEndpoint(targetID):
 		// http endpoint CRD resource is detected being used for service invocation
 		baseURL := a.getBaseURL(targetID)
 		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+":"+baseURL)
-		invokeMethodName = reqCtx.UserValue(wildcardParam).(string)
-		if invokeMethodName == "" {
-			msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
-			return
-		}
 
 	default:
 		// regular service to service invocation
-		invokeMethodName = reqCtx.UserValue(wildcardParam).(string)
 		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
 	}
 
@@ -1415,39 +1401,80 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, body))
 }
 
-// findTargetID tries to find ID of the target service from the following four places:
-// 1. HTTP header 'dapr-app-id'.
-// 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/path`
+// findTargetIDAndMethod finds ID of the target service and method from the following three places:
+// 1. HTTP header 'dapr-app-id' (path is method)
+// 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/<method>`
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
-func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
-	if appID := reqCtx.Request.Header.Peek(daprAppID); appID != nil {
-		return string(appID)
+func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetID string, method string) {
+	if appID := peekHeader(daprAppID); len(appID) != 0 {
+		return string(appID), path
 	}
 
-	if auth := string(reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization)); strings.HasPrefix(auth, "Basic ") {
+	if auth := string(peekHeader(fasthttp.HeaderAuthorization)); strings.HasPrefix(auth, "Basic ") {
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && pair[0] == daprAppID {
-				return pair[1]
+				return pair[1], path
 			}
 		}
 	}
 
-	uri := string(reqCtx.URI().Path())
-	fmt.Println("URI HERE", uri)
-	if strings.HasPrefix(uri, "/v1.0/invoke/") {
-		parts := strings.Split(uri, "/")
-		// Example: http://localhost:3500/v1.0/invoke/http://api.github.com/method/<method>
-		// parts[0]: /
-		// parts[1]: v1.0
-		// parts[2]: invoke
-		// parts[3]: http:
-		// parts[4]: api.github.com
-		// parts[5]: method
-		return parts[3] + "//" + parts[4]
+	// If we're here, the handler was probably invoked with /v1.0/invoke/ (or the invocation is invalid, missing the app id provided as header or Basic auth)
+	// However, we are not relying on wildcardParam because the URL may have been sanitized to remove `//``, so `http://` would have been turned into `http:/`
+	// First, check to make sure that the path has the prefix
+	if idx := pathHasPrefix(path, apiVersionV1, "invoke"); idx > 0 {
+		path = path[idx:]
+
+		// Scan to find app ID and method
+		// Matches `<appid>/method/<method>`.
+		// Examples:
+		// - `appid/method/mymethod`
+		// - `http://example.com/method/mymethod`
+		// - `https://example.com/method/mymethod`
+		// - `http%3A%2F%2Fexample.com/method/mymethod`
+		if idx = strings.Index(path, "/method/"); idx > 0 {
+			targetID = path[:idx]
+			method = path[(idx + len("/method")):]
+			if t, _ := url.QueryUnescape(targetID); t != "" {
+				targetID = t
+			}
+			return
+		}
 	}
 
-	return ""
+	return "", ""
+}
+
+// Returns true if a path has the parts as prefix (and a trailing slash), and returns the index of the first byte after the prefix (and after any trailing slashes).
+func pathHasPrefix(path string, prefixParts ...string) int {
+	pl := len(path)
+	ppl := len(prefixParts)
+	if pl == 0 {
+		return -1
+	}
+
+	var i, start, found int
+	for i = 0; i < pl; i++ {
+		if path[i] != '/' {
+			if found >= ppl {
+				return i
+			}
+			continue
+		}
+
+		if i-start > 0 {
+			if path[start:i] == prefixParts[found] {
+				found++
+			} else {
+				return -1
+			}
+		}
+		start = i + 1
+	}
+	if found >= ppl {
+		return i
+	}
+	return -1
 }
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
