@@ -76,7 +76,7 @@ func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 }
 
 func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
-	log.Printf("Adding component %q ...", do.component.Name)
+	log.Printf("Adding component %q ...", do.Name())
 	return do.kubeClient.DaprComponents(DaprTestNamespace).Create(do.toComponentSpec())
 }
 
@@ -90,6 +90,9 @@ func (do *DaprComponent) Name() string {
 }
 
 func (do *DaprComponent) Init(ctx context.Context) error {
+	// Ignore errors here as the component may not exist
+	_ = do.Dispose(true)
+
 	_, err := do.addComponent()
 	return err
 }
