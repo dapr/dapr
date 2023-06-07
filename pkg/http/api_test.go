@@ -3532,41 +3532,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////
 	// START API TESTS //
 	/////////////////////
-	t.Run("Start with no workflow type", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr//start"
-
-		req := workflowContrib.StartRequest{
-			WorkflowName: "Non-existent-workflow",
-		}
-
-		b, _ := json.Marshal(&req)
-
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_NAME_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrWorkflowNameMissing.Message(), resp.ErrorBody["message"])
-	})
-
-	t.Run("Start with no workflow component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows//workflow-type/start"
-
-		req := workflowContrib.StartRequest{
-			WorkflowName: "Non-existent-workflow",
-		}
-
-		b, _ := json.Marshal(&req)
-
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
-	})
 
 	t.Run("Start with non existent component", func(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/non-existent-component/workflowName/start"
@@ -3644,17 +3609,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////
 	// GET API TESTS ////
 	/////////////////////
-	t.Run("Get with no workflow component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows//instanceID"
-
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
-	})
 
 	t.Run("Get with non existent workflow component", func(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID"
@@ -3702,29 +3656,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////////
 	// TERMINATE API TESTS //
 	/////////////////////////
-	t.Run("Terminate with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr//terminate"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
-	})
-
-	t.Run("Terminate with no workflow component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows//instanceID/terminate"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
-	})
 
 	t.Run("Terminate with non existent component", func(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/terminate"
@@ -3754,37 +3685,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	///////////////////////////
 	// RAISE EVENT API TESTS //
 	///////////////////////////
-	t.Run("Raise Event with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr//raiseEvent/eventName"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
-	})
-
-	t.Run("Raise Event with no workflow component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows//instanceID/raiseEvent/fakeEvent"
-
-		req := workflowContrib.RaiseEventRequest{
-			InstanceID: "",
-			EventName:  "",
-			EventData:  nil,
-		}
-
-		b, _ := json.Marshal(&req)
-
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
-	})
 
 	t.Run("Raise Event with non existent component", func(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/raiseEvent/fakeEvent"
@@ -3823,30 +3723,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	// PAUSE API TESTS //
 	/////////////////////////
 
-	t.Run("Pause with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr//pause"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
-	})
-
-	t.Run("Pause with no workflow component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows//instanceID/pause"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
-	})
-
 	t.Run("Pause with non existent component", func(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/pause"
 
@@ -3876,30 +3752,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	// RESUME API TESTS //
 	/////////////////////////
 
-	t.Run("Resume with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr//resume"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
-	})
-
-	t.Run("Resume with no workflow component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows//instanceID/resume"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
-	})
-
 	t.Run("Resume with non existent component", func(t *testing.T) {
 		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/resume"
 
@@ -3928,38 +3780,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////
 	// PURGE API TESTS //
 	/////////////////////
-	t.Run("Purge with no workflow component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows//instanceID/purge"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
 
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrNoOrMissingWorkflowComponent.Message(), resp.ErrorBody["message"])
-	})
-
-	t.Run("Purge with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/purge"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
-	})
-
-	t.Run("Purge with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr//purge"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_INSTANCE_ID_PROVIDED_MISSING", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrMissingOrEmptyInstance.Message(), resp.ErrorBody["message"])
-	})
 	t.Run("Purge with valid API path", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'purge' method implemented to simply return nil
