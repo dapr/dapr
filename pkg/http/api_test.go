@@ -5589,18 +5589,18 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 		wantTargetID string
 		wantMethod   string
 	}{
-		{name: "dapr-app-id header", path: "/foo/bar", headers: map[string]string{"dapr-app-id": "myapp"}, wantTargetID: "myapp", wantMethod: "/foo/bar"},
-		{name: "basic auth", path: "/foo/bar", headers: map[string]string{"Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "auth", wantMethod: "/foo/bar"},
-		{name: "dapr-app-id header has priority over basic auth", path: "/foo/bar", headers: map[string]string{"dapr-app-id": "myapp", "Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "myapp", wantMethod: "/foo/bar"},
-		{name: "path with internal target", path: "/v1.0/invoke/myapp/method/foo", wantTargetID: "myapp", wantMethod: "/foo"},
-		{name: "basic auth has priority over path", path: "/v1.0/invoke/myapp/method/foo", headers: map[string]string{"Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "auth", wantMethod: "/v1.0/invoke/myapp/method/foo"},
-		{name: "path with '/' method", path: "/v1.0/invoke/myapp/method/", wantTargetID: "myapp", wantMethod: "/"},
+		{name: "dapr-app-id header", path: "/foo/bar", headers: map[string]string{"dapr-app-id": "myapp"}, wantTargetID: "myapp", wantMethod: "foo/bar"},
+		{name: "basic auth", path: "/foo/bar", headers: map[string]string{"Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "auth", wantMethod: "foo/bar"},
+		{name: "dapr-app-id header has priority over basic auth", path: "/foo/bar", headers: map[string]string{"dapr-app-id": "myapp", "Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "myapp", wantMethod: "foo/bar"},
+		{name: "path with internal target", path: "/v1.0/invoke/myapp/method/foo", wantTargetID: "myapp", wantMethod: "foo"},
+		{name: "basic auth has priority over path", path: "/v1.0/invoke/myapp/method/foo", headers: map[string]string{"Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "auth", wantMethod: "v1.0/invoke/myapp/method/foo"},
+		{name: "path with '/' method", path: "/v1.0/invoke/myapp/method/", wantTargetID: "myapp", wantMethod: ""},
 		{name: "path with missing method", path: "/v1.0/invoke/myapp/method", wantTargetID: "", wantMethod: ""},
-		{name: "path with http target unescaped", path: "/v1.0/invoke/http://example.com/method/foo", wantTargetID: "http://example.com", wantMethod: "/foo"},
-		{name: "path with https target unescaped", path: "/v1.0/invoke/https://example.com/method/foo", wantTargetID: "https://example.com", wantMethod: "/foo"},
-		{name: "path with http target escaped", path: "/v1.0/invoke/http%3A%2F%2Fexample.com/method/foo", wantTargetID: "http://example.com", wantMethod: "/foo"},
-		{name: "path with https target escaped", path: "/v1.0/invoke/https%3A%2F%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "/foo"},
-		{name: "path with https target partly escaped", path: "/v1.0/invoke/https%3A/%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "/foo"},
+		{name: "path with http target unescaped", path: "/v1.0/invoke/http://example.com/method/foo", wantTargetID: "http://example.com", wantMethod: "foo"},
+		{name: "path with https target unescaped", path: "/v1.0/invoke/https://example.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
+		{name: "path with http target escaped", path: "/v1.0/invoke/http%3A%2F%2Fexample.com/method/foo", wantTargetID: "http://example.com", wantMethod: "foo"},
+		{name: "path with https target escaped", path: "/v1.0/invoke/https%3A%2F%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
+		{name: "path with https target partly escaped", path: "/v1.0/invoke/https%3A/%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

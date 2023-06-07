@@ -75,7 +75,6 @@ const (
 	// DirectMessaging.
 	ErrDirectInvoke         = "fail to invoke, id: %s, err: %s"
 	ErrDirectInvokeNoAppID  = "failed getting app id either from the URL path or the header dapr-app-id"
-	ErrDirectInvokeMethod   = "invalid method name"
 	ErrDirectInvokeNotReady = "invoke API is not ready"
 
 	// Healthz.

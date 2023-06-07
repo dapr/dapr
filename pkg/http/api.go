@@ -1271,11 +1271,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
 		return
 	}
-	if invokeMethodName == "" {
-		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
-		return
-	}
 
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	if a.directMessaging == nil {
@@ -1407,14 +1402,14 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
 func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetID string, method string) {
 	if appID := peekHeader(daprAppID); len(appID) != 0 {
-		return string(appID), path
+		return string(appID), strings.TrimPrefix(path, "/")
 	}
 
 	if auth := string(peekHeader(fasthttp.HeaderAuthorization)); strings.HasPrefix(auth, "Basic ") {
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && pair[0] == daprAppID {
-				return pair[1], path
+				return pair[1], strings.TrimPrefix(path, "/")
 			}
 		}
 	}
@@ -1434,7 +1429,7 @@ func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetI
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
 		if idx = strings.Index(path, "/method/"); idx > 0 {
 			targetID = path[:idx]
-			method = path[(idx + len("/method")):]
+			method = path[(idx + len("/method/")):]
 			if t, _ := url.QueryUnescape(targetID); t != "" {
 				targetID = t
 			}
