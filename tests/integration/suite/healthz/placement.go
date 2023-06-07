@@ -45,7 +45,7 @@ func (d *placement) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (d *placement) Run(t *testing.T, _ context.Context) {
+func (d *placement) Run(t *testing.T, ctx context.Context) {
 	assert.Eventuallyf(t, func() bool {
 		conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", d.proc.HealthzPort))
 		if err != nil {
@@ -53,11 +53,14 @@ func (d *placement) Run(t *testing.T, _ context.Context) {
 		}
 		require.NoError(t, conn.Close())
 		return true
-	}, time.Second*5, time.Millisecond, "healthz port %d not ready", d.proc.HealthzPort)
+	}, time.Second*5, 100*time.Millisecond, "healthz port %d not ready", d.proc.HealthzPort)
+
+	reqURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", d.proc.HealthzPort)
 
 	assert.Eventually(t, func() bool {
-		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://127.0.0.1:%d/healthz", d.proc.HealthzPort))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, resp.Body.Close())
 		return http.StatusOK == resp.StatusCode
 	}, time.Second*10, 100*time.Millisecond)
