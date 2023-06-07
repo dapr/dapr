@@ -47,7 +47,7 @@ func (h *Healthz) Run(t *testing.T, ctx context.Context, cmd *framework.Command)
 		}
 		require.NoError(t, conn.Close())
 		return true
-	}, time.Second*5, time.Millisecond)
+	}, time.Second*5, 100*time.Millisecond)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", cmd.PublicPort)
 

@@ -86,7 +86,7 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 	assert.Eventually(t, func() bool {
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.InternalGRPCPort))
 		return err == nil
-	}, time.Second*5, time.Millisecond)
+	}, time.Second*5, 100*time.Millisecond)
 
 	a.healthy.Store(true)
 
@@ -103,7 +103,7 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK && string(body) == "GET /myfunc"
-	}, time.Second*20, 50*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
+	}, time.Second*20, 100*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
 
 	a.healthy.Store(false)
 
@@ -119,7 +119,7 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError &&
 			strings.Contains(string(body), "app is not in a healthy state")
-	}, time.Second*20, 50*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
+	}, time.Second*20, 100*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
 
 	require.NoError(t, a.server.Shutdown(ctx))
 
