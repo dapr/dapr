@@ -690,7 +690,7 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 				continue
 			}
 			md := middleware.Metadata{Base: a.toBaseMetadata(component)}
-			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
+			handler, err := a.httpMiddlewareRegistry.Create(a.ctx, middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
 			if err != nil {
 				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
 				if !component.Spec.IgnoreErrors {
@@ -1745,7 +1745,7 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	}
 
 	if binding != nil {
-		err := binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
+		err := binding.Init(a.ctx, bindings.Metadata{Base: a.toBaseMetadata(c)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

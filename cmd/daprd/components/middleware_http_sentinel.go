@@ -27,8 +27,8 @@ import (
 
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return sentinel.NewMiddleware(log).GetHandler(context.TODO(), metadata)
+		return func(ctx context.Context, metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+			return sentinel.NewMiddleware(log).GetHandler(ctx, metadata)
 		}
 	}, "sentinel")
 }

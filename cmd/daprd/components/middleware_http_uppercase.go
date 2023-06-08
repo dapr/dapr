@@ -16,6 +16,7 @@ limitations under the License.
 package components
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -28,7 +29,7 @@ import (
 
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+		return func(ctx context.Context, metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
 			// Apply to request only by default
 			var request, response bool
 			switch strings.ToLower(metadata.Properties["direction"]) {

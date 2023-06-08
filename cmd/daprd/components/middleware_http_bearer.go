@@ -27,7 +27,7 @@ import (
 
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+		return func(ctx context.Context, metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
 			return bearer.NewBearerMiddleware(log).GetHandler(context.TODO(), metadata)
 		}
 	}, "bearer")
