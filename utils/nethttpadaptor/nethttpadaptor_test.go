@@ -347,16 +347,16 @@ func TestNewNetHTTPHandlerFuncRequests(t *testing.T) {
 		{
 			"http request path is normalized",
 			func() *http.Request {
-				req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://localhost:8080//foo//bar/123/?hello=world", nil)
-				return req
+				return httptest.NewRequest(http.MethodGet, "https://localhost:8080///foo/bar/123aaa///%2Fbbb%2F%2E.%2Fxxx//?hell%2F%2Eo=wor%2F%2Eld", nil)
 			},
 			func(t *testing.T) func(ctx *fasthttp.RequestCtx) {
 				return func(ctx *fasthttp.RequestCtx) {
-					assert.Equal(t, "/foo/bar/123/", string(ctx.Request.URI().Path()))
+					assert.True(t, ctx.Request.URI().DisablePathNormalizing)
+					assert.Equal(t, "/foo/bar/123aaa/%2Fbbb%2F%2E.%2Fxxx/", string(ctx.Request.URI().PathOriginal()))
 					assert.Equal(t, "localhost:8080", string(ctx.Request.URI().Host()))
 					assert.Equal(t, "https", string(ctx.Request.URI().Scheme()))
-					assert.Equal(t, "hello=world", string(ctx.Request.URI().QueryString()))
-					assert.Equal(t, "https://localhost:8080/foo/bar/123/?hello=world", string(ctx.Request.URI().FullURI()))
+					assert.Equal(t, "hell%2F%2Eo=wor%2F%2Eld", string(ctx.Request.URI().QueryString()))
+					assert.Equal(t, "https://localhost:8080/foo/bar/123aaa/%2Fbbb%2F%2E.%2Fxxx/?hell%2F%2Eo=wor%2F%2Eld", string(ctx.Request.URI().FullURI()))
 				}
 			},
 		},
