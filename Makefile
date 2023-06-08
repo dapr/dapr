@@ -137,7 +137,7 @@ BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 # Comma-separated list of features to enable
-ENABLED_FEATURES ?= 
+ENABLED_FEATURES ?= ServiceInvocationStreaming
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \
