@@ -107,7 +107,7 @@ resource ArmResources 'Microsoft.Resources/resourceGroups@2020-10-01' = if (enab
     date: dateTag
   } : {}
 }
-module armCluster 'azure.bicep' = {
+module armCluster 'azure.bicep' = if (enableArm) {
   name: 'armCluster'
   scope: ArmResources
   params: {
