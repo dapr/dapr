@@ -136,6 +136,13 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		WithTrailers(trailer).
 		WithMessage(resp)
 
+	// If the data has a type_url, set protobuf as content type
+	// This is necessary to support the HTTP->gRPC service invocation path correctly
+	typeUrl := resp.GetData().GetTypeUrl()
+	if typeUrl != "" {
+		rsp.WithContentType(invokev1.ProtobufContentType)
+	}
+
 	return rsp, nil
 }
 
