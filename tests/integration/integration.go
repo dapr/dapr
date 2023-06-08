@@ -116,7 +116,7 @@ func buildDaprd(t *testing.T) {
 
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Building daprd binary to: %q", daprdPath)
-		cmd := exec.Command("go", "build", "-tags=all_components", "-v", "-o", daprdPath, filepath.Join(rootDir, "cmd/daprd"))
+		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", daprdPath, filepath.Join(rootDir, "cmd/daprd"))
 		cmd.Dir = rootDir
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

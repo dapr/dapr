@@ -348,7 +348,10 @@ test-race:
 ################################################################################
 .PHONY: test-integration
 test-integration: test-deps
-		gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json -- \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--format standard-verbose \
+			-- \
 			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
 
 ################################################################################
