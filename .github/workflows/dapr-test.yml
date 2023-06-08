@@ -225,13 +225,19 @@ jobs:
             target_arch: amd64
             windows_version: ltsc2022
     steps:
+      - name: Set up for manual runs
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
+        shell: bash
       - name: Set up for scheduled test
-        if: github.event_name != 'repository_dispatch'
+        if: github.event_name == 'schedule'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
-      - name: Parse test payload
+      - name: Set up for dispatched events
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@v6.2.0
         with:
@@ -415,13 +421,19 @@ jobs:
           echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
           echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
         shell: bash
+      - name: Set up for manual runs
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
+        shell: bash
       - name: Set up for scheduled test
-        if: github.event_name != 'repository_dispatch'
+        if: github.event_name == 'schedule'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
-      - name: Parse test payload
+      - name: Set up for dispatched events
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@v6.2.0
         with:
