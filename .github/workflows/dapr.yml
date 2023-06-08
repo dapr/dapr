@@ -405,50 +405,50 @@ jobs:
           REPO_OWNER=${{ github.repository_owner }}
           # Lowercase the value
           echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
-      - name: "download artifact: dapr_linux_amd64_all"
+      - name: "download artifact: dapr_linux_amd64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_amd64_all
+          name: dapr_linux_amd64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_amd64_stable"
+      - name: "download artifact: dapr_linux_amd64_stablecomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_amd64_stable
+          name: dapr_linux_amd64_stablecomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm_all"
+      - name: "download artifact: dapr_linux_arm_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_arm_all
+          name: dapr_linux_arm_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm_stable"
+      - name: "download artifact: dapr_linux_arm_stablecomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_arm_stable
+          name: dapr_linux_arm_stablecomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm64_all"
+      - name: "download artifact: dapr_linux_arm64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_arm64_all
+          name: dapr_linux_arm64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm64_stable"
+      - name: "download artifact: dapr_linux_arm64_stablecomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_arm64_stable
+          name: dapr_linux_arm64_stablecomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_windows_amd64_all"
+      - name: "download artifact: dapr_windows_amd64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_windows_amd64_all
+          name: dapr_windows_amd64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_darwin_amd64_all"
+      - name: "download artifact: dapr_darwin_amd64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_darwin_amd64_all
+          name: dapr_darwin_amd64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_darwin_arm64_all"
+      - name: "download artifact: dapr_darwin_arm64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_darwin_arm64_all
+          name: dapr_darwin_arm64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
       - name: "download artifact: dapr_grafana_dashboards"
         uses: actions/download-artifact@master
